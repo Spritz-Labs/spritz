@@ -4,29 +4,29 @@ Voice calls for Web3. Connect with friends using passkeys or wallets and make re
 
 ## Features
 
-- 🔐 **Passkey Authentication** - Passwordless login using device biometrics (Face ID, Touch ID, Windows Hello)
-- 💼 **Wallet Connection** - Connect MetaMask, Coinbase Wallet, and 300+ wallets via WalletConnect
-- 🧠 **Smart Accounts** - ERC-4337 smart accounts powered by Pimlico and Safe
-- 👥 **Friends List** - Add friends by wallet address or ENS name with avatar resolution
-- 📞 **Voice Calling** - Real-time voice calls between friends using Agora
-- 🎨 **Beautiful UI** - Modern, animated interface with glass morphism effects
+-   🔐 **Passkey Authentication** - Passwordless login using device biometrics (Face ID, Touch ID, Windows Hello)
+-   💼 **Wallet Connection** - Connect MetaMask, Coinbase Wallet, and 300+ wallets via WalletConnect
+-   🧠 **Smart Accounts** - ERC-4337 smart accounts powered by Pimlico and Safe
+-   👥 **Friends List** - Add friends by wallet address or ENS name with avatar resolution
+-   📞 **Voice Calling** - Real-time voice calls between friends using Agora
+-   🎨 **Beautiful UI** - Modern, animated interface with glass morphism effects
 
 ## Tech Stack
 
-- **Framework**: Next.js 15 with App Router
-- **Styling**: Tailwind CSS 4
-- **Animations**: Motion (Framer Motion)
-- **Web3**: viem, wagmi, permissionless.js
-- **Account Abstraction**: Pimlico, Safe Smart Accounts
-- **Wallet Connection**: WalletConnect AppKit
-- **Voice Calling**: Agora RTC SDK
+-   **Framework**: Next.js 15 with App Router
+-   **Styling**: Tailwind CSS 4
+-   **Animations**: Motion (Framer Motion)
+-   **Web3**: viem, wagmi, permissionless.js
+-   **Account Abstraction**: Pimlico, Safe Smart Accounts
+-   **Wallet Connection**: WalletConnect AppKit
+-   **Voice Calling**: Agora RTC SDK
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
+-   Node.js 18+
+-   npm or yarn
 
 ### Installation
 
@@ -65,17 +65,20 @@ NEXT_PUBLIC_AGORA_APP_ID=your_agora_app_id
 ### Getting API Keys
 
 #### WalletConnect Project ID
+
 1. Go to [WalletConnect Cloud](https://cloud.walletconnect.com/)
 2. Create a new project
 3. Copy your Project ID
 
 #### Pimlico API Key
+
 1. Go to [Pimlico Dashboard](https://dashboard.pimlico.io/)
 2. Create an account and project
 3. Copy your API key
 4. Make sure to enable Base Sepolia network
 
 #### Agora App ID
+
 1. Go to [Agora Console](https://console.agora.io/)
 2. Create a new project
 3. **Important**: Select "APP ID" authentication (no certificate/token required)

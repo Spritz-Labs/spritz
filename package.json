@@ -6,7 +6,9 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "vercel": "vercel --prod",
+    "vercel:preview": "vercel"
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.3.7",
@@ -35,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vercel": "^49.1.0"
   }
 }

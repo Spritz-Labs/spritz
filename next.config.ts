@@ -24,6 +24,13 @@ const nextConfig: NextConfig = {
       "@gemini-wallet/core": false,
       // React Native modules not needed for web
       "@react-native-async-storage/async-storage": false,
+      // Solana modules not needed (from Coinbase SDK)
+      "@solana/kit": false,
+      "@solana/web3.js": false,
+      "@solana-program/system": false,
+      "@solana-program/token": false,
+      "@coinbase/cdp-sdk": false,
+      "@base-org/account": false,
     };
     
     // Add fallback for node modules
