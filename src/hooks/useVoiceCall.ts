@@ -95,6 +95,22 @@ export function useVoiceCall() {
       setState((prev) => ({ ...prev, callState: "joining", error: null }));
 
       try {
+        // Check microphone permission first (better mobile support)
+        try {
+          const permissionResult = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // Stop the test stream immediately
+          permissionResult.getTracks().forEach(track => track.stop());
+        } catch (permError) {
+          const permMessage = permError instanceof Error ? permError.message : String(permError);
+          if (permMessage.includes("NotAllowed") || permMessage.includes("Permission denied")) {
+            throw new Error("Microphone access denied. Please allow microphone permission in your browser/device settings and try again.");
+          } else if (permMessage.includes("NotFound")) {
+            throw new Error("No microphone found. Please connect a microphone and try again.");
+          } else {
+            throw new Error(`Microphone error: ${permMessage}`);
+          }
+        }
+
         // Create Agora client
         const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         clientRef.current = client;

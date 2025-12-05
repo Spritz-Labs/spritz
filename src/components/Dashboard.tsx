@@ -47,6 +47,19 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
     avatar: null,
   });
   const xmtpAutoInitAttempted = useRef(false);
+  
+  // iOS Chrome detection (Chrome on iOS doesn't support WebRTC properly)
+  const [isIOSChrome, setIsIOSChrome] = useState(false);
+  const [dismissIOSWarning, setDismissIOSWarning] = useState(false);
+  
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const ua = navigator.userAgent;
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isChrome = /CriOS/.test(ua); // CriOS = Chrome on iOS
+      setIsIOSChrome(isIOS && isChrome);
+    }
+  }, []);
 
   // Username hook
   const { username: shoutUsername, claimUsername } = useUsername(userAddress);
@@ -377,6 +390,38 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
             </div>
           </div>
         </header>
+
+        {/* iOS Chrome Warning */}
+        <AnimatePresence>
+          {isIOSChrome && !dismissIOSWarning && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-amber-500/10 border-b border-amber-500/20"
+            >
+              <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-amber-200 text-sm">
+                    <span className="font-medium">Voice calls require Safari on iPhone.</span>
+                    <span className="text-amber-300/70 ml-1 hidden sm:inline">Open this page in Safari for the best experience.</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDismissIOSWarning(true)}
+                  className="p-1 rounded hover:bg-amber-500/20 text-amber-400 transition-colors flex-shrink-0"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Main Content */}
         <main className="max-w-4xl mx-auto px-4 py-8">
