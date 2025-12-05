@@ -84,7 +84,6 @@ export function useXMTP(userAddress: Address | null) {
       
       console.log("[XMTP] Client created successfully");
       console.log("[XMTP] Inbox ID:", client.inboxId);
-      console.log("[XMTP] Address:", client.accountAddress);
 
       clientRef.current = client;
       setState({ isInitialized: true, isInitializing: false, error: null });

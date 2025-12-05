@@ -120,8 +120,7 @@ export default function Home() {
                         transition={{ delay: 0.4 }}
                         className="text-zinc-400 text-lg max-w-md mx-auto"
                     >
-                        Voice calls over Ethereum. Connect your wallet and start
-                        talking.
+                        Voice calls and chat over Ethereum. Connect your wallet and start talking.
                     </motion.p>
                 </motion.div>
 

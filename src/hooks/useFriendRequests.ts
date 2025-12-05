@@ -139,7 +139,7 @@ export function useFriendRequests(userAddress: Address | null) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (supabase) supabase.removeChannel(channel);
     };
   }, [userAddress, fetchData]);
 

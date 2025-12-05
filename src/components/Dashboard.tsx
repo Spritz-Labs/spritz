@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
+import { useAccount, useSwitchChain } from "wagmi";
+import { mainnet } from "wagmi/chains";
 import { useFriendRequests, type Friend } from "@/hooks/useFriendRequests";
 import { useVoiceCall } from "@/hooks/useVoiceCall";
 import { useCallSignaling } from "@/hooks/useCallSignaling";
@@ -40,8 +42,21 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
     ensName: null,
     avatar: null,
   });
+  const xmtpAutoInitAttempted = useRef(false);
 
   const { resolveAddressOrENS } = useENS();
+  
+  // Network check
+  const { chain } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+  const [dismissNetworkBanner, setDismissNetworkBanner] = useState(false);
+  const isOnMainnet = chain?.id === mainnet.id;
+  
+  // Reset switching state when chain changes
+  useEffect(() => {
+    setIsSwitchingNetwork(false);
+  }, [chain?.id]);
 
   const {
     incomingRequests,
@@ -96,8 +111,55 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
     isInitialized: isXMTPInitialized,
     isInitializing: isXMTPInitializing,
     error: xmtpError,
+    unreadCounts,
     initialize: initializeXMTP,
+    revokeAllInstallations,
+    markAsRead,
+    onNewMessage,
   } = useXMTPContext();
+  
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; sender: string } | null>(null);
+
+  // Auto-initialize XMTP after a short delay
+  useEffect(() => {
+    if (
+      !isXMTPInitialized &&
+      !isXMTPInitializing &&
+      !xmtpAutoInitAttempted.current
+    ) {
+      xmtpAutoInitAttempted.current = true;
+      // Small delay to let the UI settle, then prompt for XMTP signature
+      const timer = setTimeout(() => {
+        initializeXMTP();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isXMTPInitialized, isXMTPInitializing, initializeXMTP]);
+
+  // Handler to switch to mainnet
+  const handleSwitchToMainnet = async () => {
+    console.log("[Network] Requesting switch to mainnet...");
+    setIsSwitchingNetwork(true);
+    
+    // Set a timeout to reset button if wallet doesn't respond
+    const timeout = setTimeout(() => {
+      console.log("[Network] Timeout - resetting button");
+      setIsSwitchingNetwork(false);
+    }, 5000);
+    
+    try {
+      if (switchChainAsync) {
+        await switchChainAsync({ chainId: mainnet.id });
+        console.log("[Network] Successfully switched to mainnet");
+      }
+    } catch (error) {
+      console.log("[Network] Failed to switch:", error);
+    } finally {
+      clearTimeout(timeout);
+      setIsSwitchingNetwork(false);
+    }
+  };
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -119,6 +181,30 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
         (f) => f.address.toLowerCase() === incomingCall.caller_address.toLowerCase()
       )
     : null;
+
+  // Listen for new messages and show toast
+  useEffect(() => {
+    if (!isXMTPInitialized) return;
+    
+    const unsubscribe = onNewMessage(({ senderAddress, content }) => {
+      // Find friend info for the sender
+      const friend = friendsListData.find(
+        (f) => f.address.toLowerCase() === senderAddress.toLowerCase()
+      );
+      const senderName = friend?.ensName || friend?.nickname || formatAddress(senderAddress);
+      
+      // Show toast notification
+      setToast({
+        sender: senderName,
+        message: content.length > 50 ? content.slice(0, 50) + "..." : content,
+      });
+      
+      // Auto-hide after 4 seconds
+      setTimeout(() => setToast(null), 4000);
+    });
+    
+    return unsubscribe;
+  }, [isXMTPInitialized, onNewMessage, friendsListData]);
 
   const handleSendFriendRequest = async (addressOrENS: string): Promise<boolean> => {
     return await sendFriendRequest(addressOrENS);
@@ -171,6 +257,8 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
 
   const handleChat = (friend: FriendsListFriend) => {
     setChatFriend(friend);
+    // Mark messages from this friend as read
+    markAsRead(friend.address);
   };
 
   return (
@@ -249,6 +337,75 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
 
         {/* Main Content */}
         <main className="max-w-4xl mx-auto px-4 py-8">
+          {/* Network Banner - Show if not on mainnet (disabled for now due to state sync issues) */}
+          {false && !isOnMainnet && chain && !dismissNetworkBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-start gap-3 flex-1">
+                  <svg
+                    className="w-5 h-5 text-orange-400 mt-0.5 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg>
+                  <div>
+                    <p className="text-orange-200 font-medium">
+                      App shows: {chain?.name}
+                    </p>
+                    <p className="text-orange-200/70 text-sm mt-1">
+                      If your wallet is already on Mainnet, try refreshing the page or dismiss this.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="py-2 px-3 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={handleSwitchToMainnet}
+                    disabled={isSwitchingNetwork}
+                    className="py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+                  >
+                    {isSwitchingNetwork ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Switching...
+                      </>
+                    ) : (
+                      "Switch"
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setDismissNetworkBanner(true)}
+                    className="p-2 rounded-lg hover:bg-zinc-700 text-orange-400 hover:text-white transition-colors"
+                    title="Dismiss"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Status Banners */}
           {!isSupabaseConfigured && (
             <motion.div
@@ -342,23 +499,44 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={initializeXMTP}
-                  disabled={isXMTPInitializing}
-                  className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isXMTPInitializing ? (
-                    <>
-                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Signing...
-                    </>
-                  ) : (
-                    "Enable Chat"
-                  )}
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Reset button - always visible for installation issues */}
+                  <button
+                    onClick={revokeAllInstallations}
+                    disabled={isXMTPInitializing}
+                    className="py-2 px-4 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isXMTPInitializing ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Resetting...
+                      </>
+                    ) : (
+                      "Reset & Enable"
+                    )}
+                  </button>
+                  {/* Enable Chat button */}
+                  <button
+                    onClick={initializeXMTP}
+                    disabled={isXMTPInitializing}
+                    className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isXMTPInitializing ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Signing...
+                      </>
+                    ) : (
+                      "Enable Chat"
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}
@@ -447,6 +625,7 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
                 onChat={handleChat}
                 onRemove={handleRemoveFriend}
                 isCallActive={callState !== "idle"}
+                unreadCounts={unreadCounts}
               />
             </div>
           </div>
@@ -535,6 +714,66 @@ function DashboardContent({ userAddress, onLogout }: DashboardProps) {
         peerName={chatFriend?.ensName || chatFriend?.nickname}
         peerAvatar={chatFriend?.avatar}
       />
+
+      {/* Toast Notification for New Messages */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: 50, x: "-50%" }}
+            className="fixed bottom-6 left-1/2 z-50"
+          >
+            <div
+              onClick={() => {
+                // Find the friend and open chat
+                const friend = friendsListData.find(
+                  (f) =>
+                    f.ensName === toast.sender ||
+                    f.nickname === toast.sender ||
+                    formatAddress(f.address) === toast.sender
+                );
+                if (friend) {
+                  handleChat(friend);
+                }
+                setToast(null);
+              }}
+              className="bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 shadow-2xl cursor-pointer hover:bg-zinc-750 transition-colors flex items-center gap-4 max-w-sm"
+            >
+              <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className="text-white font-medium truncate">{toast.sender}</p>
+                <p className="text-zinc-400 text-sm truncate">{toast.message}</p>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToast(null);
+                }}
+                className="shrink-0 text-zinc-500 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -11,6 +11,7 @@ if (!projectId) {
   console.warn("WalletConnect Project ID not set. Wallet connection will be disabled.");
 }
 
+// Networks supported - mainnet is first (default) for best ENS/XMTP experience
 export const networks = [mainnet, sepolia, base, baseSepolia];
 
 // Create wagmiAdapter

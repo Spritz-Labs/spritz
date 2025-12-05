@@ -25,6 +25,7 @@ export function useCallSignaling(userAddress: Address | null) {
 
     // Check for existing ringing calls on mount
     const checkExistingCalls = async () => {
+      if (!supabase) return;
       const { data } = await supabase
         .from("shout_calls")
         .select("*")
@@ -95,7 +96,7 @@ export function useCallSignaling(userAddress: Address | null) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (supabase) supabase.removeChannel(channel);
     };
   }, [userAddress]);
 
