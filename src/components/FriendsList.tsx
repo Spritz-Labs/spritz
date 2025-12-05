@@ -18,6 +18,7 @@ export type Friend = {
 type FriendsListProps = {
   friends: Friend[];
   onCall: (friend: Friend) => void;
+  onVideoCall?: (friend: Friend) => void;
   onChat?: (friend: Friend) => void;
   onRemove: (friendId: string) => void;
   isCallActive: boolean;
@@ -29,6 +30,7 @@ type FriendsListProps = {
 export function FriendsList({
   friends,
   onCall,
+  onVideoCall,
   onChat,
   onRemove,
   isCallActive,
@@ -187,7 +189,7 @@ export function FriendsList({
                     </div>
                   )}
 
-                  {/* Call Button */}
+                  {/* Voice Call Button */}
                   <button
                     onClick={() => onCall(friend)}
                     disabled={isCallActive}
@@ -208,6 +210,30 @@ export function FriendsList({
                       />
                     </svg>
                   </button>
+
+                  {/* Video Call Button */}
+                  {onVideoCall && (
+                    <button
+                      onClick={() => onVideoCall(friend)}
+                      disabled={isCallActive}
+                      className="w-10 h-10 rounded-full bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Video Call"
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                    </button>
+                  )}
 
                   {/* More Options */}
                   <button

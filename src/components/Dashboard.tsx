@@ -109,13 +109,19 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
 
   const {
     callState,
+    callType,
     isMuted,
+    isVideoOff,
+    isRemoteVideoOff,
     duration,
     error: callError,
     joinCall,
     leaveCall,
     toggleMute,
+    toggleVideo,
     formatDuration,
+    setLocalVideoContainer,
+    setRemoteVideoContainer,
     isConfigured: isCallConfigured,
   } = useVoiceCall();
 
@@ -249,9 +255,9 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
     return await sendFriendRequest(addressOrENS);
   };
 
-  const handleCall = async (friend: FriendsListFriend) => {
+  const handleCall = async (friend: FriendsListFriend, withVideo: boolean = false) => {
     if (!isCallConfigured) {
-      alert("Voice calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
+      alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
       return;
     }
 
@@ -264,8 +270,12 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
     // Create signaling record to notify the callee
     await startCall(friend.address, channelName);
     
-    // Join the Agora channel
-    await joinCall(channelName);
+    // Join the Agora channel (with or without video)
+    await joinCall(channelName, undefined, withVideo);
+  };
+
+  const handleVideoCall = async (friend: FriendsListFriend) => {
+    await handleCall(friend, true);
   };
 
   const handleAcceptCall = async () => {
@@ -689,6 +699,7 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
               <FriendsList
                 friends={friendsListData}
                 onCall={handleCall}
+                onVideoCall={handleVideoCall}
                 onChat={isPasskeyUser ? undefined : handleChat}
                 onRemove={handleRemoveFriend}
                 isCallActive={callState !== "idle"}
@@ -755,11 +766,17 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
               addedAt: currentCallFriend.addedAt,
             }}
             callState={callState}
+            callType={callType}
             isMuted={isMuted}
+            isVideoOff={isVideoOff}
+            isRemoteVideoOff={isRemoteVideoOff}
             duration={duration}
             formatDuration={formatDuration}
             onToggleMute={toggleMute}
+            onToggleVideo={toggleVideo}
             onEndCall={handleEndCall}
+            setLocalVideoContainer={setLocalVideoContainer}
+            setRemoteVideoContainer={setRemoteVideoContainer}
           />
         )}
       </AnimatePresence>
