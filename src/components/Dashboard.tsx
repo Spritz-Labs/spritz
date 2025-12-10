@@ -583,8 +583,8 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
                           )}
                         </button>
 
-                        {/* ENS Name (if available) */}
-                        {userENS.ensName && (
+                        {/* ENS Name */}
+                        {userENS.ensName ? (
                           <div className="px-4 py-3 flex items-center gap-3 border-t border-zinc-800">
                             <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
                               <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -596,6 +596,24 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
                               <p className="text-blue-400 text-xs truncate">{userENS.ensName}</p>
                             </div>
                           </div>
+                        ) : (
+                          <a
+                            href="https://app.ens.domains/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setIsProfileMenuOpen(false)}
+                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
+                              <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-medium">ENS</p>
+                              <p className="text-zinc-500 text-xs">Get an ENS →</p>
+                            </div>
+                          </a>
                         )}
                       </motion.div>
                     )}
