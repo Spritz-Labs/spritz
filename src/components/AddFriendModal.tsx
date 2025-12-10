@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { useUsername } from "@/hooks/useUsername";
+import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 
 type AddFriendModalProps = {
   isOpen: boolean;
@@ -12,6 +13,12 @@ type AddFriendModalProps = {
   isLoading: boolean;
   error: string | null;
 };
+
+// Check if input looks like a phone number
+function looksLikePhone(input: string): boolean {
+  const digits = input.replace(/\D/g, "");
+  return digits.length >= 10 && /^[\d\s\-\(\)\+]+$/.test(input);
+}
 
 export function AddFriendModal({
   isOpen,
@@ -24,25 +31,51 @@ export function AddFriendModal({
   const [nickname, setNickname] = useState("");
   const [resolved, setResolved] = useState<ENSResolution | null>(null);
   const [resolvedFromUsername, setResolvedFromUsername] = useState(false);
+  const [resolvedFromPhone, setResolvedFromPhone] = useState(false);
   const { resolveAddressOrENS, isResolving, error: resolveError } = useENS();
-  const { lookupUsername, searchUsernames } = useUsername(null);
+  const { lookupUsername } = useUsername(null);
+  const { lookupByPhone } = usePhoneVerification(null);
 
-  // Debounced resolution as user types - check username first, then ENS/address
+  // Debounced resolution as user types - check phone, username, then ENS/address
   useEffect(() => {
     if (!input.trim() || input.trim().length < 3) {
       setResolved(null);
       setResolvedFromUsername(false);
+      setResolvedFromPhone(false);
       return;
     }
 
     const timer = setTimeout(async () => {
       try {
-        const trimmedInput = input.trim().toLowerCase();
+        const trimmedInput = input.trim();
         
-        // First, try to lookup as a Shout username (if it doesn't look like an address or ENS)
-        if (!trimmedInput.startsWith("0x") && !trimmedInput.includes(".")) {
+        // First, check if it looks like a phone number
+        if (looksLikePhone(trimmedInput)) {
           try {
-            const usernameResult = await lookupUsername(trimmedInput);
+            const phoneResult = await lookupByPhone(trimmedInput);
+            if (phoneResult) {
+              // Found a verified phone - resolve the address for ENS/avatar
+              const ensResult = await resolveAddressOrENS(phoneResult.wallet_address);
+              setResolved({
+                address: phoneResult.wallet_address as `0x${string}`,
+                ensName: ensResult?.ensName || null,
+                avatar: ensResult?.avatar || null,
+              });
+              setResolvedFromPhone(true);
+              setResolvedFromUsername(false);
+              return;
+            }
+          } catch (err) {
+            console.error("[AddFriend] Phone lookup failed:", err);
+            // Continue to other lookups
+          }
+        }
+        
+        // Try to lookup as a Shout username (if it doesn't look like an address or ENS)
+        const lowerInput = trimmedInput.toLowerCase();
+        if (!lowerInput.startsWith("0x") && !lowerInput.includes(".")) {
+          try {
+            const usernameResult = await lookupUsername(lowerInput);
             if (usernameResult) {
               // Found a username - now resolve the address for ENS/avatar
               const ensResult = await resolveAddressOrENS(usernameResult.wallet_address);
@@ -52,6 +85,7 @@ export function AddFriendModal({
                 avatar: ensResult?.avatar || null,
               });
               setResolvedFromUsername(true);
+              setResolvedFromPhone(false);
               return;
             }
           } catch (err) {
@@ -61,18 +95,20 @@ export function AddFriendModal({
         }
         
         // Fall back to ENS/address resolution
-        const result = await resolveAddressOrENS(trimmedInput);
+        const result = await resolveAddressOrENS(lowerInput);
         setResolved(result);
         setResolvedFromUsername(false);
+        setResolvedFromPhone(false);
       } catch (err) {
         console.error("[AddFriend] Resolution failed:", err);
         setResolved(null);
         setResolvedFromUsername(false);
+        setResolvedFromPhone(false);
       }
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timer);
-  }, [input, resolveAddressOrENS, lookupUsername]);
+  }, [input, resolveAddressOrENS, lookupUsername, lookupByPhone]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -81,6 +117,7 @@ export function AddFriendModal({
       setNickname("");
       setResolved(null);
       setResolvedFromUsername(false);
+      setResolvedFromPhone(false);
     }
   }, [isOpen]);
 
@@ -120,7 +157,7 @@ export function AddFriendModal({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md z-50"
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md z-50"
           >
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl">
               <div className="flex items-center justify-between mb-6">
@@ -148,14 +185,14 @@ export function AddFriendModal({
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-zinc-400 mb-2">
-                    Username, Address, or ENS
+                    Phone, Username, Address, or ENS
                   </label>
                   <div className="relative">
                     <input
                       type="text"
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      placeholder="kevin, 0x..., or vitalik.eth"
+                      placeholder="(555) 555-5555, kevin, 0x..., or vitalik.eth"
                       className="w-full py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all"
                     />
                     {isResolving && (
@@ -227,7 +264,11 @@ export function AddFriendModal({
                                 />
                               </svg>
                               <span className="text-emerald-400 text-sm font-medium">
-                                {resolvedFromUsername ? "Found @" + input.trim().toLowerCase() : "Resolved"}
+                                {resolvedFromPhone 
+                                  ? "Found by phone" 
+                                  : resolvedFromUsername 
+                                    ? "Found @" + input.trim().toLowerCase() 
+                                    : "Resolved"}
                               </span>
                             </div>
                             {resolved.ensName && (

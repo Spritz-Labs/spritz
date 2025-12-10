@@ -89,26 +89,40 @@ export function useFriendRequests(userAddress: Address | null) {
         })
       );
 
-      // Resolve ENS and Shout username for friends
+      // Resolve ENS and Shout username for friends (with error tolerance)
       const resolvedFriends = await Promise.all(
         (friendsData || []).map(async (friend) => {
-          const resolved = await resolveAddressOrENS(friend.friend_address);
-          
-          // Also lookup Shout username
+          let ensName: string | null = null;
+          let avatar: string | null = null;
           let shoutUsername: string | null = null;
-          if (supabase) {
-            const { data: usernameData } = await supabase
-              .from("shout_usernames")
-              .select("username")
-              .eq("wallet_address", friend.friend_address.toLowerCase())
-              .maybeSingle();
-            shoutUsername = usernameData?.username || null;
+          
+          // Try ENS resolution (don't let it block friends list)
+          try {
+            const resolved = await resolveAddressOrENS(friend.friend_address);
+            ensName = resolved?.ensName || null;
+            avatar = resolved?.avatar || null;
+          } catch (err) {
+            console.warn("[fetchData] ENS resolution failed for:", friend.friend_address);
+          }
+          
+          // Lookup Shout username
+          try {
+            if (supabase) {
+              const { data: usernameData } = await supabase
+                .from("shout_usernames")
+                .select("username")
+                .eq("wallet_address", friend.friend_address.toLowerCase())
+                .maybeSingle();
+              shoutUsername = usernameData?.username || null;
+            }
+          } catch (err) {
+            console.warn("[fetchData] Username lookup failed for:", friend.friend_address);
           }
           
           return {
             ...friend,
-            ensName: resolved?.ensName,
-            avatar: resolved?.avatar,
+            ensName,
+            avatar,
             shoutUsername,
           };
         })

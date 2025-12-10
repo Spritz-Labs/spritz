@@ -16,8 +16,10 @@ import { VoiceCallUI } from "./VoiceCallUI";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { ChatModal } from "./ChatModal";
 import { UsernameClaimModal } from "./UsernameClaimModal";
+import { PhoneVerificationModal } from "./PhoneVerificationModal";
 import { XMTPProvider, useXMTPContext } from "@/context/XMTPProvider";
 import { useUsername } from "@/hooks/useUsername";
+import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import { isAgoraConfigured } from "@/config/agora";
 
 type DashboardProps = {
@@ -40,6 +42,8 @@ type FriendsListFriend = {
 function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardProps & { isPasskeyUser?: boolean }) {
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [isUsernameModalOpen, setIsUsernameModalOpen] = useState(false);
+  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [currentCallFriend, setCurrentCallFriend] = useState<FriendsListFriend | null>(null);
   const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(null);
   const [userENS, setUserENS] = useState<{ ensName: string | null; avatar: string | null }>({
@@ -47,6 +51,7 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
     avatar: null,
   });
   const xmtpAutoInitAttempted = useRef(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   
   // iOS Chrome detection (Chrome on iOS doesn't support WebRTC properly)
   const [isIOSChrome, setIsIOSChrome] = useState(false);
@@ -61,8 +66,25 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
     }
   }, []);
 
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    
+    if (isProfileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isProfileMenuOpen]);
+
   // Username hook
   const { username: shoutUsername, claimUsername } = useUsername(userAddress);
+  
+  // Phone verification hook
+  const { phoneNumber: verifiedPhone, isVerified: isPhoneVerified } = usePhoneVerification(userAddress);
 
   const { resolveAddressOrENS } = useENS();
   
@@ -342,30 +364,101 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
                     </svg>
                   </div>
                 )}
-                <div>
-                  <h1 className="text-white font-bold">
-                    {userENS.ensName || "Shout"}
-                  </h1>
-                  <div className="flex items-center gap-2">
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="text-left hover:opacity-80 transition-opacity"
+                  >
+                    <h1 className="text-white font-bold flex items-center gap-1">
+                      {userENS.ensName || (shoutUsername ? `@${shoutUsername}` : "Shout")}
+                      <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </h1>
                     <p className="text-zinc-500 text-sm font-mono">
                       {formatAddress(userAddress)}
                     </p>
-                    {shoutUsername ? (
-                      <button
-                        onClick={() => setIsUsernameModalOpen(true)}
-                        className="text-violet-400 text-sm hover:text-violet-300 transition-colors"
+                  </button>
+
+                  {/* Profile Dropdown Menu */}
+                  <AnimatePresence>
+                    {isProfileMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute left-0 top-full mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50"
                       >
-                        @{shoutUsername}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setIsUsernameModalOpen(true)}
-                        className="text-zinc-500 text-xs hover:text-violet-400 transition-colors"
-                      >
-                        + claim name
-                      </button>
+                        {/* Username */}
+                        <button
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            setIsUsernameModalOpen(true);
+                          }}
+                          className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
+                        >
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shoutUsername ? 'bg-violet-500/20' : 'bg-zinc-800'}`}>
+                            <svg className={`w-4 h-4 ${shoutUsername ? 'text-violet-400' : 'text-zinc-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium">Username</p>
+                            <p className={`text-xs truncate ${shoutUsername ? 'text-violet-400' : 'text-zinc-500'}`}>
+                              {shoutUsername ? `@${shoutUsername}` : 'Claim a username'}
+                            </p>
+                          </div>
+                          {shoutUsername && (
+                            <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Phone */}
+                        <button
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            setIsPhoneModalOpen(true);
+                          }}
+                          className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
+                        >
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isPhoneVerified ? 'bg-emerald-500/20' : 'bg-zinc-800'}`}>
+                            <svg className={`w-4 h-4 ${isPhoneVerified ? 'text-emerald-400' : 'text-zinc-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium">Phone</p>
+                            <p className={`text-xs truncate ${isPhoneVerified ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                              {isPhoneVerified ? 'Verified' : 'Add phone number'}
+                            </p>
+                          </div>
+                          {isPhoneVerified && (
+                            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* ENS Name (if available) */}
+                        {userENS.ensName && (
+                          <div className="px-4 py-3 flex items-center gap-3 border-t border-zinc-800">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                              <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-medium">ENS</p>
+                              <p className="text-blue-400 text-xs truncate">{userENS.ensName}</p>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
                     )}
-                  </div>
+                  </AnimatePresence>
                 </div>
               </div>
 
@@ -808,6 +901,14 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
         onClose={() => setIsUsernameModalOpen(false)}
         userAddress={userAddress}
         currentUsername={shoutUsername}
+        onSuccess={() => {}}
+      />
+
+      {/* Phone Verification Modal */}
+      <PhoneVerificationModal
+        isOpen={isPhoneModalOpen}
+        onClose={() => setIsPhoneModalOpen(false)}
+        userAddress={userAddress}
         onSuccess={() => {}}
       />
 
