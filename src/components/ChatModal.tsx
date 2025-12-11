@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
 import { useXMTPContext } from "@/context/XMTPProvider";
 import { PixelArtEditor } from "./PixelArtEditor";
+import { useReactions, REACTION_EMOJIS } from "@/hooks/useReactions";
 
 type ChatModalProps = {
   isOpen: boolean;
@@ -41,6 +42,10 @@ export function ChatModal({
   const [showPixelArt, setShowPixelArt] = useState(false);
   const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+  
+  // Reactions hook
+  const { reactions, fetchReactions, toggleReaction } = useReactions(userAddress);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const streamRef = useRef<any>(null);
@@ -249,6 +254,23 @@ export function ChatModal({
   const isPixelArtMessage = (content: string) => content.startsWith("[PIXEL_ART]");
   const getPixelArtUrl = (content: string) => content.replace("[PIXEL_ART]", "");
 
+  // Fetch reactions for pixel art messages
+  useEffect(() => {
+    const pixelArtUrls = messages
+      .filter((msg) => isPixelArtMessage(msg.content))
+      .map((msg) => getPixelArtUrl(msg.content));
+    
+    if (pixelArtUrls.length > 0) {
+      fetchReactions(pixelArtUrls);
+    }
+  }, [messages, fetchReactions]);
+
+  // Handle reaction click
+  const handleReaction = async (ipfsUrl: string, emoji: string) => {
+    await toggleReaction(ipfsUrl, emoji);
+    setShowReactionPicker(null);
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -363,7 +385,7 @@ export function ChatModal({
                         }`}
                       >
                         {isPixelArt ? (
-                          <div className="pixel-art-message">
+                          <div className="pixel-art-message relative">
                             <button 
                               onClick={() => setViewingImage(getPixelArtUrl(msg.content))}
                               className="block cursor-zoom-in"
@@ -386,6 +408,76 @@ export function ChatModal({
                                 loading="lazy"
                               />
                             </button>
+                            
+                            {/* Reactions Display */}
+                            {reactions[getPixelArtUrl(msg.content)]?.some(r => r.count > 0) && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {reactions[getPixelArtUrl(msg.content)]
+                                  ?.filter(r => r.count > 0)
+                                  .map((reaction) => (
+                                    <button
+                                      key={reaction.emoji}
+                                      onClick={() => handleReaction(getPixelArtUrl(msg.content), reaction.emoji)}
+                                      className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
+                                        reaction.hasReacted
+                                          ? "bg-violet-500/30 text-violet-200"
+                                          : "bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50"
+                                      }`}
+                                    >
+                                      <span>{reaction.emoji}</span>
+                                      <span className="text-[10px]">{reaction.count}</span>
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
+
+                            {/* Add Reaction Button */}
+                            <div className="relative mt-1">
+                              <button
+                                onClick={() => setShowReactionPicker(
+                                  showReactionPicker === getPixelArtUrl(msg.content) 
+                                    ? null 
+                                    : getPixelArtUrl(msg.content)
+                                )}
+                                className={`text-xs px-2 py-1 rounded-full transition-colors ${
+                                  isOwn 
+                                    ? "text-blue-200 hover:bg-blue-500/30" 
+                                    : "text-zinc-400 hover:bg-zinc-700"
+                                }`}
+                              >
+                                + React
+                              </button>
+                              
+                              {/* Reaction Picker */}
+                              <AnimatePresence>
+                                {showReactionPicker === getPixelArtUrl(msg.content) && (
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.9, y: -5 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.9, y: -5 }}
+                                    className={`absolute bottom-full mb-1 ${isOwn ? "right-0" : "left-0"} bg-zinc-800 border border-zinc-700 rounded-xl p-2 shadow-xl z-10`}
+                                  >
+                                    <div className="flex gap-1">
+                                      {REACTION_EMOJIS.map((emoji) => {
+                                        const currentReaction = reactions[getPixelArtUrl(msg.content)]?.find(r => r.emoji === emoji);
+                                        return (
+                                          <button
+                                            key={emoji}
+                                            onClick={() => handleReaction(getPixelArtUrl(msg.content), emoji)}
+                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-zinc-700 transition-colors ${
+                                              currentReaction?.hasReacted ? "bg-violet-500/30" : ""
+                                            }`}
+                                          >
+                                            {emoji}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+
                             <p className={`text-xs mt-1 ${isOwn ? "text-blue-200" : "text-zinc-500"}`}>
                               🎨 Pixel Art • {msg.sentAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                             </p>
