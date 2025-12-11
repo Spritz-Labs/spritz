@@ -211,6 +211,7 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
     callType,
     isMuted,
     isVideoOff,
+    isScreenSharing,
     isRemoteVideoOff,
     duration,
     error: callError,
@@ -218,9 +219,11 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
     leaveCall,
     toggleMute,
     toggleVideo,
+    toggleScreenShare,
     formatDuration,
     setLocalVideoContainer,
     setRemoteVideoContainer,
+    setScreenShareContainer,
     isConfigured: isCallConfigured,
   } = useVoiceCall();
 
@@ -1429,14 +1432,18 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
             callType={callType}
             isMuted={isMuted}
             isVideoOff={isVideoOff}
+            isScreenSharing={isScreenSharing}
             isRemoteVideoOff={isRemoteVideoOff}
             duration={duration}
+            error={callError}
             formatDuration={formatDuration}
             onToggleMute={toggleMute}
             onToggleVideo={toggleVideo}
+            onToggleScreenShare={toggleScreenShare}
             onEndCall={handleEndCall}
             setLocalVideoContainer={setLocalVideoContainer}
             setRemoteVideoContainer={setRemoteVideoContainer}
+            setScreenShareContainer={setScreenShareContainer}
           />
         )}
       </AnimatePresence>
@@ -1560,12 +1567,15 @@ function DashboardContent({ userAddress, onLogout, isPasskeyUser }: DashboardPro
             userAddress={userAddress}
             isMuted={isMuted}
             isVideoOff={isVideoOff}
+            isScreenSharing={isScreenSharing}
             duration={groupCallDuration}
             onToggleMute={toggleMute}
             onToggleVideo={toggleVideo}
+            onToggleScreenShare={toggleScreenShare}
             onLeave={handleLeaveGroupCall}
             setLocalVideoContainer={setLocalVideoContainer}
             setRemoteVideoContainer={setRemoteVideoContainer}
+            setScreenShareContainer={setScreenShareContainer}
             formatDuration={formatDuration}
           />
         )}

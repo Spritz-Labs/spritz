@@ -15,8 +15,10 @@ export type VoiceCallState = {
     callType: CallType;
     isMuted: boolean;
     isVideoOff: boolean;
+    isScreenSharing: boolean;
     isRemoteMuted: boolean;
     isRemoteVideoOff: boolean;
+    isRemoteScreenSharing: boolean;
     error: string | null;
     duration: number;
 };
@@ -27,8 +29,10 @@ export function useVoiceCall() {
         callType: "audio",
         isMuted: false,
         isVideoOff: true,
+        isScreenSharing: false,
         isRemoteMuted: false,
         isRemoteVideoOff: true,
+        isRemoteScreenSharing: false,
         error: null,
         duration: 0,
     });
@@ -40,6 +44,8 @@ export function useVoiceCall() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const localVideoTrackRef = useRef<any>(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const localScreenTrackRef = useRef<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const remoteAudioTrackRef = useRef<any>(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const remoteVideoTrackRef = useRef<any>(null);
@@ -49,6 +55,7 @@ export function useVoiceCall() {
     // Refs for video elements
     const localVideoRef = useRef<HTMLDivElement | null>(null);
     const remoteVideoRef = useRef<HTMLDivElement | null>(null);
+    const screenShareRef = useRef<HTMLDivElement | null>(null);
 
     // Load Agora SDK dynamically on client side
     useEffect(() => {
@@ -324,6 +331,13 @@ export function useVoiceCall() {
                 localVideoTrackRef.current = null;
             }
 
+            // Stop and close screen share track
+            if (localScreenTrackRef.current) {
+                localScreenTrackRef.current.stop();
+                localScreenTrackRef.current.close();
+                localScreenTrackRef.current = null;
+            }
+
             // Leave channel and destroy client
             if (clientRef.current) {
                 await clientRef.current.leave();
@@ -338,8 +352,10 @@ export function useVoiceCall() {
                 callType: "audio",
                 isMuted: false,
                 isVideoOff: true,
+                isScreenSharing: false,
                 isRemoteMuted: false,
                 isRemoteVideoOff: true,
+                isRemoteScreenSharing: false,
                 error: null,
                 duration: 0,
             });
@@ -377,14 +393,25 @@ export function useVoiceCall() {
         } else {
             // Turn on video
             try {
+                // Agora only allows ONE video track at a time
+                // If screen sharing is on, we need to stop it first
+                if (localScreenTrackRef.current) {
+                    console.log("[Video] Stopping screen share to enable camera");
+                    await clientRef.current.unpublish([localScreenTrackRef.current]);
+                    localScreenTrackRef.current.stop();
+                    localScreenTrackRef.current.close();
+                    localScreenTrackRef.current = null;
+                }
+
                 const localVideoTrack = await AgoraRTC.createCameraVideoTrack();
                 localVideoTrackRef.current = localVideoTrack;
                 await clientRef.current.publish([localVideoTrack]);
 
-                // Update state to video call mode and video on
+                // Update state to video call mode and video on, screen share off
                 setState((prev) => ({
                     ...prev,
                     isVideoOff: false,
+                    isScreenSharing: false,
                     callType: "video", // Switch to video call layout
                 }));
 
@@ -404,6 +431,84 @@ export function useVoiceCall() {
             }
         }
     }, [state.isVideoOff]);
+
+    const toggleScreenShare = useCallback(async () => {
+        if (!AgoraRTC || !clientRef.current) return;
+
+        if (state.isScreenSharing) {
+            // Stop screen sharing
+            if (localScreenTrackRef.current) {
+                await clientRef.current.unpublish([localScreenTrackRef.current]);
+                localScreenTrackRef.current.stop();
+                localScreenTrackRef.current.close();
+                localScreenTrackRef.current = null;
+            }
+            setState((prev) => ({ ...prev, isScreenSharing: false }));
+        } else {
+            // Start screen sharing
+            try {
+                // Agora only allows ONE video track at a time
+                // If camera is on, we need to stop it first
+                const wasVideoOn = !state.isVideoOff;
+                if (localVideoTrackRef.current) {
+                    console.log("[Screen] Stopping camera to enable screen share");
+                    await clientRef.current.unpublish([localVideoTrackRef.current]);
+                    localVideoTrackRef.current.stop();
+                    localVideoTrackRef.current.close();
+                    localVideoTrackRef.current = null;
+                }
+
+                // Create screen share track
+                const screenTrack = await AgoraRTC.createScreenVideoTrack(
+                    {
+                        encoderConfig: "1080p_2",
+                        optimizationMode: "detail",
+                    },
+                    "disable" // Don't capture audio with screen
+                );
+
+                // Handle if array is returned (when audio is enabled)
+                const videoTrack = Array.isArray(screenTrack) ? screenTrack[0] : screenTrack;
+                localScreenTrackRef.current = videoTrack;
+
+                // Listen for when user stops sharing via browser UI
+                videoTrack.on("track-ended", async () => {
+                    console.log("[Screen] User stopped screen share via browser");
+                    if (clientRef.current && localScreenTrackRef.current) {
+                        await clientRef.current.unpublish([localScreenTrackRef.current]).catch(console.error);
+                        localScreenTrackRef.current.stop();
+                        localScreenTrackRef.current.close();
+                        localScreenTrackRef.current = null;
+                    }
+                    setState((prev) => ({ ...prev, isScreenSharing: false, isVideoOff: true }));
+                });
+
+                await clientRef.current.publish([videoTrack]);
+
+                // Update state - camera is now off, screen share is on
+                setState((prev) => ({
+                    ...prev,
+                    isScreenSharing: true,
+                    isVideoOff: true, // Camera is off while screen sharing
+                    callType: "video", // Switch to video layout to show screen
+                }));
+
+                // Play screen share in the screen share container
+                const playScreen = () => {
+                    if (screenShareRef.current && localScreenTrackRef.current) {
+                        localScreenTrackRef.current.play(screenShareRef.current);
+                    } else if (localScreenTrackRef.current) {
+                        setTimeout(playScreen, 100);
+                    }
+                };
+                playScreen();
+            } catch (error) {
+                console.error("Error starting screen share:", error);
+                // User might have cancelled the picker
+                return;
+            }
+        }
+    }, [state.isScreenSharing, state.isVideoOff]);
 
     const formatDuration = useCallback((seconds: number): string => {
         const mins = Math.floor(seconds / 60);
@@ -453,15 +558,32 @@ export function useVoiceCall() {
         []
     );
 
+    const setScreenShareContainer = useCallback(
+        (element: HTMLDivElement | null) => {
+            screenShareRef.current = element;
+            // If we already have a screen share track, play it
+            if (element && localScreenTrackRef.current) {
+                try {
+                    localScreenTrackRef.current.play(element);
+                } catch (e) {
+                    console.warn("[Screen] Failed to play screen share:", e);
+                }
+            }
+        },
+        []
+    );
+
     return {
         ...state,
         joinCall,
         leaveCall,
         toggleMute,
         toggleVideo,
+        toggleScreenShare,
         formatDuration,
         setLocalVideoContainer,
         setRemoteVideoContainer,
+        setScreenShareContainer,
         isConfigured: isAgoraConfigured,
     };
 }
