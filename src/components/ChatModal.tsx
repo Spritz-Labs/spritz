@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
 import { useXMTPContext } from "@/context/XMTPProvider";
+import { PixelArtEditor } from "./PixelArtEditor";
 
 type ChatModalProps = {
   isOpen: boolean;
@@ -37,6 +38,9 @@ export function ChatModal({
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatState, setChatState] = useState<ChatState>("checking");
   const [bypassCheck, setBypassCheck] = useState(false);
+  const [showPixelArt, setShowPixelArt] = useState(false);
+  const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const streamRef = useRef<any>(null);
@@ -202,6 +206,49 @@ export function ChatModal({
     }
   };
 
+  // Handle sending pixel art
+  const handleSendPixelArt = useCallback(async (imageData: string) => {
+    setIsUploadingPixelArt(true);
+    setChatError(null);
+
+    try {
+      // Upload to IPFS via Pinata
+      const uploadResponse = await fetch("/api/pixel-art/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageData,
+          senderAddress: userAddress,
+        }),
+      });
+
+      const uploadResult = await uploadResponse.json();
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || "Failed to upload");
+      }
+
+      // Send the IPFS URL as a message with a special prefix so we can identify it
+      const pixelArtMessage = `[PIXEL_ART]${uploadResult.ipfsUrl}`;
+      const result = await sendMessage(peerAddress, pixelArtMessage);
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to send");
+      }
+
+      setShowPixelArt(false);
+    } catch (error) {
+      console.error("[Chat] Pixel art error:", error);
+      setChatError(`Failed to send pixel art: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsUploadingPixelArt(false);
+    }
+  }, [userAddress, peerAddress, sendMessage]);
+
+  // Check if a message is pixel art
+  const isPixelArtMessage = (content: string) => content.startsWith("[PIXEL_ART]");
+  const getPixelArtUrl = (content: string) => content.replace("[PIXEL_ART]", "");
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -299,6 +346,8 @@ export function ChatModal({
 
                 {messages.map((msg) => {
                   const isOwn = userInboxId ? msg.senderAddress === userInboxId : false;
+                  const isPixelArt = isPixelArtMessage(msg.content);
+                  
                   return (
                     <motion.div
                       key={msg.id}
@@ -313,10 +362,42 @@ export function ChatModal({
                             : "bg-zinc-800 text-white rounded-bl-md"
                         }`}
                       >
-                        <p className="break-words">{msg.content}</p>
-                        <p className={`text-xs mt-1 ${isOwn ? "text-blue-200" : "text-zinc-500"}`}>
-                          {msg.sentAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </p>
+                        {isPixelArt ? (
+                          <div className="pixel-art-message">
+                            <button 
+                              onClick={() => setViewingImage(getPixelArtUrl(msg.content))}
+                              className="block cursor-zoom-in"
+                            >
+                              <img
+                                src={getPixelArtUrl(msg.content)}
+                                alt="Pixel Art"
+                                className="w-32 h-32 rounded-lg bg-zinc-700 hover:opacity-90 transition-opacity"
+                                style={{ imageRendering: "pixelated" }}
+                                onError={(e) => {
+                                  // Try alternative gateway on error
+                                  const img = e.target as HTMLImageElement;
+                                  const currentSrc = img.src;
+                                  if (currentSrc.includes("ipfs.io")) {
+                                    img.src = currentSrc.replace("ipfs.io", "cloudflare-ipfs.com");
+                                  } else if (currentSrc.includes("cloudflare-ipfs.com")) {
+                                    img.src = currentSrc.replace("cloudflare-ipfs.com", "dweb.link");
+                                  }
+                                }}
+                                loading="lazy"
+                              />
+                            </button>
+                            <p className={`text-xs mt-1 ${isOwn ? "text-blue-200" : "text-zinc-500"}`}>
+                              🎨 Pixel Art • {msg.sentAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="break-words">{msg.content}</p>
+                            <p className={`text-xs mt-1 ${isOwn ? "text-blue-200" : "text-zinc-500"}`}>
+                              {msg.sentAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </motion.div>
                   );
@@ -327,6 +408,17 @@ export function ChatModal({
               {/* Input */}
               <div className="p-4 border-t border-zinc-800">
                 <div className="flex items-center gap-2">
+                  {/* Pixel Art Button */}
+                  <button
+                    onClick={() => setShowPixelArt(true)}
+                    disabled={!isInitialized || !!chatError}
+                    className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-violet-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Send Pixel Art"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                    </svg>
+                  </button>
                   <input
                     type="text"
                     value={newMessage}
@@ -359,6 +451,81 @@ export function ChatModal({
               </div>
             </div>
           </motion.div>
+
+          {/* Pixel Art Editor Modal */}
+          <PixelArtEditor
+            isOpen={showPixelArt}
+            onClose={() => setShowPixelArt(false)}
+            onSend={handleSendPixelArt}
+            isSending={isUploadingPixelArt}
+          />
+
+          {/* Image Lightbox */}
+          <AnimatePresence>
+            {viewingImage && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/95 p-4"
+                onClick={() => setViewingImage(null)}
+              >
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  className="relative max-w-full max-h-full"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Close button */}
+                  <button
+                    onClick={() => setViewingImage(null)}
+                    className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  
+                  {/* Full-size pixel art image */}
+                  <img
+                    src={viewingImage}
+                    alt="Pixel Art"
+                    className="max-w-[90vw] max-h-[80vh] rounded-xl shadow-2xl"
+                    style={{ 
+                      imageRendering: "pixelated",
+                      minWidth: "256px",
+                      minHeight: "256px",
+                    }}
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      const currentSrc = img.src;
+                      if (currentSrc.includes("ipfs.io")) {
+                        img.src = currentSrc.replace("ipfs.io", "cloudflare-ipfs.com");
+                      } else if (currentSrc.includes("cloudflare-ipfs.com")) {
+                        img.src = currentSrc.replace("cloudflare-ipfs.com", "dweb.link");
+                      }
+                    }}
+                  />
+                  
+                  {/* Download link */}
+                  <div className="mt-4 flex justify-center">
+                    <a
+                      href={viewingImage}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                      </svg>
+                      Open Original
+                    </a>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
     </AnimatePresence>
