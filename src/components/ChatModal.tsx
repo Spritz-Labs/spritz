@@ -51,6 +51,7 @@ export function ChatModal({
     getMessages,
     streamMessages,
     canMessage,
+    markAsRead,
   } = useXMTPContext();
 
   const formatAddress = (address: string) => {
@@ -125,6 +126,9 @@ export function ChatModal({
 
         setMessages(formattedMessages);
         setChatState("ready");
+        
+        // Mark messages as read since chat is now open
+        markAsRead(peerAddress);
 
         // Start streaming new messages
         const stream = await streamMessages(peerAddress, (message: unknown) => {
@@ -148,6 +152,9 @@ export function ChatModal({
             if (prev.some((m) => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
+          
+          // Mark as read immediately since chat is open
+          markAsRead(peerAddress);
         });
 
         streamRef.current = stream;
@@ -166,7 +173,7 @@ export function ChatModal({
         streamRef.current = null;
       }
     };
-  }, [isOpen, isInitialized, peerAddress, getMessages, streamMessages, canMessage, displayName, bypassCheck]);
+  }, [isOpen, isInitialized, peerAddress, getMessages, streamMessages, canMessage, displayName, bypassCheck, markAsRead]);
 
   const handleSend = useCallback(async () => {
     if (!newMessage.trim() || isSending) return;
