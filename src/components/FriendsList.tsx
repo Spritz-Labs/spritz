@@ -50,6 +50,7 @@ export function FriendsList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [friendStatuses, setFriendStatuses] = useState<Record<string, FriendStatus>>({});
   const [friendSocials, setFriendSocials] = useState<Record<string, SocialLinks>>({});
+  const [friendPhones, setFriendPhones] = useState<Record<string, string>>({});
 
   // Fetch friend socials
   useEffect(() => {
@@ -58,36 +59,83 @@ export function FriendsList({
     const fetchSocials = async () => {
       if (!supabase) return;
       
-      const addresses = friends.map(f => f.address.toLowerCase());
-      
-      const { data, error } = await supabase
-        .from("shout_socials")
-        .select("*")
-        .in("wallet_address", addresses);
+      try {
+        const addresses = friends.map(f => f.address.toLowerCase());
+        
+        const { data, error } = await supabase
+          .from("shout_socials")
+          .select("*")
+          .in("wallet_address", addresses);
 
-      if (error) {
-        console.error("[FriendsList] Error fetching socials:", error);
-        return;
-      }
+        if (error) {
+          // Only log if there's actual error info
+          if (error.message || error.code) {
+            console.warn("[FriendsList] Error fetching socials:", error.message || error.code);
+          }
+          return;
+        }
 
-      if (data) {
-        const socials: Record<string, SocialLinks> = {};
-        data.forEach((row) => {
-          socials[row.wallet_address] = {
-            x: row.x_username || undefined,
-            farcaster: row.farcaster_username || undefined,
-            instagram: row.instagram_username || undefined,
-            tiktok: row.tiktok_username || undefined,
-            youtube: row.youtube_handle || undefined,
-            linkedin: row.linkedin_username || undefined,
-            github: row.github_username || undefined,
-          };
-        });
-        setFriendSocials(socials);
+        if (data) {
+          const socials: Record<string, SocialLinks> = {};
+          data.forEach((row) => {
+            socials[row.wallet_address] = {
+              x: row.x_username || undefined,
+              farcaster: row.farcaster_username || undefined,
+              instagram: row.instagram_username || undefined,
+              tiktok: row.tiktok_username || undefined,
+              youtube: row.youtube_handle || undefined,
+              linkedin: row.linkedin_username || undefined,
+              github: row.github_username || undefined,
+            };
+          });
+          setFriendSocials(socials);
+        }
+      } catch (err) {
+        // Silently handle network errors - socials are non-critical
+        console.warn("[FriendsList] Failed to fetch socials");
       }
     };
 
     fetchSocials();
+  }, [friends]);
+
+  // Fetch friend phone numbers
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || friends.length === 0) return;
+
+    const fetchPhones = async () => {
+      if (!supabase) return;
+      
+      try {
+        const addresses = friends.map(f => f.address.toLowerCase());
+        
+        const { data, error } = await supabase
+          .from("shout_phone_numbers")
+          .select("wallet_address, phone_number")
+          .in("wallet_address", addresses)
+          .eq("verified", true);
+
+        if (error) {
+          if (error.message || error.code) {
+            console.warn("[FriendsList] Error fetching phones:", error.message || error.code);
+          }
+          return;
+        }
+
+        if (data) {
+          const phones: Record<string, string> = {};
+          data.forEach((row) => {
+            phones[row.wallet_address] = row.phone_number;
+          });
+          setFriendPhones(phones);
+        }
+      } catch (err) {
+        // Silently handle network errors - phones are non-critical
+        console.warn("[FriendsList] Failed to fetch phones");
+      }
+    };
+
+    fetchPhones();
   }, [friends]);
 
   // Fetch friend statuses
@@ -157,6 +205,15 @@ export function FriendsList({
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const formatPhoneNumber = (phone: string) => {
+    // Show formatted phone: (***) ***-1234
+    if (phone.length >= 4) {
+      const last4 = phone.slice(-4);
+      return `(***) ***-${last4}`;
+    }
+    return "Verified";
   };
 
   const getDisplayName = (friend: Friend) => {
@@ -261,6 +318,17 @@ export function FriendsList({
                       <p className="text-white font-medium truncate text-sm sm:text-base">
                         {getDisplayName(friend)}
                       </p>
+                      {/* Phone verified badge */}
+                      {friendPhones[friend.address.toLowerCase()] && (
+                        <span 
+                          className="flex-shrink-0 text-emerald-400" 
+                          title={`Phone verified: ${formatPhoneNumber(friendPhones[friend.address.toLowerCase()])}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                        </span>
+                      )}
                       {/* DND badge */}
                       {friendStatuses[friend.address.toLowerCase()]?.isDnd && (
                         <span className="flex-shrink-0 text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full">
@@ -404,6 +472,23 @@ export function FriendsList({
                       )}
                     </div>
                     
+                    {/* Friend's Phone Number */}
+                    {friendPhones[friend.address.toLowerCase()] && (
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 rounded-lg">
+                          <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          <span className="text-emerald-300 text-sm font-medium">
+                            {formatPhoneNumber(friendPhones[friend.address.toLowerCase()])}
+                          </span>
+                          <svg className="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Friend's Socials */}
                     {friendSocials[friend.address.toLowerCase()] && 
                      Object.values(friendSocials[friend.address.toLowerCase()]).some(Boolean) && (
