@@ -1,196 +1,200 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --accent-violet: #8b5cf6;
-  --accent-purple: #a855f7;
-  --accent-blue: #3b82f6;
+    --background: #09090b;
+    --foreground: #fafafa;
+    --accent-violet: #8b5cf6;
+    --accent-purple: #a855f7;
+    --accent-blue: #3b82f6;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-dm-sans);
-  --font-mono: var(--font-jetbrains);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --font-sans: var(--font-dm-sans);
+    --font-mono: var(--font-jetbrains);
 }
 
 * {
-  box-sizing: border-box;
+    box-sizing: border-box;
 }
 
 html,
 body {
-  min-height: 100vh;
+    min-height: 100vh;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-dm-sans), system-ui, sans-serif;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-dm-sans), system-ui, sans-serif;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #18181b;
+    background: #18181b;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 4px;
+    background: #3f3f46;
+    border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+    background: #52525b;
 }
 
 /* Animated gradient background */
 .gradient-bg {
-  background: linear-gradient(
-    135deg,
-    #09090b 0%,
-    #18181b 25%,
-    #1a1625 50%,
-    #18181b 75%,
-    #09090b 100%
-  );
-  background-size: 400% 400%;
-  animation: gradient-shift 15s ease infinite;
+    background: linear-gradient(
+        135deg,
+        #09090b 0%,
+        #18181b 25%,
+        #1a1625 50%,
+        #18181b 75%,
+        #09090b 100%
+    );
+    background-size: 400% 400%;
+    animation: gradient-shift 15s ease infinite;
 }
 
 @keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
 }
 
 /* Glowing orbs */
 .glow-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.4;
-  pointer-events: none;
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 .glow-orb-violet {
-  background: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
+    background: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
 }
 
 .glow-orb-purple {
-  background: radial-gradient(circle, #a855f7 0%, transparent 70%);
+    background: radial-gradient(circle, #a855f7 0%, transparent 70%);
 }
 
 .glow-orb-blue {
-  background: radial-gradient(circle, #3b82f6 0%, transparent 70%);
+    background: radial-gradient(circle, #3b82f6 0%, transparent 70%);
 }
 
 /* Grid pattern overlay */
 .grid-pattern {
-  background-image: linear-gradient(
-      to right,
-      rgba(255, 255, 255, 0.02) 1px,
-      transparent 1px
-    ),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 40px 40px;
+    background-image: linear-gradient(
+            to right,
+            rgba(255, 255, 255, 0.02) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.02) 1px,
+            transparent 1px
+        );
+    background-size: 40px 40px;
 }
 
 /* Glass card effect */
 .glass-card {
-  background: rgba(24, 24, 27, 0.7);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(63, 63, 70, 0.5);
+    background: rgba(24, 24, 27, 0.7);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(63, 63, 70, 0.5);
 }
 
 /* Noise texture overlay */
 .noise-overlay::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity: 0.03;
-  pointer-events: none;
-  z-index: 1;
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 1;
 }
 
 /* Animation utilities */
 @keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
 }
 
 @keyframes pulse-glow {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 0.6;
-  }
+    0%,
+    100% {
+        opacity: 0.4;
+    }
+    50% {
+        opacity: 0.6;
+    }
 }
 
 .animate-float {
-  animation: float 6s ease-in-out infinite;
+    animation: float 6s ease-in-out infinite;
 }
 
 .animate-pulse-glow {
-  animation: pulse-glow 4s ease-in-out infinite;
+    animation: pulse-glow 4s ease-in-out infinite;
 }
 
 /* Focus states */
 input:focus,
 button:focus {
-  outline: none;
+    outline: none;
 }
 
 /* Selection color */
 ::selection {
-  background: rgba(139, 92, 246, 0.3);
-  color: white;
+    background: rgba(139, 92, 246, 0.3);
+    color: white;
 }
 
 /* Safe area insets for PWA on iOS */
 .safe-area-pt {
-  padding-top: env(safe-area-inset-top, 0px);
+    padding-top: env(safe-area-inset-top, 0px);
 }
 
 .safe-area-pb {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .safe-area-pl {
-  padding-left: env(safe-area-inset-left, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
 }
 
 .safe-area-pr {
-  padding-right: env(safe-area-inset-right, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
 }
 
 .safe-area-inset {
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Top safe area with minimum padding */
 .safe-area-top {
-  padding-top: max(env(safe-area-inset-top, 0px), 0px);
+    padding-top: max(env(safe-area-inset-top, 0px), 0px);
 }
