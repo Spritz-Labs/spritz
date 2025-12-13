@@ -7,6 +7,7 @@ import { type Address } from "viem";
 import { PasskeyAuth } from "@/components/PasskeyAuth";
 import { WalletConnect } from "@/components/WalletConnect";
 import { Dashboard } from "@/components/Dashboard";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
 
 export default function Home() {
@@ -57,6 +58,9 @@ export default function Home() {
 
     return (
         <main className="relative min-h-screen gradient-bg overflow-hidden">
+            {/* PWA Install Prompt for mobile users */}
+            <PWAInstallPrompt />
+
             {/* Background effects */}
             <div className="absolute inset-0 grid-pattern" />
             <div className="absolute inset-0 noise-overlay" />

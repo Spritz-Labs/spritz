@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Web3Provider } from "@/context/Web3Provider";
@@ -20,6 +20,33 @@ export const metadata: Metadata = {
     title: "Reach | Voice Calls for Web3",
     description:
         "Voice calls for Web3. Connect with friends using passkeys or wallets and make voice calls.",
+    manifest: "/manifest.json",
+    appleWebApp: {
+        capable: true,
+        statusBarStyle: "black-translucent",
+        title: "Reach",
+    },
+    formatDetection: {
+        telephone: false,
+    },
+    icons: {
+        icon: [
+            { url: "/icons/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+            { url: "/icons/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+        ],
+        apple: [
+            { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+        ],
+    },
+};
+
+export const viewport: Viewport = {
+    themeColor: "#8b5cf6",
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+    viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -29,6 +56,14 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en" className="dark">
+            <head>
+                <meta name="application-name" content="Reach" />
+                <meta name="mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+                <meta name="apple-mobile-web-app-title" content="Reach" />
+                <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+            </head>
             <body
                 className={`${dmSans.variable} ${jetbrainsMono.variable} font-sans antialiased`}
             >
