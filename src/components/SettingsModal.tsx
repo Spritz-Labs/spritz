@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type UserSettings } from "@/hooks/useUserSettings";
 
@@ -14,6 +13,7 @@ type SettingsModalProps = {
   pushPermission: NotificationPermission;
   pushSubscribed: boolean;
   pushLoading: boolean;
+  pushError: string | null;
   onEnablePush: () => Promise<boolean>;
   onDisablePush: () => Promise<boolean>;
 };
@@ -27,27 +27,15 @@ export function SettingsModal({
   pushPermission,
   pushSubscribed,
   pushLoading,
+  pushError,
   onEnablePush,
   onDisablePush,
 }: SettingsModalProps) {
-  const [pushError, setPushError] = useState<string | null>(null);
-
   const handlePushToggle = async () => {
-    setPushError(null);
     if (pushSubscribed) {
-      const success = await onDisablePush();
-      if (!success) {
-        setPushError("Failed to disable notifications");
-      }
+      await onDisablePush();
     } else {
-      const success = await onEnablePush();
-      if (!success) {
-        if (pushPermission === "denied") {
-          setPushError("Notifications blocked. Enable in browser settings.");
-        } else {
-          setPushError("Failed to enable notifications");
-        }
-      }
+      await onEnablePush();
     }
   };
   return (

@@ -191,6 +191,7 @@ function DashboardContent({
         permission: pushPermission,
         isSubscribed: pushSubscribed,
         isLoading: pushLoading,
+        error: pushError,
         subscribe: subscribeToPush,
         unsubscribe: unsubscribeFromPush,
     } = usePushNotifications(userAddress);
@@ -2085,6 +2086,7 @@ function DashboardContent({
                 pushPermission={pushPermission}
                 pushSubscribed={pushSubscribed}
                 pushLoading={pushLoading}
+                pushError={pushError}
                 onEnablePush={subscribeToPush}
                 onDisablePush={unsubscribeFromPush}
             />

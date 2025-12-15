@@ -23,7 +23,8 @@ function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
 
 export function usePushNotifications(userAddress: Address | null) {
     const [isSupported, setIsSupported] = useState(false);
-    const [permission, setPermission] = useState<NotificationPermission>("default");
+    const [permission, setPermission] =
+        useState<NotificationPermission>("default");
     const [isSubscribed, setIsSubscribed] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -67,8 +68,13 @@ export function usePushNotifications(userAddress: Address | null) {
 
     // Subscribe to push notifications
     const subscribe = useCallback(async (): Promise<boolean> => {
-        console.log("[Push] Subscribe called", { isSupported, userAddress, hasSupabase: !!supabase, vapidKey: !!VAPID_PUBLIC_KEY });
-        
+        console.log("[Push] Subscribe called", {
+            isSupported,
+            userAddress,
+            hasSupabase: !!supabase,
+            vapidKey: !!VAPID_PUBLIC_KEY,
+        });
+
         if (!isSupported || !userAddress || !supabase) {
             setError("Push notifications not supported or not configured");
             setIsLoading(false);
@@ -92,11 +98,17 @@ export function usePushNotifications(userAddress: Address | null) {
             }
 
             // Check if service worker is registered
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            console.log("[Push] Service worker registrations:", registrations.length);
-            
+            const registrations =
+                await navigator.serviceWorker.getRegistrations();
+            console.log(
+                "[Push] Service worker registrations:",
+                registrations.length
+            );
+
             if (registrations.length === 0) {
-                setError("Service worker not available. Try refreshing the page.");
+                setError(
+                    "Service worker not available. Try refreshing the page."
+                );
                 setIsLoading(false);
                 return false;
             }
@@ -105,9 +117,12 @@ export function usePushNotifications(userAddress: Address | null) {
             console.log("[Push] Waiting for service worker...");
             const registration = await Promise.race([
                 navigator.serviceWorker.ready,
-                new Promise<never>((_, reject) => 
-                    setTimeout(() => reject(new Error("Service worker timeout")), 10000)
-                )
+                new Promise<never>((_, reject) =>
+                    setTimeout(
+                        () => reject(new Error("Service worker timeout")),
+                        10000
+                    )
+                ),
             ]);
             console.log("[Push] Service worker ready");
 
@@ -149,7 +164,9 @@ export function usePushNotifications(userAddress: Address | null) {
             return true;
         } catch (err) {
             console.error("[Push] Error subscribing:", err);
-            setError(err instanceof Error ? err.message : "Failed to subscribe");
+            setError(
+                err instanceof Error ? err.message : "Failed to subscribe"
+            );
             setIsLoading(false);
             return false;
         }
