@@ -99,16 +99,13 @@ export function usePushNotifications(userAddress: Address | null) {
 
             // Wait for service worker to be ready (with timeout)
             console.log("[Push] Waiting for service worker...");
-            
+
             let registration: ServiceWorkerRegistration;
             try {
                 registration = await Promise.race([
                     navigator.serviceWorker.ready,
                     new Promise<never>((_, reject) =>
-                        setTimeout(
-                            () => reject(new Error("timeout")),
-                            15000
-                        )
+                        setTimeout(() => reject(new Error("timeout")), 15000)
                     ),
                 ]);
                 console.log("[Push] Service worker ready:", registration.scope);
@@ -117,15 +114,23 @@ export function usePushNotifications(userAddress: Address | null) {
                 // Try to register manually if not available
                 try {
                     console.log("[Push] Attempting manual SW registration...");
-                    registration = await navigator.serviceWorker.register("/sw.js", {
-                        scope: "/",
-                    });
+                    registration = await navigator.serviceWorker.register(
+                        "/sw.js",
+                        {
+                            scope: "/",
+                        }
+                    );
                     // Wait for it to be ready
                     await navigator.serviceWorker.ready;
                     console.log("[Push] Manual registration successful");
                 } catch (regError) {
-                    console.error("[Push] Manual registration failed:", regError);
-                    setError("Service worker not available. Please refresh and try again.");
+                    console.error(
+                        "[Push] Manual registration failed:",
+                        regError
+                    );
+                    setError(
+                        "Service worker not available. Please refresh and try again."
+                    );
                     setIsLoading(false);
                     return false;
                 }
