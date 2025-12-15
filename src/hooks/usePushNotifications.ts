@@ -97,34 +97,39 @@ export function usePushNotifications(userAddress: Address | null) {
                 return false;
             }
 
-            // Check if service worker is registered
-            const registrations =
-                await navigator.serviceWorker.getRegistrations();
-            console.log(
-                "[Push] Service worker registrations:",
-                registrations.length
-            );
-
-            if (registrations.length === 0) {
-                setError(
-                    "Service worker not available. Try refreshing the page."
-                );
-                setIsLoading(false);
-                return false;
-            }
-
-            // Get service worker registration with timeout
+            // Wait for service worker to be ready (with timeout)
             console.log("[Push] Waiting for service worker...");
-            const registration = await Promise.race([
-                navigator.serviceWorker.ready,
-                new Promise<never>((_, reject) =>
-                    setTimeout(
-                        () => reject(new Error("Service worker timeout")),
-                        10000
-                    )
-                ),
-            ]);
-            console.log("[Push] Service worker ready");
+            
+            let registration: ServiceWorkerRegistration;
+            try {
+                registration = await Promise.race([
+                    navigator.serviceWorker.ready,
+                    new Promise<never>((_, reject) =>
+                        setTimeout(
+                            () => reject(new Error("timeout")),
+                            15000
+                        )
+                    ),
+                ]);
+                console.log("[Push] Service worker ready:", registration.scope);
+            } catch (swError) {
+                console.error("[Push] Service worker error:", swError);
+                // Try to register manually if not available
+                try {
+                    console.log("[Push] Attempting manual SW registration...");
+                    registration = await navigator.serviceWorker.register("/sw.js", {
+                        scope: "/",
+                    });
+                    // Wait for it to be ready
+                    await navigator.serviceWorker.ready;
+                    console.log("[Push] Manual registration successful");
+                } catch (regError) {
+                    console.error("[Push] Manual registration failed:", regError);
+                    setError("Service worker not available. Please refresh and try again.");
+                    setIsLoading(false);
+                    return false;
+                }
+            }
 
             // Subscribe to push
             console.log("[Push] Subscribing to push manager...");

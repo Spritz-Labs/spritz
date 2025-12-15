@@ -184,7 +184,7 @@ function DashboardContent({
         toggleDnd,
         toggleSound,
     } = useUserSettings(userAddress);
-    
+
     // Push notifications
     const {
         isSupported: pushSupported,
@@ -195,7 +195,7 @@ function DashboardContent({
         subscribe: subscribeToPush,
         unsubscribe: unsubscribeFromPush,
     } = usePushNotifications(userAddress);
-    
+
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
@@ -770,8 +770,14 @@ function DashboardContent({
         )}_${addresses[1].slice(2, 10)}`;
 
         // Create signaling record to notify the callee
-        const callerDisplayName = userENS.ensName || (reachUsername ? `@${reachUsername}` : undefined);
-        const callRecord = await startCall(friend.address, channelName, callerDisplayName);
+        const callerDisplayName =
+            userENS.ensName ||
+            (reachUsername ? `@${reachUsername}` : undefined);
+        const callRecord = await startCall(
+            friend.address,
+            channelName,
+            callerDisplayName
+        );
 
         if (!callRecord) {
             console.error("[Dashboard] Failed to create call signaling record");
