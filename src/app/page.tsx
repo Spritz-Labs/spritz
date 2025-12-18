@@ -69,14 +69,8 @@ export default function Home() {
     // Show loading splash while checking auth
     if (isCheckingAuth) {
         return (
-            <main className="min-h-screen bg-zinc-950 flex items-center justify-center overflow-hidden relative">
-                {/* Globe in background */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <Globe className="opacity-70" />
-                </div>
-
-                {/* Loading content */}
-                <div className="text-center relative z-10">
+            <main className="min-h-screen bg-zinc-950 flex items-center justify-center">
+                <div className="text-center">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30 animate-pulse">
                         <svg
                             className="w-8 h-8 text-white"
@@ -92,10 +86,10 @@ export default function Home() {
                             />
                         </svg>
                     </div>
-                    <h1 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">
+                    <h1 className="text-2xl font-bold text-white mb-2">
                         Reach
                     </h1>
-                    <p className="text-zinc-400 text-sm">Loading...</p>
+                    <p className="text-zinc-500 text-sm">Loading...</p>
                 </div>
             </main>
         );
@@ -125,11 +119,13 @@ export default function Home() {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 0.6, scale: 1 }}
+                    animate={{ opacity: 0.85, scale: 1 }}
                     transition={{ duration: 2, delay: 0.3 }}
                     className="relative"
                 >
                     <Globe />
+                    {/* Glow effect behind globe */}
+                    <div className="absolute inset-0 bg-violet-500/20 rounded-full blur-[80px] -z-10 scale-125" />
                 </motion.div>
             </div>
 

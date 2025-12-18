@@ -18,9 +18,19 @@ export function Globe({
         setIsClient(true);
         // Make globe responsive to screen size
         const updateSize = () => {
-            const screenMin = Math.min(window.innerWidth, window.innerHeight);
-            // Globe should be 80% of the smaller screen dimension, min 400, max 900
-            const newSize = Math.max(400, Math.min(900, screenMin * 0.85));
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            // On mobile, make globe fill more of the screen
+            // Use the larger dimension to ensure visibility
+            const isMobile = screenWidth < 768;
+            const multiplier = isMobile ? 1.2 : 0.85;
+            const minSize = isMobile ? 350 : 500;
+            const maxSize = isMobile ? 600 : 900;
+            const screenMin = Math.min(screenWidth, screenHeight);
+            const newSize = Math.max(
+                minSize,
+                Math.min(maxSize, screenMin * multiplier)
+            );
             setActualSize(newSize);
         };
         updateSize();
@@ -40,12 +50,12 @@ export function Globe({
             phi: 0,
             theta: 0.3,
             dark: 1,
-            diffuse: 1.2,
+            diffuse: 3, // Increased diffuse lighting
             mapSamples: 16000,
-            mapBrightness: 6, // Much brighter map
-            baseColor: [0.4, 0.4, 0.5], // Lighter base
+            mapBrightness: 12, // Much brighter map for mobile visibility
+            baseColor: [0.5, 0.5, 0.6], // Brighter base color
             markerColor: [139 / 255, 92 / 255, 246 / 255], // violet-500
-            glowColor: [0.3, 0.2, 0.5], // Purple glow
+            glowColor: [0.4, 0.3, 0.6], // Stronger purple glow
             markers: [
                 // Major tech hubs with connections
                 { location: [37.7749, -122.4194], size: 0.12 }, // San Francisco
@@ -96,8 +106,7 @@ export function Globe({
             style={{
                 width: actualSize,
                 height: actualSize,
-                maxWidth: "100%",
-                aspectRatio: "1",
+                display: "block",
             }}
         />
     );
