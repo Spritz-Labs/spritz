@@ -680,8 +680,10 @@ export function useVoiceCall() {
             }
 
             // Determine canvas size - use remote video dimensions or fallback
-            const width = remoteVideo?.videoWidth || localVideo?.videoWidth || 1280;
-            const height = remoteVideo?.videoHeight || localVideo?.videoHeight || 720;
+            const width =
+                remoteVideo?.videoWidth || localVideo?.videoWidth || 1280;
+            const height =
+                remoteVideo?.videoHeight || localVideo?.videoHeight || 720;
 
             // Create canvas
             const canvas = document.createElement("canvas");
@@ -745,7 +747,9 @@ export function useVoiceCall() {
                     } catch (e) {
                         // User cancelled or share failed, fall through to download
                         if ((e as Error).name !== "AbortError") {
-                            console.log("[Screenshot] Share failed, falling back to download");
+                            console.log(
+                                "[Screenshot] Share failed, falling back to download"
+                            );
                         }
                     }
                 }

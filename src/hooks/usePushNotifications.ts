@@ -147,12 +147,73 @@ export function usePushNotifications(userAddress: string | null) {
                 }
             }
 
-            // Subscribe to push
+            // Wait for service worker to be active (it might be installing/waiting)
+            const waitForActive = async (
+                reg: ServiceWorkerRegistration,
+                maxAttempts = 10
+            ): Promise<void> => {
+                for (let i = 0; i < maxAttempts; i++) {
+                    const sw = reg.active || reg.waiting || reg.installing;
+                    if (reg.active && reg.active.state === "activated") {
+                        console.log("[Push] Service worker is active");
+                        return;
+                    }
+                    console.log(
+                        `[Push] Waiting for SW to activate... attempt ${i + 1}/${maxAttempts}`,
+                        sw?.state
+                    );
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                }
+                // Continue anyway - let the subscribe call fail with a proper error if needed
+                console.log("[Push] Proceeding after wait attempts");
+            };
+
+            await waitForActive(registration);
+
+            // Subscribe to push with retry
             console.log("[Push] Subscribing to push manager...");
-            const subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY!),
-            });
+            let subscription: PushSubscription | null = null;
+            let lastError: Error | null = null;
+            const maxRetries = 5;
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(
+                            VAPID_PUBLIC_KEY!
+                        ),
+                    });
+                    break; // Success!
+                } catch (subError) {
+                    lastError = subError as Error;
+                    const errMsg =
+                        subError instanceof Error ? subError.message : "";
+                    console.log(
+                        `[Push] Subscribe attempt ${attempt + 1}/${maxRetries} failed:`,
+                        errMsg
+                    );
+
+                    // If it's the "active service worker" error, wait and retry
+                    if (
+                        errMsg.includes("active service worker") ||
+                        errMsg.includes("activated")
+                    ) {
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, 1000)
+                        );
+                        continue;
+                    }
+                    // For other errors, don't retry
+                    throw subError;
+                }
+            }
+
+            if (!subscription) {
+                throw (
+                    lastError || new Error("Failed to subscribe after retries")
+                );
+            }
 
             console.log("[Push] Subscription created:", subscription.endpoint);
 

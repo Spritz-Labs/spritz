@@ -81,12 +81,17 @@ export default function RootLayout({
                     rel="apple-touch-icon"
                     href="/icons/apple-touch-icon.png"
                 />
-                {/* Suppress known AppKit/Solana errors before React loads */}
+                {/* Suppress known AppKit/Solana/XMTP errors before React loads */}
                 <script
                     dangerouslySetInnerHTML={{
                         __html: `
                             (function() {
-                                var suppressedErrors = ['Endpoint URL must start with', 'No project ID is configured'];
+                                var suppressedErrors = [
+                                    'Endpoint URL must start with',
+                                    'No project ID is configured',
+                                    'Group is inactive',
+                                    'Errors Occured During Sync'
+                                ];
                                 window.addEventListener('error', function(e) {
                                     var msg = e.message || (e.error && e.error.message) || '';
                                     for (var i = 0; i < suppressedErrors.length; i++) {
@@ -107,6 +112,17 @@ export default function RootLayout({
                                         }
                                     }
                                 }, true);
+                                // Also suppress console.error for these XMTP messages
+                                var origError = console.error;
+                                console.error = function() {
+                                    var msg = Array.prototype.join.call(arguments, ' ');
+                                    for (var i = 0; i < suppressedErrors.length; i++) {
+                                        if (msg.indexOf(suppressedErrors[i]) !== -1) {
+                                            return;
+                                        }
+                                    }
+                                    origError.apply(console, arguments);
+                                };
                             })();
                         `,
                     }}
