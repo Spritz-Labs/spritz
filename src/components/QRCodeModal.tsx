@@ -115,7 +115,10 @@ export function QRCodeModal({
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `reach-qr-${displayName.replace(/[^a-zA-Z0-9]/g, "-")}.png`;
+        link.download = `reach-qr-${displayName.replace(
+            /[^a-zA-Z0-9]/g,
+            "-"
+        )}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -162,10 +165,16 @@ export function QRCodeModal({
 
     // Social share URLs
     const socialLinks = {
-        twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
-        telegram: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`,
+        twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+            shareText
+        )}`,
+        telegram: `https://t.me/share/url?url=${encodeURIComponent(
+            shareUrl
+        )}&text=${encodeURIComponent(shareText)}`,
         whatsapp: `https://wa.me/?text=${encodeURIComponent(shareText)}`,
-        facebook: `https://www.facebook.com/sharer/sharer.php?quote=${encodeURIComponent(shareText)}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?quote=${encodeURIComponent(
+            shareText
+        )}`,
     };
 
     const canNativeShare =
@@ -423,5 +432,3 @@ export function QRCodeModal({
         </AnimatePresence>
     );
 }
-
-
