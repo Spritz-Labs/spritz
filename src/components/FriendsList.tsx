@@ -821,7 +821,12 @@ export function FriendsList({
                                         {friendToRemove.nickname ||
                                             friendToRemove.reachUsername ||
                                             friendToRemove.ensName ||
-                                            `${friendToRemove.address.slice(0, 6)}...${friendToRemove.address.slice(-4)}`}
+                                            `${friendToRemove.address.slice(
+                                                0,
+                                                6
+                                            )}...${friendToRemove.address.slice(
+                                                -4
+                                            )}`}
                                     </span>
                                     ? This action cannot be undone.
                                 </p>
