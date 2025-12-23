@@ -7,6 +7,7 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { mainnet } from "wagmi/chains";
 import { useFriendRequests, type Friend } from "@/hooks/useFriendRequests";
 import { useVoiceCall } from "@/hooks/useVoiceCall";
+import { useHuddle01Call } from "@/hooks/useHuddle01Call";
 import { useCallSignaling } from "@/hooks/useCallSignaling";
 import { useENS } from "@/hooks/useENS";
 import { FriendsList } from "./FriendsList";
@@ -23,6 +24,7 @@ import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { isAgoraConfigured } from "@/config/agora";
+import { isHuddle01Configured, createHuddle01Room } from "@/config/huddle01";
 import { StatusModal } from "./StatusModal";
 import { SettingsModal } from "./SettingsModal";
 import { QRCodeModal } from "./QRCodeModal";
@@ -192,6 +194,7 @@ function DashboardContent({
         setStatus,
         toggleDnd,
         toggleSound,
+        toggleDecentralizedCalls,
     } = useUserSettings(userAddress);
 
     // Push notifications
@@ -252,6 +255,18 @@ function DashboardContent({
         resolveUserENS();
     }, [userAddress, resolveAddressOrENS]);
 
+    // Agora (centralized) call hook
+    const agoraCall = useVoiceCall();
+
+    // Huddle01 (decentralized) call hook
+    const huddle01Call = useHuddle01Call(userAddress);
+
+    // Use the appropriate call provider based on user settings
+    const useDecentralized =
+        userSettings.decentralizedCalls && isHuddle01Configured;
+    const activeCall = useDecentralized ? huddle01Call : agoraCall;
+
+    // Destructure from active provider
     const {
         callState,
         callType,
@@ -272,7 +287,7 @@ function DashboardContent({
         setRemoteVideoContainer,
         setScreenShareContainer,
         isConfigured: isCallConfigured,
-    } = useVoiceCall();
+    } = activeCall;
 
     const {
         incomingCall,
@@ -791,15 +806,36 @@ function DashboardContent({
             notifyOutgoingCall(); // Play outgoing call sound
         }
 
-        // Generate a unique channel name based on both addresses (sorted for consistency)
-        const addresses = [
-            userAddress.toLowerCase(),
-            friend.address.toLowerCase(),
-        ].sort();
-        const channelName = `spritz_${addresses[0].slice(
-            2,
-            10
-        )}_${addresses[1].slice(2, 10)}`;
+        // Determine the channel/room name based on call provider
+        let channelName: string;
+        const useDecentralized =
+            userSettings.decentralizedCalls && isHuddle01Configured;
+
+        if (useDecentralized) {
+            // Create a Huddle01 room and use its ID
+            console.log("[Dashboard] Creating Huddle01 room for call...");
+            const roomResult = await createHuddle01Room("Spritz Call");
+            if (!roomResult) {
+                console.error("[Dashboard] Failed to create Huddle01 room");
+                setCurrentCallFriend(null);
+                alert(
+                    "Failed to create decentralized call room. Please try again or disable decentralized calls."
+                );
+                return;
+            }
+            channelName = roomResult.roomId;
+            console.log("[Dashboard] Huddle01 room created:", channelName);
+        } else {
+            // Generate a unique channel name for Agora based on both addresses (sorted for consistency)
+            const addresses = [
+                userAddress.toLowerCase(),
+                friend.address.toLowerCase(),
+            ].sort();
+            channelName = `spritz_${addresses[0].slice(
+                2,
+                10
+            )}_${addresses[1].slice(2, 10)}`;
+        }
 
         // Create signaling record to notify the callee
         const callerDisplayName =
@@ -1945,6 +1981,70 @@ function DashboardContent({
                                     Add Friend
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Decentralized Calls Toggle */}
+                        <div className="px-6 py-4 border-b border-zinc-800">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 flex items-center justify-center">
+                                        <svg
+                                            className="w-5 h-5 text-emerald-400"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                            />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-white font-medium">
+                                            Decentralized Calls
+                                        </p>
+                                        <p className="text-zinc-500 text-xs">
+                                            {userSettings.decentralizedCalls
+                                                ? "Using Huddle01 (Web3)"
+                                                : "Using Agora (Centralized)"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={toggleDecentralizedCalls}
+                                    disabled={
+                                        !isHuddle01Configured &&
+                                        !userSettings.decentralizedCalls
+                                    }
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                        userSettings.decentralizedCalls
+                                            ? "bg-emerald-500"
+                                            : "bg-zinc-700"
+                                    } ${
+                                        !isHuddle01Configured &&
+                                        !userSettings.decentralizedCalls
+                                            ? "opacity-50 cursor-not-allowed"
+                                            : ""
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            userSettings.decentralizedCalls
+                                                ? "translate-x-6"
+                                                : "translate-x-1"
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+                            {!isHuddle01Configured && (
+                                <p className="text-amber-500/80 text-xs mt-2">
+                                    Set NEXT_PUBLIC_HUDDLE01_PROJECT_ID and
+                                    NEXT_PUBLIC_HUDDLE01_API_KEY to enable
+                                </p>
+                            )}
                         </div>
 
                         <div className="p-6">

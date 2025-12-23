@@ -14,6 +14,7 @@ export type UserSettings = {
     statusText: string;
     isDnd: boolean;
     soundEnabled: boolean;
+    decentralizedCalls: boolean;
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     statusText: "Available to chat",
     isDnd: false,
     soundEnabled: true,
+    decentralizedCalls: false, // Default to Agora until Huddle01 is fully integrated
 };
 
 // Preset status options
@@ -70,6 +72,7 @@ export function useUserSettings(userAddress: string | null) {
                         statusText: data.status_text || "",
                         isDnd: data.is_dnd || false,
                         soundEnabled: data.sound_enabled ?? true,
+                        decentralizedCalls: data.decentralized_calls ?? false, // Default to Agora
                     });
                 }
             } catch (err) {
@@ -109,6 +112,8 @@ export function useUserSettings(userAddress: string | null) {
                             status_text: updatedSettings.statusText,
                             is_dnd: updatedSettings.isDnd,
                             sound_enabled: updatedSettings.soundEnabled,
+                            decentralized_calls:
+                                updatedSettings.decentralizedCalls,
                             updated_at: new Date().toISOString(),
                         },
                         { onConflict: "wallet_address" }
@@ -153,6 +158,14 @@ export function useUserSettings(userAddress: string | null) {
         [updateSettings, settings.soundEnabled]
     );
 
+    const toggleDecentralizedCalls = useCallback(
+        () =>
+            updateSettings({
+                decentralizedCalls: !settings.decentralizedCalls,
+            }),
+        [updateSettings, settings.decentralizedCalls]
+    );
+
     const clearStatus = useCallback(
         () =>
             updateSettings({
@@ -170,6 +183,7 @@ export function useUserSettings(userAddress: string | null) {
         setStatus,
         toggleDnd,
         toggleSound,
+        toggleDecentralizedCalls,
         clearStatus,
         isConfigured: isSupabaseConfigured,
     };
