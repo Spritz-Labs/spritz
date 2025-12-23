@@ -8,6 +8,7 @@ export type CallSignal = {
     caller_address: string;
     callee_address: string;
     channel_name: string;
+    call_type: "audio" | "video";
     status: "ringing" | "accepted" | "rejected" | "ended" | "missed";
     created_at: string;
 };
@@ -159,7 +160,8 @@ export function useCallSignaling(userAddress: string | null) {
         async (
             calleeAddress: string,
             channelName: string,
-            callerName?: string
+            callerName?: string,
+            callType: "audio" | "video" = "audio"
         ): Promise<CallSignal | null> => {
             if (!userAddress || !isSupabaseConfigured || !supabase) {
                 console.error("[CallSignaling] Not configured");
@@ -173,6 +175,7 @@ export function useCallSignaling(userAddress: string | null) {
                 normalizedCaller,
                 normalizedCallee,
                 channelName,
+                callType,
             });
 
             // Clean up any existing calls first
@@ -191,13 +194,19 @@ export function useCallSignaling(userAddress: string | null) {
                     caller_address: normalizedCaller,
                     callee_address: normalizedCallee,
                     channel_name: channelName,
+                    call_type: callType,
                     status: "ringing",
                 })
                 .select()
                 .single();
 
             if (error) {
-                console.error("[CallSignaling] Failed to start call:", error);
+                console.error("[CallSignaling] Failed to start call:", {
+                    message: error.message,
+                    details: error.details,
+                    hint: error.hint,
+                    code: error.code,
+                });
                 return null;
             }
 
@@ -233,11 +242,19 @@ export function useCallSignaling(userAddress: string | null) {
         [userAddress]
     );
 
-    // Accept incoming call
-    const acceptCall = useCallback(async (): Promise<string | null> => {
+    // Accept incoming call - returns { channelName, callType } or null
+    const acceptCall = useCallback(async (): Promise<{
+        channelName: string;
+        callType: "audio" | "video";
+    } | null> => {
         if (!incomingCall || !supabase) return null;
 
-        console.log("[CallSignaling] Accepting call:", incomingCall.id);
+        console.log(
+            "[CallSignaling] Accepting call:",
+            incomingCall.id,
+            "type:",
+            incomingCall.call_type
+        );
 
         const { error } = await supabase
             .from("shout_calls")
@@ -253,10 +270,11 @@ export function useCallSignaling(userAddress: string | null) {
         }
 
         const channelName = incomingCall.channel_name;
+        const callType = incomingCall.call_type || "audio";
         const callId = incomingCall.id;
         setIncomingCall(null);
         setActiveCallId(callId); // Track the active call
-        return channelName;
+        return { channelName, callType };
     }, [incomingCall]);
 
     // Reject incoming call

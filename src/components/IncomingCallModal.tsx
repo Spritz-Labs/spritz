@@ -6,6 +6,7 @@ type IncomingCallModalProps = {
   callerAddress: string;
   callerName?: string | null;
   callerAvatar?: string | null;
+  callType?: "audio" | "video";
   onAccept: () => void;
   onReject: () => void;
 };
@@ -14,6 +15,7 @@ export function IncomingCallModal({
   callerAddress,
   callerName,
   callerAvatar,
+  callType = "audio",
   onAccept,
   onReject,
 }: IncomingCallModalProps) {
@@ -91,7 +93,7 @@ export function IncomingCallModal({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
               </span>
-              Incoming voice call
+              Incoming {callType === "video" ? "video" : "voice"} call
             </p>
           </div>
 

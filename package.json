@@ -14,7 +14,6 @@
     },
     "dependencies": {
         "@coinbase/wallet-sdk": "^4.3.7",
-        "@huddle01/react": "^2.6.4",
         "@huddle01/server-sdk": "^2.6.2",
         "@huddle01/web-core": "^2.6.4",
         "@metamask/sdk": "^0.33.1",

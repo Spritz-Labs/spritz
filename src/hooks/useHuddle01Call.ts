@@ -189,6 +189,10 @@ export function useHuddle01Call(userAddress: string | null) {
     }, []);
 
     const startDurationTimer = useCallback(() => {
+        // Clear any existing timer first to prevent duplicates
+        if (durationIntervalRef.current) {
+            clearInterval(durationIntervalRef.current);
+        }
         startTimeRef.current = Date.now();
         durationIntervalRef.current = setInterval(() => {
             if (startTimeRef.current) {
@@ -200,6 +204,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 }));
             }
         }, 1000);
+        console.log("[Huddle01] Duration timer started");
     }, []);
 
     const stopDurationTimer = useCallback(() => {
@@ -605,22 +610,29 @@ export function useHuddle01Call(userAddress: string | null) {
                             localVideoRef.current &&
                             track
                         ) {
-                            const stream = new MediaStream([track]);
-                            const videoEl = document.createElement("video");
-                            videoEl.srcObject = stream;
-                            videoEl.autoplay = true;
-                            videoEl.playsInline = true;
-                            videoEl.muted = true;
-                            videoEl.style.width = "100%";
-                            videoEl.style.height = "100%";
-                            videoEl.style.objectFit = "cover";
-                            videoEl.style.borderRadius = "12px";
-                            videoEl.style.transform = "scaleX(-1)";
-                            localVideoRef.current.innerHTML = "";
-                            localVideoRef.current.appendChild(videoEl);
-                            console.log(
-                                "[Huddle01] Local video element created"
-                            );
+                            // Check if we already have a local video element
+                            const existingVideo = localVideoRef.current.querySelector("video");
+                            if (existingVideo) {
+                                // Update existing element's stream instead of creating new one
+                                const stream = new MediaStream([track]);
+                                existingVideo.srcObject = stream;
+                                console.log("[Huddle01] Updated existing local video element");
+                            } else {
+                                const stream = new MediaStream([track]);
+                                const videoEl = document.createElement("video");
+                                videoEl.srcObject = stream;
+                                videoEl.autoplay = true;
+                                videoEl.playsInline = true;
+                                videoEl.muted = true;
+                                videoEl.style.width = "100%";
+                                videoEl.style.height = "100%";
+                                videoEl.style.objectFit = "cover";
+                                videoEl.style.borderRadius = "12px";
+                                videoEl.style.transform = "scaleX(-1)";
+                                localVideoRef.current.innerHTML = "";
+                                localVideoRef.current.appendChild(videoEl);
+                                console.log("[Huddle01] Local video element created");
+                            }
                         }
                     } catch (err) {
                         console.warn(
@@ -1031,6 +1043,13 @@ export function useHuddle01Call(userAddress: string | null) {
                     }
                 }
 
+                // The room-joined event might not always fire, so ensure the timer is started here too
+                // If it was already started by room-joined, starting again is fine (it will just restart)
+                if (!startTimeRef.current) {
+                    console.log("[Huddle01] Starting duration timer (fallback)");
+                    startDurationTimer();
+                }
+
                 setState((prev) => ({
                     ...prev,
                     roomId,
@@ -1067,6 +1086,44 @@ export function useHuddle01Call(userAddress: string | null) {
 
         try {
             if (clientRef.current) {
+                // First, try to stop all local media tracks to release the microphone/camera
+                // Only try to stop media if they were actually started
+                // Check state to avoid "Cannot Find Producer" errors
+                const localPeer = clientRef.current.localPeer;
+                if (localPeer) {
+                    console.log("[Huddle01] Stopping local media tracks...");
+                    
+                    // Only disable audio if not already muted (producer exists)
+                    if (!state.isMuted) {
+                        try {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            await (localPeer as any).disableAudio?.();
+                        } catch (e) {
+                            // Silently ignore - producer may not exist
+                        }
+                    }
+                    
+                    // Only disable video if it was enabled (producer exists)
+                    if (!state.isVideoOff) {
+                        try {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            await (localPeer as any).disableVideo?.();
+                        } catch (e) {
+                            // Silently ignore - producer may not exist
+                        }
+                    }
+                    
+                    // Only stop screen share if it was active
+                    if (state.isScreenSharing) {
+                        try {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            await (localPeer as any).stopScreenShare?.();
+                        } catch (e) {
+                            // Silently ignore - producer may not exist
+                        }
+                    }
+                }
+
                 // Check if the room is actually connected before trying to leave
                 // Also check if socket is still open
                 try {
@@ -1103,11 +1160,49 @@ export function useHuddle01Call(userAddress: string | null) {
         } catch (error) {
             // Ignore all errors during cleanup
         } finally {
-            // Clean up media elements
-            if (localVideoRef.current) localVideoRef.current.innerHTML = "";
-            if (remoteVideoRef.current) remoteVideoRef.current.innerHTML = "";
-            if (screenShareRef.current) screenShareRef.current.innerHTML = "";
+            // Clean up media elements and stop any remaining tracks
+            if (localVideoRef.current) {
+                // Stop tracks from video elements
+                const videos = localVideoRef.current.querySelectorAll("video");
+                videos.forEach((video) => {
+                    const stream = video.srcObject as MediaStream;
+                    if (stream) {
+                        stream.getTracks().forEach((track) => {
+                            track.stop();
+                            console.log("[Huddle01] Stopped local video track:", track.kind);
+                        });
+                    }
+                    video.srcObject = null;
+                });
+                localVideoRef.current.innerHTML = "";
+            }
+            if (remoteVideoRef.current) {
+                const videos = remoteVideoRef.current.querySelectorAll("video");
+                videos.forEach((video) => {
+                    const stream = video.srcObject as MediaStream;
+                    if (stream) {
+                        stream.getTracks().forEach((track) => track.stop());
+                    }
+                    video.srcObject = null;
+                });
+                remoteVideoRef.current.innerHTML = "";
+            }
+            if (screenShareRef.current) {
+                const videos = screenShareRef.current.querySelectorAll("video");
+                videos.forEach((video) => {
+                    const stream = video.srcObject as MediaStream;
+                    if (stream) {
+                        stream.getTracks().forEach((track) => track.stop());
+                    }
+                    video.srcObject = null;
+                });
+                screenShareRef.current.innerHTML = "";
+            }
             if (remoteAudioRef.current) {
+                const stream = remoteAudioRef.current.srcObject as MediaStream;
+                if (stream) {
+                    stream.getTracks().forEach((track) => track.stop());
+                }
                 remoteAudioRef.current.srcObject = null;
                 remoteAudioRef.current.remove();
                 remoteAudioRef.current = null;
@@ -1128,7 +1223,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 roomId: null,
             });
         }
-    }, [stopDurationTimer]);
+    }, [stopDurationTimer, state.isMuted, state.isVideoOff, state.isScreenSharing]);
 
     const toggleMute = useCallback(async () => {
         if (!clientRef.current) return;
@@ -1140,11 +1235,20 @@ export function useHuddle01Call(userAddress: string | null) {
             };
 
             if (state.isMuted) {
-                await localPeer.enableAudio();
+                try {
+                    await localPeer.enableAudio();
+                } catch (enableErr) {
+                    console.warn("[Huddle01] Could not enable audio:", enableErr);
+                }
+                setState((prev) => ({ ...prev, isMuted: false }));
             } else {
-                await localPeer.disableAudio();
+                try {
+                    await localPeer.disableAudio();
+                } catch (disableErr) {
+                    console.warn("[Huddle01] Could not disable audio (may not be enabled):", disableErr);
+                }
+                setState((prev) => ({ ...prev, isMuted: true }));
             }
-            setState((prev) => ({ ...prev, isMuted: !prev.isMuted }));
         } catch (error) {
             console.error("[Huddle01] Error toggling mute:", error);
         }
@@ -1167,8 +1271,30 @@ export function useHuddle01Call(userAddress: string | null) {
                     callType: "video",
                 }));
             } else {
-                await localPeer.disableVideo();
+                // Wrap in try/catch - disableVideo can fail if producer doesn't exist
+                try {
+                    await localPeer.disableVideo();
+                } catch (disableErr) {
+                    console.warn("[Huddle01] Could not disable video (may not be enabled):", disableErr);
+                }
+                // Always update state even if disable fails
                 setState((prev) => ({ ...prev, isVideoOff: true }));
+                
+                // Also clean up the local video element
+                if (localVideoRef.current) {
+                    const videos = localVideoRef.current.querySelectorAll("video");
+                    videos.forEach((video) => {
+                        const stream = video.srcObject as MediaStream;
+                        if (stream) {
+                            stream.getTracks().forEach((track) => {
+                                if (track.kind === "video") {
+                                    track.stop();
+                                }
+                            });
+                        }
+                    });
+                    localVideoRef.current.innerHTML = "";
+                }
             }
         } catch (error) {
             console.error("[Huddle01] Error toggling video:", error);
@@ -1185,8 +1311,24 @@ export function useHuddle01Call(userAddress: string | null) {
             };
 
             if (state.isScreenSharing) {
-                await localPeer.stopScreenShare();
+                try {
+                    await localPeer.stopScreenShare();
+                } catch (stopErr) {
+                    console.warn("[Huddle01] Could not stop screen share:", stopErr);
+                }
                 setState((prev) => ({ ...prev, isScreenSharing: false }));
+                
+                // Clean up screen share element
+                if (screenShareRef.current) {
+                    const videos = screenShareRef.current.querySelectorAll("video");
+                    videos.forEach((video) => {
+                        const stream = video.srcObject as MediaStream;
+                        if (stream) {
+                            stream.getTracks().forEach((track) => track.stop());
+                        }
+                    });
+                    screenShareRef.current.innerHTML = "";
+                }
             } else {
                 await localPeer.startScreenShare();
                 setState((prev) => ({

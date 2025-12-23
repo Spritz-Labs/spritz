@@ -844,7 +844,8 @@ function DashboardContent({
         const callRecord = await startCall(
             friend.address,
             channelName,
-            callerDisplayName
+            callerDisplayName,
+            withVideo ? "video" : "audio"
         );
 
         if (!callRecord) {
@@ -885,14 +886,17 @@ function DashboardContent({
 
     const handleAcceptCall = async () => {
         stopRinging(); // Stop the ring sound
-        const channelName = await acceptCall();
-        if (channelName) {
+        const result = await acceptCall();
+        if (result) {
+            const { channelName, callType } = result;
             // Find the caller friend to show in the call UI
             if (incomingCallFriend) {
                 setCurrentCallFriend(incomingCallFriend);
             }
-            // Join the Agora channel
-            const success = await joinCall(channelName);
+            // Join the call channel with video if it's a video call
+            const withVideo = callType === "video";
+            console.log("[Dashboard] Accepting call, type:", callType, "withVideo:", withVideo);
+            const success = await joinCall(channelName, undefined, withVideo);
             if (success && userSettings.soundEnabled) {
                 notifyCallConnected();
             }
@@ -2245,6 +2249,7 @@ function DashboardContent({
                         incomingCallFriend?.nickname
                     }
                     callerAvatar={incomingCallFriend?.avatar}
+                    callType={incomingCall.call_type || "audio"}
                     onAccept={handleAcceptCall}
                     onReject={handleRejectCall}
                 />
