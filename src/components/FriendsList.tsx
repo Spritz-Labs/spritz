@@ -48,6 +48,7 @@ export function FriendsList({
     friendsWakuStatus = {},
 }: FriendsListProps) {
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [friendToRemove, setFriendToRemove] = useState<Friend | null>(null);
     const [friendStatuses, setFriendStatuses] = useState<
         Record<string, FriendStatus>
     >({});
@@ -749,7 +750,7 @@ export function FriendsList({
                                             </button>
                                             <button
                                                 onClick={() => {
-                                                    onRemove(friend.id);
+                                                    setFriendToRemove(friend);
                                                     setExpandedId(null);
                                                 }}
                                                 className="py-2 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm transition-colors flex items-center justify-center gap-2"
@@ -776,6 +777,75 @@ export function FriendsList({
                         </div>
                     </motion.div>
                 ))}
+            </AnimatePresence>
+
+            {/* Remove Friend Confirmation Modal */}
+            <AnimatePresence>
+                {friendToRemove && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => setFriendToRemove(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full"
+                        >
+                            <div className="text-center">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                                    <svg
+                                        className="w-8 h-8 text-red-400"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                        />
+                                    </svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-white mb-2">
+                                    Remove Friend
+                                </h3>
+                                <p className="text-zinc-400 mb-6">
+                                    Are you sure you want to remove{" "}
+                                    <span className="text-white font-medium">
+                                        {friendToRemove.nickname ||
+                                            friendToRemove.reachUsername ||
+                                            friendToRemove.ensName ||
+                                            `${friendToRemove.address.slice(0, 6)}...${friendToRemove.address.slice(-4)}`}
+                                    </span>
+                                    ? This action cannot be undone.
+                                </p>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setFriendToRemove(null)}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            onRemove(friendToRemove.id);
+                                            setFriendToRemove(null);
+                                        }}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
             </AnimatePresence>
         </div>
     );
