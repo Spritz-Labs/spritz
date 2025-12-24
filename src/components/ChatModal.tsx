@@ -106,6 +106,7 @@ export function ChatModal({
         streamMessages,
         canMessage,
         markAsRead,
+        setActiveChatPeer,
     } = useXMTPContext();
 
     const formatAddress = (address: string) => {
@@ -128,15 +129,20 @@ export function ChatModal({
 
     // Reset state when modal closes
     useEffect(() => {
-        if (!isOpen) {
+        if (isOpen) {
+            // Set this chat as active to prevent unread count increments
+            setActiveChatPeer(peerAddress);
+        } else {
             setMessages([]);
             setChatError(null);
             setChatState("checking");
             setBypassCheck(false);
             // Clear typing indicator when modal closes
             stopTyping();
+            // Clear active chat peer
+            setActiveChatPeer(null);
         }
-    }, [isOpen, stopTyping]);
+    }, [isOpen, stopTyping, setActiveChatPeer, peerAddress]);
 
     // Load messages and start streaming when initialized
     useEffect(() => {

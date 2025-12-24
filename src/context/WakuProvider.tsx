@@ -344,6 +344,7 @@ type WakuContextType = {
     canMessage: (address: string) => Promise<boolean>;
     canMessageBatch: (addresses: string[]) => Promise<Record<string, boolean>>;
     markAsRead: (peerAddress: string) => void;
+    setActiveChatPeer: (peerAddress: string | null) => void;
     onNewMessage: (callback: NewMessageCallback) => () => void;
     close: () => void;
     // Group methods
@@ -448,6 +449,9 @@ export function WakuProvider({
     const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(
         {}
     );
+    
+    // Track which chat is currently open (to avoid incrementing unread for open chats)
+    const activeChatPeerRef = useRef<string | null>(null);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nodeRef = useRef<any>(null);
@@ -1094,12 +1098,14 @@ export function WakuProvider({
                             msg.sender.toLowerCase() !==
                             userAddress?.toLowerCase()
                         ) {
-                            // Increment unread count for this sender
+                            // Only increment unread count if this chat is NOT currently open
                             const senderLower = msg.sender.toLowerCase();
-                            setUnreadCounts((prev) => ({
-                                ...prev,
-                                [senderLower]: (prev[senderLower] || 0) + 1,
-                            }));
+                            if (activeChatPeerRef.current !== senderLower) {
+                                setUnreadCounts((prev) => ({
+                                    ...prev,
+                                    [senderLower]: (prev[senderLower] || 0) + 1,
+                                }));
+                            }
 
                             newMessageCallbacksRef.current.forEach(
                                 (callback) => {
@@ -1167,6 +1173,15 @@ export function WakuProvider({
             return newCounts;
         });
     }, []);
+
+    // Set the active chat peer (to prevent incrementing unread for open chats)
+    const setActiveChatPeer = useCallback((peerAddress: string | null) => {
+        activeChatPeerRef.current = peerAddress?.toLowerCase() || null;
+        // If setting an active peer, also mark as read immediately
+        if (peerAddress) {
+            markAsRead(peerAddress);
+        }
+    }, [markAsRead]);
 
     // Register callback for new message notifications
     const onNewMessage = useCallback((callback: NewMessageCallback) => {
@@ -1918,6 +1933,7 @@ export function WakuProvider({
                 canMessage,
                 canMessageBatch,
                 markAsRead,
+                setActiveChatPeer,
                 onNewMessage,
                 close,
                 // Group methods
