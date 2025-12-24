@@ -135,7 +135,7 @@ export function useFriendRequests(userAddress: string | null) {
                         );
                     }
 
-                    // Lookup Reach username
+                    // Lookup Spritz username
                     try {
                         if (supabase) {
                             const { data: usernameData } = await supabase

@@ -82,7 +82,7 @@ export function AddFriendModal({
                     }
                 }
 
-                // Try to lookup as a Reach username (if it doesn't look like an address or ENS)
+                // Try to lookup as a Spritz username (if it doesn't look like an address or ENS)
                 const lowerInput = trimmedInput.toLowerCase();
                 if (!lowerInput.startsWith("0x") && !lowerInput.includes(".")) {
                     try {

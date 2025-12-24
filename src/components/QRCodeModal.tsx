@@ -45,8 +45,8 @@ export function QRCodeModal({
     const qrValue = address;
 
     // Share text
-    const shareText = `Add me on Reach! My wallet address: ${address}`;
-    const shareUrl = `https://reach.sh?add=${address}`; // Placeholder URL
+    const shareText = `Add me on Spritz! My wallet address: ${address}`;
+    const shareUrl = `https://app.spritz.chat?add=${address}`;
 
     // Generate QR code as image blob
     const getQRImageBlob = useCallback(async (): Promise<Blob | null> => {
@@ -432,4 +432,3 @@ export function QRCodeModal({
         </AnimatePresence>
     );
 }
-
