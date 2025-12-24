@@ -1274,16 +1274,36 @@ export function WakuProvider({
     const getGroups = useCallback(async (): Promise<WakuGroup[]> => {
         const hiddenGroups = getHiddenGroups();
         const storedGroups = getStoredGroups();
+        
+        console.log("[Waku] getGroups called:", {
+            userAddress: userAddress?.toLowerCase(),
+            storedGroupsCount: storedGroups.length,
+            storedGroups: storedGroups.map(g => ({ 
+                id: g.id, 
+                name: g.name, 
+                members: g.members 
+            })),
+            hiddenGroupsCount: hiddenGroups.size,
+        });
 
-        return storedGroups
+        const filteredGroups = storedGroups
             .filter((g) => !hiddenGroups.has(g.id))
-            .filter((g) => g.members.includes(userAddress?.toLowerCase() || ""))
+            .filter((g) => {
+                const isUserMember = g.members.includes(userAddress?.toLowerCase() || "");
+                if (!isUserMember) {
+                    console.log("[Waku] User not in group:", g.name, "members:", g.members);
+                }
+                return isUserMember;
+            })
             .map((g) => ({
                 id: g.id,
                 name: g.name,
                 memberCount: g.members.length,
                 createdAt: new Date(g.createdAt),
             }));
+            
+        console.log("[Waku] Filtered groups:", filteredGroups.length);
+        return filteredGroups;
     }, [getHiddenGroups, getStoredGroups, userAddress]);
 
     // Get messages from a group (from Supabase + Waku store)

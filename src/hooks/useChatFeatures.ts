@@ -22,6 +22,7 @@ export function useTypingIndicator(
             const client = supabase; // Capture for type narrowing
             try {
                 if (typing) {
+                    console.log("[Typing] Setting typing status to true");
                     await client.from("shout_typing_status").upsert(
                         {
                             conversation_id: conversationId,
@@ -32,14 +33,21 @@ export function useTypingIndicator(
                         { onConflict: "conversation_id,user_address" }
                     );
                 } else {
-                    await client
+                    console.log("[Typing] Deleting typing status for", userAddress.toLowerCase());
+                    const { error } = await client
                         .from("shout_typing_status")
                         .delete()
                         .eq("conversation_id", conversationId)
                         .eq("user_address", userAddress.toLowerCase());
+                    
+                    if (error) {
+                        console.error("[Typing] Delete failed:", error);
+                    } else {
+                        console.log("[Typing] Typing status deleted successfully");
+                    }
                 }
-            } catch {
-                // Silently fail - typing is not critical
+            } catch (err) {
+                console.error("[Typing] Error:", err);
             }
         },
         [userAddress, conversationId]
@@ -84,6 +92,7 @@ export function useTypingIndicator(
                     filter: `conversation_id=eq.${conversationId}`,
                 },
                 (payload) => {
+                    console.log("[Typing] Realtime event:", payload.eventType, payload);
                     const data = payload.new as any;
                     if (data && data.user_address !== userAddress.toLowerCase()) {
                         setPeerTyping(payload.eventType !== "DELETE" && data.is_typing);
@@ -98,31 +107,50 @@ export function useTypingIndicator(
             )
             .subscribe();
 
-        // Also check for existing stale typing status on mount and clear it
-        const checkAndClearStaleTyping = async () => {
-            const { data } = await client
-                .from("shout_typing_status")
-                .select("*")
-                .eq("conversation_id", conversationId)
-                .neq("user_address", userAddress.toLowerCase())
-                .single();
-            
-            if (data) {
-                // Check if it's stale (older than 5 seconds)
-                const updatedAt = new Date(data.updated_at);
-                const now = new Date();
-                if (now.getTime() - updatedAt.getTime() > 5000) {
-                    // Stale, don't show typing
-                    setPeerTyping(false);
+        // Check for stale typing status periodically (every 3 seconds)
+        const checkStaleTyping = async () => {
+            try {
+                const { data } = await client
+                    .from("shout_typing_status")
+                    .select("*")
+                    .eq("conversation_id", conversationId)
+                    .neq("user_address", userAddress.toLowerCase())
+                    .maybeSingle();
+                
+                if (data) {
+                    // Check if it's stale (older than 5 seconds)
+                    const updatedAt = new Date(data.updated_at);
+                    const now = new Date();
+                    const ageMs = now.getTime() - updatedAt.getTime();
+                    
+                    if (ageMs > 5000) {
+                        // Stale, clear typing indicator
+                        console.log("[Typing] Stale typing status detected, age:", ageMs, "ms");
+                        setPeerTyping(false);
+                        // Also delete the stale row
+                        await client
+                            .from("shout_typing_status")
+                            .delete()
+                            .eq("id", data.id);
+                    } else {
+                        setPeerTyping(data.is_typing);
+                    }
                 } else {
-                    setPeerTyping(data.is_typing);
+                    // No typing status found, ensure we show not typing
+                    setPeerTyping(false);
                 }
+            } catch (err) {
+                // Ignore errors
             }
         };
-        checkAndClearStaleTyping();
+        
+        // Check immediately and then every 3 seconds
+        checkStaleTyping();
+        const staleCheckInterval = setInterval(checkStaleTyping, 3000);
 
         return () => {
             client.removeChannel(channel);
+            clearInterval(staleCheckInterval);
             // Clean up typing status on unmount - fire and forget
             sendTypingStatus(false);
         };
