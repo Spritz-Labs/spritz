@@ -69,6 +69,9 @@ export function useTypingIndicator(
         if (!isSupabaseConfigured || !supabase || !conversationId || !userAddress)
             return;
 
+        // Reset peer typing state when conversation changes
+        setPeerTyping(false);
+
         const client = supabase; // Capture for closure
         const channel = client
             .channel(`typing-${conversationId}`)
@@ -95,9 +98,32 @@ export function useTypingIndicator(
             )
             .subscribe();
 
+        // Also check for existing stale typing status on mount and clear it
+        const checkAndClearStaleTyping = async () => {
+            const { data } = await client
+                .from("shout_typing_status")
+                .select("*")
+                .eq("conversation_id", conversationId)
+                .neq("user_address", userAddress.toLowerCase())
+                .single();
+            
+            if (data) {
+                // Check if it's stale (older than 5 seconds)
+                const updatedAt = new Date(data.updated_at);
+                const now = new Date();
+                if (now.getTime() - updatedAt.getTime() > 5000) {
+                    // Stale, don't show typing
+                    setPeerTyping(false);
+                } else {
+                    setPeerTyping(data.is_typing);
+                }
+            }
+        };
+        checkAndClearStaleTyping();
+
         return () => {
             client.removeChannel(channel);
-            // Clean up typing status on unmount
+            // Clean up typing status on unmount - fire and forget
             sendTypingStatus(false);
         };
     }, [conversationId, userAddress, sendTypingStatus]);
@@ -111,13 +137,20 @@ export function useTypingIndicator(
         };
     }, []);
 
+    // Stop typing function - clears local state and sends to server
+    const stopTyping = useCallback(() => {
+        setIsTyping(false);
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
+        }
+        sendTypingStatus(false);
+    }, [sendTypingStatus]);
+
     return {
         peerTyping,
         handleTyping,
-        stopTyping: () => {
-            setIsTyping(false);
-            sendTypingStatus(false);
-        },
+        stopTyping,
     };
 }
 

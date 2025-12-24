@@ -20,6 +20,8 @@ import {
     useMessageReactions,
     MESSAGE_REACTION_EMOJIS,
 } from "@/hooks/useChatFeatures";
+import { VoiceRecorder, VoiceMessage } from "./VoiceRecorder";
+import { MessageSearch } from "./MessageSearch";
 
 type ChatModalProps = {
     isOpen: boolean;
@@ -62,6 +64,8 @@ export function ChatModal({
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [showMsgReactions, setShowMsgReactions] = useState<string | null>(null);
+    const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+    const [showSearch, setShowSearch] = useState(false);
 
     // Generate conversation ID for this chat
     const conversationId = [userAddress, peerAddress]
@@ -129,8 +133,10 @@ export function ChatModal({
             setChatError(null);
             setChatState("checking");
             setBypassCheck(false);
+            // Clear typing indicator when modal closes
+            stopTyping();
         }
-    }, [isOpen]);
+    }, [isOpen, stopTyping]);
 
     // Load messages and start streaming when initialized
     useEffect(() => {
@@ -187,6 +193,11 @@ export function ChatModal({
                         }));
 
                     setMessages(formattedMessages);
+                    
+                    // Mark all loaded messages as read in the database
+                    if (formattedMessages.length > 0) {
+                        markMessagesRead(formattedMessages.map((m: Message) => m.id));
+                    }
                 } catch (loadErr) {
                     console.log(
                         "[Chat] Failed to load messages, continuing anyway:",
@@ -232,6 +243,8 @@ export function ChatModal({
                                 return [...prev, newMsg];
                             });
                             markAsRead(peerAddress);
+                            // Mark the new message as read in the database
+                            markMessagesRead([newMsg.id]);
                         }
                     );
                     console.log("[Chat] Stream setup complete:", stream);
@@ -522,6 +535,26 @@ export function ChatModal({
                                         {formatAddress(peerAddress)}
                                     </p>
                                 </div>
+                                {/* Search Button */}
+                                <button
+                                    onClick={() => setShowSearch(true)}
+                                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+                                    title="Search messages"
+                                >
+                                    <svg
+                                        className="w-4 h-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                        />
+                                    </svg>
+                                </button>
                                 <button
                                     onClick={onClose}
                                     className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
@@ -980,7 +1013,7 @@ export function ChatModal({
                                     <button
                                         onClick={() => setShowPixelArt(true)}
                                         disabled={!isInitialized || !!chatError}
-                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
                                         title="Send Pixel Art"
                                     >
                                         <svg
@@ -998,6 +1031,38 @@ export function ChatModal({
                                             />
                                         </svg>
                                     </button>
+                                    {/* Voice Message Button */}
+                                    <button
+                                        onClick={() => setShowVoiceRecorder(true)}
+                                        disabled={!isInitialized || !!chatError}
+                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Send Voice Message"
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                                            />
+                                        </svg>
+                                    </button>
+                                    {/* Voice Recorder Overlay */}
+                                    <VoiceRecorder
+                                        isOpen={showVoiceRecorder}
+                                        onCancel={() => setShowVoiceRecorder(false)}
+                                        onSend={async (blob, duration) => {
+                                            // TODO: Upload to IPFS and send as message
+                                            console.log("Voice message:", blob, duration);
+                                            setShowVoiceRecorder(false);
+                                            alert("Voice messages coming soon! The recording infrastructure is ready.");
+                                        }}
+                                    />
                                     <div className="flex-1 relative">
                                         <input
                                             type="text"
@@ -1172,6 +1237,20 @@ export function ChatModal({
                             </motion.div>
                         )}
                     </AnimatePresence>
+
+                    {/* Message Search Overlay */}
+                    <MessageSearch
+                        messages={messages}
+                        onSelectMessage={(msgId) => {
+                            // Scroll to message (could implement smooth scrolling)
+                            const element = document.getElementById(`msg-${msgId}`);
+                            element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }}
+                        onClose={() => setShowSearch(false)}
+                        isOpen={showSearch}
+                        userAddress={userAddress}
+                        peerName={displayName}
+                    />
                 </>
             )}
         </AnimatePresence>
