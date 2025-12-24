@@ -667,6 +667,15 @@ export function useVoiceCall() {
         []
     );
 
+    // Local screen share container (for Huddle01 compatibility, Agora uses screenShareRef for local)
+    const setLocalScreenShareContainer = useCallback(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        (_element: HTMLDivElement | null) => {
+            // No-op for Agora - local screen share uses screenShareRef
+        },
+        []
+    );
+
     // Screenshot functionality - captures video call to image
     const takeScreenshot = useCallback(async (): Promise<boolean> => {
         try {
@@ -784,6 +793,7 @@ export function useVoiceCall() {
         setLocalVideoContainer,
         setRemoteVideoContainer,
         setScreenShareContainer,
+        setLocalScreenShareContainer,
         isConfigured: isAgoraConfigured,
     };
 }

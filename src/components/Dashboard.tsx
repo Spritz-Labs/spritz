@@ -274,6 +274,7 @@ function DashboardContent({
         isVideoOff,
         isScreenSharing,
         isRemoteVideoOff,
+        isRemoteScreenSharing,
         duration,
         error: callError,
         joinCall,
@@ -286,6 +287,7 @@ function DashboardContent({
         setLocalVideoContainer,
         setRemoteVideoContainer,
         setScreenShareContainer,
+        setLocalScreenShareContainer,
         isConfigured: isCallConfigured,
     } = activeCall;
 
@@ -2018,7 +2020,7 @@ function DashboardContent({
                                         <p className="text-zinc-500 text-xs">
                                             {userSettings.decentralizedCalls
                                                 ? "Using Web3"
-                                                : "Using Agora (Centralized)"}
+                                                : "Using Web3 Provider"}
                                         </p>
                                     </div>
                                 </div>
@@ -2230,6 +2232,7 @@ function DashboardContent({
                         isVideoOff={isVideoOff}
                         isScreenSharing={isScreenSharing}
                         isRemoteVideoOff={isRemoteVideoOff}
+                        isRemoteScreenSharing={isRemoteScreenSharing}
                         duration={duration}
                         error={callError}
                         formatDuration={formatDuration}
@@ -2241,6 +2244,9 @@ function DashboardContent({
                         setLocalVideoContainer={setLocalVideoContainer}
                         setRemoteVideoContainer={setRemoteVideoContainer}
                         setScreenShareContainer={setScreenShareContainer}
+                        setLocalScreenShareContainer={
+                            setLocalScreenShareContainer
+                        }
                     />
                 )}
             </AnimatePresence>

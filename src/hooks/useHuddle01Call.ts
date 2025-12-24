@@ -93,7 +93,8 @@ export function useHuddle01Call(userAddress: string | null) {
     const startTimeRef = useRef<number | null>(null);
     const localVideoRef = useRef<HTMLDivElement | null>(null);
     const remoteVideoRef = useRef<HTMLDivElement | null>(null);
-    const screenShareRef = useRef<HTMLDivElement | null>(null);
+    const screenShareRef = useRef<HTMLDivElement | null>(null); // For remote screen share display
+    const localScreenShareRef = useRef<HTMLDivElement | null>(null); // For local screen share preview
     const localAudioRef = useRef<HTMLAudioElement | null>(null);
     const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -1686,6 +1687,87 @@ export function useHuddle01Call(userAddress: string | null) {
                                         );
                                         return true;
                                     }
+                                } else if (
+                                    label === "screen" ||
+                                    label === "screen-share-video" ||
+                                    label.includes("screen")
+                                ) {
+                                    // Handle remote screen share (Huddle01 uses 'screen-share-video' label)
+                                    console.log(
+                                        "[Huddle01] Remote screen share received! Label:",
+                                        label
+                                    );
+
+                                    // Helper function to attach remote screen share with retries
+                                    const attachRemoteScreenShare = (
+                                        retryAttempt: number = 1
+                                    ) => {
+                                        if (screenShareRef.current) {
+                                            console.log(
+                                                `[Huddle01] Attaching remote screen share (attempt ${retryAttempt})`
+                                            );
+                                            // Clear any existing content
+                                            screenShareRef.current.innerHTML =
+                                                "";
+
+                                            const videoEl =
+                                                document.createElement("video");
+                                            videoEl.srcObject = stream;
+                                            videoEl.autoplay = true;
+                                            videoEl.playsInline = true;
+                                            videoEl.setAttribute(
+                                                "webkit-playsinline",
+                                                "true"
+                                            );
+                                            videoEl.muted = false;
+                                            videoEl.style.width = "100%";
+                                            videoEl.style.height = "100%";
+                                            videoEl.style.objectFit = "contain";
+                                            videoEl.style.borderRadius = "8px";
+                                            videoEl.style.backgroundColor =
+                                                "#000";
+                                            screenShareRef.current.appendChild(
+                                                videoEl
+                                            );
+
+                                            videoEl.play().catch((e) => {
+                                                console.warn(
+                                                    "[Huddle01] Screen share play failed:",
+                                                    e
+                                                );
+                                            });
+
+                                            console.log(
+                                                "[Huddle01] Remote screen share element created"
+                                            );
+                                        } else if (retryAttempt < 15) {
+                                            // Container not ready (waiting for React re-render after isRemoteScreenSharing: true)
+                                            console.log(
+                                                `[Huddle01] Screen share container not ready, retrying in 100ms (attempt ${retryAttempt})`
+                                            );
+                                            setTimeout(
+                                                () =>
+                                                    attachRemoteScreenShare(
+                                                        retryAttempt + 1
+                                                    ),
+                                                100
+                                            );
+                                        } else {
+                                            console.warn(
+                                                "[Huddle01] Could not attach remote screen share - container never became available"
+                                            );
+                                        }
+                                    };
+
+                                    // Set state first to trigger re-render and create container
+                                    setState((prev) => ({
+                                        ...prev,
+                                        isRemoteScreenSharing: true,
+                                    }));
+
+                                    // Start trying to attach with retries
+                                    attachRemoteScreenShare(1);
+                                    return true;
                                 }
                                 return true; // Track found, even if not attached
                             }
@@ -1733,6 +1815,15 @@ export function useHuddle01Call(userAddress: string | null) {
                         setState((prev) => ({
                             ...prev,
                             isRemoteVideoOff: false,
+                        }));
+                    } else if (
+                        label === "screen" ||
+                        label === "screen-share-video" ||
+                        label.includes("screen")
+                    ) {
+                        setState((prev) => ({
+                            ...prev,
+                            isRemoteScreenSharing: true,
                         }));
                     }
                 });
@@ -1858,7 +1949,9 @@ export function useHuddle01Call(userAddress: string | null) {
                                 isRemoteVideoOff: true,
                             }));
                         } else if (
-                            streamData.label === "screen" &&
+                            (streamData.label === "screen" ||
+                                streamData.label === "screen-share-video" ||
+                                streamData.label?.includes("screen")) &&
                             screenShareRef.current
                         ) {
                             screenShareRef.current.innerHTML = "";
@@ -2727,6 +2820,18 @@ export function useHuddle01Call(userAddress: string | null) {
                 });
                 screenShareRef.current.innerHTML = "";
             }
+            if (localScreenShareRef.current) {
+                const videos =
+                    localScreenShareRef.current.querySelectorAll("video");
+                videos.forEach((video) => {
+                    const stream = video.srcObject as MediaStream;
+                    if (stream) {
+                        stream.getTracks().forEach((track) => track.stop());
+                    }
+                    video.srcObject = null;
+                });
+                localScreenShareRef.current.innerHTML = "";
+            }
             if (remoteAudioRef.current) {
                 const stream = remoteAudioRef.current.srcObject as MediaStream;
                 if (stream) {
@@ -2878,7 +2983,7 @@ export function useHuddle01Call(userAddress: string | null) {
 
         try {
             const localPeer = clientRef.current.localPeer as {
-                startScreenShare: () => Promise<void>;
+                startScreenShare: () => Promise<MediaStream>;
                 stopScreenShare: () => Promise<void>;
             };
 
@@ -2893,28 +2998,106 @@ export function useHuddle01Call(userAddress: string | null) {
                 }
                 setState((prev) => ({ ...prev, isScreenSharing: false }));
 
-                // Clean up screen share element
-                if (screenShareRef.current) {
+                // Clean up local screen share preview element
+                if (localScreenShareRef.current) {
                     const videos =
-                        screenShareRef.current.querySelectorAll("video");
+                        localScreenShareRef.current.querySelectorAll("video");
                     videos.forEach((video) => {
                         const stream = video.srcObject as MediaStream;
                         if (stream) {
                             stream.getTracks().forEach((track) => track.stop());
                         }
                     });
-                    screenShareRef.current.innerHTML = "";
+                    localScreenShareRef.current.innerHTML = "";
                 }
             } else {
-                await localPeer.startScreenShare();
+                console.log("[Huddle01] Starting screen share...");
+                const screenStream = await localPeer.startScreenShare();
+                console.log(
+                    "[Huddle01] Screen share started, got stream:",
+                    screenStream
+                );
+
                 setState((prev) => ({
                     ...prev,
                     isScreenSharing: true,
                     callType: "video",
                 }));
+
+                // Helper function to attach local screen share preview
+                const attachLocalScreenShare = (attempt: number = 1) => {
+                    if (!screenStream) return;
+
+                    if (localScreenShareRef.current) {
+                        console.log(
+                            `[Huddle01] Attaching local screen share preview (attempt ${attempt})`
+                        );
+                        // Clear any existing content
+                        localScreenShareRef.current.innerHTML = "";
+
+                        const videoEl = document.createElement("video");
+                        videoEl.srcObject = screenStream;
+                        videoEl.autoplay = true;
+                        videoEl.playsInline = true;
+                        videoEl.muted = true; // Mute local preview to avoid echo
+                        videoEl.style.width = "100%";
+                        videoEl.style.height = "100%";
+                        videoEl.style.objectFit = "contain";
+                        videoEl.style.borderRadius = "8px";
+                        videoEl.style.backgroundColor = "#000";
+                        localScreenShareRef.current.appendChild(videoEl);
+
+                        videoEl.play().catch((e) => {
+                            console.warn(
+                                "[Huddle01] Screen share preview play failed:",
+                                e
+                            );
+                        });
+                        console.log(
+                            "[Huddle01] Local screen share preview created"
+                        );
+                    } else if (attempt < 10) {
+                        // Container not available yet (waiting for React re-render), retry
+                        console.log(
+                            `[Huddle01] Local screen share container not ready, retrying in 100ms (attempt ${attempt})`
+                        );
+                        setTimeout(
+                            () => attachLocalScreenShare(attempt + 1),
+                            100
+                        );
+                    } else {
+                        console.warn(
+                            "[Huddle01] Could not attach local screen share preview - container never became available"
+                        );
+                    }
+                };
+
+                // Start trying to attach the local preview (with retries for React re-render)
+                attachLocalScreenShare(1);
+
+                // Listen for the screen share track ending (user clicked "Stop sharing")
+                if (screenStream) {
+                    const videoTrack = screenStream.getVideoTracks()[0];
+                    if (videoTrack) {
+                        videoTrack.onended = () => {
+                            console.log(
+                                "[Huddle01] Screen share track ended by user"
+                            );
+                            setState((prev) => ({
+                                ...prev,
+                                isScreenSharing: false,
+                            }));
+                            if (localScreenShareRef.current) {
+                                localScreenShareRef.current.innerHTML = "";
+                            }
+                        };
+                    }
+                }
             }
         } catch (error) {
             console.error("[Huddle01] Error toggling screen share:", error);
+            // Reset state if screen share failed (e.g., user cancelled)
+            setState((prev) => ({ ...prev, isScreenSharing: false }));
         }
     }, [state.isScreenSharing]);
 
@@ -2947,6 +3130,13 @@ export function useHuddle01Call(userAddress: string | null) {
         []
     );
 
+    const setLocalScreenShareContainer = useCallback(
+        (element: HTMLDivElement | null) => {
+            localScreenShareRef.current = element;
+        },
+        []
+    );
+
     const takeScreenshot = useCallback(async (): Promise<boolean> => {
         // Screenshot implementation similar to Agora
         console.log("[Huddle01] Screenshot not yet implemented");
@@ -2965,6 +3155,7 @@ export function useHuddle01Call(userAddress: string | null) {
         setLocalVideoContainer,
         setRemoteVideoContainer,
         setScreenShareContainer,
+        setLocalScreenShareContainer,
         isConfigured: isHuddle01Configured,
     };
 }

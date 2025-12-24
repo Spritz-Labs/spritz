@@ -12,6 +12,7 @@ type VoiceCallUIProps = {
     isVideoOff: boolean;
     isScreenSharing: boolean;
     isRemoteVideoOff: boolean;
+    isRemoteScreenSharing: boolean;
     duration: number;
     error: string | null;
     formatDuration: (seconds: number) => string;
@@ -23,6 +24,7 @@ type VoiceCallUIProps = {
     setLocalVideoContainer: (element: HTMLDivElement | null) => void;
     setRemoteVideoContainer: (element: HTMLDivElement | null) => void;
     setScreenShareContainer: (element: HTMLDivElement | null) => void;
+    setLocalScreenShareContainer: (element: HTMLDivElement | null) => void;
 };
 
 export function VoiceCallUI({
@@ -33,6 +35,7 @@ export function VoiceCallUI({
     isVideoOff,
     isScreenSharing,
     isRemoteVideoOff,
+    isRemoteScreenSharing,
     duration,
     error,
     formatDuration,
@@ -44,6 +47,7 @@ export function VoiceCallUI({
     setLocalVideoContainer,
     setRemoteVideoContainer,
     setScreenShareContainer,
+    setLocalScreenShareContainer,
 }: VoiceCallUIProps) {
     if (!friend || callState === "idle") return null;
 
@@ -189,15 +193,34 @@ export function VoiceCallUI({
                         </div>
                     </div>
 
-                    {/* Screen Share Preview (when sharing) */}
-                    {isScreenSharing && (
-                        <div className="absolute bottom-24 left-4 w-48 h-28 sm:w-56 sm:h-32 rounded-xl overflow-hidden shadow-2xl border-2 border-emerald-500">
+                    {/* Remote Screen Share (full screen when remote is sharing) */}
+                    {isRemoteScreenSharing && (
+                        <div className="absolute inset-0 z-20 bg-black">
                             <div
                                 ref={setScreenShareContainer}
+                                className="w-full h-full"
+                                onClick={(e) => {
+                                    // Force play screen share on tap (needed for iOS)
+                                    e.currentTarget.querySelectorAll("video").forEach((video) => {
+                                        video.play().catch(() => {});
+                                    });
+                                }}
+                            />
+                            <div className="absolute top-4 left-4 bg-emerald-500 text-white text-sm px-3 py-1.5 rounded-lg shadow-lg">
+                                {friend ? `${getDisplayName(friend)} is sharing screen` : 'Screen Share'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Local Screen Share Preview (when you are sharing) */}
+                    {isScreenSharing && (
+                        <div className="absolute bottom-24 left-4 w-48 h-28 sm:w-56 sm:h-32 rounded-xl overflow-hidden shadow-2xl border-2 border-emerald-500 z-10">
+                            <div
+                                ref={setLocalScreenShareContainer}
                                 className="w-full h-full bg-black"
                             />
                             <div className="absolute top-1 left-1 bg-emerald-500 text-white text-xs px-1.5 py-0.5 rounded">
-                                Screen
+                                Your Screen
                             </div>
                         </div>
                     )}
