@@ -393,18 +393,26 @@ export function useHuddle01Call(userAddress: string | null) {
                     setState((prev) => ({ ...prev, callState: "connected" }));
                     startDurationTimer();
 
-                    // Start polling for remote video - this handles the case where
-                    // the other party enables video AFTER we join
-                    // Poll every 1 second for 15 seconds
+                    // Start polling for remote streams - this handles the case where
+                    // the other party enables audio/video AFTER we join
+                    // On mobile, poll more frequently and for longer
+                    const isMobilePolling = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                     let pollCount = 0;
-                    const maxPolls = 15;
+                    const maxPolls = isMobilePolling ? 30 : 15; // 30 seconds on mobile, 15 on desktop
+                    const pollInterval = isMobilePolling ? 1000 : 1000; // 1 second
+                    
+                    console.log(`[Huddle01] Starting polling (mobile: ${isMobilePolling}, maxPolls: ${maxPolls})`);
+                    
                     const pollIntervalId = setInterval(() => {
                         pollCount++;
 
-                        // Stop polling if we already have remote video
-                        if (remoteVideoRef.current?.children.length) {
+                        // Only stop polling if we have BOTH remote video AND audio
+                        const hasRemoteVideo = (remoteVideoRef.current?.children?.length ?? 0) > 0;
+                        const hasRemoteAudio = remoteAudioRef.current !== null;
+                        
+                        if (hasRemoteVideo && hasRemoteAudio) {
                             console.log(
-                                "[Huddle01] Remote video found, stopping poll"
+                                "[Huddle01] Remote video AND audio found, stopping poll"
                             );
                             clearInterval(pollIntervalId);
                             return;
@@ -413,20 +421,64 @@ export function useHuddle01Call(userAddress: string | null) {
                         // Stop after max polls
                         if (pollCount > maxPolls) {
                             console.log(
-                                "[Huddle01] Max polls reached, stopping"
+                                `[Huddle01] Max polls (${maxPolls}) reached, stopping. hasVideo: ${hasRemoteVideo}, hasAudio: ${hasRemoteAudio}`
                             );
                             clearInterval(pollIntervalId);
                             return;
                         }
 
                         console.log(
-                            `[Huddle01] Polling for remote video (${pollCount}/${maxPolls})...`
+                            `[Huddle01] Polling for remote streams (${pollCount}/${maxPolls})... hasVideo: ${hasRemoteVideo}, hasAudio: ${hasRemoteAudio}`
                         );
 
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const remotePeers = (client.room as any)?.remotePeers;
                         if (remotePeers && remotePeers.size > 0) {
+                            console.log(`[Huddle01] Found ${remotePeers.size} remote peer(s)`);
                             for (const [peerId, peer] of remotePeers) {
+                                console.log(`[Huddle01] Checking peer: ${peerId}`);
+                                
+                                // Check for audio FIRST (more important)
+                                try {
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const audioConsumer = (
+                                        peer as any
+                                    ).getConsumer?.("audio");
+                                    if (
+                                        audioConsumer?.track instanceof
+                                        MediaStreamTrack &&
+                                        !remoteAudioRef.current
+                                    ) {
+                                        console.log(
+                                            "[Huddle01] Found AUDIO from peer via polling:",
+                                            peerId
+                                        );
+                                        const audioStream = new MediaStream([
+                                            audioConsumer.track,
+                                        ]);
+                                        const audioEl =
+                                            document.createElement("audio");
+                                        audioEl.srcObject = audioStream;
+                                        audioEl.autoplay = true;
+                                        // iOS-specific attributes
+                                        audioEl.setAttribute("playsinline", "true");
+                                        audioEl.setAttribute("webkit-playsinline", "true");
+                                        document.body.appendChild(audioEl);
+                                        remoteAudioRef.current = audioEl;
+                                        // iOS requires explicit play() call
+                                        audioEl.play().catch((e) => {
+                                            console.warn("[Huddle01] Audio play failed via polling:", e);
+                                        });
+                                        setState((prev) => ({
+                                            ...prev,
+                                            isRemoteMuted: false,
+                                        }));
+                                        console.log("[Huddle01] Remote AUDIO created via polling!");
+                                    }
+                                } catch (audioErr) {
+                                    console.log("[Huddle01] Audio consumer check failed:", audioErr);
+                                }
+                                
                                 // Check for video
                                 try {
                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -438,7 +490,7 @@ export function useHuddle01Call(userAddress: string | null) {
                                         MediaStreamTrack
                                     ) {
                                         console.log(
-                                            "[Huddle01] Found video from peer via polling:",
+                                            "[Huddle01] Found VIDEO from peer via polling:",
                                             peerId
                                         );
 
@@ -455,6 +507,8 @@ export function useHuddle01Call(userAddress: string | null) {
                                             videoEl.srcObject = stream;
                                             videoEl.autoplay = true;
                                             videoEl.playsInline = true;
+                                            // iOS-specific attributes
+                                            videoEl.setAttribute("webkit-playsinline", "true");
                                             videoEl.style.width = "100%";
                                             videoEl.style.height = "100%";
                                             videoEl.style.objectFit = "cover";
@@ -462,12 +516,16 @@ export function useHuddle01Call(userAddress: string | null) {
                                             remoteVideoRef.current.appendChild(
                                                 videoEl
                                             );
+                                            // iOS requires explicit play() call
+                                            videoEl.play().catch((e) => {
+                                                console.warn("[Huddle01] Video play failed via polling:", e);
+                                            });
                                             setState((prev) => ({
                                                 ...prev,
                                                 isRemoteVideoOff: false,
                                             }));
                                             console.log(
-                                                "[Huddle01] Remote video created via polling!"
+                                                "[Huddle01] Remote VIDEO created via polling!"
                                             );
                                             clearInterval(pollIntervalId);
                                             return;
@@ -521,7 +579,7 @@ export function useHuddle01Call(userAddress: string | null) {
                                 }
                             }
                         }
-                    }, 1000); // Poll every 1 second
+                    }, pollInterval);
 
                     // Store interval ID for cleanup
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -579,13 +637,22 @@ export function useHuddle01Call(userAddress: string | null) {
                                         audioEl.srcObject = stream;
                                         audioEl.autoplay = true;
                                         // iOS-specific attributes
-                                        audioEl.setAttribute("playsinline", "true");
-                                        audioEl.setAttribute("webkit-playsinline", "true");
+                                        audioEl.setAttribute(
+                                            "playsinline",
+                                            "true"
+                                        );
+                                        audioEl.setAttribute(
+                                            "webkit-playsinline",
+                                            "true"
+                                        );
                                         document.body.appendChild(audioEl);
                                         remoteAudioRef.current = audioEl;
                                         // iOS requires explicit play() call
                                         audioEl.play().catch((e) => {
-                                            console.warn("[Huddle01] Audio play failed from peer-joined:", e);
+                                            console.warn(
+                                                "[Huddle01] Audio play failed from peer-joined:",
+                                                e
+                                            );
                                         });
                                         setState((prev) => ({
                                             ...prev,
@@ -625,7 +692,10 @@ export function useHuddle01Call(userAddress: string | null) {
                                                 videoEl.autoplay = true;
                                                 videoEl.playsInline = true;
                                                 // iOS-specific attributes
-                                                videoEl.setAttribute("webkit-playsinline", "true");
+                                                videoEl.setAttribute(
+                                                    "webkit-playsinline",
+                                                    "true"
+                                                );
                                                 videoEl.style.width = "100%";
                                                 videoEl.style.height = "100%";
                                                 videoEl.style.objectFit =
@@ -637,7 +707,10 @@ export function useHuddle01Call(userAddress: string | null) {
                                                 );
                                                 // iOS requires explicit play() call
                                                 videoEl.play().catch((e) => {
-                                                    console.warn("[Huddle01] Video play failed from peer-joined:", e);
+                                                    console.warn(
+                                                        "[Huddle01] Video play failed from peer-joined:",
+                                                        e
+                                                    );
                                                 });
                                                 setState((prev) => ({
                                                     ...prev,
@@ -1064,12 +1137,18 @@ export function useHuddle01Call(userAddress: string | null) {
                                     audioEl.autoplay = true;
                                     // iOS-specific attributes
                                     audioEl.setAttribute("playsinline", "true");
-                                    audioEl.setAttribute("webkit-playsinline", "true");
+                                    audioEl.setAttribute(
+                                        "webkit-playsinline",
+                                        "true"
+                                    );
                                     document.body.appendChild(audioEl);
                                     remoteAudioRef.current = audioEl;
                                     // iOS requires explicit play() call
                                     audioEl.play().catch((e) => {
-                                        console.warn("[Huddle01] Audio play failed via new-consumer:", e);
+                                        console.warn(
+                                            "[Huddle01] Audio play failed via new-consumer:",
+                                            e
+                                        );
                                     });
                                     setState((prev) => ({
                                         ...prev,
@@ -1093,7 +1172,10 @@ export function useHuddle01Call(userAddress: string | null) {
                                     videoEl.autoplay = true;
                                     videoEl.playsInline = true;
                                     // iOS-specific attributes
-                                    videoEl.setAttribute("webkit-playsinline", "true");
+                                    videoEl.setAttribute(
+                                        "webkit-playsinline",
+                                        "true"
+                                    );
                                     videoEl.style.width = "100%";
                                     videoEl.style.height = "100%";
                                     videoEl.style.objectFit = "cover";
@@ -1102,7 +1184,10 @@ export function useHuddle01Call(userAddress: string | null) {
                                     remoteVideoRef.current.appendChild(videoEl);
                                     // iOS requires explicit play() call
                                     videoEl.play().catch((e) => {
-                                        console.warn("[Huddle01] Video play failed via new-consumer:", e);
+                                        console.warn(
+                                            "[Huddle01] Video play failed via new-consumer:",
+                                            e
+                                        );
                                     });
                                     setState((prev) => ({
                                         ...prev,
