@@ -597,7 +597,9 @@ export function FriendsList({
                 // Combined query for statuses + online (was 2 separate queries!)
                 client
                     .from("shout_user_settings")
-                    .select("wallet_address, status_emoji, status_text, is_dnd, last_seen")
+                    .select(
+                        "wallet_address, status_emoji, status_text, is_dnd, last_seen"
+                    )
                     .in("wallet_address", addresses),
                 // Socials
                 client
@@ -635,7 +637,8 @@ export function FriendsList({
                     // Check if online
                     if (row.last_seen) {
                         const lastSeenTime = new Date(row.last_seen).getTime();
-                        online[row.wallet_address] = now - lastSeenTime < ONLINE_THRESHOLD;
+                        online[row.wallet_address] =
+                            now - lastSeenTime < ONLINE_THRESHOLD;
                     }
                 });
                 setFriendStatuses(statuses);
@@ -697,7 +700,8 @@ export function FriendsList({
                 data.forEach((row) => {
                     if (row.last_seen) {
                         const lastSeenTime = new Date(row.last_seen).getTime();
-                        online[row.wallet_address] = now - lastSeenTime < ONLINE_THRESHOLD;
+                        online[row.wallet_address] =
+                            now - lastSeenTime < ONLINE_THRESHOLD;
                     }
                 });
                 setOnlineStatuses(online);
@@ -815,10 +819,13 @@ export function FriendsList({
                         // Also update online status
                         if (newData.last_seen) {
                             const now = Date.now();
-                            const lastSeenTime = new Date(newData.last_seen).getTime();
+                            const lastSeenTime = new Date(
+                                newData.last_seen
+                            ).getTime();
                             setOnlineStatuses((prev) => ({
                                 ...prev,
-                                [newData.wallet_address]: now - lastSeenTime < 120000,
+                                [newData.wallet_address]:
+                                    now - lastSeenTime < 120000,
                             }));
                         }
                     }
@@ -958,6 +965,10 @@ export function FriendsList({
                     placeholder="Search friends..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    autoComplete="off"
                     className="w-full pl-10 pr-4 py-2.5 bg-zinc-800/50 border border-zinc-700/50 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-transparent transition-all"
                 />
                 {searchQuery && (
