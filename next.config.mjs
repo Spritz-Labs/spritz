@@ -4,7 +4,7 @@ import withPWAInit from "next-pwa";
 const withPWA = withPWAInit({
     dest: "public",
     register: true,
-    skipWaiting: true,
+    skipWaiting: false, // Let the app control when to update via PWAInstallPrompt
     disable: process.env.NODE_ENV === "development",
     runtimeCaching: [
         {

@@ -17,7 +17,9 @@ export function PWAInstallPrompt() {
     const [isAndroid, setIsAndroid] = useState(false);
     const [deferredPrompt, setDeferredPrompt] =
         useState<BeforeInstallPromptEvent | null>(null);
-    const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+    const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(
+        null
+    );
 
     // Handle app update
     const handleUpdate = useCallback(() => {
@@ -29,58 +31,152 @@ export function PWAInstallPrompt() {
         window.location.reload();
     }, [waitingWorker]);
 
-    // Check for service worker updates
+    // Check for service worker updates - runs on ALL devices (desktop and mobile)
     useEffect(() => {
-        if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+        console.log("[PWA] PWAInstallPrompt component mounted");
+
+        if (typeof window === "undefined") {
+            console.log("[PWA] SSR - skipping");
             return;
         }
 
-        const checkForUpdates = async () => {
+        if (!("serviceWorker" in navigator)) {
+            console.log("[PWA] Service worker not supported in this browser");
+            return;
+        }
+
+        console.log("[PWA] Setting up service worker update detection...");
+
+        let updateFoundListenerAttached = false;
+
+        const checkForUpdates = async (source: string = "initial") => {
             try {
                 const registration = await navigator.serviceWorker.ready;
-                
+                console.log(`[PWA] Checking for updates (${source})...`);
+
                 // Check if there's already a waiting worker
                 if (registration.waiting) {
+                    console.log(
+                        "[PWA] Found waiting worker! Showing update prompt."
+                    );
+                    setWaitingWorker(registration.waiting);
+                    setShowUpdatePrompt(true);
+                    return; // No need to check further if we already have an update
+                }
+
+                // Listen for new service worker updates (only attach once)
+                if (!updateFoundListenerAttached) {
+                    updateFoundListenerAttached = true;
+                    registration.addEventListener("updatefound", () => {
+                        console.log(
+                            "[PWA] Update found! New service worker installing..."
+                        );
+                        const newWorker = registration.installing;
+                        if (!newWorker) return;
+
+                        newWorker.addEventListener("statechange", () => {
+                            console.log(
+                                "[PWA] New worker state changed to:",
+                                newWorker.state
+                            );
+                            if (
+                                newWorker.state === "installed" &&
+                                navigator.serviceWorker.controller
+                            ) {
+                                // New content is available
+                                console.log(
+                                    "[PWA] New version installed! Showing update prompt."
+                                );
+                                setWaitingWorker(newWorker);
+                                setShowUpdatePrompt(true);
+                            }
+                        });
+                    });
+                }
+
+                // Force check for updates now
+                console.log(`[PWA] Forcing update check (${source})...`);
+                await registration.update();
+
+                // Check again after update() in case a new waiting worker appeared
+                if (registration.waiting) {
+                    console.log(
+                        "[PWA] Found waiting worker after update check!"
+                    );
                     setWaitingWorker(registration.waiting);
                     setShowUpdatePrompt(true);
                 }
-
-                // Listen for new service worker updates
-                registration.addEventListener("updatefound", () => {
-                    const newWorker = registration.installing;
-                    if (!newWorker) return;
-
-                    newWorker.addEventListener("statechange", () => {
-                        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-                            // New content is available
-                            setWaitingWorker(newWorker);
-                            setShowUpdatePrompt(true);
-                        }
-                    });
-                });
             } catch (error) {
                 console.error("[PWA] Error checking for updates:", error);
             }
         };
 
-        checkForUpdates();
+        // Initial check
+        checkForUpdates("mount");
+
+        // Check when app becomes visible (user switches back to the app)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                console.log(
+                    "[PWA] App became visible, checking for updates..."
+                );
+                checkForUpdates("visibility");
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        // Check when window gains focus
+        const handleFocus = () => {
+            console.log("[PWA] Window focused, checking for updates...");
+            checkForUpdates("focus");
+        };
+        window.addEventListener("focus", handleFocus);
+
+        // Check when page is shown (includes back/forward navigation and PWA resume)
+        const handlePageShow = (event: PageTransitionEvent) => {
+            // persisted means the page was restored from bfcache
+            if (event.persisted) {
+                console.log(
+                    "[PWA] Page restored from cache, checking for updates..."
+                );
+                checkForUpdates("pageshow");
+            }
+        };
+        window.addEventListener("pageshow", handlePageShow);
 
         // Also listen for controller change (when update is activated)
         let refreshing = false;
-        navigator.serviceWorker.addEventListener("controllerchange", () => {
+        const handleControllerChange = () => {
             if (refreshing) return;
             refreshing = true;
+            console.log("[PWA] Controller changed, reloading...");
             window.location.reload();
-        });
+        };
+        navigator.serviceWorker.addEventListener(
+            "controllerchange",
+            handleControllerChange
+        );
 
-        // Check for updates periodically (every 30 minutes)
+        // Check for updates periodically (every 5 minutes when app is active)
         const intervalId = setInterval(() => {
-            navigator.serviceWorker.ready.then((registration) => {
-                registration.update();
-            });
-        }, 30 * 60 * 1000);
+            if (document.visibilityState === "visible") {
+                checkForUpdates("interval");
+            }
+        }, 5 * 60 * 1000);
 
-        return () => clearInterval(intervalId);
+        return () => {
+            clearInterval(intervalId);
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange
+            );
+            window.removeEventListener("focus", handleFocus);
+            window.removeEventListener("pageshow", handlePageShow);
+            navigator.serviceWorker.removeEventListener(
+                "controllerchange",
+                handleControllerChange
+            );
+        };
     }, []);
 
     useEffect(() => {
@@ -313,7 +409,8 @@ export function PWAInstallPrompt() {
                                     Update Available
                                 </h3>
                                 <p className="text-zinc-400 text-xs leading-relaxed">
-                                    A new version of Spritz is available with improvements and bug fixes.
+                                    A new version of Spritz is available with
+                                    improvements and bug fixes.
                                 </p>
                             </div>
 
@@ -356,4 +453,3 @@ export function PWAInstallPrompt() {
 
     return installPromptUI;
 }
-

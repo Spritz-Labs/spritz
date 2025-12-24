@@ -42,6 +42,21 @@ async function loadHuddle01SDK(): Promise<void> {
     return sdkLoadPromise;
 }
 
+// Force reload the SDK (clears any internal singleton state)
+async function forceReloadHuddle01SDK(): Promise<void> {
+    console.log("[Huddle01] Force reloading SDK module...");
+    HuddleClient = null;
+    sdkLoadPromise = null;
+
+    // Re-import fresh
+    sdkLoadPromise = import("@huddle01/web-core").then((module) => {
+        HuddleClient = module.HuddleClient;
+        console.log("[Huddle01] SDK module reloaded");
+    });
+
+    return sdkLoadPromise;
+}
+
 // Helper to wait for SDK with timeout
 async function waitForHuddle01SDK(timeoutMs: number = 5000): Promise<boolean> {
     const startTime = Date.now();
@@ -82,8 +97,18 @@ export function useHuddle01Call(userAddress: string | null) {
     const localAudioRef = useRef<HTMLAudioElement | null>(null);
     const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
+    // Guard against concurrent join attempts (React Strict Mode can cause duplicates)
+    const isJoiningRef = useRef<boolean>(false);
+    const currentRoomIdRef = useRef<string | null>(null);
+
     // Store pending tracks that couldn't be attached due to missing refs
     const pendingRemoteVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+
+    // Store polling interval for cleanup
+    const pollIntervalIdRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Guard against processing streams after leaving call
+    const isLeavingRef = useRef<boolean>(false);
 
     // Load Huddle01 SDK dynamically
     useEffect(() => {
@@ -163,10 +188,9 @@ export function useHuddle01Call(userAddress: string | null) {
                 clearInterval(durationIntervalRef.current);
             }
             // Clear polling interval if it exists
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const pollIntervalId = (clientRef.current as any)?.__pollIntervalId;
-            if (pollIntervalId) {
-                clearInterval(pollIntervalId);
+            if (pollIntervalIdRef.current) {
+                clearInterval(pollIntervalIdRef.current);
+                pollIntervalIdRef.current = null;
             }
             // Clean up Huddle01 client if it exists
             if (clientRef.current) {
@@ -221,7 +245,49 @@ export function useHuddle01Call(userAddress: string | null) {
             _uid?: number,
             withVideo: boolean = false
         ): Promise<boolean> => {
+            // Generate unique call ID for logging this entire call attempt
+            const callId = `${Date.now()}-${Math.random()
+                .toString(36)
+                .slice(2, 6)}`;
+            console.log(
+                `\n[Huddle01][${callId}] ============ NEW CALL ATTEMPT ============`
+            );
+            console.log(`[Huddle01][${callId}] Room: ${channelName}`);
+            console.log(`[Huddle01][${callId}] Video: ${withVideo}`);
+            console.log(
+                `[Huddle01][${callId}] clientRef exists: ${!!clientRef.current}`
+            );
+            console.log(
+                `[Huddle01][${callId}] Current call state: ${state.callState}`
+            );
+            console.log(
+                `[Huddle01][${callId}] isJoiningRef: ${isJoiningRef.current}`
+            );
+            console.log(
+                `[Huddle01][${callId}] currentRoomIdRef: ${currentRoomIdRef.current}`
+            );
+
+            // Guard against concurrent join attempts (React Strict Mode causes duplicates)
+            if (isJoiningRef.current) {
+                console.warn(
+                    `[Huddle01][${callId}] Already joining a call, ignoring duplicate request`
+                );
+                return false;
+            }
+
+            // If already in a room, skip
+            if (currentRoomIdRef.current === channelName && clientRef.current) {
+                console.warn(
+                    `[Huddle01][${callId}] Already in this room, ignoring duplicate request`
+                );
+                return true;
+            }
+
+            // Set the joining flag
+            isJoiningRef.current = true;
+
             if (!isHuddle01Configured) {
+                isJoiningRef.current = false;
                 setState((prev) => ({
                     ...prev,
                     callState: "error",
@@ -235,6 +301,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 console.log("[Huddle01] SDK not loaded, waiting...");
                 const loaded = await waitForHuddle01SDK(5000);
                 if (!loaded) {
+                    isJoiningRef.current = false;
                     setState((prev) => ({
                         ...prev,
                         callState: "error",
@@ -246,6 +313,7 @@ export function useHuddle01Call(userAddress: string | null) {
             }
 
             if (!userAddress) {
+                isJoiningRef.current = false;
                 setState((prev) => ({
                     ...prev,
                     callState: "error",
@@ -256,38 +324,80 @@ export function useHuddle01Call(userAddress: string | null) {
 
             // THOROUGH cleanup of any existing client from a previous call
             console.log("[Huddle01] Starting pre-call cleanup...");
-            
-            // Clear any existing polling intervals
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const existingPollId = (clientRef.current as any)?.__pollIntervalId;
-            if (existingPollId) {
-                clearInterval(existingPollId);
+
+            // Clear any existing polling intervals (stored in our ref)
+            if (pollIntervalIdRef.current) {
+                clearInterval(pollIntervalIdRef.current);
+                pollIntervalIdRef.current = null;
                 console.log("[Huddle01] Cleared existing poll interval");
             }
-            
-            // Clean up existing client
+
+            // Clean up existing client - MUST be thorough to avoid state pollution
             if (clientRef.current) {
-                console.log("[Huddle01] Cleaning up existing client before new call...");
+                console.log(
+                    "[Huddle01] Cleaning up existing client before new call..."
+                );
                 try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const clientAny = clientRef.current as any;
+
                     // Try to disable media first
                     const oldLocalPeer = clientRef.current.localPeer;
                     if (oldLocalPeer) {
                         try {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             await (oldLocalPeer as any).disableAudio?.();
-                        } catch { /* ignore */ }
+                        } catch {
+                            /* ignore */
+                        }
                         try {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             await (oldLocalPeer as any).disableVideo?.();
-                        } catch { /* ignore */ }
+                        } catch {
+                            /* ignore */
+                        }
                     }
-                    await clientRef.current.leaveRoom();
+
+                    // Leave the room
+                    try {
+                        await clientRef.current.leaveRoom();
+                        console.log("[Huddle01] Pre-call: leaveRoom completed");
+                    } catch (leaveErr) {
+                        console.log(
+                            "[Huddle01] Pre-call: leaveRoom error (continuing):",
+                            leaveErr
+                        );
+                    }
+
+                    // Close sockets
+                    try {
+                        if (clientAny._socket?.close) clientAny._socket.close();
+                        if (clientAny.socket?.close) clientAny.socket.close();
+                    } catch {
+                        /* ignore */
+                    }
+
+                    // Close transports
+                    try {
+                        if (clientAny._sendTransport?.close)
+                            clientAny._sendTransport.close();
+                        if (clientAny._recvTransport?.close)
+                            clientAny._recvTransport.close();
+                    } catch {
+                        /* ignore */
+                    }
                 } catch (e) {
                     console.log("[Huddle01] Cleanup error (expected):", e);
                 }
                 clientRef.current = null;
+
+                // Wait a bit for the old client to fully disconnect
+                console.log(
+                    "[Huddle01] Waiting 500ms for old client to fully disconnect..."
+                );
+                await new Promise((resolve) => setTimeout(resolve, 500));
             }
-            
+
             // Clean up local video elements
             if (localVideoRef.current) {
                 const videos = localVideoRef.current.querySelectorAll("video");
@@ -301,7 +411,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 localVideoRef.current.innerHTML = "";
                 console.log("[Huddle01] Cleared local video elements");
             }
-            
+
             // Clean up remote video elements
             if (remoteVideoRef.current) {
                 const videos = remoteVideoRef.current.querySelectorAll("video");
@@ -315,7 +425,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 remoteVideoRef.current.innerHTML = "";
                 console.log("[Huddle01] Cleared remote video elements");
             }
-            
+
             // Clean up remote audio elements
             if (remoteAudioRef.current) {
                 const stream = remoteAudioRef.current.srcObject as MediaStream;
@@ -327,13 +437,78 @@ export function useHuddle01Call(userAddress: string | null) {
                 remoteAudioRef.current = null;
                 console.log("[Huddle01] Cleared remote audio element");
             }
-            
+
+            // Clean up ALL orphaned audio elements in document.body from previous calls
+            const orphanedAudio = document.body.querySelectorAll("audio");
+            orphanedAudio.forEach((audioEl) => {
+                const stream = audioEl.srcObject as MediaStream;
+                if (stream) {
+                    stream.getTracks().forEach((track) => track.stop());
+                }
+                audioEl.srcObject = null;
+                audioEl.remove();
+            });
+            if (orphanedAudio.length > 0) {
+                console.log(
+                    `[Huddle01] Pre-call cleanup: removed ${orphanedAudio.length} orphaned audio elements`
+                );
+            }
+
             // Clear pending track
             pendingRemoteVideoTrackRef.current = null;
-            
-            // Small delay to let the SDK fully reset (important for calling different people)
-            console.log("[Huddle01] Waiting 500ms for SDK to reset...");
-            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Force release ALL media devices - this is crucial for switching calls
+            // The browser can cache media streams which prevents new calls from working
+            console.log("[Huddle01] Force releasing all media devices...");
+            try {
+                // Get all active media streams and stop them
+                const mediaDevices =
+                    await navigator.mediaDevices.enumerateDevices();
+                console.log("[Huddle01] Found devices:", mediaDevices.length);
+
+                // Try to get and immediately release a stream to clear any cached state
+                try {
+                    const tempStream =
+                        await navigator.mediaDevices.getUserMedia({
+                            audio: true,
+                            video: true,
+                        });
+                    tempStream.getTracks().forEach((track) => {
+                        track.stop();
+                        console.log(
+                            "[Huddle01] Force-stopped track:",
+                            track.kind,
+                            track.label
+                        );
+                    });
+                } catch (e) {
+                    // Might fail if permissions denied, that's ok
+                    console.log(
+                        "[Huddle01] Could not get temp stream (expected if no permissions):",
+                        e
+                    );
+                }
+            } catch (e) {
+                console.log("[Huddle01] Device enumeration failed:", e);
+            }
+
+            // Longer delay to let the SDK fully reset (important for calling different people)
+            console.log(
+                "[Huddle01] Waiting 1500ms for SDK and browser to fully reset..."
+            );
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
+            // Double-check that client is truly null
+            if (clientRef.current) {
+                console.warn(
+                    "[Huddle01] Client still exists after cleanup, forcing null"
+                );
+                clientRef.current = null;
+            }
+
+            // Force reload the SDK module to clear any internal singleton state
+            // This is the nuclear option but ensures clean state for new calls
+            await forceReloadHuddle01SDK();
 
             setState((prev) => ({
                 ...prev,
@@ -347,7 +522,12 @@ export function useHuddle01Call(userAddress: string | null) {
                 // Use the channel name directly as the room ID
                 // The room should already be created by the caller
                 const roomId = channelName;
-                console.log("[Huddle01] Joining room:", roomId, "- clientRef was:", clientRef.current ? "NOT null (cleaned up)" : "null");
+                console.log(
+                    "[Huddle01] Joining room:",
+                    roomId,
+                    "- clientRef was:",
+                    clientRef.current ? "NOT null (cleaned up)" : "null"
+                );
 
                 // Get access token with timeout
                 const tokenPromise = getHuddle01Token(roomId, userAddress);
@@ -368,7 +548,10 @@ export function useHuddle01Call(userAddress: string | null) {
                     );
                 }
 
-                console.log("[Huddle01] Token received, creating client...");
+                console.log("[Huddle01] Token received for room:", roomId);
+                console.log(
+                    "[Huddle01] Creating fresh Huddle01 client instance..."
+                );
 
                 // Detect mobile/iOS
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(
@@ -460,6 +643,119 @@ export function useHuddle01Call(userAddress: string | null) {
                 });
                 clientRef.current = client;
 
+                // Helper to get remote peer streams using the official API
+                const getRemotePeerStreams = (peerId: string) => {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const roomAny = client.room as any;
+
+                        // Try the official API first: getRemotePeerById
+                        const remotePeer = roomAny.getRemotePeerById?.(peerId);
+                        if (remotePeer) {
+                            console.log(
+                                `[Huddle01] Got remote peer via getRemotePeerById: ${peerId}`
+                            );
+                            const audioTrack =
+                                remotePeer.getConsumer?.("audio")?.track;
+                            const videoTrack =
+                                remotePeer.getConsumer?.("video")?.track;
+                            return { audioTrack, videoTrack, peer: remotePeer };
+                        }
+
+                        // Fallback: try remotePeers Map
+                        const remotePeers = roomAny.remotePeers;
+                        if (remotePeers) {
+                            const peer = remotePeers.get(peerId);
+                            if (peer) {
+                                console.log(
+                                    `[Huddle01] Got remote peer via remotePeers Map: ${peerId}`
+                                );
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const peerAny = peer as any;
+                                const audioTrack =
+                                    peerAny.getConsumer?.("audio")?.track;
+                                const videoTrack =
+                                    peerAny.getConsumer?.("video")?.track;
+                                return { audioTrack, videoTrack, peer };
+                            }
+                        }
+
+                        console.log(
+                            `[Huddle01] Could not find remote peer: ${peerId}`
+                        );
+                        return {
+                            audioTrack: null,
+                            videoTrack: null,
+                            peer: null,
+                        };
+                    } catch (err) {
+                        console.log(
+                            "[Huddle01] Error getting remote peer streams:",
+                            err
+                        );
+                        return {
+                            audioTrack: null,
+                            videoTrack: null,
+                            peer: null,
+                        };
+                    }
+                };
+
+                // Helper to check and log remote peer's producer state
+                const logRemotePeerState = (peerId: string) => {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const roomAny = client.room as any;
+                        const remotePeer =
+                            roomAny.getRemotePeerById?.(peerId) ||
+                            roomAny.remotePeers?.get(peerId);
+
+                        if (remotePeer) {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const peerAny = remotePeer as any;
+
+                            // Log all properties for debugging
+                            console.log(
+                                `[Huddle01] Remote peer ${peerId} detailed state:`,
+                                {
+                                    // Basic info
+                                    peerId: peerAny.peerId,
+                                    role: peerAny.role,
+                                    metadata: peerAny.metadata,
+
+                                    // Producer info
+                                    producersMap: peerAny.producers,
+                                    producersSize: peerAny.producers?.size,
+                                    hasAudioProducer:
+                                        peerAny.producers?.has?.("audio"),
+                                    hasVideoProducer:
+                                        peerAny.producers?.has?.("video"),
+
+                                    // Consumer info
+                                    consumersMap: peerAny.consumers,
+                                    consumersSize: peerAny.consumers?.size,
+                                    audioConsumer:
+                                        peerAny.getConsumer?.("audio"),
+                                    videoConsumer:
+                                        peerAny.getConsumer?.("video"),
+
+                                    // Available keys
+                                    keys: Object.keys(peerAny),
+                                }
+                            );
+                        } else {
+                            console.log(
+                                `[Huddle01] Remote peer ${peerId} not found`
+                            );
+                        }
+                    } catch (err) {
+                        console.log(
+                            "[Huddle01] Error logging remote peer state:",
+                            err
+                        );
+                    }
+                };
+
                 // Set up event handlers (using type assertion for SDK compatibility)
                 const room = client.room as {
                     on: (
@@ -471,7 +767,13 @@ export function useHuddle01Call(userAddress: string | null) {
 
                 room.on("room-joined", () => {
                     console.log("[Huddle01] Joined room successfully");
-                    setState((prev) => ({ ...prev, callState: "connected" }));
+                    currentRoomIdRef.current = roomId;
+                    isJoiningRef.current = false; // Clear joining flag on success
+                    setState((prev) => ({
+                        ...prev,
+                        callState: "connected",
+                        roomId,
+                    }));
                     startDurationTimer();
 
                     // Start polling for remote streams - this handles the case where
@@ -488,8 +790,25 @@ export function useHuddle01Call(userAddress: string | null) {
                         `[Huddle01] Starting polling (mobile: ${isMobilePolling}, maxPolls: ${maxPolls})`
                     );
 
-                    const pollIntervalId = setInterval(() => {
+                    // Clear any existing poll interval first
+                    if (pollIntervalIdRef.current) {
+                        clearInterval(pollIntervalIdRef.current);
+                    }
+
+                    pollIntervalIdRef.current = setInterval(() => {
                         pollCount++;
+
+                        // Guard: Don't process if we're leaving the call
+                        if (isLeavingRef.current) {
+                            console.log(
+                                "[Huddle01] Poll: Stopping - call is ending"
+                            );
+                            if (pollIntervalIdRef.current) {
+                                clearInterval(pollIntervalIdRef.current);
+                                pollIntervalIdRef.current = null;
+                            }
+                            return;
+                        }
 
                         // Only stop polling if we have BOTH remote video AND audio
                         const hasRemoteVideo =
@@ -500,7 +819,10 @@ export function useHuddle01Call(userAddress: string | null) {
                             console.log(
                                 "[Huddle01] Remote video AND audio found, stopping poll"
                             );
-                            clearInterval(pollIntervalId);
+                            if (pollIntervalIdRef.current) {
+                                clearInterval(pollIntervalIdRef.current);
+                                pollIntervalIdRef.current = null;
+                            }
                             return;
                         }
 
@@ -509,7 +831,10 @@ export function useHuddle01Call(userAddress: string | null) {
                             console.log(
                                 `[Huddle01] Max polls (${maxPolls}) reached, stopping. hasVideo: ${hasRemoteVideo}, hasAudio: ${hasRemoteAudio}`
                             );
-                            clearInterval(pollIntervalId);
+                            if (pollIntervalIdRef.current) {
+                                clearInterval(pollIntervalIdRef.current);
+                                pollIntervalIdRef.current = null;
+                            }
                             return;
                         }
 
@@ -527,6 +852,21 @@ export function useHuddle01Call(userAddress: string | null) {
                                 console.log(
                                     `[Huddle01] Checking peer: ${peerId}`
                                 );
+
+                                // If we don't have remote audio/video yet, log the peer state for debugging
+                                if (
+                                    !remoteAudioRef.current ||
+                                    (remoteVideoRef.current?.children?.length ??
+                                        0) === 0
+                                ) {
+                                    // Log detailed peer state for debugging
+                                    if (pollCount <= 5) {
+                                        console.log(
+                                            `[Huddle01] Checking peer ${peerId} for streams...`
+                                        );
+                                        logRemotePeerState(peerId);
+                                    }
+                                }
 
                                 // Check for audio FIRST (more important)
                                 try {
@@ -681,7 +1021,13 @@ export function useHuddle01Call(userAddress: string | null) {
                                             console.log(
                                                 "[Huddle01] Remote VIDEO created via polling!"
                                             );
-                                            clearInterval(pollIntervalId);
+                                            if (pollIntervalIdRef.current) {
+                                                clearInterval(
+                                                    pollIntervalIdRef.current
+                                                );
+                                                pollIntervalIdRef.current =
+                                                    null;
+                                            }
                                             return;
                                         } else if (!remoteVideoRef.current) {
                                             pendingRemoteVideoTrackRef.current =
@@ -808,11 +1154,7 @@ export function useHuddle01Call(userAddress: string | null) {
                             }
                         }
                     }, pollInterval);
-
-                    // Store interval ID for cleanup
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (clientRef.current as any).__pollIntervalId =
-                        pollIntervalId;
+                    // pollIntervalIdRef is already set above, no need to store on client
                 });
 
                 room.on("room-closed", () => {
@@ -826,18 +1168,54 @@ export function useHuddle01Call(userAddress: string | null) {
                     setState((prev) => ({ ...prev, callState: "idle" }));
                 });
 
+                // Add comprehensive event logging for debugging
+                const debugEvents = [
+                    "new-peer-joined",
+                    "peer-left",
+                    "peer-metadata-updated",
+                    "remote-producer-added",
+                    "remote-producer-closed",
+                    "producer-added",
+                    "producer-closed",
+                    "consumer-created",
+                    "consumer-closed",
+                    "new-consumer",
+                    "stream-started",
+                    "stream-stopped",
+                    "track-added",
+                    "track-removed",
+                    "receive-data",
+                ];
+                debugEvents.forEach((eventName) => {
+                    room.on(eventName, (data: unknown) => {
+                        console.log(`[Huddle01] EVENT: ${eventName}`, data);
+                    });
+                });
+
                 room.on("peer-joined", (peer) => {
                     console.log("[Huddle01] Peer joined:", peer);
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const peerData = peer as any;
+                    const peerId = peerData?.peerId;
+
+                    // Log the peer state immediately for debugging
+                    if (peerId) {
+                        console.log(
+                            `[Huddle01] New peer joined, logging state...`
+                        );
+                        logRemotePeerState(peerId);
+                    }
+
                     // When a new peer joins, check for their streams after a delay
                     // (they might have already enabled video before joining our room)
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         console.log(
                             "[Huddle01] Checking new peer for existing streams..."
                         );
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const peerData = peer as any;
-                        const peerId = peerData?.peerId;
                         if (peerId) {
+                            // Log peer state again after delay
+                            logRemotePeerState(peerId);
+
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const remotePeers = (client.room as any)
                                 ?.remotePeers;
@@ -990,6 +1368,14 @@ export function useHuddle01Call(userAddress: string | null) {
                 };
 
                 localPeerEvents.on("stream-playable", (data: unknown) => {
+                    // Guard: Don't process if we're leaving the call
+                    if (isLeavingRef.current) {
+                        console.log(
+                            "[Huddle01] Ignoring local stream-playable - call is ending"
+                        );
+                        return;
+                    }
+
                     console.log("[Huddle01] Local stream playable:", data);
                     try {
                         const streamData = data as {
@@ -1063,6 +1449,14 @@ export function useHuddle01Call(userAddress: string | null) {
 
                 // Listen for remote peers' streams
                 room.on("stream-added", (data: unknown) => {
+                    // Guard: Don't process streams if we're leaving the call
+                    if (isLeavingRef.current) {
+                        console.log(
+                            "[Huddle01] Ignoring stream-added - call is ending"
+                        );
+                        return;
+                    }
+
                     console.log(
                         "[Huddle01] Remote stream added - full data:",
                         JSON.stringify(
@@ -1498,6 +1892,37 @@ export function useHuddle01Call(userAddress: string | null) {
                 await Promise.race([joinPromise, joinTimeoutPromise]);
                 console.log("[Huddle01] Join room completed");
 
+                // Log detailed room/connection state after joining
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const roomAny = client.room as any;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const clientAny = client as any;
+                    console.log("[Huddle01] Connection state after join:", {
+                        roomState: roomAny?.state,
+                        roomId: roomAny?.roomId,
+                        localPeerId: roomAny?.localPeer?.peerId,
+                        remotePeersCount: roomAny?.remotePeers?.size,
+                        // Check for transport/connection info
+                        hasTransports:
+                            !!clientAny._sendTransport ||
+                            !!clientAny._recvTransport,
+                        socketConnected: clientAny._socket?.connected,
+                        socketState: clientAny._socket?.readyState,
+                        // Check available methods
+                        roomKeys: Object.keys(roomAny || {}),
+                        clientKeys: Object.keys(clientAny || {}),
+                        // Room methods
+                        hasGetRemotePeerById:
+                            typeof roomAny?.getRemotePeerById === "function",
+                    });
+                } catch (e) {
+                    console.log(
+                        "[Huddle01] Could not log connection state:",
+                        e
+                    );
+                }
+
                 // On mobile, wait longer for the room to fully initialize
                 // This helps ensure the caller's streams are ready before the callee joins
                 const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(
@@ -1597,6 +2022,42 @@ export function useHuddle01Call(userAddress: string | null) {
                     }
                 }
 
+                // Log our local producer state for debugging
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const localPeerAny = client.localPeer as any;
+                    const producers =
+                        localPeerAny.producers || localPeerAny._producers;
+                    const producerLabels: string[] = [];
+                    if (producers) {
+                        if (producers.forEach) {
+                            producers.forEach((_: unknown, label: string) =>
+                                producerLabels.push(label)
+                            );
+                        } else if (typeof producers === "object") {
+                            Object.keys(producers).forEach((k) =>
+                                producerLabels.push(k)
+                            );
+                        }
+                    }
+                    console.log(
+                        "[Huddle01] Local peer producer state after enabling media:",
+                        {
+                            hasProducers: !!producers,
+                            producersSize: producers?.size,
+                            producerLabels,
+                            localPeerKeys: Object.keys(localPeerAny),
+                            role: localPeerAny.role,
+                            permissions: localPeerAny.permissions,
+                        }
+                    );
+                } catch (e) {
+                    console.log(
+                        "[Huddle01] Could not log local peer state:",
+                        e
+                    );
+                }
+
                 // The room-joined event might not always fire, so ensure the timer is started here too
                 // If it was already started by room-joined, starting again is fine (it will just restart)
                 if (!startTimeRef.current) {
@@ -1604,6 +2065,469 @@ export function useHuddle01Call(userAddress: string | null) {
                         "[Huddle01] Starting duration timer (fallback)"
                     );
                     startDurationTimer();
+                }
+
+                // CRITICAL: Also start polling as fallback if room-joined didn't fire
+                // This ensures we can receive remote streams even when the event doesn't trigger
+                if (!pollIntervalIdRef.current) {
+                    console.log(
+                        "[Huddle01] Starting polling (fallback - room-joined didn't fire)"
+                    );
+                    const isMobilePolling = /iPhone|iPad|iPod|Android/i.test(
+                        navigator.userAgent
+                    );
+                    let pollCount = 0;
+                    const maxPolls = isMobilePolling ? 30 : 15;
+                    const pollInterval = 1000;
+
+                    // Helper function to extract track from various consumer formats
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const extractTrack = (
+                        consumer: any
+                    ): MediaStreamTrack | null => {
+                        if (!consumer) return null;
+
+                        // Direct track property
+                        if (consumer.track instanceof MediaStreamTrack) {
+                            return consumer.track;
+                        }
+
+                        // Nested in _track
+                        if (consumer._track instanceof MediaStreamTrack) {
+                            return consumer._track;
+                        }
+
+                        // Check if consumer itself is a track
+                        if (consumer instanceof MediaStreamTrack) {
+                            return consumer;
+                        }
+
+                        // Check for getTrack method
+                        if (typeof consumer.getTrack === "function") {
+                            const track = consumer.getTrack();
+                            if (track instanceof MediaStreamTrack) {
+                                return track;
+                            }
+                        }
+
+                        return null;
+                    };
+
+                    pollIntervalIdRef.current = setInterval(() => {
+                        pollCount++;
+
+                        // Guard: Don't process if we're leaving the call
+                        if (isLeavingRef.current) {
+                            console.log(
+                                "[Huddle01] Fallback poll: Stopping - call is ending"
+                            );
+                            if (pollIntervalIdRef.current) {
+                                clearInterval(pollIntervalIdRef.current);
+                                pollIntervalIdRef.current = null;
+                            }
+                            return;
+                        }
+
+                        const hasRemoteVideo =
+                            (remoteVideoRef.current?.children?.length ?? 0) > 0;
+                        const hasRemoteAudio = remoteAudioRef.current !== null;
+
+                        if (hasRemoteVideo && hasRemoteAudio) {
+                            console.log(
+                                "[Huddle01] Fallback poll: Remote A/V found, stopping"
+                            );
+                            if (pollIntervalIdRef.current) {
+                                clearInterval(pollIntervalIdRef.current);
+                                pollIntervalIdRef.current = null;
+                            }
+                            return;
+                        }
+
+                        if (pollCount > maxPolls) {
+                            console.log(
+                                `[Huddle01] Fallback poll: Max polls reached`
+                            );
+                            if (pollIntervalIdRef.current) {
+                                clearInterval(pollIntervalIdRef.current);
+                                pollIntervalIdRef.current = null;
+                            }
+                            return;
+                        }
+
+                        console.log(
+                            `[Huddle01] Fallback polling (${pollCount}/${maxPolls})...`
+                        );
+
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const remotePeers = (client.room as any)?.remotePeers;
+                        if (remotePeers && remotePeers.size > 0) {
+                            console.log(
+                                `[Huddle01] Fallback poll: Found ${remotePeers.size} peer(s)`
+                            );
+                            for (const [peerId, peer] of remotePeers) {
+                                // Log peer state for debugging on first few polls
+                                const hasRemoteStreams =
+                                    remoteAudioRef.current ||
+                                    (remoteVideoRef.current?.children?.length ??
+                                        0) > 0;
+                                if (!hasRemoteStreams && pollCount <= 5) {
+                                    console.log(
+                                        `[Huddle01] Fallback poll: Checking peer ${peerId} state...`
+                                    );
+                                    logRemotePeerState(peerId);
+                                }
+
+                                // Log peer structure for debugging
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const peerAny = peer as any;
+                                if (pollCount <= 3) {
+                                    // Get all properties of the peer for debugging
+                                    const peerKeys = Object.keys(peerAny);
+                                    const protoKeys =
+                                        Object.getOwnPropertyNames(
+                                            Object.getPrototypeOf(peerAny) || {}
+                                        );
+
+                                    // Check for producers
+                                    const producers =
+                                        peerAny.producers || peerAny._producers;
+                                    const producerLabels: string[] = [];
+                                    if (producers) {
+                                        if (producers.forEach) {
+                                            producers.forEach(
+                                                (_: unknown, label: string) =>
+                                                    producerLabels.push(label)
+                                            );
+                                        } else if (
+                                            typeof producers === "object"
+                                        ) {
+                                            Object.keys(producers).forEach(
+                                                (k) => producerLabels.push(k)
+                                            );
+                                        }
+                                    }
+
+                                    // Check role/permissions
+                                    const role = peerAny.role;
+                                    const permissions = peerAny.permissions;
+                                    const metadata = peerAny.metadata;
+
+                                    console.log(
+                                        `[Huddle01] Fallback poll: Peer ${peerId} FULL structure:`,
+                                        {
+                                            hasGetConsumer:
+                                                typeof peerAny.getConsumer ===
+                                                "function",
+                                            hasConsumers: !!peerAny.consumers,
+                                            consumersSize:
+                                                peerAny.consumers?.size,
+                                            hasProducers: !!producers,
+                                            producersSize: producers?.size,
+                                            producerLabels,
+                                            role,
+                                            permissions,
+                                            metadata,
+                                            peerKeys,
+                                            protoMethods: protoKeys.filter(
+                                                (m) =>
+                                                    typeof peerAny[m] ===
+                                                    "function"
+                                            ),
+                                        }
+                                    );
+                                }
+
+                                // Try to get audio via getConsumer
+                                if (!remoteAudioRef.current) {
+                                    try {
+                                        const audioConsumer =
+                                            peerAny.getConsumer?.("audio");
+                                        if (pollCount <= 3) {
+                                            console.log(
+                                                `[Huddle01] Fallback poll: Audio consumer:`,
+                                                {
+                                                    exists: !!audioConsumer,
+                                                    type: typeof audioConsumer,
+                                                    hasTrack:
+                                                        !!audioConsumer?.track,
+                                                    trackType:
+                                                        typeof audioConsumer?.track,
+                                                }
+                                            );
+                                        }
+                                        const audioTrack =
+                                            extractTrack(audioConsumer);
+                                        if (audioTrack) {
+                                            console.log(
+                                                "[Huddle01] Fallback poll: Found AUDIO from",
+                                                peerId
+                                            );
+                                            const audioStream = new MediaStream(
+                                                [audioTrack]
+                                            );
+                                            const audioEl =
+                                                document.createElement("audio");
+                                            audioEl.srcObject = audioStream;
+                                            audioEl.autoplay = true;
+                                            audioEl.setAttribute(
+                                                "playsinline",
+                                                "true"
+                                            );
+                                            audioEl.setAttribute(
+                                                "webkit-playsinline",
+                                                "true"
+                                            );
+                                            document.body.appendChild(audioEl);
+                                            remoteAudioRef.current = audioEl;
+                                            audioEl
+                                                .play()
+                                                .catch((e) =>
+                                                    console.log(
+                                                        "[Huddle01] Fallback audio play error:",
+                                                        e
+                                                    )
+                                                );
+                                            setState((prev) => ({
+                                                ...prev,
+                                                isRemoteMuted: false,
+                                            }));
+                                        }
+                                    } catch (e) {
+                                        console.log(
+                                            "[Huddle01] Fallback poll: Audio consumer error:",
+                                            e
+                                        );
+                                    }
+
+                                    // Also try via consumers Map
+                                    if (
+                                        !remoteAudioRef.current &&
+                                        peerAny.consumers
+                                    ) {
+                                        try {
+                                            for (const [
+                                                ,
+                                                consumer,
+                                            ] of peerAny.consumers) {
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                const consumerAny =
+                                                    consumer as any;
+                                                if (
+                                                    consumerAny.kind ===
+                                                        "audio" ||
+                                                    consumerAny.label ===
+                                                        "audio" ||
+                                                    consumerAny.appData
+                                                        ?.label === "audio"
+                                                ) {
+                                                    const audioTrack =
+                                                        extractTrack(
+                                                            consumerAny
+                                                        );
+                                                    if (audioTrack) {
+                                                        console.log(
+                                                            "[Huddle01] Fallback poll: Found AUDIO via consumers Map from",
+                                                            peerId
+                                                        );
+                                                        const audioStream =
+                                                            new MediaStream([
+                                                                audioTrack,
+                                                            ]);
+                                                        const audioEl =
+                                                            document.createElement(
+                                                                "audio"
+                                                            );
+                                                        audioEl.srcObject =
+                                                            audioStream;
+                                                        audioEl.autoplay = true;
+                                                        audioEl.setAttribute(
+                                                            "playsinline",
+                                                            "true"
+                                                        );
+                                                        audioEl.setAttribute(
+                                                            "webkit-playsinline",
+                                                            "true"
+                                                        );
+                                                        document.body.appendChild(
+                                                            audioEl
+                                                        );
+                                                        remoteAudioRef.current =
+                                                            audioEl;
+                                                        audioEl
+                                                            .play()
+                                                            .catch((e) =>
+                                                                console.log(
+                                                                    "[Huddle01] Fallback audio play error:",
+                                                                    e
+                                                                )
+                                                            );
+                                                        setState((prev) => ({
+                                                            ...prev,
+                                                            isRemoteMuted:
+                                                                false,
+                                                        }));
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        } catch (e) {
+                                            console.log(
+                                                "[Huddle01] Fallback poll: Consumers Map audio error:",
+                                                e
+                                            );
+                                        }
+                                    }
+                                }
+
+                                // Try to get video via getConsumer
+                                if (
+                                    remoteVideoRef.current &&
+                                    (remoteVideoRef.current?.children?.length ??
+                                        0) === 0
+                                ) {
+                                    try {
+                                        const videoConsumer =
+                                            peerAny.getConsumer?.("video");
+                                        if (pollCount <= 3) {
+                                            console.log(
+                                                `[Huddle01] Fallback poll: Video consumer:`,
+                                                {
+                                                    exists: !!videoConsumer,
+                                                    type: typeof videoConsumer,
+                                                    hasTrack:
+                                                        !!videoConsumer?.track,
+                                                    trackType:
+                                                        typeof videoConsumer?.track,
+                                                }
+                                            );
+                                        }
+                                        const videoTrack =
+                                            extractTrack(videoConsumer);
+                                        if (videoTrack) {
+                                            console.log(
+                                                "[Huddle01] Fallback poll: Found VIDEO from",
+                                                peerId
+                                            );
+                                            const videoStream = new MediaStream(
+                                                [videoTrack]
+                                            );
+                                            const videoEl =
+                                                document.createElement("video");
+                                            videoEl.srcObject = videoStream;
+                                            videoEl.autoplay = true;
+                                            videoEl.playsInline = true;
+                                            videoEl.muted = true;
+                                            videoEl.setAttribute(
+                                                "webkit-playsinline",
+                                                "true"
+                                            );
+                                            videoEl.className =
+                                                "w-full h-full object-cover rounded-lg";
+                                            remoteVideoRef.current.appendChild(
+                                                videoEl
+                                            );
+                                            videoEl
+                                                .play()
+                                                .catch((e) =>
+                                                    console.log(
+                                                        "[Huddle01] Fallback video play error:",
+                                                        e
+                                                    )
+                                                );
+                                            setState((prev) => ({
+                                                ...prev,
+                                                isRemoteVideoOff: false,
+                                            }));
+                                        }
+                                    } catch (e) {
+                                        console.log(
+                                            "[Huddle01] Fallback poll: Video consumer error:",
+                                            e
+                                        );
+                                    }
+
+                                    // Also try via consumers Map
+                                    if (
+                                        (remoteVideoRef.current?.children
+                                            ?.length ?? 0) === 0 &&
+                                        peerAny.consumers
+                                    ) {
+                                        try {
+                                            for (const [
+                                                ,
+                                                consumer,
+                                            ] of peerAny.consumers) {
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                const consumerAny =
+                                                    consumer as any;
+                                                if (
+                                                    consumerAny.kind ===
+                                                        "video" ||
+                                                    consumerAny.label ===
+                                                        "video" ||
+                                                    consumerAny.appData
+                                                        ?.label === "video"
+                                                ) {
+                                                    const videoTrack =
+                                                        extractTrack(
+                                                            consumerAny
+                                                        );
+                                                    if (videoTrack) {
+                                                        console.log(
+                                                            "[Huddle01] Fallback poll: Found VIDEO via consumers Map from",
+                                                            peerId
+                                                        );
+                                                        const videoStream =
+                                                            new MediaStream([
+                                                                videoTrack,
+                                                            ]);
+                                                        const videoEl =
+                                                            document.createElement(
+                                                                "video"
+                                                            );
+                                                        videoEl.srcObject =
+                                                            videoStream;
+                                                        videoEl.autoplay = true;
+                                                        videoEl.playsInline =
+                                                            true;
+                                                        videoEl.muted = true;
+                                                        videoEl.setAttribute(
+                                                            "webkit-playsinline",
+                                                            "true"
+                                                        );
+                                                        videoEl.className =
+                                                            "w-full h-full object-cover rounded-lg";
+                                                        remoteVideoRef.current.appendChild(
+                                                            videoEl
+                                                        );
+                                                        videoEl
+                                                            .play()
+                                                            .catch((e) =>
+                                                                console.log(
+                                                                    "[Huddle01] Fallback video play error:",
+                                                                    e
+                                                                )
+                                                            );
+                                                        setState((prev) => ({
+                                                            ...prev,
+                                                            isRemoteVideoOff:
+                                                                false,
+                                                        }));
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        } catch (e) {
+                                            console.log(
+                                                "[Huddle01] Fallback poll: Consumers Map video error:",
+                                                e
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }, pollInterval);
                 }
 
                 setState((prev) => ({
@@ -1615,6 +2539,9 @@ export function useHuddle01Call(userAddress: string | null) {
                 return true;
             } catch (error) {
                 console.error("[Huddle01] Error joining call:", error);
+                // Clear refs on error
+                isJoiningRef.current = false;
+                currentRoomIdRef.current = null;
                 setState((prev) => ({
                     ...prev,
                     callState: "error",
@@ -1630,14 +2557,16 @@ export function useHuddle01Call(userAddress: string | null) {
     );
 
     const leaveCall = useCallback(async () => {
+        // Set leaving guard immediately to prevent race conditions with stream handlers
+        isLeavingRef.current = true;
         setState((prev) => ({ ...prev, callState: "leaving" }));
         stopDurationTimer();
 
         // Clear polling interval if it exists
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const pollIntervalId = (clientRef.current as any)?.__pollIntervalId;
-        if (pollIntervalId) {
-            clearInterval(pollIntervalId);
+        if (pollIntervalIdRef.current) {
+            clearInterval(pollIntervalIdRef.current);
+            pollIntervalIdRef.current = null;
+            console.log("[Huddle01] Cleared polling interval on leave");
         }
 
         try {
@@ -1680,11 +2609,15 @@ export function useHuddle01Call(userAddress: string | null) {
                     }
                 }
 
-                // Check if the room is actually connected before trying to leave
-                // Also check if socket is still open
+                // ALWAYS try to leave the room and clean up, regardless of state
+                // This ensures we don't have stale state affecting the next call
                 try {
                     const roomState = clientRef.current.room?.state;
-                    const socketState = clientRef.current.socket?.state;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const clientAny = clientRef.current as any;
+                    const socketState =
+                        clientAny.socket?.state ||
+                        clientAny._socket?.readyState;
 
                     console.log(
                         "[Huddle01] Leave call - room state:",
@@ -1693,24 +2626,56 @@ export function useHuddle01Call(userAddress: string | null) {
                         socketState
                     );
 
-                    // Only try to leave if room is in a good state
-                    // Skip if socket is already closed or undefined (indicates already disconnected)
-                    if (
-                        (roomState === "connected" ||
-                            roomState === "connecting") &&
-                        socketState &&
-                        socketState !== "closed"
-                    ) {
+                    // Always attempt to leave the room
+                    console.log("[Huddle01] Attempting leaveRoom...");
+                    try {
                         await clientRef.current.leaveRoom();
-                    } else {
+                        console.log("[Huddle01] leaveRoom completed");
+                    } catch (leaveErr) {
                         console.log(
-                            "[Huddle01] Skipping leaveRoom - already disconnected"
+                            "[Huddle01] leaveRoom error (continuing cleanup):",
+                            leaveErr
+                        );
+                    }
+
+                    // Try to disconnect any sockets
+                    try {
+                        if (clientAny._socket?.close) {
+                            clientAny._socket.close();
+                            console.log("[Huddle01] Socket closed manually");
+                        }
+                        if (clientAny.socket?.close) {
+                            clientAny.socket.close();
+                            console.log(
+                                "[Huddle01] Socket (alt) closed manually"
+                            );
+                        }
+                    } catch (socketErr) {
+                        console.log(
+                            "[Huddle01] Socket close error:",
+                            socketErr
+                        );
+                    }
+
+                    // Try to disconnect transports
+                    try {
+                        if (clientAny._sendTransport?.close) {
+                            clientAny._sendTransport.close();
+                        }
+                        if (clientAny._recvTransport?.close) {
+                            clientAny._recvTransport.close();
+                        }
+                    } catch (transportErr) {
+                        console.log(
+                            "[Huddle01] Transport close error:",
+                            transportErr
                         );
                     }
                 } catch (leaveError) {
-                    // Ignore errors when leaving - the socket might already be closed
-                    // This is expected when the remote party ends the call first
-                    console.log("[Huddle01] Leave room error (expected):", leaveError);
+                    console.log(
+                        "[Huddle01] Leave room error (continuing):",
+                        leaveError
+                    );
                 }
             }
         } catch (error) {
@@ -1718,7 +2683,7 @@ export function useHuddle01Call(userAddress: string | null) {
         } finally {
             // ALWAYS null the client ref to ensure fresh instance on next call
             clientRef.current = null;
-            
+
             // Reset pending track ref
             pendingRemoteVideoTrackRef.current = null;
             // Clean up media elements and stop any remaining tracks
@@ -1771,6 +2736,34 @@ export function useHuddle01Call(userAddress: string | null) {
                 remoteAudioRef.current.remove();
                 remoteAudioRef.current = null;
             }
+
+            // Clean up ALL orphaned audio elements in document.body
+            // (multiple can be created during a call from various event handlers)
+            const orphanedAudioElements =
+                document.body.querySelectorAll("audio");
+            orphanedAudioElements.forEach((audioEl) => {
+                const stream = audioEl.srcObject as MediaStream;
+                if (stream) {
+                    stream.getTracks().forEach((track) => {
+                        track.stop();
+                        console.log("[Huddle01] Stopped orphaned audio track");
+                    });
+                }
+                audioEl.srcObject = null;
+                audioEl.remove();
+            });
+            if (orphanedAudioElements.length > 0) {
+                console.log(
+                    `[Huddle01] Cleaned up ${orphanedAudioElements.length} orphaned audio elements`
+                );
+            }
+
+            // Clear join tracking refs
+            isJoiningRef.current = false;
+            currentRoomIdRef.current = null;
+
+            // Reset leaving guard
+            isLeavingRef.current = false;
 
             // Always reset state
             setState({

@@ -113,12 +113,15 @@ export default function Home() {
     // Show dashboard if authenticated
     if (isAuthenticated && userAddress) {
         return (
-            <Dashboard
-                userAddress={userAddress}
-                onLogout={handleLogout}
-                isPasskeyUser={isPasskeyAuthenticated}
-                walletType={activeWalletType}
-            />
+            <>
+                <PWAInstallPrompt />
+                <Dashboard
+                    userAddress={userAddress}
+                    onLogout={handleLogout}
+                    isPasskeyUser={isPasskeyAuthenticated}
+                    walletType={activeWalletType}
+                />
+            </>
         );
     }
 

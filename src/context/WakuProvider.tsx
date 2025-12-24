@@ -1864,3 +1864,4 @@ export function useWakuContext() {
 export const useXMTPContext = useWakuContext;
 export const XMTPProvider = WakuProvider;
 export type XMTPGroup = WakuGroup;
+
