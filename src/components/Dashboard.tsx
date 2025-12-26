@@ -295,11 +295,12 @@ function DashboardContent({
     const allInvitesUsed = usedInvites > 0 && usedInvites === totalInvites;
 
     // Alpha Channel
+    const alphaChat = useAlphaChat(userAddress);
     const {
         unreadCount: alphaUnreadCount,
         isMember: isAlphaMember,
         membership: alphaMembership,
-    } = useAlphaChat(userAddress);
+    } = alphaChat;
     const [isAlphaChatOpen, setIsAlphaChatOpen] = useState(false);
 
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
@@ -3213,6 +3214,7 @@ function DashboardContent({
                 isOpen={isAlphaChatOpen}
                 onClose={() => setIsAlphaChatOpen(false)}
                 userAddress={userAddress}
+                alphaChat={alphaChat}
                 getUserInfo={getAlphaUserInfo}
             />
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { useAlphaChat } from "@/hooks/useAlphaChat";
+import type { AlphaMessage, AlphaMembership } from "@/hooks/useAlphaChat";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 
@@ -10,6 +10,19 @@ interface AlphaChatModalProps {
     isOpen: boolean;
     onClose: () => void;
     userAddress: string;
+    // Shared hook state from parent
+    alphaChat: {
+        messages: AlphaMessage[];
+        membership: AlphaMembership | null;
+        isMember: boolean;
+        isLoading: boolean;
+        isSending: boolean;
+        sendMessage: (content: string, messageType?: "text" | "pixel_art") => Promise<boolean>;
+        markAsRead: () => Promise<void>;
+        toggleNotifications: () => Promise<boolean>;
+        leaveChannel: () => Promise<boolean>;
+        joinChannel: () => Promise<boolean>;
+    };
     // For displaying usernames/avatars
     getUserInfo?: (address: string) => {
         name: string | null;
@@ -21,6 +34,7 @@ export function AlphaChatModal({
     isOpen,
     onClose,
     userAddress,
+    alphaChat,
     getUserInfo,
 }: AlphaChatModalProps) {
     const {
@@ -34,7 +48,7 @@ export function AlphaChatModal({
         toggleNotifications,
         leaveChannel,
         joinChannel,
-    } = useAlphaChat(userAddress);
+    } = alphaChat;
 
     const [newMessage, setNewMessage] = useState("");
     const [showPixelArt, setShowPixelArt] = useState(false);
