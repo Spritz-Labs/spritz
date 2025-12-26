@@ -538,12 +538,16 @@ export default function AdminPage() {
                                                             </code>
                                                             <span
                                                                 className={`px-2 py-1 rounded-full text-xs ${
-                                                                    code.is_active
+                                                                    code.max_uses > 0 && code.current_uses >= code.max_uses
+                                                                        ? "bg-amber-500/20 text-amber-400"
+                                                                        : code.is_active
                                                                         ? "bg-green-500/20 text-green-400"
                                                                         : "bg-red-500/20 text-red-400"
                                                                 }`}
                                                             >
-                                                                {code.is_active
+                                                                {code.max_uses > 0 && code.current_uses >= code.max_uses
+                                                                    ? "Redeemed"
+                                                                    : code.is_active
                                                                     ? "Active"
                                                                     : "Inactive"}
                                                             </span>
