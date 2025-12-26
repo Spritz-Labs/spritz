@@ -168,11 +168,65 @@ export function useEmailVerification(walletAddress: string | null) {
         }));
     }, []);
 
+    // Remove email
+    const removeEmail = useCallback(async () => {
+        if (!walletAddress || !supabase) {
+            setState(prev => ({ ...prev, error: "Wallet not connected" }));
+            return false;
+        }
+
+        try {
+            const { error } = await supabase
+                .from("shout_users")
+                .update({
+                    email: null,
+                    email_verified: false,
+                })
+                .eq("wallet_address", walletAddress.toLowerCase());
+
+            if (error) {
+                console.error("[Email] Remove error:", error);
+                setState(prev => ({ ...prev, error: "Failed to remove email" }));
+                return false;
+            }
+
+            setState(prev => ({
+                ...prev,
+                email: null,
+                isVerified: false,
+                codeSent: false,
+                error: null,
+            }));
+            return true;
+        } catch (err) {
+            console.error("[Email] Remove error:", err);
+            setState(prev => ({ ...prev, error: "Failed to remove email" }));
+            return false;
+        }
+    }, [walletAddress]);
+
+    // Start changing email
+    const startChangeEmail = useCallback(() => {
+        setState(prev => ({
+            ...prev,
+            codeSent: false,
+            error: null,
+        }));
+    }, []);
+
+    // Clear error
+    const clearError = useCallback(() => {
+        setState(prev => ({ ...prev, error: null }));
+    }, []);
+
     return {
         ...state,
         sendCode,
         verifyCode,
         reset,
+        removeEmail,
+        startChangeEmail,
+        clearError,
         refresh: loadEmailStatus,
     };
 }
