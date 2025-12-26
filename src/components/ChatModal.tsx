@@ -20,8 +20,10 @@ import {
     useMessageReactions,
     MESSAGE_REACTION_EMOJIS,
 } from "@/hooks/useChatFeatures";
-import { VoiceRecorder, VoiceMessage } from "./VoiceRecorder";
+// VoiceRecorder removed - not fully implemented yet
+// import { VoiceRecorder, VoiceMessage } from "./VoiceRecorder";
 import { MessageSearch } from "./MessageSearch";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 type ChatModalProps = {
     isOpen: boolean;
@@ -63,8 +65,9 @@ export function ChatModal({
     );
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-    const [showMsgReactions, setShowMsgReactions] = useState<string | null>(null);
-    const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+    const [showMsgReactions, setShowMsgReactions] = useState<string | null>(
+        null
+    );
     const [showSearch, setShowSearch] = useState(false);
 
     // Generate conversation ID for this chat
@@ -109,6 +112,9 @@ export function ChatModal({
         setActiveChatPeer,
     } = useXMTPContext();
 
+    // Analytics tracking
+    const { trackMessageSent } = useAnalytics(userAddress);
+
     const formatAddress = (address: string) => {
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
@@ -135,7 +141,11 @@ export function ChatModal({
             setActiveChatPeer(peerAddress);
             // Also explicitly mark as read to clear any existing unread count
             markAsRead(peerAddress);
-            console.log("[Chat] Opened chat with", peerAddress, "- marking as read");
+            console.log(
+                "[Chat] Opened chat with",
+                peerAddress,
+                "- marking as read"
+            );
         } else {
             setMessages([]);
             setChatError(null);
@@ -203,10 +213,12 @@ export function ChatModal({
                         }));
 
                     setMessages(formattedMessages);
-                    
+
                     // Mark all loaded messages as read in the database
                     if (formattedMessages.length > 0) {
-                        markMessagesRead(formattedMessages.map((m: Message) => m.id));
+                        markMessagesRead(
+                            formattedMessages.map((m: Message) => m.id)
+                        );
                     }
                 } catch (loadErr) {
                     console.log(
@@ -387,6 +399,8 @@ export function ChatModal({
             const result = await sendMessage(peerAddress, messageContent);
             if (result.success) {
                 setNewMessage("");
+                // Track message sent for analytics
+                trackMessageSent();
                 // Add the sent message to the UI immediately
                 if (result.message && userAddress) {
                     const sentMessage: Message = {
@@ -412,7 +426,14 @@ export function ChatModal({
         } finally {
             setIsSending(false);
         }
-    }, [newMessage, isSending, sendMessage, peerAddress, userAddress]);
+    }, [
+        newMessage,
+        isSending,
+        sendMessage,
+        peerAddress,
+        userAddress,
+        trackMessageSent,
+    ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -452,6 +473,9 @@ export function ChatModal({
                     throw new Error(result.error || "Failed to send");
                 }
 
+                // Track message sent for analytics
+                trackMessageSent();
+
                 // Add the sent pixel art message to the UI immediately
                 if (result.message && userAddress) {
                     const sentMessage: Message = {
@@ -475,7 +499,7 @@ export function ChatModal({
                 setIsUploadingPixelArt(false);
             }
         },
-        [userAddress, peerAddress, sendMessage]
+        [userAddress, peerAddress, sendMessage, trackMessageSent]
     );
 
     // Check if a message is pixel art
@@ -706,10 +730,14 @@ export function ChatModal({
                                                 {isPixelArt ? (
                                                     <div className="pixel-art-message relative">
                                                         <PixelArtImage
-                                                            src={getPixelArtUrl(msg.content)}
+                                                            src={getPixelArtUrl(
+                                                                msg.content
+                                                            )}
                                                             onClick={() =>
                                                                 setViewingImage(
-                                                                    getPixelArtUrl(msg.content)
+                                                                    getPixelArtUrl(
+                                                                        msg.content
+                                                                    )
                                                                 )
                                                             }
                                                             size="md"
@@ -898,56 +926,119 @@ export function ChatModal({
                                                         </p>
 
                                                         {/* Link Previews */}
-                                                        {detectUrls(msg.content).slice(0, 1).map((url) => (
-                                                            <LinkPreview key={url} url={url} compact />
-                                                        ))}
+                                                        {detectUrls(msg.content)
+                                                            .slice(0, 1)
+                                                            .map((url) => (
+                                                                <LinkPreview
+                                                                    key={url}
+                                                                    url={url}
+                                                                    compact
+                                                                />
+                                                            ))}
 
                                                         {/* Message Reactions */}
-                                                        {msgReactions[msg.id]?.some(r => r.count > 0) && (
+                                                        {msgReactions[
+                                                            msg.id
+                                                        ]?.some(
+                                                            (r) => r.count > 0
+                                                        ) && (
                                                             <div className="flex flex-wrap gap-1 mt-1">
-                                                                {msgReactions[msg.id]
-                                                                    ?.filter(r => r.count > 0)
-                                                                    .map((reaction) => (
-                                                                        <button
-                                                                            key={reaction.emoji}
-                                                                            onClick={() => toggleMsgReaction(msg.id, reaction.emoji)}
-                                                                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                                reaction.hasReacted
-                                                                                    ? "bg-[#FB8D22]/30"
-                                                                                    : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                                            }`}
-                                                                        >
-                                                                            <span>{reaction.emoji}</span>
-                                                                            <span className="text-[10px]">{reaction.count}</span>
-                                                                        </button>
-                                                                    ))}
+                                                                {msgReactions[
+                                                                    msg.id
+                                                                ]
+                                                                    ?.filter(
+                                                                        (r) =>
+                                                                            r.count >
+                                                                            0
+                                                                    )
+                                                                    .map(
+                                                                        (
+                                                                            reaction
+                                                                        ) => (
+                                                                            <button
+                                                                                key={
+                                                                                    reaction.emoji
+                                                                                }
+                                                                                onClick={() =>
+                                                                                    toggleMsgReaction(
+                                                                                        msg.id,
+                                                                                        reaction.emoji
+                                                                                    )
+                                                                                }
+                                                                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
+                                                                                    reaction.hasReacted
+                                                                                        ? "bg-[#FB8D22]/30"
+                                                                                        : "bg-zinc-700/50 hover:bg-zinc-600/50"
+                                                                                }`}
+                                                                            >
+                                                                                <span>
+                                                                                    {
+                                                                                        reaction.emoji
+                                                                                    }
+                                                                                </span>
+                                                                                <span className="text-[10px]">
+                                                                                    {
+                                                                                        reaction.count
+                                                                                    }
+                                                                                </span>
+                                                                            </button>
+                                                                        )
+                                                                    )}
                                                             </div>
                                                         )}
 
                                                         {/* Time + Read Receipt */}
-                                                        <div className={`flex items-center gap-1.5 mt-1 ${
-                                                            isOwn ? "justify-end" : ""
-                                                        }`}>
-                                                            <p className={`text-xs ${
-                                                                isOwn ? "text-[#FFF0E0]" : "text-zinc-500"
-                                                            }`}>
-                                                                {msg.sentAt.toLocaleTimeString([], {
-                                                                    hour: "2-digit",
-                                                                    minute: "2-digit",
-                                                                })}
+                                                        <div
+                                                            className={`flex items-center gap-1.5 mt-1 ${
+                                                                isOwn
+                                                                    ? "justify-end"
+                                                                    : ""
+                                                            }`}
+                                                        >
+                                                            <p
+                                                                className={`text-xs ${
+                                                                    isOwn
+                                                                        ? "text-[#FFF0E0]"
+                                                                        : "text-zinc-500"
+                                                                }`}
+                                                            >
+                                                                {msg.sentAt.toLocaleTimeString(
+                                                                    [],
+                                                                    {
+                                                                        hour: "2-digit",
+                                                                        minute: "2-digit",
+                                                                    }
+                                                                )}
                                                             </p>
                                                             {isOwn && (
                                                                 <MessageStatusIndicator
-                                                                    status={getMessageStatus(msg.id, true, peerAddress)}
+                                                                    status={getMessageStatus(
+                                                                        msg.id,
+                                                                        true,
+                                                                        peerAddress
+                                                                    )}
                                                                 />
                                                             )}
                                                         </div>
 
                                                         {/* Hover Actions */}
-                                                        <div className={`absolute ${isOwn ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1`}>
+                                                        <div
+                                                            className={`absolute ${
+                                                                isOwn
+                                                                    ? "left-0 -translate-x-full pr-2"
+                                                                    : "right-0 translate-x-full pl-2"
+                                                            } top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1`}
+                                                        >
                                                             {/* React Button */}
                                                             <button
-                                                                onClick={() => setShowMsgReactions(showMsgReactions === msg.id ? null : msg.id)}
+                                                                onClick={() =>
+                                                                    setShowMsgReactions(
+                                                                        showMsgReactions ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : msg.id
+                                                                    )
+                                                                }
                                                                 className="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-sm"
                                                                 title="React"
                                                             >
@@ -955,24 +1046,62 @@ export function ChatModal({
                                                             </button>
                                                             {/* Reply Button */}
                                                             <button
-                                                                onClick={() => setReplyingTo(msg)}
+                                                                onClick={() =>
+                                                                    setReplyingTo(
+                                                                        msg
+                                                                    )
+                                                                }
                                                                 className="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center"
                                                                 title="Reply"
                                                             >
-                                                                <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                                <svg
+                                                                    className="w-3.5 h-3.5 text-zinc-400"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                    />
                                                                 </svg>
                                                             </button>
                                                         </div>
 
                                                         {/* Quick Reaction Picker */}
-                                                        {showMsgReactions === msg.id && (
-                                                            <div className={`absolute ${isOwn ? "right-0" : "left-0"} -top-10`}>
+                                                        {showMsgReactions ===
+                                                            msg.id && (
+                                                            <div
+                                                                className={`absolute ${
+                                                                    isOwn
+                                                                        ? "right-0"
+                                                                        : "left-0"
+                                                                } -top-10`}
+                                                            >
                                                                 <QuickReactionPicker
-                                                                    isOpen={true}
-                                                                    onClose={() => setShowMsgReactions(null)}
-                                                                    onSelect={(emoji) => toggleMsgReaction(msg.id, emoji)}
-                                                                    emojis={MESSAGE_REACTION_EMOJIS}
+                                                                    isOpen={
+                                                                        true
+                                                                    }
+                                                                    onClose={() =>
+                                                                        setShowMsgReactions(
+                                                                            null
+                                                                        )
+                                                                    }
+                                                                    onSelect={(
+                                                                        emoji
+                                                                    ) =>
+                                                                        toggleMsgReaction(
+                                                                            msg.id,
+                                                                            emoji
+                                                                        )
+                                                                    }
+                                                                    emojis={
+                                                                        MESSAGE_REACTION_EMOJIS
+                                                                    }
                                                                 />
                                                             </div>
                                                         )}
@@ -983,7 +1112,7 @@ export function ChatModal({
                                     );
                                 })}
                                 <div ref={messagesEndRef} />
-                                
+
                                 {/* Typing Indicator */}
                                 {peerTyping && (
                                     <TypingIndicator name={displayName} />
@@ -999,7 +1128,11 @@ export function ChatModal({
                                     <div className="w-1 h-8 bg-[#FF5500] rounded-full" />
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs text-[#FF5500]">
-                                            Replying to {replyingTo.senderAddress.toLowerCase() === userAddress.toLowerCase() ? "yourself" : displayName}
+                                            Replying to{" "}
+                                            {replyingTo.senderAddress.toLowerCase() ===
+                                            userAddress.toLowerCase()
+                                                ? "yourself"
+                                                : displayName}
                                         </p>
                                         <p className="text-xs text-zinc-400 truncate">
                                             {replyingTo.content}
@@ -1009,8 +1142,18 @@ export function ChatModal({
                                         onClick={() => setReplyingTo(null)}
                                         className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -1023,7 +1166,7 @@ export function ChatModal({
                                     <button
                                         onClick={() => setShowPixelArt(true)}
                                         disabled={!isInitialized || !!chatError}
-                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
+                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         title="Send Pixel Art"
                                     >
                                         <svg
@@ -1041,38 +1184,6 @@ export function ChatModal({
                                             />
                                         </svg>
                                     </button>
-                                    {/* Voice Message Button */}
-                                    <button
-                                        onClick={() => setShowVoiceRecorder(true)}
-                                        disabled={!isInitialized || !!chatError}
-                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        title="Send Voice Message"
-                                    >
-                                        <svg
-                                            className="w-5 h-5"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                                            />
-                                        </svg>
-                                    </button>
-                                    {/* Voice Recorder Overlay */}
-                                    <VoiceRecorder
-                                        isOpen={showVoiceRecorder}
-                                        onCancel={() => setShowVoiceRecorder(false)}
-                                        onSend={async (blob, duration) => {
-                                            // TODO: Upload to IPFS and send as message
-                                            console.log("Voice message:", blob, duration);
-                                            setShowVoiceRecorder(false);
-                                            alert("Voice messages coming soon! The recording infrastructure is ready.");
-                                        }}
-                                    />
                                     <div className="flex-1 relative">
                                         <input
                                             type="text"
@@ -1088,13 +1199,19 @@ export function ChatModal({
                                                     ? "Type a message..."
                                                     : "Initializing..."
                                             }
-                                            disabled={!isInitialized || !!chatError}
+                                            disabled={
+                                                !isInitialized || !!chatError
+                                            }
                                             className="w-full py-3 px-4 pr-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50"
                                         />
                                         {/* Emoji Picker Button */}
                                         <button
                                             type="button"
-                                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                            onClick={() =>
+                                                setShowEmojiPicker(
+                                                    !showEmojiPicker
+                                                )
+                                            }
                                             className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
                                         >
                                             😊
@@ -1102,9 +1219,13 @@ export function ChatModal({
                                         {/* Emoji Picker Dropdown */}
                                         <EmojiPicker
                                             isOpen={showEmojiPicker}
-                                            onClose={() => setShowEmojiPicker(false)}
+                                            onClose={() =>
+                                                setShowEmojiPicker(false)
+                                            }
                                             onSelect={(emoji) => {
-                                                setNewMessage((prev) => prev + emoji);
+                                                setNewMessage(
+                                                    (prev) => prev + emoji
+                                                );
                                             }}
                                             position="top"
                                         />
@@ -1253,8 +1374,13 @@ export function ChatModal({
                         messages={messages}
                         onSelectMessage={(msgId) => {
                             // Scroll to message (could implement smooth scrolling)
-                            const element = document.getElementById(`msg-${msgId}`);
-                            element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                            const element = document.getElementById(
+                                `msg-${msgId}`
+                            );
+                            element?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                            });
                         }}
                         onClose={() => setShowSearch(false)}
                         isOpen={showSearch}

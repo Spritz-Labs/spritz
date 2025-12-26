@@ -1,0 +1,151 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifyMessage } from "viem";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const supabase = supabaseUrl && supabaseKey 
+    ? createClient(supabaseUrl, supabaseKey)
+    : null;
+
+// Verify admin signature from headers
+async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; address: string | null; isSuperAdmin: boolean }> {
+    const address = request.headers.get("x-admin-address");
+    const signature = request.headers.get("x-admin-signature");
+    const encodedMessage = request.headers.get("x-admin-message");
+
+    if (!address || !signature || !encodedMessage || !supabase) {
+        return { isAdmin: false, address: null, isSuperAdmin: false };
+    }
+
+    try {
+        // Decode the base64 encoded message
+        const message = decodeURIComponent(atob(encodedMessage));
+        
+        const isValidSignature = await verifyMessage({
+            address: address as `0x${string}`,
+            message,
+            signature: signature as `0x${string}`,
+        });
+
+        if (!isValidSignature) {
+            return { isAdmin: false, address: null, isSuperAdmin: false };
+        }
+
+        const { data: admin } = await supabase
+            .from("shout_admins")
+            .select("*")
+            .eq("wallet_address", address.toLowerCase())
+            .single();
+
+        return { 
+            isAdmin: !!admin, 
+            address: address.toLowerCase(),
+            isSuperAdmin: admin?.is_super_admin || false 
+        };
+    } catch {
+        return { isAdmin: false, address: null, isSuperAdmin: false };
+    }
+}
+
+// GET: List all users
+export async function GET(request: NextRequest) {
+    if (!supabase) {
+        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+    }
+
+    const { isAdmin } = await verifyAdmin(request);
+    if (!isAdmin) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "50");
+    const search = searchParams.get("search");
+    const sortBy = searchParams.get("sortBy") || "last_login";
+    const sortOrder = searchParams.get("sortOrder") || "desc";
+
+    let query = supabase
+        .from("shout_users")
+        .select("*", { count: "exact" });
+
+    if (search) {
+        query = query.or(`wallet_address.ilike.%${search}%,ens_name.ilike.%${search}%,username.ilike.%${search}%`);
+    }
+
+    query = query
+        .order(sortBy, { ascending: sortOrder === "asc" })
+        .range((page - 1) * limit, page * limit - 1);
+
+    const { data: users, error, count } = await query;
+
+    if (error) {
+        console.error("[Admin] Error fetching users:", error);
+        return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+    }
+
+    return NextResponse.json({
+        users,
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil((count || 0) / limit),
+    });
+}
+
+// PATCH: Update user (ban, add notes, etc.)
+export async function PATCH(request: NextRequest) {
+    if (!supabase) {
+        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+    }
+
+    const { isAdmin, address: adminAddress } = await verifyAdmin(request);
+    if (!isAdmin || !adminAddress) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+        const { userAddress, updates } = await request.json();
+
+        if (!userAddress) {
+            return NextResponse.json({ error: "User address required" }, { status: 400 });
+        }
+
+        // Allowed fields to update
+        const allowedFields = ["is_banned", "ban_reason", "notes"];
+        const filteredUpdates: Record<string, unknown> = {};
+        for (const key of allowedFields) {
+            if (key in updates) {
+                filteredUpdates[key] = updates[key];
+            }
+        }
+
+        filteredUpdates.updated_at = new Date().toISOString();
+
+        const { error } = await supabase
+            .from("shout_users")
+            .update(filteredUpdates)
+            .eq("wallet_address", userAddress.toLowerCase());
+
+        if (error) {
+            console.error("[Admin] Error updating user:", error);
+            return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+        }
+
+        // Log activity
+        await supabase.from("shout_admin_activity").insert({
+            admin_address: adminAddress,
+            action: updates.is_banned ? "ban_user" : "update_user",
+            target_address: userAddress.toLowerCase(),
+            details: filteredUpdates,
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("[Admin] Error:", error);
+        return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+    }
+}
+

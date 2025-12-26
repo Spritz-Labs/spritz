@@ -253,16 +253,6 @@ export default function Home() {
                         transition={{ delay: 0.8 }}
                         className="text-center text-zinc-600 text-sm mt-6"
                     >
-                        Powered by{" "}
-                        <a
-                            href="https://agora.io"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-emerald-400 hover:text-emerald-300 transition-colors"
-                        >
-                            Agora
-                        </a>{" "}
-                        &{" "}
                         <a
                             href="https://walletconnect.com"
                             target="_blank"

@@ -42,6 +42,8 @@ import { useGroupInvitations } from "@/hooks/useGroupInvitations";
 import { GroupInvitations } from "./GroupInvitations";
 import { usePresence } from "@/hooks/usePresence";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
+import { useLoginTracking } from "@/hooks/useLoginTracking";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -209,6 +211,25 @@ function DashboardContent({
         subscribe: subscribeToPush,
         unsubscribe: unsubscribeFromPush,
     } = usePushNotifications(userAddress);
+
+    // Track user login for admin analytics
+    useLoginTracking({
+        walletAddress: userAddress,
+        walletType,
+        chain: isSolanaUser ? "solana" : "ethereum",
+        ensName: userENS.ensName,
+        username: reachUsername,
+    });
+
+    // Analytics tracking
+    const { 
+        trackVoiceCall, 
+        trackVideoCall, 
+        syncFriendsCount,
+        syncGroupsCount,
+        trackFriendAdded,
+        trackFriendRemoved,
+    } = useAnalytics(userAddress);
 
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -467,6 +488,13 @@ function DashboardContent({
         checkFriendsWaku();
     }, [friends, isPasskeyUser, isSolanaUser, canMessageBatch]);
 
+    // Sync friends count for analytics
+    useEffect(() => {
+        if (friends.length > 0) {
+            syncFriendsCount(friends.length);
+        }
+    }, [friends.length, syncFriendsCount]);
+
     // Load groups when Waku is initialized (EVM users only)
     useEffect(() => {
         if (!isWakuInitialized || isPasskeyUser || isSolanaUser) return;
@@ -485,6 +513,13 @@ function DashboardContent({
 
         loadGroups();
     }, [isWakuInitialized, isPasskeyUser, isSolanaUser, getGroups]);
+
+    // Sync groups count for analytics
+    useEffect(() => {
+        if (groups.length > 0) {
+            syncGroupsCount(groups.length);
+        }
+    }, [groups.length, syncGroupsCount]);
 
     // Handler to create a new group
     const handleCreateGroup = async (
@@ -616,6 +651,13 @@ function DashboardContent({
 
     // Handler to leave a group call
     const handleLeaveGroupCall = async () => {
+        // Track call analytics before ending
+        const callDurationMinutes = Math.ceil(groupCallDuration / 60);
+        if (callDurationMinutes > 0) {
+            // Group calls are typically video calls
+            trackVideoCall(callDurationMinutes);
+        }
+        
         if (userSettings.soundEnabled) {
             notifyCallEnded();
         }
@@ -951,6 +993,16 @@ function DashboardContent({
     ]);
 
     const handleEndCall = async () => {
+        // Track call analytics before ending
+        const callDurationMinutes = Math.ceil(duration / 60);
+        if (callDurationMinutes > 0) {
+            if (!isVideoOff) {
+                trackVideoCall(callDurationMinutes);
+            } else {
+                trackVoiceCall(callDurationMinutes);
+            }
+        }
+        
         if (userSettings.soundEnabled) {
             notifyCallEnded();
         }
@@ -961,6 +1013,14 @@ function DashboardContent({
 
     const handleRemoveFriend = async (friendId: string) => {
         await removeFriend(friendId);
+        trackFriendRemoved();
+    };
+
+    // Wrapped accept request that tracks analytics
+    const handleAcceptRequest = async (requestId: string): Promise<boolean> => {
+        const result = await acceptRequest(requestId);
+        trackFriendAdded();
+        return result;
     };
 
     const handleChat = (friend: FriendsListFriend) => {
@@ -1963,7 +2023,7 @@ function DashboardContent({
                                 <FriendRequests
                                     incomingRequests={incomingRequests}
                                     outgoingRequests={outgoingRequests}
-                                    onAccept={acceptRequest}
+                                    onAccept={handleAcceptRequest}
                                     onReject={rejectRequest}
                                     onCancel={cancelRequest}
                                     isLoading={isFriendsLoading}
