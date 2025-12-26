@@ -302,5 +302,155 @@ export function useAgentChat(userAddress: string | null, agentId: string | null)
     };
 }
 
+// Types for knowledge items
+export type AgentKnowledge = {
+    id: string;
+    agent_id: string;
+    title: string;
+    url: string;
+    content_type: string;
+    status: "pending" | "processing" | "indexed" | "failed";
+    error_message: string | null;
+    chunk_count: number;
+    created_at: string;
+    indexed_at: string | null;
+};
+
+// Hook for managing agent knowledge base
+export function useAgentKnowledge(userAddress: string | null, agentId: string | null) {
+    const [knowledgeItems, setKnowledgeItems] = useState<AgentKnowledge[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Fetch knowledge items
+    const fetchKnowledge = useCallback(async () => {
+        if (!userAddress || !agentId) {
+            setKnowledgeItems([]);
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const res = await fetch(
+                `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}`
+            );
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to fetch knowledge");
+            }
+
+            setKnowledgeItems(data.items || []);
+        } catch (err) {
+            console.error("[useAgentKnowledge] Error:", err);
+            setError(err instanceof Error ? err.message : "Failed to fetch knowledge");
+        } finally {
+            setIsLoading(false);
+        }
+    }, [userAddress, agentId]);
+
+    // Add a knowledge item
+    const addKnowledgeItem = useCallback(async (
+        title: string,
+        url: string,
+        contentType?: string
+    ): Promise<AgentKnowledge | null> => {
+        if (!userAddress || !agentId) return null;
+
+        try {
+            const res = await fetch(`/api/agents/${agentId}/knowledge`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userAddress, title, url, contentType }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to add knowledge item");
+            }
+
+            await fetchKnowledge();
+            return data.item;
+        } catch (err) {
+            console.error("[useAgentKnowledge] Error:", err);
+            throw err;
+        }
+    }, [userAddress, agentId, fetchKnowledge]);
+
+    // Delete a knowledge item
+    const deleteKnowledgeItem = useCallback(async (knowledgeId: string): Promise<boolean> => {
+        if (!userAddress || !agentId) return false;
+
+        try {
+            const res = await fetch(
+                `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}&knowledgeId=${encodeURIComponent(knowledgeId)}`,
+                { method: "DELETE" }
+            );
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Failed to delete knowledge item");
+            }
+
+            await fetchKnowledge();
+            return true;
+        } catch (err) {
+            console.error("[useAgentKnowledge] Error:", err);
+            throw err;
+        }
+    }, [userAddress, agentId, fetchKnowledge]);
+
+    // Index a knowledge item (generate embeddings)
+    const indexKnowledgeItem = useCallback(async (knowledgeId: string): Promise<boolean> => {
+        if (!userAddress || !agentId) return false;
+
+        // Update local state to show processing
+        setKnowledgeItems(prev => prev.map(item => 
+            item.id === knowledgeId ? { ...item, status: "processing" as const } : item
+        ));
+
+        try {
+            const res = await fetch(`/api/agents/${agentId}/knowledge/index`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userAddress, knowledgeId }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to index knowledge item");
+            }
+
+            // Refresh to get updated status
+            await fetchKnowledge();
+            return true;
+        } catch (err) {
+            console.error("[useAgentKnowledge] Error indexing:", err);
+            // Refresh to get actual status
+            await fetchKnowledge();
+            throw err;
+        }
+    }, [userAddress, agentId, fetchKnowledge]);
+
+    // Load knowledge when agent changes
+    useEffect(() => {
+        fetchKnowledge();
+    }, [fetchKnowledge]);
+
+    return {
+        knowledgeItems,
+        isLoading,
+        error,
+        fetchKnowledge,
+        addKnowledgeItem,
+        deleteKnowledgeItem,
+        indexKnowledgeItem,
+    };
+}
+
 export default useAgents;
 

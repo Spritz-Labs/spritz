@@ -13,7 +13,68 @@ const supabase = supabaseUrl && supabaseKey
 const geminiApiKey = process.env.GOOGLE_GEMINI_API_KEY;
 const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
-// Simple function to fetch text content from a URL
+// Generate embedding for a query using Gemini
+async function generateQueryEmbedding(query: string): Promise<number[] | null> {
+    if (!ai) return null;
+    
+    try {
+        const result = await ai.models.embedContent({
+            model: "text-embedding-004",
+            contents: query,
+        });
+        
+        return result.embeddings?.[0]?.values || null;
+    } catch (error) {
+        console.error("[Chat] Error generating query embedding:", error);
+        return null;
+    }
+}
+
+// Retrieve relevant chunks using vector similarity
+async function retrieveRelevantChunks(
+    agentId: string,
+    query: string,
+    maxChunks: number = 5
+): Promise<string[]> {
+    if (!supabase) return [];
+    
+    try {
+        // Generate embedding for the query
+        const queryEmbedding = await generateQueryEmbedding(query);
+        if (!queryEmbedding) {
+            console.log("[Chat] Failed to generate query embedding, falling back to no RAG");
+            return [];
+        }
+
+        // Search for similar chunks
+        const { data: chunks, error } = await supabase.rpc("match_knowledge_chunks", {
+            p_agent_id: agentId,
+            p_query_embedding: `[${queryEmbedding.join(",")}]`,
+            p_match_count: maxChunks,
+            p_match_threshold: 0.5, // Lower threshold to get more results
+        });
+
+        if (error) {
+            console.error("[Chat] Error retrieving chunks:", error);
+            return [];
+        }
+
+        if (!chunks || chunks.length === 0) {
+            console.log("[Chat] No relevant chunks found");
+            return [];
+        }
+
+        console.log(`[Chat] Found ${chunks.length} relevant chunks`);
+        return chunks.map((c: { content: string; similarity: number }) => 
+            `[Relevance: ${(c.similarity * 100).toFixed(0)}%]\n${c.content}`
+        );
+    } catch (error) {
+        console.error("[Chat] Error in RAG retrieval:", error);
+        return [];
+    }
+}
+
+// Fallback: Simple function to fetch text content from a URL (for non-indexed items)
 async function fetchUrlContent(url: string): Promise<string | null> {
     try {
         const controller = new AbortController();
@@ -104,31 +165,43 @@ export async function POST(
             .order("created_at", { ascending: false })
             .limit(10);
 
-        // Get knowledge base items for this agent (if enabled)
+        // Get knowledge base context (if enabled)
         let knowledgeContext = "";
         const useKnowledgeBase = agent.use_knowledge_base !== false; // Default true
         
         if (useKnowledgeBase) {
-            const { data: knowledgeItems } = await supabase
-                .from("shout_agent_knowledge")
-                .select("url, title, content_type")
-                .eq("agent_id", id)
-                .limit(5); // Limit to 5 for now to avoid token limits
+            // Try RAG retrieval first (using indexed embeddings)
+            const relevantChunks = await retrieveRelevantChunks(id, message, 5);
+            
+            if (relevantChunks.length > 0) {
+                // Use RAG results
+                console.log("[Chat] Using RAG with", relevantChunks.length, "chunks");
+                knowledgeContext = "\n\n## Relevant Knowledge (from indexed sources):\n" + 
+                    relevantChunks.join("\n\n---\n\n");
+            } else {
+                // Fallback to direct URL fetching for non-indexed items
+                const { data: knowledgeItems } = await supabase
+                    .from("shout_agent_knowledge")
+                    .select("url, title, content_type, status")
+                    .eq("agent_id", id)
+                    .eq("status", "pending") // Only fetch pending (non-indexed) items
+                    .limit(3);
 
-            // Fetch content from knowledge base URLs (in parallel)
-            if (knowledgeItems && knowledgeItems.length > 0) {
-                const contentPromises = knowledgeItems.map(async (item) => {
-                    const content = await fetchUrlContent(item.url);
-                    if (content) {
-                        return `\n--- ${item.title} (${item.url}) ---\n${content}`;
+                if (knowledgeItems && knowledgeItems.length > 0) {
+                    console.log("[Chat] Falling back to URL fetching for", knowledgeItems.length, "items");
+                    const contentPromises = knowledgeItems.map(async (item) => {
+                        const content = await fetchUrlContent(item.url);
+                        if (content) {
+                            return `\n--- ${item.title} (${item.url}) ---\n${content}`;
+                        }
+                        return null;
+                    });
+                    
+                    const contents = await Promise.all(contentPromises);
+                    const validContents = contents.filter(Boolean);
+                    if (validContents.length > 0) {
+                        knowledgeContext = "\n\n## Knowledge Base Context:\n" + validContents.join("\n");
                     }
-                    return null;
-                });
-                
-                const contents = await Promise.all(contentPromises);
-                const validContents = contents.filter(Boolean);
-                if (validContents.length > 0) {
-                    knowledgeContext = "\n\n## Knowledge Base Context:\n" + validContents.join("\n");
                 }
             }
         }

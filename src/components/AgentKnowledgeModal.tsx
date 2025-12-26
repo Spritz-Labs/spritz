@@ -15,6 +15,7 @@ type KnowledgeItem = {
     chunk_count: number;
     created_at: string;
     indexed_at: string | null;
+    isIndexing?: boolean; // Client-side loading state
 };
 
 interface AgentKnowledgeModalProps {
@@ -129,6 +130,36 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
             setItems((prev) => prev.filter((item) => item.id !== itemId));
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to delete item");
+        }
+    };
+
+    const handleIndexItem = async (itemId: string) => {
+        if (!agent) return;
+
+        // Update local state to show processing
+        setItems(prev => prev.map(item => 
+            item.id === itemId ? { ...item, isIndexing: true, status: "processing" as const } : item
+        ));
+
+        try {
+            const res = await fetch(`/api/agents/${agent.id}/knowledge/index`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userAddress, knowledgeId: itemId }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to index");
+            }
+
+            // Refresh to get updated status
+            await fetchItems();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to index");
+            // Refresh to get actual status
+            await fetchItems();
         }
     };
 
@@ -277,15 +308,49 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                             </p>
                                                         )}
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleDeleteItem(item.id)}
-                                                        className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                                        title="Remove"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                        </svg>
-                                                    </button>
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        {/* Index button - show for pending or failed */}
+                                                        {(item.status === "pending" || item.status === "failed") && (
+                                                            <button
+                                                                onClick={() => handleIndexItem(item.id)}
+                                                                disabled={item.isIndexing}
+                                                                className="px-2 py-1.5 text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg transition-colors flex items-center gap-1"
+                                                                title="Index this URL"
+                                                            >
+                                                                {item.isIndexing ? (
+                                                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                                    </svg>
+                                                                ) : (
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                                                    </svg>
+                                                                )}
+                                                                Index
+                                                            </button>
+                                                        )}
+                                                        {/* Processing indicator */}
+                                                        {item.status === "processing" && !item.isIndexing && (
+                                                            <span className="px-2 py-1.5 text-xs bg-blue-500/10 text-blue-400 rounded-lg flex items-center gap-1">
+                                                                <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                                </svg>
+                                                                Indexing...
+                                                            </span>
+                                                        )}
+                                                        {/* Delete button */}
+                                                        <button
+                                                            onClick={() => handleDeleteItem(item.id)}
+                                                            className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                            title="Remove"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </motion.div>
                                         );
@@ -298,8 +363,17 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                         <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
                             <div className="flex items-center justify-between text-xs text-zinc-500">
                                 <span>{items.length}/10 knowledge sources</span>
-                                <span className="flex items-center gap-1">
-                                    <span className="text-yellow-400">⏳</span> Indexing coming soon with Vertex AI
+                                <span className="flex items-center gap-2">
+                                    {items.filter(i => i.status === "indexed").length > 0 && (
+                                        <span className="text-green-400">
+                                            ✓ {items.filter(i => i.status === "indexed").length} indexed
+                                        </span>
+                                    )}
+                                    {items.filter(i => i.status === "pending").length > 0 && (
+                                        <span className="text-yellow-400">
+                                            ⏳ {items.filter(i => i.status === "pending").length} pending
+                                        </span>
+                                    )}
                                 </span>
                             </div>
                         </div>
