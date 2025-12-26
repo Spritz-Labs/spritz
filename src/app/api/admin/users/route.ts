@@ -86,8 +86,37 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
     }
 
+    // Fetch used invite counts for all users
+    const userAddresses = (users || []).map(u => u.wallet_address);
+    let usedInviteCounts: Record<string, number> = {};
+    
+    if (userAddresses.length > 0) {
+        const { data: inviteData } = await supabase
+            .from("shout_user_invites")
+            .select("owner_address, used_by")
+            .in("owner_address", userAddresses);
+        
+        if (inviteData) {
+            // Count used invites per user
+            for (const invite of inviteData) {
+                if (!usedInviteCounts[invite.owner_address]) {
+                    usedInviteCounts[invite.owner_address] = 0;
+                }
+                if (invite.used_by) {
+                    usedInviteCounts[invite.owner_address]++;
+                }
+            }
+        }
+    }
+
+    // Add used_invites to each user
+    const usersWithInvites = (users || []).map(user => ({
+        ...user,
+        invites_used: usedInviteCounts[user.wallet_address] || 0,
+    }));
+
     return NextResponse.json({
-        users,
+        users: usersWithInvites,
         total: count,
         page,
         limit,

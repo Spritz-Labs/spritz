@@ -355,7 +355,13 @@ export default function AdminPage() {
                                 href="/admin/users"
                                 className="text-zinc-400 hover:text-white transition-colors"
                             >
-                                View Users
+                                Users
+                            </Link>
+                            <Link
+                                href="/admin/analytics"
+                                className="text-zinc-400 hover:text-white transition-colors"
+                            >
+                                Analytics
                             </Link>
                             <span className="text-zinc-500 text-sm">
                                 {formatAddress(address || "")}
@@ -397,12 +403,20 @@ export default function AdminPage() {
                             <span className="text-zinc-500">
                                 {formatAddress(address || "")}
                             </span>
-                            <Link
-                                href="/admin/users"
-                                className="px-3 py-1.5 bg-[#FF5500] text-white rounded-lg font-medium"
-                            >
-                                View Users →
-                            </Link>
+                            <div className="flex gap-2">
+                                <Link
+                                    href="/admin/analytics"
+                                    className="px-3 py-1.5 bg-zinc-800 text-white rounded-lg font-medium"
+                                >
+                                    📊
+                                </Link>
+                                <Link
+                                    href="/admin/users"
+                                    className="px-3 py-1.5 bg-[#FF5500] text-white rounded-lg font-medium"
+                                >
+                                    👥
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </div>

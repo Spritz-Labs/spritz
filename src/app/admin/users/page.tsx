@@ -82,6 +82,7 @@ type User = {
     // Points & Invites
     points: number;
     invite_count: number;
+    invites_used: number;
 };
 
 export default function UsersPage() {
@@ -674,8 +675,8 @@ export default function UsersPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-center">
-                                                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5500]/20 text-[#FFBBA7] font-medium">
-                                                        {user.invite_count || 5}
+                                                    <span className="inline-flex items-center justify-center px-2 h-8 rounded-full bg-[#FF5500]/20 text-[#FFBBA7] font-medium text-xs">
+                                                        {user.invites_used || 0}/{user.invite_count || 5}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-center">
@@ -969,10 +970,10 @@ export default function UsersPage() {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="text-xs text-[#FFBBA7]/70 uppercase">
-                                                Invite Allocation
+                                                Invites Used
                                             </p>
                                             <p className="text-3xl font-bold text-[#FFBBA7]">
-                                                {editingUser.invite_count || 5}
+                                                {editingUser.invites_used || 0}/{editingUser.invite_count || 5}
                                             </p>
                                         </div>
                                         <button
