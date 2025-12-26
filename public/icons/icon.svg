@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Background -->
-  <rect width="512" height="512" rx="108" fill="#18181B"/>
+  <!-- Background - Cream/Light Peach -->
+  <rect width="512" height="512" rx="108" fill="#FFF5E6"/>
   
   <!-- 8-bit Orange - Pixel Art Style -->
   <!-- Each "pixel" is 32x32 units for a 16x16 grid feel -->
