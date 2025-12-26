@@ -31,7 +31,7 @@ export function PWAInstallPrompt() {
         window.location.reload();
     }, [waitingWorker]);
 
-    // Check for service worker updates - runs on ALL devices (desktop and mobile)
+    // Check for service worker updates - ONLY on mobile PWA apps
     useEffect(() => {
         console.log("[PWA] PWAInstallPrompt component mounted");
 
@@ -40,12 +40,36 @@ export function PWAInstallPrompt() {
             return;
         }
 
+        // Only check for updates on mobile devices
+        const userAgent = navigator.userAgent.toLowerCase();
+        const isIOSDevice =
+            /iphone|ipad|ipod/.test(userAgent) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        const isAndroidDevice = /android/.test(userAgent);
+        const isMobile = isIOSDevice || isAndroidDevice;
+
+        if (!isMobile) {
+            console.log("[PWA] Not a mobile device - skipping update check");
+            return;
+        }
+
+        // Only check for updates if running as installed PWA
+        const isStandalone =
+            window.matchMedia("(display-mode: standalone)").matches ||
+            // @ts-expect-error - iOS Safari specific
+            window.navigator.standalone === true;
+
+        if (!isStandalone) {
+            console.log("[PWA] Not running as PWA - skipping update check");
+            return;
+        }
+
         if (!("serviceWorker" in navigator)) {
             console.log("[PWA] Service worker not supported in this browser");
             return;
         }
 
-        console.log("[PWA] Setting up service worker update detection...");
+        console.log("[PWA] Mobile PWA detected - setting up service worker update detection...");
 
         let updateFoundListenerAttached = false;
 
@@ -453,4 +477,5 @@ export function PWAInstallPrompt() {
 
     return installPromptUI;
 }
+
 

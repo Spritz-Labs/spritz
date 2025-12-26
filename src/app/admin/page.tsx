@@ -237,7 +237,13 @@ export default function AdminPage() {
                 <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
                     <h1 className="text-2xl font-bold text-white mb-4">Admin Access</h1>
                     <p className="text-zinc-400 mb-6">Connect your wallet to access the admin panel.</p>
-                    <Link href="/" className="text-[#FF5500] hover:underline">
+                    
+                    {/* AppKit Button - renders the WalletConnect modal */}
+                    <div className="mb-4">
+                        <appkit-button />
+                    </div>
+                    
+                    <Link href="/" className="text-zinc-500 hover:text-zinc-300 text-sm">
                         ← Back to Home
                     </Link>
                 </div>
