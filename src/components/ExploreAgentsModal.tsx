@@ -164,12 +164,15 @@ export function ExploreAgentsModal({
                             ) : (
                                 <div className="grid gap-3">
                                     {agents.map((agent) => (
-                                        <motion.button
+                                        <motion.div
                                             key={agent.id}
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             onClick={() => onSelectAgent(agent)}
-                                            className="w-full p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-xl hover:border-emerald-500/50 hover:bg-zinc-800 transition-all text-left group"
+                                            className="w-full p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-xl hover:border-emerald-500/50 hover:bg-zinc-800 transition-all text-left group cursor-pointer"
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => e.key === "Enter" && onSelectAgent(agent)}
                                         >
                                             <div className="flex items-start gap-4">
                                                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
@@ -227,7 +230,7 @@ export function ExploreAgentsModal({
                                                     </div>
                                                 </div>
                                             </div>
-                                        </motion.button>
+                                        </motion.div>
                                     ))}
                                 </div>
                             )}
