@@ -13,6 +13,7 @@ export function MessageStatusIndicator({
 }: MessageStatusIndicatorProps) {
     return (
         <span className={`inline-flex items-center ${className}`}>
+            {/* Pending/Sending - pulsing circle */}
             {(status === "pending" || status === "sending") && (
                 <svg
                     className="w-3.5 h-3.5 text-zinc-500 animate-pulse"
@@ -22,6 +23,7 @@ export function MessageStatusIndicator({
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
                 </svg>
             )}
+            {/* Failed - warning icon */}
             {status === "failed" && (
                 <svg
                     className="w-3.5 h-3.5 text-red-500"
@@ -33,7 +35,8 @@ export function MessageStatusIndicator({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
             )}
-            {status === "sent" && (
+            {/* Sent/Delivered - single checkmark */}
+            {(status === "sent" || status === "delivered") && (
                 <svg
                     className="w-3.5 h-3.5 text-zinc-400"
                     fill="none"
@@ -44,28 +47,7 @@ export function MessageStatusIndicator({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
             )}
-            {status === "delivered" && (
-                <span className="relative">
-                    <svg
-                        className="w-3.5 h-3.5 text-zinc-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2.5}
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <svg
-                        className="w-3.5 h-3.5 text-zinc-400 absolute top-0 left-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2.5}
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                </span>
-            )}
+            {/* Read - double checkmarks (orange) */}
             {status === "read" && (
                 <span className="relative inline-flex">
                     <svg

@@ -556,20 +556,23 @@ function DashboardContent({
     // This is used when clicking a push notification
     useEffect(() => {
         if (typeof window === "undefined" || isSolanaUser) return;
-        
+
         const urlParams = new URLSearchParams(window.location.search);
         const chatAddress = urlParams.get("chat");
-        
+
         if (chatAddress && friendsListData.length > 0) {
             // Find the friend with this address
             const friend = friendsListData.find(
                 (f) => f.address.toLowerCase() === chatAddress.toLowerCase()
             );
-            
+
             if (friend) {
-                console.log("[Dashboard] Opening chat from URL param:", chatAddress);
+                console.log(
+                    "[Dashboard] Opening chat from URL param:",
+                    chatAddress
+                );
                 setChatFriend(friend);
-                
+
                 // Clean up the URL without reloading
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, "", newUrl);
@@ -580,26 +583,37 @@ function DashboardContent({
     // Listen for service worker messages to open chat
     useEffect(() => {
         if (typeof window === "undefined" || isSolanaUser) return;
-        
+
         const handleServiceWorkerMessage = (event: MessageEvent) => {
             if (event.data?.type === "OPEN_CHAT" && event.data.senderAddress) {
-                console.log("[Dashboard] Received OPEN_CHAT from SW:", event.data.senderAddress);
-                
+                console.log(
+                    "[Dashboard] Received OPEN_CHAT from SW:",
+                    event.data.senderAddress
+                );
+
                 // Find the friend with this address
                 const friend = friendsListData.find(
-                    (f) => f.address.toLowerCase() === event.data.senderAddress.toLowerCase()
+                    (f) =>
+                        f.address.toLowerCase() ===
+                        event.data.senderAddress.toLowerCase()
                 );
-                
+
                 if (friend) {
                     setChatFriend(friend);
                 }
             }
         };
-        
-        navigator.serviceWorker?.addEventListener("message", handleServiceWorkerMessage);
-        
+
+        navigator.serviceWorker?.addEventListener(
+            "message",
+            handleServiceWorkerMessage
+        );
+
         return () => {
-            navigator.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
+            navigator.serviceWorker?.removeEventListener(
+                "message",
+                handleServiceWorkerMessage
+            );
         };
     }, [friendsListData, isSolanaUser]);
 
