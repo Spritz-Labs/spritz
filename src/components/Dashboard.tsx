@@ -2993,7 +2993,7 @@ function DashboardContent({
 
                     {/* Leaderboard */}
                     <div className="mt-6">
-                        <Leaderboard userAddress={userAddress} limit={10} />
+                        <Leaderboard userAddress={userAddress} limit={50} />
                     </div>
 
                     {/* Call Error */}
