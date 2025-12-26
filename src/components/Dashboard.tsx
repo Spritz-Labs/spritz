@@ -284,7 +284,12 @@ function DashboardContent({
     }, [socialCount, hasClaimed, awardUserPoints]);
 
     // User invites
-    const { available: availableInvites } = useUserInvites(userAddress);
+    const {
+        available: availableInvites,
+        used: usedInvites,
+        totalAllocation: totalInvites,
+    } = useUserInvites(userAddress);
+    const allInvitesUsed = usedInvites > 0 && usedInvites === totalInvites;
 
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -1885,7 +1890,85 @@ function DashboardContent({
                                                     );
                                                 })()}
 
-                                                {/* 9. Settings */}
+                                                {/* 9. Invites */}
+                                                <button
+                                                    onClick={() => {
+                                                        setIsProfileMenuOpen(
+                                                            false
+                                                        );
+                                                        setIsInvitesModalOpen(
+                                                            true
+                                                        );
+                                                    }}
+                                                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
+                                                >
+                                                    <div
+                                                        className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                                            allInvitesUsed
+                                                                ? "bg-emerald-500/20"
+                                                                : "bg-[#FB8D22]/20"
+                                                        }`}
+                                                    >
+                                                        <svg
+                                                            className={`w-4 h-4 ${
+                                                                allInvitesUsed
+                                                                    ? "text-emerald-400"
+                                                                    : "text-[#FFBBA7]"
+                                                            }`}
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+                                                            />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-white text-sm font-medium">
+                                                            Invites
+                                                        </p>
+                                                        <p
+                                                            className={`text-xs ${
+                                                                allInvitesUsed
+                                                                    ? "text-emerald-400"
+                                                                    : "text-[#FFBBA7]"
+                                                            }`}
+                                                        >
+                                                            {allInvitesUsed
+                                                                ? `All ${usedInvites} codes redeemed!`
+                                                                : `${availableInvites} codes available`}
+                                                        </p>
+                                                    </div>
+                                                    {allInvitesUsed ? (
+                                                        <svg
+                                                            className="w-4 h-4 text-emerald-400"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M5 13l4 4L19 7"
+                                                            />
+                                                        </svg>
+                                                    ) : (
+                                                        <div className="bg-[#FB8D22]/20 px-2 py-0.5 rounded-full">
+                                                            <span className="text-[#FFBBA7] text-xs font-medium">
+                                                                {
+                                                                    availableInvites
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </button>
+
+                                                {/* 10. Settings */}
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
@@ -2313,11 +2396,12 @@ function DashboardContent({
                                     </svg>
                                     <div>
                                         <p className="text-[#FFF0E0] font-medium">
-                                            Enable Waku Chat
+                                            Enable Encrypted Chat
                                         </p>
                                         <p className="text-[#FFF0E0]/70 text-sm mt-1">
-                                            Connecting to the Waku network for
-                                            encrypted peer-to-peer messaging.
+                                            Connecting to a decentralized
+                                            network for encrypted peer-to-peer
+                                            messaging.
                                         </p>
                                         {wakuError && (
                                             <p className="text-red-400 text-sm mt-1">
@@ -2427,8 +2511,8 @@ function DashboardContent({
                                         />
                                     </svg>
                                     <p className="text-emerald-200 font-medium">
-                                        Waku Chat Enabled! You can now send and
-                                        receive encrypted messages.
+                                        Encrypted Chat Enabled! You can now send
+                                        and receive encrypted messages.
                                     </p>
                                 </div>
                             </motion.div>
