@@ -77,16 +77,21 @@ export function useUserInvites(walletAddress: string | null) {
         return `https://app.spritz.chat?invite=${code}`;
     }, []);
 
-    // Copy invite to clipboard
+    // Generate invite message with blurb
+    const getInviteMessage = useCallback((code: string) => {
+        return `🚀 You're invited to Spritz - the censorship resistant chat app for Web3!\n\n${getInviteLink(code)}`;
+    }, [getInviteLink]);
+
+    // Copy invite to clipboard (with blurb)
     const copyInvite = useCallback(async (code: string): Promise<boolean> => {
         try {
-            await navigator.clipboard.writeText(getInviteLink(code));
+            await navigator.clipboard.writeText(getInviteMessage(code));
             return true;
         } catch (err) {
             console.error("[Invites] Copy error:", err);
             return false;
         }
-    }, [getInviteLink]);
+    }, [getInviteMessage]);
 
     // Share invite (mobile)
     const shareInvite = useCallback(async (code: string): Promise<boolean> => {

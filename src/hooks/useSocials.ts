@@ -133,6 +133,11 @@ export function useSocials(userAddress: string | null) {
             if (!userAddress || !isSupabaseConfigured || !supabase)
                 return false;
 
+            // Check if this is the first social being added
+            const previousCount = Object.values(socials).filter(Boolean).length;
+            const newCount = Object.values(newSocials).filter(Boolean).length;
+            const isFirstSocial = previousCount === 0 && newCount > 0;
+
             setIsLoading(true);
             setError(null);
 
@@ -160,6 +165,23 @@ export function useSocials(userAddress: string | null) {
                     return false;
                 }
 
+                // Award points for adding first social link
+                if (isFirstSocial) {
+                    try {
+                        await fetch("/api/points", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                walletAddress: userAddress,
+                                action: "social_added",
+                            }),
+                        });
+                    } catch (pointsErr) {
+                        console.error("[Socials] Failed to award points:", pointsErr);
+                        // Don't fail the save if points fail
+                    }
+                }
+
                 setSocials(newSocials);
                 return true;
             } catch (err) {
@@ -170,7 +192,7 @@ export function useSocials(userAddress: string | null) {
                 setIsLoading(false);
             }
         },
-        [userAddress]
+        [userAddress, socials]
     );
 
     // Fetch socials for a specific address (for viewing friend's socials)

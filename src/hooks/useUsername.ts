@@ -130,6 +130,21 @@ export function useUsername(userAddress: string | null) {
                         }
                         return false;
                     }
+
+                    // Award points for claiming username (first time only)
+                    try {
+                        await fetch("/api/points", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                walletAddress: userAddress,
+                                action: "username_claimed",
+                            }),
+                        });
+                    } catch (pointsErr) {
+                        console.error("[Username] Failed to award points:", pointsErr);
+                        // Don't fail the username claim if points fail
+                    }
                 }
 
                 setUsername(normalizedName);

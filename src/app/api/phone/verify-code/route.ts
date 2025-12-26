@@ -137,10 +137,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to verify phone number" }, { status: 500 });
       }
 
+      // Award points for phone verification
+      try {
+        await db.rpc("award_points", {
+          p_address: walletAddress.toLowerCase(),
+          p_points: 100,
+          p_reason: "Phone number verified",
+          p_claim_key: "phone_verified",
+        });
+      } catch (pointsErr) {
+        console.error("[verify-code] Failed to award points:", pointsErr);
+        // Don't fail verification if points fail
+      }
+
       return NextResponse.json({
         success: true,
         message: "Phone number verified successfully",
         phoneNumber: pending.phone_number,
+        pointsAwarded: 100,
       });
     }
 
@@ -172,10 +186,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Award points for phone verification
+    try {
+      await db.rpc("award_points", {
+        p_address: walletAddress.toLowerCase(),
+        p_points: 100,
+        p_reason: "Phone number verified",
+        p_claim_key: "phone_verified",
+      });
+    } catch (pointsErr) {
+      console.error("[verify-code] Failed to award points:", pointsErr);
+      // Don't fail verification if points fail
+    }
+
     return NextResponse.json({
       success: true,
       message: "Phone number verified successfully",
       phoneNumber: pending.phone_number,
+      pointsAwarded: 100,
     });
   } catch (error) {
     console.error("[verify-code] Error:", error);
