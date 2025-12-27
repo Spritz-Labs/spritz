@@ -84,8 +84,14 @@ export function Leaderboard({ userAddress, limit = 10 }: LeaderboardProps) {
             setENSCache(cache);
             
             return ensName || null;
-        } catch (err) {
-            console.error("[Leaderboard] ENS resolve error:", err);
+        } catch {
+            // ENS resolution can fail for many reasons (no reverse record, network issues, etc.)
+            // Silently cache null to prevent repeated failed lookups
+            cache[address.toLowerCase()] = {
+                ensName: null,
+                timestamp: Date.now(),
+            };
+            setENSCache(cache);
             return null;
         }
     }, []);

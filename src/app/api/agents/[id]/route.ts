@@ -64,7 +64,20 @@ export async function PATCH(
     try {
         const { id } = await params;
         const body = await request.json();
-        const { userAddress, name, personality, avatarEmoji, visibility, webSearchEnabled, useKnowledgeBase } = body;
+        const { 
+            userAddress, 
+            name, 
+            personality, 
+            avatarEmoji, 
+            visibility, 
+            webSearchEnabled, 
+            useKnowledgeBase,
+            // x402 fields
+            x402Enabled,
+            x402PriceCents,
+            x402Network,
+            x402WalletAddress,
+        } = body;
 
         if (!userAddress) {
             return NextResponse.json({ error: "User address required" }, { status: 400 });
@@ -99,6 +112,12 @@ export async function PATCH(
         if (visibility !== undefined) updates.visibility = visibility;
         if (webSearchEnabled !== undefined) updates.web_search_enabled = webSearchEnabled;
         if (useKnowledgeBase !== undefined) updates.use_knowledge_base = useKnowledgeBase;
+        
+        // x402 configuration updates
+        if (x402Enabled !== undefined) updates.x402_enabled = x402Enabled;
+        if (x402PriceCents !== undefined) updates.x402_price_cents = Math.max(1, x402PriceCents);
+        if (x402Network !== undefined) updates.x402_network = x402Network;
+        if (x402WalletAddress !== undefined) updates.x402_wallet_address = x402WalletAddress?.toLowerCase() || null;
 
         console.log("[Agents] Updating agent:", id, "with:", updates);
 

@@ -16,6 +16,13 @@ export type Agent = {
     message_count: number;
     created_at: string;
     updated_at: string;
+    // x402 payment configuration
+    x402_enabled?: boolean;
+    x402_price_cents?: number;
+    x402_network?: "base" | "base-sepolia";
+    x402_wallet_address?: string;
+    x402_total_earnings_cents?: number;
+    x402_message_count_paid?: number;
 };
 
 export type ChatMessage = {

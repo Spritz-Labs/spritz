@@ -350,6 +350,7 @@ export function AgentsSection({ userAddress }: AgentsSectionProps) {
                 }}
                 agent={selectedAgent}
                 onSave={handleSaveAgent}
+                userAddress={userAddress}
             />
             <AgentKnowledgeModal
                 isOpen={isKnowledgeModalOpen}
