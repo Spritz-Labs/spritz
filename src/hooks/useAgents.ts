@@ -12,6 +12,18 @@ export type MCPServer = {
     x402PriceCents?: number;
 };
 
+export type APITool = {
+    id: string;
+    name: string;
+    url: string;
+    method: "GET" | "POST" | "PUT" | "DELETE";
+    apiKey?: string;
+    headers?: Record<string, string>;
+    description?: string;
+    x402Enabled?: boolean;
+    x402PriceCents?: number;
+};
+
 export type Agent = {
     id: string;
     owner_address: string;
@@ -36,6 +48,8 @@ export type Agent = {
     x402_pricing_mode?: "global" | "per_tool";
     // MCP server configuration
     mcp_servers?: MCPServer[];
+    // API Tools configuration
+    api_tools?: APITool[];
 };
 
 export type ChatMessage = {

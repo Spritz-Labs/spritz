@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Agent, MCPServer } from "@/hooks/useAgents";
+import { Agent, MCPServer, APITool } from "@/hooks/useAgents";
 
 const AGENT_EMOJIS = [
     "🤖", "🧠", "💡", "🎯", "🚀", "⚡", "🔮", "🎨",
@@ -36,11 +36,12 @@ interface EditAgentModalProps {
         x402WalletAddress?: string;
         x402PricingMode?: "global" | "per_tool";
         mcpServers?: MCPServer[];
+        apiTools?: APITool[];
     }) => Promise<void>;
     userAddress?: string;
 }
 
-type TabType = "general" | "capabilities" | "mcp";
+type TabType = "general" | "capabilities" | "mcp" | "api";
 
 export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: EditAgentModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("general");
@@ -67,6 +68,15 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
     const [newMcpUrl, setNewMcpUrl] = useState("");
     const [newMcpApiKey, setNewMcpApiKey] = useState("");
     
+    // API Tools
+    const [apiTools, setApiTools] = useState<APITool[]>([]);
+    const [showAddApi, setShowAddApi] = useState(false);
+    const [newApiName, setNewApiName] = useState("");
+    const [newApiUrl, setNewApiUrl] = useState("");
+    const [newApiMethod, setNewApiMethod] = useState<"GET" | "POST" | "PUT" | "DELETE">("GET");
+    const [newApiKey, setNewApiKey] = useState("");
+    const [newApiDescription, setNewApiDescription] = useState("");
+    
     // UI state
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -88,6 +98,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
             setX402WalletAddress(agent.x402_wallet_address || userAddress || "");
             setX402PricingMode(agent.x402_pricing_mode || "global");
             setMcpServers(agent.mcp_servers || []);
+            setApiTools(agent.api_tools || []);
             setError(null);
             setShowEmbedCode(false);
             setActiveTab("general");
@@ -142,6 +153,40 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
         setMcpServers(mcpServers.map(s => s.id === id ? { ...s, ...updates } : s));
     };
 
+    // Add API Tool
+    const addApiTool = () => {
+        if (!newApiName || !newApiUrl) return;
+        
+        const newTool: APITool = {
+            id: `api-${Date.now()}`,
+            name: newApiName,
+            url: newApiUrl,
+            method: newApiMethod,
+            apiKey: newApiKey || undefined,
+            description: newApiDescription || undefined,
+            x402Enabled: false,
+            x402PriceCents: 1,
+        };
+        
+        setApiTools([...apiTools, newTool]);
+        setNewApiName("");
+        setNewApiUrl("");
+        setNewApiMethod("GET");
+        setNewApiKey("");
+        setNewApiDescription("");
+        setShowAddApi(false);
+    };
+
+    // Remove API Tool
+    const removeApiTool = (id: string) => {
+        setApiTools(apiTools.filter(t => t.id !== id));
+    };
+
+    // Update API Tool
+    const updateApiTool = (id: string, updates: Partial<APITool>) => {
+        setApiTools(apiTools.map(t => t.id === id ? { ...t, ...updates } : t));
+    };
+
     const handleSave = async () => {
         if (!agent || !name.trim()) {
             setError("Please give your agent a name");
@@ -176,6 +221,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                 x402WalletAddress: x402WalletAddress.trim(),
                 x402PricingMode,
                 mcpServers,
+                apiTools,
             });
             onClose();
         } catch (err) {
@@ -225,7 +271,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                             {[
                                 { id: "general" as TabType, label: "General", icon: "⚙️" },
                                 { id: "capabilities" as TabType, label: "Capabilities", icon: "🔧" },
-                                { id: "mcp" as TabType, label: "MCP Tools", icon: "🔌" },
+                                { id: "mcp" as TabType, label: "MCP", icon: "🔌" },
+                                { id: "api" as TabType, label: "APIs", icon: "🌐" },
                             ].map(tab => (
                                 <button
                                     key={tab.id}
@@ -657,6 +704,163 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                     Add Server
                                                 </button>
                                             </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* API Tools Tab */}
+                            {activeTab === "api" && (
+                                <>
+                                    <p className="text-xs text-zinc-500 mb-4">
+                                        Configure external API endpoints your agent can call to fetch data or perform actions.
+                                    </p>
+
+                                    {/* Configured API Tools */}
+                                    {apiTools.length > 0 && (
+                                        <div className="space-y-2 mb-4">
+                                            {apiTools.map(tool => (
+                                                <div key={tool.id} className="p-3 bg-zinc-800 border border-zinc-700 rounded-xl">
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`text-xs font-mono px-2 py-0.5 rounded ${
+                                                                tool.method === "GET" ? "bg-green-500/20 text-green-400" :
+                                                                tool.method === "POST" ? "bg-blue-500/20 text-blue-400" :
+                                                                tool.method === "PUT" ? "bg-yellow-500/20 text-yellow-400" :
+                                                                "bg-red-500/20 text-red-400"
+                                                            }`}>{tool.method}</span>
+                                                            <div>
+                                                                <p className="text-sm font-medium text-white">{tool.name}</p>
+                                                                <p className="text-xs text-zinc-500 truncate max-w-[200px]">{tool.url}</p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeApiTool(tool.id)}
+                                                            className="text-zinc-500 hover:text-red-400 text-sm"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {tool.description && (
+                                                        <p className="text-xs text-zinc-400 mb-2">{tool.description}</p>
+                                                    )}
+
+                                                    {/* API Key input */}
+                                                    <div className="mb-2">
+                                                        <input
+                                                            type="password"
+                                                            value={tool.apiKey || ""}
+                                                            onChange={(e) => updateApiTool(tool.id, { apiKey: e.target.value || undefined })}
+                                                            placeholder="API Key (optional)"
+                                                            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                                                        />
+                                                    </div>
+
+                                                    {/* Per-tool pricing */}
+                                                    {x402Enabled && x402PricingMode === "per_tool" && (
+                                                        <div className="flex items-center gap-2 pt-2 border-t border-zinc-700">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={tool.x402Enabled || false}
+                                                                    onChange={(e) => updateApiTool(tool.id, { x402Enabled: e.target.checked })}
+                                                                    className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
+                                                                />
+                                                                <span className="text-xs text-zinc-400">💰 Paid API</span>
+                                                            </label>
+                                                            {tool.x402Enabled && (
+                                                                <div className="flex items-center gap-1 ml-auto">
+                                                                    <span className="text-xs text-zinc-500">$</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0.01"
+                                                                        step="0.01"
+                                                                        value={((tool.x402PriceCents || 1) / 100).toFixed(2)}
+                                                                        onChange={(e) => updateApiTool(tool.id, { 
+                                                                            x402PriceCents: Math.max(1, Math.round(parseFloat(e.target.value || "0.01") * 100))
+                                                                        })}
+                                                                        className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Add API Tool */}
+                                    {!showAddApi ? (
+                                        <button
+                                            onClick={() => setShowAddApi(true)}
+                                            className="w-full py-3 border-2 border-dashed border-zinc-700 rounded-xl text-zinc-400 hover:border-cyan-500 hover:text-cyan-400 transition-colors text-sm"
+                                        >
+                                            + Add API Endpoint
+                                        </button>
+                                    ) : (
+                                        <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-sm font-medium text-white">Add API Endpoint</h4>
+                                                <button onClick={() => setShowAddApi(false)} className="text-zinc-400 hover:text-white text-sm">✕</button>
+                                            </div>
+
+                                            {/* Name */}
+                                            <input
+                                                type="text"
+                                                value={newApiName}
+                                                onChange={(e) => setNewApiName(e.target.value)}
+                                                placeholder="API name (e.g., Weather API)"
+                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                                            />
+
+                                            {/* Method + URL */}
+                                            <div className="flex gap-2">
+                                                <select
+                                                    value={newApiMethod}
+                                                    onChange={(e) => setNewApiMethod(e.target.value as typeof newApiMethod)}
+                                                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                                                >
+                                                    <option value="GET">GET</option>
+                                                    <option value="POST">POST</option>
+                                                    <option value="PUT">PUT</option>
+                                                    <option value="DELETE">DELETE</option>
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    value={newApiUrl}
+                                                    onChange={(e) => setNewApiUrl(e.target.value)}
+                                                    placeholder="https://api.example.com/endpoint"
+                                                    className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-cyan-500"
+                                                />
+                                            </div>
+
+                                            {/* Description */}
+                                            <input
+                                                type="text"
+                                                value={newApiDescription}
+                                                onChange={(e) => setNewApiDescription(e.target.value)}
+                                                placeholder="Description (optional)"
+                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                                            />
+
+                                            {/* API Key */}
+                                            <input
+                                                type="password"
+                                                value={newApiKey}
+                                                onChange={(e) => setNewApiKey(e.target.value)}
+                                                placeholder="API Key (optional)"
+                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-cyan-500"
+                                            />
+
+                                            <button
+                                                onClick={addApiTool}
+                                                disabled={!newApiName || !newApiUrl}
+                                                className="w-full py-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                                            >
+                                                Add API
+                                            </button>
                                         </div>
                                     )}
                                 </>

@@ -80,6 +80,8 @@ export async function PATCH(
             x402PricingMode,
             // MCP servers
             mcpServers,
+            // API Tools
+            apiTools,
         } = body;
 
         if (!userAddress) {
@@ -125,6 +127,9 @@ export async function PATCH(
         
         // MCP servers configuration
         if (mcpServers !== undefined) updates.mcp_servers = mcpServers;
+        
+        // API Tools configuration
+        if (apiTools !== undefined) updates.api_tools = apiTools;
 
         console.log("[Agents] Updating agent:", id, "with:", updates);
 
