@@ -77,6 +77,9 @@ export async function PATCH(
             x402PriceCents,
             x402Network,
             x402WalletAddress,
+            x402PricingMode,
+            // MCP servers
+            mcpServers,
         } = body;
 
         if (!userAddress) {
@@ -118,6 +121,10 @@ export async function PATCH(
         if (x402PriceCents !== undefined) updates.x402_price_cents = Math.max(1, x402PriceCents);
         if (x402Network !== undefined) updates.x402_network = x402Network;
         if (x402WalletAddress !== undefined) updates.x402_wallet_address = x402WalletAddress?.toLowerCase() || null;
+        if (x402PricingMode !== undefined) updates.x402_pricing_mode = x402PricingMode;
+        
+        // MCP servers configuration
+        if (mcpServers !== undefined) updates.mcp_servers = mcpServers;
 
         console.log("[Agents] Updating agent:", id, "with:", updates);
 

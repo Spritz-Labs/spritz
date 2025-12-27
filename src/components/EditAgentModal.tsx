@@ -2,11 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Agent } from "@/hooks/useAgents";
+import { Agent, MCPServer } from "@/hooks/useAgents";
 
 const AGENT_EMOJIS = [
     "🤖", "🧠", "💡", "🎯", "🚀", "⚡", "🔮", "🎨",
     "📚", "💼", "🔬", "🎭", "🌟", "🦾", "🤓", "🧙",
+];
+
+// Pre-configured MCP servers users can choose from
+const POPULAR_MCP_SERVERS = [
+    { id: "filesystem", name: "File System", url: "npx -y @modelcontextprotocol/server-filesystem", description: "Read/write local files", requiresApiKey: false },
+    { id: "github", name: "GitHub", url: "npx -y @modelcontextprotocol/server-github", description: "GitHub repository access", requiresApiKey: true },
+    { id: "slack", name: "Slack", url: "npx -y @modelcontextprotocol/server-slack", description: "Slack workspace integration", requiresApiKey: true },
+    { id: "postgres", name: "PostgreSQL", url: "npx -y @modelcontextprotocol/server-postgres", description: "Database queries", requiresApiKey: true },
+    { id: "brave-search", name: "Brave Search", url: "npx -y @modelcontextprotocol/server-brave-search", description: "Web search via Brave", requiresApiKey: true },
+    { id: "memory", name: "Memory", url: "npx -y @modelcontextprotocol/server-memory", description: "Persistent memory storage", requiresApiKey: false },
 ];
 
 interface EditAgentModalProps {
@@ -24,27 +34,44 @@ interface EditAgentModalProps {
         x402PriceCents?: number;
         x402Network?: "base" | "base-sepolia";
         x402WalletAddress?: string;
+        x402PricingMode?: "global" | "per_tool";
+        mcpServers?: MCPServer[];
     }) => Promise<void>;
     userAddress?: string;
 }
 
+type TabType = "general" | "capabilities" | "mcp";
+
 export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: EditAgentModalProps) {
+    const [activeTab, setActiveTab] = useState<TabType>("general");
+    
+    // General settings
     const [name, setName] = useState("");
     const [personality, setPersonality] = useState("");
     const [emoji, setEmoji] = useState("🤖");
     const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
+    
+    // Capabilities
     const [webSearchEnabled, setWebSearchEnabled] = useState(true);
     const [useKnowledgeBase, setUseKnowledgeBase] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    
-    // x402 state
     const [x402Enabled, setX402Enabled] = useState(false);
     const [x402PriceCents, setX402PriceCents] = useState(1);
     const [x402Network, setX402Network] = useState<"base" | "base-sepolia">("base");
     const [x402WalletAddress, setX402WalletAddress] = useState("");
+    const [x402PricingMode, setX402PricingMode] = useState<"global" | "per_tool">("global");
+    
+    // MCP Servers
+    const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+    const [showAddMcp, setShowAddMcp] = useState(false);
+    const [newMcpName, setNewMcpName] = useState("");
+    const [newMcpUrl, setNewMcpUrl] = useState("");
+    const [newMcpApiKey, setNewMcpApiKey] = useState("");
+    
+    // UI state
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [showEmbedCode, setShowEmbedCode] = useState(false);
-    const [embedData, setEmbedData] = useState<{ code: { sdk: string } } | null>(null);
+    const [embedData, setEmbedData] = useState<{ code: { sdk: string }; endpoints: { chat: string } } | null>(null);
 
     // Load agent data when modal opens
     useEffect(() => {
@@ -55,17 +82,19 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
             setVisibility(agent.visibility);
             setWebSearchEnabled(agent.web_search_enabled !== false);
             setUseKnowledgeBase(agent.use_knowledge_base !== false);
-            // x402 fields
             setX402Enabled(agent.x402_enabled || false);
             setX402PriceCents(agent.x402_price_cents || 1);
             setX402Network(agent.x402_network || "base");
             setX402WalletAddress(agent.x402_wallet_address || userAddress || "");
+            setX402PricingMode(agent.x402_pricing_mode || "global");
+            setMcpServers(agent.mcp_servers || []);
             setError(null);
             setShowEmbedCode(false);
+            setActiveTab("general");
         }
     }, [agent, isOpen, userAddress]);
 
-    // Fetch embed code when x402 is enabled
+    // Fetch embed code
     const fetchEmbedCode = async () => {
         if (!agent || !userAddress) return;
         try {
@@ -80,13 +109,45 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
         }
     };
 
+    // Add MCP server
+    const addMcpServer = (preset?: typeof POPULAR_MCP_SERVERS[0]) => {
+        const newServer: MCPServer = {
+            id: preset?.id || `custom-${Date.now()}`,
+            name: preset?.name || newMcpName,
+            url: preset?.url || newMcpUrl,
+            apiKey: preset?.requiresApiKey ? "" : undefined,
+            description: preset?.description,
+            x402Enabled: false,
+            x402PriceCents: 1,
+        };
+        
+        if (!preset && newMcpApiKey) {
+            newServer.apiKey = newMcpApiKey;
+        }
+        
+        setMcpServers([...mcpServers, newServer]);
+        setNewMcpName("");
+        setNewMcpUrl("");
+        setNewMcpApiKey("");
+        setShowAddMcp(false);
+    };
+
+    // Remove MCP server
+    const removeMcpServer = (id: string) => {
+        setMcpServers(mcpServers.filter(s => s.id !== id));
+    };
+
+    // Update MCP server
+    const updateMcpServer = (id: string, updates: Partial<MCPServer>) => {
+        setMcpServers(mcpServers.map(s => s.id === id ? { ...s, ...updates } : s));
+    };
+
     const handleSave = async () => {
         if (!agent || !name.trim()) {
             setError("Please give your agent a name");
             return;
         }
 
-        // Validate x402 settings
         if (x402Enabled) {
             if (visibility !== "public") {
                 setError("x402 API access requires the agent to be Public");
@@ -113,6 +174,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                 x402PriceCents,
                 x402Network,
                 x402WalletAddress: x402WalletAddress.trim(),
+                x402PricingMode,
+                mcpServers,
             });
             onClose();
         } catch (err) {
@@ -142,14 +205,41 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="flex items-center gap-3 mb-6">
+                        <div className="flex items-center gap-3 mb-4">
                             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl">
                                 {emoji}
                             </div>
-                            <div>
+                            <div className="flex-1">
                                 <h2 className="text-xl font-bold text-white">Edit Agent</h2>
-                                <p className="text-sm text-zinc-400">Update your AI assistant</p>
+                                <p className="text-sm text-zinc-400">{agent.name}</p>
                             </div>
+                            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex gap-1 mb-4 bg-zinc-800 rounded-lg p-1">
+                            {[
+                                { id: "general" as TabType, label: "General", icon: "⚙️" },
+                                { id: "capabilities" as TabType, label: "Capabilities", icon: "🔧" },
+                                { id: "mcp" as TabType, label: "MCP Tools", icon: "🔌" },
+                            ].map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1 ${
+                                        activeTab === tab.id
+                                            ? "bg-purple-500 text-white"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    <span>{tab.icon}</span>
+                                    <span className="hidden sm:inline">{tab.label}</span>
+                                </button>
+                            ))}
                         </div>
 
                         {/* Error */}
@@ -159,315 +249,417 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                             </div>
                         )}
 
-                        {/* Form */}
+                        {/* Tab Content */}
                         <div className="space-y-5">
-                            {/* Name */}
-                            <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                    Agent Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="e.g., Research Assistant, Code Helper..."
-                                    maxLength={50}
-                                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors"
-                                />
-                                <p className="text-xs text-zinc-500 mt-1">{name.length}/50 characters</p>
-                            </div>
+                            {/* General Tab */}
+                            {activeTab === "general" && (
+                                <>
+                                    {/* Name */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Agent Name *</label>
+                                        <input
+                                            type="text"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                            maxLength={50}
+                                            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                                        />
+                                    </div>
 
-                            {/* Emoji Picker */}
-                            <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                    Avatar
-                                </label>
-                                <div className="flex flex-wrap gap-2">
-                                    {AGENT_EMOJIS.map((e) => (
-                                        <button
-                                            key={e}
-                                            onClick={() => setEmoji(e)}
-                                            className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${
-                                                emoji === e
-                                                    ? "bg-purple-500/30 border-2 border-purple-500 scale-110"
-                                                    : "bg-zinc-800 border border-zinc-700 hover:border-zinc-600"
-                                            }`}
-                                        >
-                                            {e}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Personality */}
-                            <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                    Personality
-                                </label>
-                                <textarea
-                                    value={personality}
-                                    onChange={(e) => setPersonality(e.target.value)}
-                                    placeholder="Describe how your agent should behave..."
-                                    maxLength={1000}
-                                    rows={3}
-                                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors resize-none"
-                                />
-                                <p className="text-xs text-zinc-500 mt-1">{personality.length}/1000 characters</p>
-                            </div>
-
-                            {/* Visibility */}
-                            <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                    Visibility
-                                </label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button
-                                        onClick={() => setVisibility("private")}
-                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                            visibility === "private"
-                                                ? "bg-purple-500/20 border-2 border-purple-500 text-purple-400"
-                                                : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-600"
-                                        }`}
-                                    >
-                                        🔒 Private
-                                    </button>
-                                    <button
-                                        onClick={() => setVisibility("friends")}
-                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                            visibility === "friends"
-                                                ? "bg-purple-500/20 border-2 border-purple-500 text-purple-400"
-                                                : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-600"
-                                        }`}
-                                    >
-                                        👥 Friends
-                                    </button>
-                                    <button
-                                        onClick={() => setVisibility("public")}
-                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                            visibility === "public"
-                                                ? "bg-purple-500/20 border-2 border-purple-500 text-purple-400"
-                                                : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-600"
-                                        }`}
-                                    >
-                                        🌍 Public
-                                    </button>
-                                </div>
-                                <p className="text-xs text-zinc-500 mt-2">
-                                    {visibility === "private" && "Only you can use this agent"}
-                                    {visibility === "friends" && "Your friends can also use this agent"}
-                                    {visibility === "public" && "Anyone can discover and use this agent"}
-                                </p>
-                            </div>
-
-                            {/* Capabilities */}
-                            <div>
-                                <label className="block text-sm font-medium text-zinc-300 mb-3">
-                                    Capabilities
-                                </label>
-                                <div className="space-y-3">
-                                    {/* Web Search Toggle */}
-                                    <label className="flex items-center justify-between p-3 bg-zinc-800 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-xl">🔍</span>
-                                            <div>
-                                                <p className="text-sm font-medium text-white">Web Search</p>
-                                                <p className="text-xs text-zinc-500">Access real-time information from the web</p>
-                                            </div>
-                                        </div>
-                                        <div 
-                                            onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                                            className={`w-11 h-6 rounded-full transition-colors relative ${
-                                                webSearchEnabled ? "bg-purple-500" : "bg-zinc-600"
-                                            }`}
-                                        >
-                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
-                                                webSearchEnabled ? "left-6" : "left-1"
-                                            }`} />
-                                        </div>
-                                    </label>
-
-                                    {/* Knowledge Base Toggle */}
-                                    <label className="flex items-center justify-between p-3 bg-zinc-800 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-xl">📚</span>
-                                            <div>
-                                                <p className="text-sm font-medium text-white">Knowledge Base</p>
-                                                <p className="text-xs text-zinc-500">Use added URLs as context for responses</p>
-                                            </div>
-                                        </div>
-                                        <div 
-                                            onClick={() => setUseKnowledgeBase(!useKnowledgeBase)}
-                                            className={`w-11 h-6 rounded-full transition-colors relative ${
-                                                useKnowledgeBase ? "bg-purple-500" : "bg-zinc-600"
-                                            }`}
-                                        >
-                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
-                                                useKnowledgeBase ? "left-6" : "left-1"
-                                            }`} />
-                                        </div>
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* x402 API Access */}
-                            <div className="border-t border-zinc-800 pt-5">
-                                <label className="block text-sm font-medium text-zinc-300 mb-3">
-                                    💰 x402 External API Access
-                                </label>
-                                <p className="text-xs text-zinc-500 mb-3">
-                                    Enable micropayments so external apps can use your agent via API. Payments are in USDC on Base.
-                                </p>
-                                
-                                {/* x402 Enable Toggle */}
-                                <label className="flex items-center justify-between p-3 bg-zinc-800 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 transition-colors mb-3">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xl">🔌</span>
-                                        <div>
-                                            <p className="text-sm font-medium text-white">Enable x402 API</p>
-                                            <p className="text-xs text-zinc-500">Let external apps pay to use your agent</p>
+                                    {/* Emoji */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Avatar</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {AGENT_EMOJIS.map((e) => (
+                                                <button
+                                                    key={e}
+                                                    onClick={() => setEmoji(e)}
+                                                    className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${
+                                                        emoji === e
+                                                            ? "bg-purple-500/30 border-2 border-purple-500 scale-110"
+                                                            : "bg-zinc-800 border border-zinc-700 hover:border-zinc-600"
+                                                    }`}
+                                                >
+                                                    {e}
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
-                                    <div 
-                                        onClick={() => setX402Enabled(!x402Enabled)}
-                                        className={`w-11 h-6 rounded-full transition-colors relative ${
-                                            x402Enabled ? "bg-emerald-500" : "bg-zinc-600"
-                                        }`}
-                                    >
-                                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
-                                            x402Enabled ? "left-6" : "left-1"
-                                        }`} />
-                                    </div>
-                                </label>
 
-                                {/* x402 Configuration (shown when enabled) */}
-                                {x402Enabled && (
-                                    <div className="space-y-3 pl-3 border-l-2 border-emerald-500/30">
-                                        {visibility !== "public" && (
-                                            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                                                <p className="text-xs text-amber-400">
-                                                    ⚠️ x402 requires Public visibility. Change visibility above to enable API access.
+                                    {/* Personality */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Personality</label>
+                                        <textarea
+                                            value={personality}
+                                            onChange={(e) => setPersonality(e.target.value)}
+                                            maxLength={1000}
+                                            rows={3}
+                                            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 resize-none"
+                                        />
+                                    </div>
+
+                                    {/* Visibility */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Visibility</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { value: "private", label: "🔒 Private" },
+                                                { value: "friends", label: "👥 Friends" },
+                                                { value: "public", label: "🌍 Public" },
+                                            ].map(opt => (
+                                                <button
+                                                    key={opt.value}
+                                                    onClick={() => setVisibility(opt.value as typeof visibility)}
+                                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                                        visibility === opt.value
+                                                            ? "bg-purple-500/20 border-2 border-purple-500 text-purple-400"
+                                                            : "bg-zinc-800 border border-zinc-700 text-zinc-400"
+                                                    }`}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Capabilities Tab */}
+                            {activeTab === "capabilities" && (
+                                <>
+                                    {/* Built-in Capabilities */}
+                                    <div className="space-y-3">
+                                        {/* Web Search */}
+                                        <CapabilityToggle
+                                            icon="🔍"
+                                            title="Web Search"
+                                            description="Access real-time information from the web"
+                                            enabled={webSearchEnabled}
+                                            onChange={setWebSearchEnabled}
+                                        />
+
+                                        {/* Knowledge Base */}
+                                        <CapabilityToggle
+                                            icon="📚"
+                                            title="Knowledge Base"
+                                            description="Use added URLs as context for responses"
+                                            enabled={useKnowledgeBase}
+                                            onChange={setUseKnowledgeBase}
+                                        />
+
+                                        {/* x402 API Access */}
+                                        <CapabilityToggle
+                                            icon="💰"
+                                            title="x402 API Access"
+                                            description="Let external apps pay to use your agent"
+                                            enabled={x402Enabled}
+                                            onChange={setX402Enabled}
+                                            color="emerald"
+                                        />
+                                    </div>
+
+                                    {/* x402 Configuration */}
+                                    {x402Enabled && (
+                                        <div className="mt-4 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl space-y-4">
+                                            <h4 className="text-sm font-medium text-emerald-400 flex items-center gap-2">
+                                                💰 x402 Payment Settings
+                                            </h4>
+
+                                            {visibility !== "public" && (
+                                                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                                                    <p className="text-xs text-amber-400">⚠️ x402 requires Public visibility</p>
+                                                </div>
+                                            )}
+
+                                            {/* Pricing Mode */}
+                                            <div>
+                                                <label className="block text-xs font-medium text-zinc-400 mb-2">Pricing Mode</label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setX402PricingMode("global")}
+                                                        className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                                            x402PricingMode === "global"
+                                                                ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
+                                                                : "bg-zinc-800 border border-zinc-700 text-zinc-400"
+                                                        }`}
+                                                    >
+                                                        🌐 Global Price
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setX402PricingMode("per_tool")}
+                                                        className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                                            x402PricingMode === "per_tool"
+                                                                ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
+                                                                : "bg-zinc-800 border border-zinc-700 text-zinc-400"
+                                                        }`}
+                                                    >
+                                                        🔧 Per Tool
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-zinc-500 mt-1">
+                                                    {x402PricingMode === "global" 
+                                                        ? "Single price for all interactions" 
+                                                        : "Set different prices per MCP tool"}
                                                 </p>
                                             </div>
-                                        )}
-                                        
-                                        {/* Price per message */}
-                                        <div>
-                                            <label className="block text-xs font-medium text-zinc-400 mb-1">
-                                                Price per Message (USD)
-                                            </label>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-zinc-400">$</span>
+
+                                            {/* Global Price (only shown in global mode) */}
+                                            {x402PricingMode === "global" && (
+                                                <div>
+                                                    <label className="block text-xs font-medium text-zinc-400 mb-1">Price per Message</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-zinc-400">$</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0.01"
+                                                            step="0.01"
+                                                            value={(x402PriceCents / 100).toFixed(2)}
+                                                            onChange={(e) => setX402PriceCents(Math.max(1, Math.round(parseFloat(e.target.value || "0.01") * 100)))}
+                                                            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                                                        />
+                                                        <span className="text-xs text-zinc-500">USDC</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Network */}
+                                            <div>
+                                                <label className="block text-xs font-medium text-zinc-400 mb-1">Network</label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setX402Network("base")}
+                                                        className={`px-3 py-2 rounded-lg text-xs font-medium ${
+                                                            x402Network === "base"
+                                                                ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
+                                                                : "bg-zinc-800 border border-zinc-700 text-zinc-400"
+                                                        }`}
+                                                    >
+                                                        Base Mainnet
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setX402Network("base-sepolia")}
+                                                        className={`px-3 py-2 rounded-lg text-xs font-medium ${
+                                                            x402Network === "base-sepolia"
+                                                                ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
+                                                                : "bg-zinc-800 border border-zinc-700 text-zinc-400"
+                                                        }`}
+                                                    >
+                                                        Sepolia (Test)
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Wallet */}
+                                            <div>
+                                                <label className="block text-xs font-medium text-zinc-400 mb-1">Payment Wallet</label>
                                                 <input
-                                                    type="number"
-                                                    min="0.01"
-                                                    step="0.01"
-                                                    value={(x402PriceCents / 100).toFixed(2)}
-                                                    onChange={(e) => setX402PriceCents(Math.max(1, Math.round(parseFloat(e.target.value || "0.01") * 100)))}
-                                                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                                                    type="text"
+                                                    value={x402WalletAddress}
+                                                    onChange={(e) => setX402WalletAddress(e.target.value)}
+                                                    placeholder="0x..."
+                                                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
                                                 />
-                                                <span className="text-xs text-zinc-500">USDC</span>
                                             </div>
-                                        </div>
 
-                                        {/* Network */}
-                                        <div>
-                                            <label className="block text-xs font-medium text-zinc-400 mb-1">
-                                                Network
-                                            </label>
-                                            <div className="grid grid-cols-2 gap-2">
+                                            {/* Get Embed Code */}
+                                            {agent?.x402_enabled && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => setX402Network("base")}
-                                                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                                        x402Network === "base"
-                                                            ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
-                                                            : "bg-zinc-800 border border-zinc-700 text-zinc-400"
-                                                    }`}
+                                                    onClick={fetchEmbedCode}
+                                                    className="w-full py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-400 rounded-lg text-sm font-medium"
                                                 >
-                                                    Base Mainnet
+                                                    📋 Get API URL / SDK Code
                                                 </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setX402Network("base-sepolia")}
-                                                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                                        x402Network === "base-sepolia"
-                                                            ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
-                                                            : "bg-zinc-800 border border-zinc-700 text-zinc-400"
-                                                    }`}
-                                                >
-                                                    Base Sepolia (Test)
-                                                </button>
+                                            )}
+
+                                            {/* Earnings */}
+                                            {agent?.x402_enabled && (agent.x402_message_count_paid || 0) > 0 && (
+                                                <div className="p-3 bg-emerald-500/10 rounded-lg">
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-zinc-400">Paid Messages:</span>
+                                                        <span className="text-white">{agent.x402_message_count_paid}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-zinc-400">Total Earned:</span>
+                                                        <span className="text-emerald-400">${((agent.x402_total_earnings_cents || 0) / 100).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Embed Code Display */}
+                                    {showEmbedCode && embedData && (
+                                        <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h4 className="text-sm font-medium text-white">API Endpoint</h4>
+                                                <button onClick={() => setShowEmbedCode(false)} className="text-zinc-400 hover:text-white text-sm">✕</button>
                                             </div>
-                                        </div>
-
-                                        {/* Wallet Address */}
-                                        <div>
-                                            <label className="block text-xs font-medium text-zinc-400 mb-1">
-                                                Payment Wallet Address
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={x402WalletAddress}
-                                                onChange={(e) => setX402WalletAddress(e.target.value)}
-                                                placeholder="0x..."
-                                                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
-                                            />
-                                            <p className="text-xs text-zinc-500 mt-1">
-                                                Payments will be sent to this address
-                                            </p>
-                                        </div>
-
-                                        {/* Get Embed Code Button */}
-                                        {agent?.x402_enabled && (
+                                            <code className="block text-xs bg-zinc-900 p-2 rounded text-emerald-400 mb-3 break-all">
+                                                {embedData.endpoints.chat}
+                                            </code>
+                                            <details className="text-xs">
+                                                <summary className="text-zinc-400 cursor-pointer hover:text-white">Show SDK Code</summary>
+                                                <pre className="mt-2 bg-zinc-900 p-3 rounded-lg overflow-x-auto text-zinc-300 max-h-32">
+                                                    {embedData.code.sdk}
+                                                </pre>
+                                            </details>
                                             <button
-                                                type="button"
-                                                onClick={fetchEmbedCode}
-                                                className="w-full py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-400 rounded-lg text-sm font-medium transition-colors"
+                                                onClick={() => navigator.clipboard.writeText(embedData.endpoints.chat)}
+                                                className="mt-2 w-full py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-xs text-white"
                                             >
-                                                📋 Get SDK / Embed Code
+                                                📋 Copy URL
                                             </button>
-                                        )}
+                                        </div>
+                                    )}
+                                </>
+                            )}
 
-                                        {/* Show earnings stats if enabled */}
-                                        {agent?.x402_enabled && (agent.x402_message_count_paid || 0) > 0 && (
-                                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                                                <p className="text-xs text-emerald-400 font-medium mb-1">💰 Earnings</p>
-                                                <div className="flex justify-between text-xs">
-                                                    <span className="text-zinc-400">Paid Messages:</span>
-                                                    <span className="text-white">{agent.x402_message_count_paid || 0}</span>
+                            {/* MCP Tools Tab */}
+                            {activeTab === "mcp" && (
+                                <>
+                                    <p className="text-xs text-zinc-500 mb-4">
+                                        Connect MCP servers to give your agent access to external tools and services.
+                                    </p>
+
+                                    {/* Configured MCP Servers */}
+                                    {mcpServers.length > 0 && (
+                                        <div className="space-y-2 mb-4">
+                                            {mcpServers.map(server => (
+                                                <div key={server.id} className="p-3 bg-zinc-800 border border-zinc-700 rounded-xl">
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-lg">🔌</span>
+                                                            <div>
+                                                                <p className="text-sm font-medium text-white">{server.name}</p>
+                                                                <p className="text-xs text-zinc-500 truncate max-w-[200px]">{server.url}</p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeMcpServer(server.id)}
+                                                            className="text-zinc-500 hover:text-red-400 text-sm"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {/* API Key input if needed */}
+                                                    {server.apiKey !== undefined && (
+                                                        <div className="mb-2">
+                                                            <input
+                                                                type="password"
+                                                                value={server.apiKey}
+                                                                onChange={(e) => updateMcpServer(server.id, { apiKey: e.target.value })}
+                                                                placeholder="API Key (required)"
+                                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Per-tool pricing */}
+                                                    {x402Enabled && x402PricingMode === "per_tool" && (
+                                                        <div className="flex items-center gap-2 pt-2 border-t border-zinc-700">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={server.x402Enabled || false}
+                                                                    onChange={(e) => updateMcpServer(server.id, { x402Enabled: e.target.checked })}
+                                                                    className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
+                                                                />
+                                                                <span className="text-xs text-zinc-400">💰 Paid tool</span>
+                                                            </label>
+                                                            {server.x402Enabled && (
+                                                                <div className="flex items-center gap-1 ml-auto">
+                                                                    <span className="text-xs text-zinc-500">$</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0.01"
+                                                                        step="0.01"
+                                                                        value={((server.x402PriceCents || 1) / 100).toFixed(2)}
+                                                                        onChange={(e) => updateMcpServer(server.id, { 
+                                                                            x402PriceCents: Math.max(1, Math.round(parseFloat(e.target.value || "0.01") * 100))
+                                                                        })}
+                                                                        className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="flex justify-between text-xs">
-                                                    <span className="text-zinc-400">Total Earned:</span>
-                                                    <span className="text-emerald-400">${((agent.x402_total_earnings_cents || 0) / 100).toFixed(2)}</span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Add MCP Server */}
+                                    {!showAddMcp ? (
+                                        <button
+                                            onClick={() => setShowAddMcp(true)}
+                                            className="w-full py-3 border-2 border-dashed border-zinc-700 rounded-xl text-zinc-400 hover:border-purple-500 hover:text-purple-400 transition-colors text-sm"
+                                        >
+                                            + Add MCP Server
+                                        </button>
+                                    ) : (
+                                        <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-sm font-medium text-white">Add MCP Server</h4>
+                                                <button onClick={() => setShowAddMcp(false)} className="text-zinc-400 hover:text-white text-sm">✕</button>
+                                            </div>
+
+                                            {/* Popular presets */}
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-2">Popular servers:</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {POPULAR_MCP_SERVERS.filter(s => !mcpServers.some(m => m.id === s.id)).slice(0, 4).map(preset => (
+                                                        <button
+                                                            key={preset.id}
+                                                            onClick={() => addMcpServer(preset)}
+                                                            className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-white"
+                                                        >
+                                                            {preset.name}
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
 
-                            {/* Embed Code Modal */}
-                            {showEmbedCode && embedData && (
-                                <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h4 className="text-sm font-medium text-white">SDK Integration Code</h4>
-                                        <button
-                                            onClick={() => setShowEmbedCode(false)}
-                                            className="text-zinc-400 hover:text-white"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                    <pre className="text-xs bg-zinc-900 p-3 rounded-lg overflow-x-auto text-zinc-300 max-h-48">
-                                        {embedData.code.sdk}
-                                    </pre>
-                                    <button
-                                        onClick={() => navigator.clipboard.writeText(embedData.code.sdk)}
-                                        className="mt-2 w-full py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-xs text-white transition-colors"
-                                    >
-                                        📋 Copy to Clipboard
-                                    </button>
-                                </div>
+                                            {/* Custom server */}
+                                            <div className="pt-2 border-t border-zinc-700">
+                                                <p className="text-xs text-zinc-500 mb-2">Or add custom:</p>
+                                                <input
+                                                    type="text"
+                                                    value={newMcpName}
+                                                    onChange={(e) => setNewMcpName(e.target.value)}
+                                                    placeholder="Server name"
+                                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none focus:border-purple-500"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={newMcpUrl}
+                                                    onChange={(e) => setNewMcpUrl(e.target.value)}
+                                                    placeholder="Server URL or command"
+                                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 font-mono focus:outline-none focus:border-purple-500"
+                                                />
+                                                <input
+                                                    type="password"
+                                                    value={newMcpApiKey}
+                                                    onChange={(e) => setNewMcpApiKey(e.target.value)}
+                                                    placeholder="API Key (optional)"
+                                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 font-mono focus:outline-none focus:border-purple-500"
+                                                />
+                                                <button
+                                                    onClick={() => addMcpServer()}
+                                                    disabled={!newMcpName || !newMcpUrl}
+                                                    className="w-full py-2 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                                                >
+                                                    Add Server
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
 
@@ -484,17 +676,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                 disabled={isSaving || !name.trim()}
                                 className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all"
                             >
-                                {isSaving ? (
-                                    <span className="flex items-center justify-center gap-2">
-                                        <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                        </svg>
-                                        Saving...
-                                    </span>
-                                ) : (
-                                    "Save Changes"
-                                )}
+                                {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </div>
                     </motion.div>
@@ -504,5 +686,41 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
     );
 }
 
-export default EditAgentModal;
+// Toggle component for capabilities
+function CapabilityToggle({ 
+    icon, 
+    title, 
+    description, 
+    enabled, 
+    onChange,
+    color = "purple"
+}: { 
+    icon: string; 
+    title: string; 
+    description: string; 
+    enabled: boolean; 
+    onChange: (v: boolean) => void;
+    color?: "purple" | "emerald";
+}) {
+    const colorClass = color === "emerald" ? "bg-emerald-500" : "bg-purple-500";
+    
+    return (
+        <div 
+            onClick={() => onChange(!enabled)}
+            className="flex items-center justify-between p-3 bg-zinc-800 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 transition-colors"
+        >
+            <div className="flex items-center gap-3">
+                <span className="text-xl">{icon}</span>
+                <div>
+                    <p className="text-sm font-medium text-white">{title}</p>
+                    <p className="text-xs text-zinc-500">{description}</p>
+                </div>
+            </div>
+            <div className={`w-11 h-6 rounded-full transition-colors relative ${enabled ? colorClass : "bg-zinc-600"}`}>
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${enabled ? "left-6" : "left-1"}`} />
+            </div>
+        </div>
+    );
+}
 
+export default EditAgentModal;

@@ -2,6 +2,16 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+export type MCPServer = {
+    id: string;
+    name: string;
+    url: string;
+    apiKey?: string;
+    description?: string;
+    x402Enabled?: boolean;
+    x402PriceCents?: number;
+};
+
 export type Agent = {
     id: string;
     owner_address: string;
@@ -23,6 +33,9 @@ export type Agent = {
     x402_wallet_address?: string;
     x402_total_earnings_cents?: number;
     x402_message_count_paid?: number;
+    x402_pricing_mode?: "global" | "per_tool";
+    // MCP server configuration
+    mcp_servers?: MCPServer[];
 };
 
 export type ChatMessage = {

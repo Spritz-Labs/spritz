@@ -208,6 +208,11 @@ export function AgentsSection({ userAddress }: AgentsSectionProps) {
                                                             {agent.visibility === "friends" ? "👥" : "🌍"}
                                                         </span>
                                                     )}
+                                                    {agent.x402_enabled && (
+                                                        <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 rounded text-emerald-400 font-medium" title={`x402 API: $${((agent.x402_price_cents || 1) / 100).toFixed(2)}/msg`}>
+                                                            💰
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-xs text-zinc-500 truncate">
                                                     {agent.personality || "AI Assistant"}
