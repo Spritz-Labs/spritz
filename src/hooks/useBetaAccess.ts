@@ -19,6 +19,11 @@ type CachedBetaAccess = {
     timestamp: number;
 };
 
+// Helper to check if address is a Solana address (base58, not starting with 0x)
+function isSolanaAddress(address: string): boolean {
+    return !address.startsWith("0x") && address.length >= 32 && address.length <= 44;
+}
+
 export function useBetaAccess(userAddress: string | null) {
     const [hasBetaAccess, setHasBetaAccess] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +35,10 @@ export function useBetaAccess(userAddress: string | null) {
             return;
         }
 
-        const normalizedAddress = userAddress.toLowerCase();
+        // Solana addresses are case-sensitive, EVM addresses should be lowercased
+        const normalizedAddress = isSolanaAddress(userAddress) 
+            ? userAddress 
+            : userAddress.toLowerCase();
         const cacheKey = `${CACHE_KEY}_${normalizedAddress}`;
 
         // Check cache first
@@ -57,7 +65,10 @@ export function useBetaAccess(userAddress: string | null) {
                 .single();
 
             if (error) {
-                console.error("[Beta Access] Error fetching:", error);
+                // PGRST116 means no rows found - user doesn't exist yet, not an error
+                if (error.code !== "PGRST116") {
+                    console.error("[Beta Access] Error fetching:", error);
+                }
                 setHasBetaAccess(false);
             } else {
                 const hasAccess = data?.beta_access || false;
@@ -88,7 +99,10 @@ export function useBetaAccess(userAddress: string | null) {
     // Function to clear cache and refresh
     const refresh = useCallback(() => {
         if (userAddress) {
-            const cacheKey = `${CACHE_KEY}_${userAddress.toLowerCase()}`;
+            const normalizedAddress = isSolanaAddress(userAddress) 
+                ? userAddress 
+                : userAddress.toLowerCase();
+            const cacheKey = `${CACHE_KEY}_${normalizedAddress}`;
             localStorage.removeItem(cacheKey);
         }
         setIsLoading(true);
