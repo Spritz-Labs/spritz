@@ -62,27 +62,42 @@ export function useAuthImplementation() {
         return true;
     }, [credentials]);
 
-    // Load saved credentials on mount
+    // Load saved credentials on mount - wait for address to be available
     useEffect(() => {
         if (typeof window === "undefined") return;
+        
+        // Don't do anything until we know the wallet connection state
+        // address will be undefined initially, then set once wallet reconnects
+        if (address === undefined && isConnected === undefined) {
+            return; // Still initializing
+        }
         
         try {
             const saved = localStorage.getItem(AUTH_CREDENTIALS_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 
-                // Validate the parsed data
+                // Validate the parsed data structure
                 if (
                     parsed &&
                     typeof parsed.address === 'string' && parsed.address.trim() &&
                     typeof parsed.signature === 'string' && parsed.signature.trim() &&
                     typeof parsed.message === 'string' && parsed.message.trim() &&
                     typeof parsed.timestamp === 'number' &&
-                    parsed.address.toLowerCase() === address?.toLowerCase() &&
                     Date.now() - parsed.timestamp < AUTH_TTL
                 ) {
-                    console.log("[Auth] Loaded valid credentials from localStorage");
-                    setCredentials(parsed as AuthCredentials);
+                    // If we have an address, verify it matches
+                    // If no address yet (wallet reconnecting), keep credentials
+                    if (!address || parsed.address.toLowerCase() === address.toLowerCase()) {
+                        console.log("[Auth] Loaded valid credentials from localStorage");
+                        setCredentials(parsed as AuthCredentials);
+                    } else {
+                        // Address mismatch - different wallet connected
+                        console.log("[Auth] Address mismatch, clearing credentials");
+                        localStorage.removeItem(AUTH_CREDENTIALS_KEY);
+                        setCredentials(null);
+                        setState(prev => ({ ...prev, isLoading: false }));
+                    }
                 } else {
                     console.log("[Auth] Invalid or expired credentials, clearing");
                     localStorage.removeItem(AUTH_CREDENTIALS_KEY);
@@ -98,7 +113,7 @@ export function useAuthImplementation() {
             setCredentials(null);
             setState(prev => ({ ...prev, isLoading: false }));
         }
-    }, [address]);
+    }, [address, isConnected]);
 
     // Verify credentials when they change
     useEffect(() => {

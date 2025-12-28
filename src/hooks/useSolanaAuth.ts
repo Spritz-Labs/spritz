@@ -65,28 +65,42 @@ export function useSolanaAuthImplementation() {
         return true;
     }, [credentials]);
 
-    // Load saved credentials on mount
+    // Load saved credentials on mount - wait for address to be available
     useEffect(() => {
         if (typeof window === "undefined") return;
+        
+        // Don't do anything until we know the wallet connection state
+        if (address === undefined && isConnected === undefined) {
+            return; // Still initializing
+        }
         
         try {
             const saved = localStorage.getItem(SOLANA_AUTH_CREDENTIALS_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 
-                // Validate the parsed data (Solana addresses are case-sensitive)
+                // Validate the parsed data structure
                 if (
                     parsed &&
                     typeof parsed.address === 'string' && parsed.address.trim() &&
                     typeof parsed.signature === 'string' && parsed.signature.trim() &&
                     typeof parsed.message === 'string' && parsed.message.trim() &&
                     typeof parsed.timestamp === 'number' &&
-                    parsed.address === address && // Case-sensitive for Solana
                     parsed.chain === "solana" &&
                     Date.now() - parsed.timestamp < AUTH_TTL
                 ) {
-                    console.log("[SolanaAuth] Loaded valid credentials from localStorage");
-                    setCredentials(parsed as SolanaAuthCredentials);
+                    // If we have an address, verify it matches (case-sensitive for Solana)
+                    // If no address yet (wallet reconnecting), keep credentials
+                    if (!address || parsed.address === address) {
+                        console.log("[SolanaAuth] Loaded valid credentials from localStorage");
+                        setCredentials(parsed as SolanaAuthCredentials);
+                    } else {
+                        // Address mismatch - different wallet connected
+                        console.log("[SolanaAuth] Address mismatch, clearing credentials");
+                        localStorage.removeItem(SOLANA_AUTH_CREDENTIALS_KEY);
+                        setCredentials(null);
+                        setState(prev => ({ ...prev, isLoading: false }));
+                    }
                 } else {
                     console.log("[SolanaAuth] Invalid or expired credentials, clearing");
                     localStorage.removeItem(SOLANA_AUTH_CREDENTIALS_KEY);
@@ -102,7 +116,7 @@ export function useSolanaAuthImplementation() {
             setCredentials(null);
             setState(prev => ({ ...prev, isLoading: false }));
         }
-    }, [address]);
+    }, [address, isConnected]);
 
     // Verify credentials when they change
     useEffect(() => {
