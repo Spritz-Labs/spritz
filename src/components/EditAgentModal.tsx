@@ -740,22 +740,57 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                     </div>
                                                     
                                                     {/* API Key input */}
-                                                    <div className="mb-2 relative">
-                                                        <input
-                                                            type={visibleApiKeys.has(`mcp-${server.id}`) ? "text" : "password"}
-                                                            value={server.apiKey || ""}
-                                                            onChange={(e) => updateMcpServer(server.id, { apiKey: e.target.value || undefined })}
-                                                            placeholder="API Key (optional)"
-                                                            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 pr-10 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleApiKeyVisibility(`mcp-${server.id}`)}
-                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
-                                                            title={visibleApiKeys.has(`mcp-${server.id}`) ? "Hide" : "Show"}
-                                                        >
-                                                            {visibleApiKeys.has(`mcp-${server.id}`) ? "🙈" : "👁️"}
-                                                        </button>
+                                                    <div className="mb-2">
+                                                        <div className="relative">
+                                                            <input
+                                                                type={visibleApiKeys.has(`mcp-${server.id}`) ? "text" : "password"}
+                                                                value={server.apiKey || ""}
+                                                                onChange={(e) => updateMcpServer(server.id, { apiKey: e.target.value || undefined })}
+                                                                placeholder="API Key (optional)"
+                                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 pr-10 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleApiKeyVisibility(`mcp-${server.id}`)}
+                                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
+                                                                title={visibleApiKeys.has(`mcp-${server.id}`) ? "Hide" : "Show"}
+                                                            >
+                                                                {visibleApiKeys.has(`mcp-${server.id}`) ? "🙈" : "👁️"}
+                                                            </button>
+                                                        </div>
+                                                        {/* Add API Key as Header */}
+                                                        {server.apiKey && (
+                                                            <div className="mt-1 flex items-center gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Header name (e.g. X-API-Key)"
+                                                                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                                                            const headerName = e.currentTarget.value.trim();
+                                                                            const newHeaders = { ...(server.headers || {}), [headerName]: server.apiKey || "" };
+                                                                            updateMcpServer(server.id, { headers: newHeaders });
+                                                                            e.currentTarget.value = "";
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                                                                        if (input?.value.trim()) {
+                                                                            const headerName = input.value.trim();
+                                                                            const newHeaders = { ...(server.headers || {}), [headerName]: server.apiKey || "" };
+                                                                            updateMcpServer(server.id, { headers: newHeaders });
+                                                                            input.value = "";
+                                                                        }
+                                                                    }}
+                                                                    className="px-2 py-1 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 rounded text-xs whitespace-nowrap"
+                                                                >
+                                                                    + Add to Headers
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     {/* Custom Headers */}
@@ -1046,22 +1081,57 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                     </div>
 
                                                     {/* API Key input */}
-                                                    <div className="mb-2 relative">
-                                                        <input
-                                                            type={visibleApiKeys.has(`api-${tool.id}`) ? "text" : "password"}
-                                                            value={tool.apiKey || ""}
-                                                            onChange={(e) => updateApiTool(tool.id, { apiKey: e.target.value || undefined })}
-                                                            placeholder="API Key (optional)"
-                                                            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 pr-10 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleApiKeyVisibility(`api-${tool.id}`)}
-                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
-                                                            title={visibleApiKeys.has(`api-${tool.id}`) ? "Hide" : "Show"}
-                                                        >
-                                                            {visibleApiKeys.has(`api-${tool.id}`) ? "🙈" : "👁️"}
-                                                        </button>
+                                                    <div className="mb-2">
+                                                        <div className="relative">
+                                                            <input
+                                                                type={visibleApiKeys.has(`api-${tool.id}`) ? "text" : "password"}
+                                                                value={tool.apiKey || ""}
+                                                                onChange={(e) => updateApiTool(tool.id, { apiKey: e.target.value || undefined })}
+                                                                placeholder="API Key (optional)"
+                                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 pr-10 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleApiKeyVisibility(`api-${tool.id}`)}
+                                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
+                                                                title={visibleApiKeys.has(`api-${tool.id}`) ? "Hide" : "Show"}
+                                                            >
+                                                                {visibleApiKeys.has(`api-${tool.id}`) ? "🙈" : "👁️"}
+                                                            </button>
+                                                        </div>
+                                                        {/* Add API Key as Header */}
+                                                        {tool.apiKey && (
+                                                            <div className="mt-1 flex items-center gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Header name (e.g. Authorization)"
+                                                                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                                                            const headerName = e.currentTarget.value.trim();
+                                                                            const newHeaders = { ...(tool.headers || {}), [headerName]: tool.apiKey || "" };
+                                                                            updateApiTool(tool.id, { headers: newHeaders });
+                                                                            e.currentTarget.value = "";
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                                                                        if (input?.value.trim()) {
+                                                                            const headerName = input.value.trim();
+                                                                            const newHeaders = { ...(tool.headers || {}), [headerName]: tool.apiKey || "" };
+                                                                            updateApiTool(tool.id, { headers: newHeaders });
+                                                                            input.value = "";
+                                                                        }
+                                                                    }}
+                                                                    className="px-2 py-1 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 rounded text-xs whitespace-nowrap"
+                                                                >
+                                                                    + Add to Headers
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     {/* Custom Headers */}
