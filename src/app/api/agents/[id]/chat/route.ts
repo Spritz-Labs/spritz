@@ -412,7 +412,14 @@ export async function POST(
         }
 
         // Build enhanced system instructions with knowledge context
-        let systemInstructions = agent.system_instructions || `You are a helpful AI assistant named ${agent.name}.`;
+        let systemInstructions = "";
+        
+        // Add critical instruction about tool usage FIRST (before personality)
+        if (agent.mcp_servers && agent.mcp_servers.length > 0) {
+            systemInstructions += "CRITICAL INSTRUCTION: When users ask you to 'search', 'look up', 'find docs', or mention tool names like 'Context7', they are asking you to USE the tools configured for you - NOT to write code that calls those tools. The tool calls are made automatically and results are provided below. Simply answer using that information. NEVER output code showing how to import or call these tools - that's not what the user wants.\n\n";
+        }
+        
+        systemInstructions += agent.system_instructions || `You are a helpful AI assistant named ${agent.name}.`;
         if (knowledgeContext) {
             systemInstructions += `\n\nYou have access to the following knowledge sources. Use this information to help answer questions when relevant:${knowledgeContext}`;
         }
