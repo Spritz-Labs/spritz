@@ -494,7 +494,14 @@ function DashboardContent({
     } = useCallSignaling(userAddress);
 
     // Call history tracking
-    const { logCall, updateCall } = useCallHistory(userAddress);
+    const { 
+        calls: callHistory, 
+        isLoading: isCallHistoryLoading, 
+        error: callHistoryError, 
+        fetchCallHistory,
+        logCall, 
+        updateCall 
+    } = useCallHistory(userAddress);
     const [currentCallId, setCurrentCallId] = useState<string | null>(null);
     const [callStartTime, setCallStartTime] = useState<Date | null>(null);
     const [showNewCallDropdown, setShowNewCallDropdown] = useState(false);
@@ -3260,6 +3267,10 @@ function DashboardContent({
                             <CallHistory
                                 userAddress={userAddress}
                                 friends={friendsListData}
+                                calls={callHistory}
+                                isLoading={isCallHistoryLoading}
+                                error={callHistoryError}
+                                onRefresh={fetchCallHistory}
                                 onCall={handleCall}
                                 isCallActive={callState !== "idle"}
                             />

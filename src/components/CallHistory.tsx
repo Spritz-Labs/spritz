@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useCallHistory, formatCallDuration, getRelativeTime } from "@/hooks/useCallHistory";
+import { formatCallDuration, getRelativeTime } from "@/hooks/useCallHistory";
 import type { CallHistoryEntry } from "@/app/api/calls/route";
 import type { Address } from "viem";
 
@@ -18,6 +18,10 @@ type Friend = {
 type CallHistoryProps = {
     userAddress: string;
     friends: Friend[];
+    calls: CallHistoryEntry[];
+    isLoading: boolean;
+    error: string | null;
+    onRefresh: () => void;
     onCall: (friend: Friend, withVideo: boolean) => void;
     isCallActive: boolean;
 };
@@ -25,10 +29,13 @@ type CallHistoryProps = {
 export function CallHistory({
     userAddress,
     friends,
+    calls,
+    isLoading,
+    error,
+    onRefresh,
     onCall,
     isCallActive,
 }: CallHistoryProps) {
-    const { calls, isLoading, error, fetchCallHistory } = useCallHistory(userAddress);
 
     // Helper to find friend by address
     const getFriendByAddress = (address: string): Friend | undefined => {
@@ -118,7 +125,7 @@ export function CallHistory({
             <div className="text-center py-12">
                 <p className="text-red-400 mb-4">{error}</p>
                 <button
-                    onClick={fetchCallHistory}
+                    onClick={onRefresh}
                     className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white transition-colors"
                 >
                     Try Again
