@@ -664,12 +664,52 @@ Remember: The user asked a question and the answer is in the data above. Just pr
                         };
                         
                         if (tool.method === "POST") {
-                            // Try to construct a reasonable request body
-                            fetchOptions.body = JSON.stringify({ 
-                                query: message,
-                                message: message,
-                                text: message 
-                            });
+                            // Check if this is likely a GraphQL API
+                            const isGraphQL = tool.url.toLowerCase().includes("graph") || 
+                                             tool.description?.toLowerCase().includes("graphql") ||
+                                             tool.instructions?.toLowerCase().includes("graphql") ||
+                                             tool.name?.toLowerCase().includes("graph");
+                            
+                            if (isGraphQL && ai) {
+                                // Use AI to generate an appropriate GraphQL query
+                                console.log(`[Chat] Generating GraphQL query for: ${message}`);
+                                const schemaHint = tool.instructions || tool.description || "";
+                                
+                                const queryGenResponse = await ai.models.generateContent({
+                                    model: "gemini-2.0-flash",
+                                    contents: [{
+                                        role: "user",
+                                        parts: [{ text: `Generate a GraphQL query to answer this question: "${message}"
+
+Context about the API:
+${schemaHint}
+
+RULES:
+1. Return ONLY the GraphQL query, no explanation
+2. Do NOT wrap in markdown code blocks
+3. Make it a valid GraphQL query
+4. If you're unsure of the exact schema, make reasonable assumptions based on the API name and context
+
+Example format:
+{ domains(first: 3) { id name } }` }]
+                                    }],
+                                    config: { maxOutputTokens: 500 }
+                                });
+                                
+                                let generatedQuery = queryGenResponse.text?.trim() || "";
+                                // Clean up any markdown code blocks
+                                generatedQuery = generatedQuery.replace(/```graphql?\n?/gi, "").replace(/```\n?/g, "").trim();
+                                
+                                console.log(`[Chat] Generated GraphQL query: ${generatedQuery}`);
+                                fetchOptions.body = JSON.stringify({ query: generatedQuery });
+                            } else {
+                                // Regular POST - try to construct a reasonable request body
+                                fetchOptions.body = JSON.stringify({ 
+                                    query: message,
+                                    message: message,
+                                    text: message 
+                                });
+                            }
                         }
                         
                         const apiResponse = await fetch(tool.url, fetchOptions);
@@ -692,7 +732,29 @@ Remember: The user asked a question and the answer is in the data above. Just pr
             }
             
             if (apiResults.length > 0) {
-                systemInstructions += "\n\n## API Results (use this information to answer):\n" + apiResults.join("\n");
+                // Add API results to the mcpResultsSection (at the TOP of prompt, before personality)
+                const apiResultsText = `
+## API RESULTS (USE THIS DATA - DO NOT OUTPUT CODE)
+
+The following data was ALREADY retrieved from APIs on behalf of the user.
+Your job is to PRESENT this information in a helpful, formatted way.
+
+ABSOLUTE RULES:
+1. DO NOT write code showing how to query these APIs
+2. DO NOT show GraphQL queries or fetch examples
+3. JUST use the retrieved data to answer the user's question directly
+4. Format the information nicely
+
+${apiResults.join("\n")}
+
+---END OF API DATA---
+`;
+                // Prepend to mcpResultsSection if it exists, or create it
+                if (mcpResultsSection) {
+                    mcpResultsSection = apiResultsText + "\n" + mcpResultsSection;
+                } else {
+                    mcpResultsSection = apiResultsText;
+                }
             }
         }
 
