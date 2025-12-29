@@ -605,6 +605,11 @@ Remember: The user asked a question and the answer is in the data above. Just pr
                 ].join(" ").toLowerCase();
                 const messageWords = message.toLowerCase();
                 
+                // Check if this is a GraphQL/subgraph API
+                const isGraphQLTool = tool.url.toLowerCase().includes("graph") || 
+                                     toolText.includes("graphql") ||
+                                     toolText.includes("subgraph");
+                
                 // Check relevance with multiple methods:
                 // 1. If instructions contain "always" or "every", always call it
                 const alwaysCall = tool.instructions?.toLowerCase().includes("always") ||
@@ -623,9 +628,22 @@ Remember: The user asked a question and the answer is in the data above. Just pr
                 const isDocQuery = docPatterns.some(p => messageWords.includes(p));
                 const toolIsDocRelated = toolText.includes("doc") || toolText.includes("search") || toolText.includes("library");
                 
-                const isRelevant = alwaysCall || nameMentioned || keywordMatch || (isDocQuery && toolIsDocRelated);
+                // 5. Check for data query patterns (common for GraphQL/subgraph queries)
+                const dataQueryPatterns = ["get", "fetch", "show", "list", "find", "last", "recent", "latest", "first", "top", "all"];
+                const isDataQuery = dataQueryPatterns.some(p => messageWords.includes(p));
                 
-                console.log(`[Chat] API tool ${tool.name} relevance check: alwaysCall=${alwaysCall}, nameMentioned=${nameMentioned}, keywordMatch=${keywordMatch}, isDocQuery=${isDocQuery && toolIsDocRelated}, result=${isRelevant}`);
+                // 6. Check if user explicitly asks to use API/tool
+                const explicitApiRequest = messageWords.includes("api") || 
+                                          messageWords.includes("tool") || 
+                                          messageWords.includes("use your");
+                
+                // GraphQL APIs are more likely to be relevant for data queries
+                const graphQLDataQuery = isGraphQLTool && isDataQuery;
+                
+                const isRelevant = alwaysCall || nameMentioned || keywordMatch || 
+                                  (isDocQuery && toolIsDocRelated) || graphQLDataQuery || explicitApiRequest;
+                
+                console.log(`[Chat] API tool ${tool.name} relevance check: alwaysCall=${alwaysCall}, nameMentioned=${nameMentioned}, keywordMatch=${keywordMatch}, graphQLDataQuery=${graphQLDataQuery}, explicitApiRequest=${explicitApiRequest}, result=${isRelevant}`);
                 
                 if (isRelevant) {
                     try {
@@ -715,18 +733,24 @@ Example format:
                         const apiResponse = await fetch(tool.url, fetchOptions);
                         clearTimeout(timeoutId);
                         
-                        console.log(`[Chat] API tool ${tool.name} response status: ${apiResponse.status}`);
+                        const responseText = await apiResponse.text();
+                        console.log(`[Chat] API tool ${tool.name} response: status=${apiResponse.status}, length=${responseText.length}`);
                         
                         if (apiResponse.ok) {
-                            const data = await apiResponse.text();
-                            const truncatedData = data.length > 8000 ? data.substring(0, 8000) + "..." : data;
+                            const truncatedData = responseText.length > 8000 ? responseText.substring(0, 8000) + "..." : responseText;
                             apiResults.push(`\n--- Result from ${tool.name} ---\n${truncatedData}`);
-                            console.log(`[Chat] API tool ${tool.name} returned ${data.length} chars`);
+                            console.log(`[Chat] API tool ${tool.name} returned ${responseText.length} chars`);
                         } else {
-                            console.log(`[Chat] API tool ${tool.name} returned error: ${apiResponse.status}`);
+                            // Log error details for debugging
+                            console.error(`[Chat] API tool ${tool.name} error: ${apiResponse.status} - ${responseText.substring(0, 500)}`);
+                            // Still try to use the response if it contains useful error info
+                            if (responseText && responseText.length > 0) {
+                                apiResults.push(`\n--- Error from ${tool.name} (${apiResponse.status}) ---\n${responseText.substring(0, 1000)}`);
+                            }
                         }
                     } catch (error) {
                         console.error(`[Chat] Error calling API tool ${tool.name}:`, error);
+                        apiResults.push(`\n--- Error calling ${tool.name} ---\nFailed to reach the API: ${error instanceof Error ? error.message : String(error)}`);
                     }
                 }
             }
