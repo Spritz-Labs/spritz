@@ -115,9 +115,9 @@ function DashboardContent({
     const [showWakuSuccess, setShowWakuSuccess] = useState(false);
     const [showSolanaBanner, setShowSolanaBanner] = useState(true);
     
-    // Bottom navigation tab state
+    // Bottom navigation tab state - default to chats
     type NavTab = "agents" | "friends" | "chats" | "calls" | "settings";
-    const [activeNavTab, setActiveNavTab] = useState<NavTab>("friends");
+    const [activeNavTab, setActiveNavTab] = useState<NavTab>("chats");
     const [currentCallFriend, setCurrentCallFriend] =
         useState<FriendsListFriend | null>(null);
     const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(
@@ -2711,17 +2711,18 @@ function DashboardContent({
                         </div>
                     )}
 
-                    {/* AI Agents Section - Beta Users Only */}
-                    {hasBetaAccess && (
-                        <div id="agents-section" className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6 scroll-mt-20">
+                    {/* AI Agents Section - Beta Users Only, shown when Agents tab selected */}
+                    {hasBetaAccess && activeNavTab === "agents" && (
+                        <div id="agents-section" className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6">
                             <div className="p-6">
                                 <AgentsSection userAddress={userAddress} />
                             </div>
                         </div>
                     )}
 
-                    {/* Friends Section */}
-                    <div id="friends-section" className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden scroll-mt-20">
+                    {/* Friends Section - shown when Friends tab selected */}
+                    {activeNavTab === "friends" && (
+                    <div id="friends-section" className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
                         <div className="p-6 border-b border-zinc-800">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -2867,6 +2868,43 @@ function DashboardContent({
                             </div>
                         )}
 
+                        <div className="p-6">
+                            <FriendsList
+                                friends={friendsListData}
+                                userAddress={userAddress}
+                                onCall={handleCall}
+                                onVideoCall={handleVideoCall}
+                                onChat={isPasskeyUser ? undefined : handleChat}
+                                onRemove={handleRemoveFriend}
+                                isCallActive={callState !== "idle"}
+                                unreadCounts={
+                                    isPasskeyUser
+                                        ? {}
+                                        : unreadCounts
+                                }
+                                hideChat={isPasskeyUser}
+                                friendsWakuStatus={friendsWakuStatus}
+                            />
+                        </div>
+                    </div>
+                    )}
+
+                    {/* Chats Section - Shows FriendsList in chat mode plus Group Chats */}
+                    {activeNavTab === "chats" && (
+                    <>
+                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
+                        <div className="p-6 border-b border-zinc-800">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">
+                                        Chats
+                                    </h2>
+                                    <p className="text-zinc-500 text-sm mt-1">
+                                        {friendsListData.length} conversations
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                         <div className="p-6">
                             <FriendsList
                                 friends={friendsListData}
@@ -3096,11 +3134,47 @@ function DashboardContent({
                             </div>
                         </div>
                     )}
+                    </>
+                    )}
 
-                    {/* Leaderboard */}
+                    {/* Calls Section */}
+                    {activeNavTab === "calls" && (
+                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
+                        <div className="p-6 border-b border-zinc-800">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">
+                                        Calls
+                                    </h2>
+                                    <p className="text-zinc-500 text-sm mt-1">
+                                        Voice and video calls with friends
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <FriendsList
+                                friends={friendsListData}
+                                userAddress={userAddress}
+                                onCall={handleCall}
+                                onVideoCall={handleVideoCall}
+                                onChat={undefined}
+                                onRemove={handleRemoveFriend}
+                                isCallActive={callState !== "idle"}
+                                unreadCounts={{}}
+                                hideChat={true}
+                                friendsWakuStatus={friendsWakuStatus}
+                            />
+                        </div>
+                    </div>
+                    )}
+
+                    {/* Leaderboard - show on all tabs except settings */}
+                    {activeNavTab !== "settings" && (
                     <div className="mt-6">
                         <Leaderboard userAddress={userAddress} limit={50} />
                     </div>
+                    )}
 
                     {/* Call Error */}
                     <AnimatePresence>
@@ -3138,10 +3212,7 @@ function DashboardContent({
                             {/* Agents Tab */}
                             {hasBetaAccess && (
                                 <button
-                                    onClick={() => {
-                                        setActiveNavTab("agents");
-                                        document.getElementById("agents-section")?.scrollIntoView({ behavior: "smooth" });
-                                    }}
+                                    onClick={() => setActiveNavTab("agents")}
                                     className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
                                         activeNavTab === "agents"
                                             ? "text-purple-400 bg-purple-500/20"
@@ -3155,10 +3226,7 @@ function DashboardContent({
 
                             {/* Friends Tab */}
                             <button
-                                onClick={() => {
-                                    setActiveNavTab("friends");
-                                    document.getElementById("friends-section")?.scrollIntoView({ behavior: "smooth" });
-                                }}
+                                onClick={() => setActiveNavTab("friends")}
                                 className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
                                     activeNavTab === "friends"
                                         ? "text-orange-400 bg-orange-500/20"
@@ -3171,10 +3239,7 @@ function DashboardContent({
 
                             {/* Chats Tab */}
                             <button
-                                onClick={() => {
-                                    setActiveNavTab("chats");
-                                    document.getElementById("friends-section")?.scrollIntoView({ behavior: "smooth" });
-                                }}
+                                onClick={() => setActiveNavTab("chats")}
                                 className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all relative ${
                                     activeNavTab === "chats"
                                         ? "text-blue-400 bg-blue-500/20"
@@ -3191,10 +3256,7 @@ function DashboardContent({
 
                             {/* Calls Tab */}
                             <button
-                                onClick={() => {
-                                    setActiveNavTab("calls");
-                                    document.getElementById("friends-section")?.scrollIntoView({ behavior: "smooth" });
-                                }}
+                                onClick={() => setActiveNavTab("calls")}
                                 className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
                                     activeNavTab === "calls"
                                         ? "text-green-400 bg-green-500/20"
