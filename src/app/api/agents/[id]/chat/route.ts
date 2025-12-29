@@ -13,6 +13,94 @@ const supabase = supabaseUrl && supabaseKey
 const geminiApiKey = process.env.GOOGLE_GEMINI_API_KEY;
 const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
+// Cache for MCP server tool schemas (in-memory, per instance)
+const mcpToolsCache = new Map<string, { tools: MCPTool[]; fetchedAt: number }>();
+const MCP_CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
+interface MCPTool {
+    name: string;
+    description?: string;
+    inputSchema?: {
+        type: string;
+        properties?: Record<string, { type: string; description?: string }>;
+        required?: string[];
+    };
+}
+
+// Discover MCP server tools by calling tools/list
+async function discoverMcpTools(
+    serverUrl: string, 
+    headers: Record<string, string>
+): Promise<MCPTool[]> {
+    // Check cache first
+    const cached = mcpToolsCache.get(serverUrl);
+    if (cached && Date.now() - cached.fetchedAt < MCP_CACHE_TTL) {
+        console.log(`[MCP] Using cached tools for ${serverUrl}`);
+        return cached.tools;
+    }
+    
+    try {
+        console.log(`[MCP] Discovering tools from ${serverUrl}`);
+        const response = await fetch(serverUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 0,
+                method: "tools/list",
+                params: {}
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const tools: MCPTool[] = data?.result?.tools || [];
+            console.log(`[MCP] Discovered ${tools.length} tools from ${serverUrl}`);
+            
+            // Cache the results
+            mcpToolsCache.set(serverUrl, { tools, fetchedAt: Date.now() });
+            
+            return tools;
+        }
+    } catch (error) {
+        console.error(`[MCP] Error discovering tools from ${serverUrl}:`, error);
+    }
+    
+    return [];
+}
+
+// Use Google Search to get context about an MCP server (always enabled for MCP discovery)
+async function getMcpServerContext(serverName: string, serverUrl: string): Promise<string | null> {
+    if (!ai) return null;
+    
+    try {
+        console.log(`[MCP] Searching for context about ${serverName}`);
+        
+        // Use Gemini with Google Search grounding to find info about this MCP server
+        const response = await ai.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: [{
+                role: "user",
+                parts: [{ text: `What is ${serverName} MCP server? How do I use its tools? What parameters do its main tools expect? Keep the response brief and technical.` }]
+            }],
+            config: {
+                tools: [{ googleSearch: {} }],
+                maxOutputTokens: 1024,
+            }
+        });
+        
+        const context = response.text;
+        if (context && context.length > 50) {
+            console.log(`[MCP] Got context for ${serverName}: ${context.substring(0, 200)}...`);
+            return context;
+        }
+    } catch (error) {
+        console.error(`[MCP] Error getting context for ${serverName}:`, error);
+    }
+    
+    return null;
+}
+
 // Generate embedding for a query using Gemini
 async function generateQueryEmbedding(query: string): Promise<number[] | null> {
     if (!ai) return null;
@@ -296,11 +384,57 @@ export async function POST(
                         
                         console.log(`[Chat] Context7: Extracted library name: ${libraryName} from message: "${message.substring(0, 100)}"`);
                         
+                        // Discover available tools from this MCP server
+                        const availableTools = await discoverMcpTools(server.url, headers);
+                        
+                        // Get additional context about this MCP server via Google Search
+                        let mcpContext = "";
+                        if (availableTools.length === 0) {
+                            // If we couldn't discover tools, try to get context via Google Search
+                            const searchContext = await getMcpServerContext(server.name, server.url);
+                            if (searchContext) {
+                                mcpContext = `\n\nContext about ${server.name}:\n${searchContext}`;
+                            }
+                        } else {
+                            // Add tool info to context
+                            mcpContext = `\n\nAvailable tools from ${server.name}:\n`;
+                            for (const tool of availableTools) {
+                                mcpContext += `- ${tool.name}`;
+                                if (tool.description) mcpContext += `: ${tool.description}`;
+                                if (tool.inputSchema?.properties) {
+                                    const params = Object.entries(tool.inputSchema.properties)
+                                        .map(([k, v]) => `${k}${tool.inputSchema?.required?.includes(k) ? '*' : ''}: ${v.type}`)
+                                        .join(", ");
+                                    mcpContext += ` (params: ${params})`;
+                                }
+                                mcpContext += "\n";
+                            }
+                        }
+                        
+                        if (mcpContext) {
+                            systemInstructions += mcpContext;
+                        }
+                        
                         // Try MCP JSON-RPC call to resolve library ID first
                         if (libraryName && server.url.includes("context7")) {
                             console.log(`[Chat] Context7: Resolving library ID for: ${libraryName}`);
                             
-                            // Call resolve-library-id (send both 'libraryName' and 'query' for compatibility)
+                            // Find the resolve-library-id tool from discovered tools to get correct param names
+                            const resolveTool = availableTools.find(t => t.name === "resolve-library-id");
+                            const resolveParams: Record<string, string> = {};
+                            
+                            if (resolveTool?.inputSchema?.properties) {
+                                // Use the discovered schema to build correct parameters
+                                for (const paramName of Object.keys(resolveTool.inputSchema.properties)) {
+                                    resolveParams[paramName] = libraryName;
+                                }
+                                console.log(`[Chat] Context7: Using discovered params:`, Object.keys(resolveParams));
+                            } else {
+                                // Fallback: send both common parameter names
+                                resolveParams.libraryName = libraryName;
+                                resolveParams.query = libraryName;
+                            }
+                            
                             console.log(`[Chat] Context7: Making request to ${server.url} for library: ${libraryName}`);
                             const resolveResponse = await fetch(server.url, {
                                 method: "POST",
@@ -311,10 +445,7 @@ export async function POST(
                                     method: "tools/call",
                                     params: {
                                         name: "resolve-library-id",
-                                        arguments: { 
-                                            libraryName: libraryName,
-                                            query: libraryName  // Some versions expect 'query' instead
-                                        }
+                                        arguments: resolveParams
                                     }
                                 })
                             });
@@ -338,6 +469,26 @@ export async function POST(
                                     const libraryId = libraryIdMatch[0];
                                     console.log(`[Chat] Context7: Found library ID: ${libraryId}, fetching docs...`);
                                     
+                                    // Find the get-library-docs tool to get correct param names
+                                    const docsTool = availableTools.find(t => t.name === "get-library-docs");
+                                    const docsParams: Record<string, string> = {};
+                                    
+                                    if (docsTool?.inputSchema?.properties) {
+                                        // Use discovered schema
+                                        for (const [paramName, paramDef] of Object.entries(docsTool.inputSchema.properties)) {
+                                            if (paramName.toLowerCase().includes("id") || paramName.toLowerCase().includes("library")) {
+                                                docsParams[paramName] = libraryId;
+                                            } else if (paramName.toLowerCase().includes("topic") || paramName.toLowerCase().includes("query")) {
+                                                docsParams[paramName] = message;
+                                            }
+                                        }
+                                        console.log(`[Chat] Context7: Using discovered doc params:`, Object.keys(docsParams));
+                                    } else {
+                                        // Fallback
+                                        docsParams.context7CompatibleLibraryID = libraryId;
+                                        docsParams.topic = message;
+                                    }
+                                    
                                     // Call get-library-docs
                                     const docsResponse = await fetch(server.url, {
                                         method: "POST",
@@ -348,10 +499,7 @@ export async function POST(
                                             method: "tools/call",
                                             params: {
                                                 name: "get-library-docs",
-                                                arguments: {
-                                                    context7CompatibleLibraryID: libraryId,
-                                                    topic: message
-                                                }
+                                                arguments: docsParams
                                             }
                                         })
                                     });
