@@ -99,6 +99,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
     const [newMcpName, setNewMcpName] = useState("");
     const [newMcpUrl, setNewMcpUrl] = useState("");
     const [newMcpApiKey, setNewMcpApiKey] = useState("");
+    const [newMcpDescription, setNewMcpDescription] = useState("");
     const [newMcpHeaders, setNewMcpHeaders] = useState<Record<string, string>>({});
     
     // API Tools
@@ -178,7 +179,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
             name: preset?.name || newMcpName,
             url: preset?.url || newMcpUrl,
             apiKey: preset?.requiresApiKey ? "" : undefined,
-            description: preset?.description,
+            description: preset?.description || newMcpDescription || undefined,
             x402Enabled: false,
             x402PriceCents: 1,
         };
@@ -203,6 +204,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
         setNewMcpName("");
         setNewMcpUrl("");
         setNewMcpApiKey("");
+        setNewMcpDescription("");
         setNewMcpHeaders({});
         setShowAddMcp(false);
     };
@@ -739,6 +741,17 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                         </button>
                                                     </div>
                                                     
+                                                    {/* Instructions for Agent */}
+                                                    <div className="mb-2">
+                                                        <textarea
+                                                            value={server.description || ""}
+                                                            onChange={(e) => updateMcpServer(server.id, { description: e.target.value || undefined })}
+                                                            placeholder="Instructions for agent (e.g. 'Use this MCP server to search documentation when the user asks about API references')"
+                                                            rows={2}
+                                                            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-purple-500 resize-none"
+                                                        />
+                                                    </div>
+
                                                     {/* API Key input */}
                                                     <div className="mb-2">
                                                         <div className="relative">
@@ -949,6 +962,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                     placeholder="API Key (optional)"
                                                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 font-mono focus:outline-none focus:border-purple-500"
                                                 />
+                                                <textarea
+                                                    value={newMcpDescription}
+                                                    onChange={(e) => setNewMcpDescription(e.target.value)}
+                                                    placeholder="Instructions for agent (when should it use this server?)"
+                                                    rows={2}
+                                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none focus:border-purple-500 resize-none"
+                                                />
                                                 
                                                 {/* Headers */}
                                                 <div className="mb-2">
@@ -1069,14 +1089,14 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                         </button>
                                                     </div>
                                                     
-                                                    {/* Description */}
+                                                    {/* Instructions for Agent */}
                                                     <div className="mb-2">
-                                                        <input
-                                                            type="text"
+                                                        <textarea
                                                             value={tool.description || ""}
                                                             onChange={(e) => updateApiTool(tool.id, { description: e.target.value || undefined })}
-                                                            placeholder="Description (optional)"
-                                                            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                                                            placeholder="Instructions for agent (e.g. 'Call this API to get weather data when the user asks about the forecast')"
+                                                            rows={2}
+                                                            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 resize-none"
                                                         />
                                                     </div>
 
@@ -1280,13 +1300,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                 />
                                             </div>
 
-                                            {/* Description */}
-                                            <input
-                                                type="text"
+                                            {/* Instructions for Agent */}
+                                            <textarea
                                                 value={newApiDescription}
                                                 onChange={(e) => setNewApiDescription(e.target.value)}
-                                                placeholder="Description (optional)"
-                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                                                placeholder="Instructions for agent (when should it use this API?)"
+                                                rows={2}
+                                                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500 resize-none"
                                             />
 
                                             {/* API Key */}
