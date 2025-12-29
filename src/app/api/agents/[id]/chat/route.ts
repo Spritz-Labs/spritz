@@ -786,7 +786,7 @@ RULES:
             }
             
             if (apiResults.length > 0) {
-                // Add API results to the mcpResultsSection (at the TOP of prompt, before personality)
+                // Add API results directly to systemInstructions (prepend at the top)
                 const apiResultsText = `
 ## API RESULTS (USE THIS DATA - DO NOT OUTPUT CODE)
 
@@ -795,20 +795,20 @@ Your job is to PRESENT this information in a helpful, formatted way.
 
 ABSOLUTE RULES:
 1. DO NOT write code showing how to query these APIs
-2. DO NOT show GraphQL queries or fetch examples
+2. DO NOT show GraphQL queries or fetch examples  
 3. JUST use the retrieved data to answer the user's question directly
-4. Format the information nicely
+4. Format the information nicely (use markdown tables, lists, etc.)
 
 ${apiResults.join("\n")}
 
 ---END OF API DATA---
+
 `;
-                // Prepend to mcpResultsSection if it exists, or create it
-                if (mcpResultsSection) {
-                    mcpResultsSection = apiResultsText + "\n" + mcpResultsSection;
-                } else {
-                    mcpResultsSection = apiResultsText;
-                }
+                // Prepend API results to the BEGINNING of system instructions
+                systemInstructions = apiResultsText + systemInstructions;
+                
+                // Add a reminder at the end
+                systemInstructions += `\n\n[CRITICAL REMINDER: The API data above contains the answer. Present it directly - DO NOT output code.]`;
             }
         }
 
