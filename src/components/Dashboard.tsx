@@ -1464,8 +1464,8 @@ function DashboardContent({
         <>
             <div className="min-h-screen bg-zinc-950">
                 {/* Header */}
-                <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-lg sticky top-0 z-40 safe-area-pt">
-                    <div className="max-w-4xl mx-auto px-6 py-4 safe-area-pl safe-area-pr">
+                <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-lg sticky top-0 z-40 safe-area-pt px-2">
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 safe-area-pl safe-area-pr">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 {/* User Avatar or App Icon - Click for QR Code */}
