@@ -94,12 +94,13 @@ export default function Home() {
     }, []);
 
     // Give wagmi/appkit time to reconnect from storage
-    // Use longer timeout if we detected a saved session
+    // Use longer timeout if we detected a saved session (especially for PWA after force quit)
     useEffect(() => {
         if (mounted) {
             const hasSession = hasSavedSession.current;
             // Use longer delay if we expect a wallet to reconnect
-            const delay = hasSession ? 1500 : 500;
+            // PWA force quit can take longer to restore wallet connection
+            const delay = hasSession ? 3000 : 500;
             
             const timer = setTimeout(() => {
                 setInitializing(false);
@@ -107,11 +108,21 @@ export default function Home() {
             return () => clearTimeout(timer);
         }
     }, [mounted]);
+
+    // Clear initializing early if wallet reconnects before timeout
+    useEffect(() => {
+        if (mounted && initializing && isWalletConnected && walletAddress) {
+            // Wallet reconnected, no need to wait for timeout
+            setInitializing(false);
+        }
+    }, [mounted, initializing, isWalletConnected, walletAddress]);
     
     // Detect if wallet is still reconnecting (checking multiple signals)
+    // Be more patient with reconnection after PWA force quit
     const isWalletReconnecting = 
         isReconnecting || 
-        (hasSavedSession.current && !isWalletConnected && initializing);
+        (hasSavedSession.current && !isWalletConnected && initializing) ||
+        (hasSavedSession.current && !isWalletConnected && !initializing && isSiweLoading);
 
     // Auto sign-in with SIWE/SIWS when wallet connects (if not already authenticated)
     useEffect(() => {
@@ -183,8 +194,8 @@ export default function Home() {
         
         return (
             <main className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="mx-auto mb-4 animate-pulse">
+                <div className="flex flex-col items-center justify-center text-center">
+                    <div className="mb-4 animate-pulse">
                         <SpritzLogo size="2xl" className="shadow-lg shadow-[#FF5500]/30" />
                     </div>
                     <h1 className="text-2xl font-bold text-white mb-2">
@@ -211,8 +222,8 @@ export default function Home() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="w-full max-w-md"
                 >
-                    <div className="glass-card rounded-3xl p-8 shadow-2xl text-center">
-                        <SpritzLogo size="xl" className="mx-auto mb-6 shadow-lg shadow-[#FF5500]/30" />
+                    <div className="glass-card rounded-3xl p-8 shadow-2xl text-center flex flex-col items-center">
+                        <SpritzLogo size="xl" className="mb-6 shadow-lg shadow-[#FF5500]/30" />
                         
                         <h2 className="text-2xl font-bold text-white mb-2">
                             Sign In to Spritz

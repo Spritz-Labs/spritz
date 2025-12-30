@@ -234,7 +234,7 @@ export function GoLiveModal({
                             <Broadcast.Container className="absolute inset-0 flex items-center justify-center">
                                 <Broadcast.Video
                                     title="Live broadcast"
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-contain"
                                     style={{ transform: "scaleX(-1)" }}
                                 />
 
@@ -353,7 +353,7 @@ export function GoLiveModal({
                                 autoPlay
                                 muted
                                 playsInline
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain"
                                 style={{ transform: "scaleX(-1)" }}
                             />
 
