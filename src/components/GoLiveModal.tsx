@@ -10,7 +10,10 @@ type GoLiveModalProps = {
     onClose: () => void;
     userAddress: string;
     currentStream: Stream | null;
-    onCreateStream: (title?: string, description?: string) => Promise<Stream | null>;
+    onCreateStream: (
+        title?: string,
+        description?: string
+    ) => Promise<Stream | null>;
     onGoLive: (streamId: string) => Promise<boolean>;
     onEndStream: (streamId: string) => Promise<boolean>;
 };
@@ -28,7 +31,7 @@ export function GoLiveModal({
 }: GoLiveModalProps) {
     const videoPreviewRef = useRef<HTMLVideoElement>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
-    
+
     const [title, setTitle] = useState("");
     const [status, setStatus] = useState<StreamStatus>("preview");
     const [error, setError] = useState<string | null>(null);
@@ -39,7 +42,9 @@ export function GoLiveModal({
     const [copied, setCopied] = useState(false);
 
     // Generate shareable URL
-    const shareUrl = currentStream?.id ? `https://app.spritz.chat/live/${currentStream.id}` : null;
+    const shareUrl = currentStream?.id
+        ? `https://app.spritz.chat/live/${currentStream.id}`
+        : null;
 
     // Copy share URL to clipboard
     const copyShareUrl = async () => {
@@ -52,13 +57,12 @@ export function GoLiveModal({
             console.error("[GoLive] Failed to copy:", e);
         }
     };
-    
 
     // Start camera preview
     const startCamera = useCallback(async () => {
         try {
             setError(null);
-            
+
             // Use default camera resolution - let the device choose best quality
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -77,7 +81,9 @@ export function GoLiveModal({
             setCameraReady(true);
         } catch (e) {
             console.error("[GoLive] Camera error:", e);
-            setError("Failed to access camera. Please allow camera permissions.");
+            setError(
+                "Failed to access camera. Please allow camera permissions."
+            );
             setCameraReady(false);
         }
     }, []);
@@ -97,53 +103,62 @@ export function GoLiveModal({
     // Comprehensive cleanup function to stop ALL media tracks
     const stopAllMediaTracks = useCallback(() => {
         console.log("[GoLive] Stopping all media tracks...");
-        
+
+        // Collect all tracks first, then stop them all
+        const allTracks: MediaStreamTrack[] = [];
+
         // Stop our tracked stream
         if (mediaStreamRef.current) {
-            mediaStreamRef.current.getTracks().forEach(track => {
-                track.stop();
-                console.log("[GoLive] Stopped track:", track.kind, track.id);
+            mediaStreamRef.current.getTracks().forEach((track) => {
+                allTracks.push(track);
             });
             mediaStreamRef.current = null;
         }
-        
-        // Stop all video element streams (including Broadcast component's video)
+
+        // Collect tracks from all video element streams (including Broadcast component's video)
         try {
-            const videoElements = document.querySelectorAll('video');
-            videoElements.forEach(video => {
+            const videoElements = document.querySelectorAll("video");
+            videoElements.forEach((video) => {
                 const stream = video.srcObject as MediaStream;
                 if (stream) {
-                    stream.getTracks().forEach(track => {
-                        track.stop();
-                        console.log("[GoLive] Stopped track from video element:", track.kind, track.id);
+                    stream.getTracks().forEach((track) => {
+                        allTracks.push(track);
                     });
                     video.srcObject = null;
                 }
             });
         } catch (e) {
-            console.error("[GoLive] Error cleaning up video streams:", e);
+            console.error("[GoLive] Error collecting video streams:", e);
         }
-        
-        // Nuclear option: Stop ALL active media tracks from all media elements
-        // This is needed because the Broadcast component might hold tracks internally
+
+        // Collect tracks from all audio elements
         try {
-            // Stop all tracks from video and audio elements
-            const allMediaElements = document.querySelectorAll('video, audio');
-            allMediaElements.forEach(element => {
-                const mediaElement = element as HTMLVideoElement | HTMLAudioElement;
-                if (mediaElement.srcObject) {
-                    const stream = mediaElement.srcObject as MediaStream;
-                    stream.getTracks().forEach(track => {
-                        track.stop();
-                        console.log("[GoLive] Stopped track from media element:", track.kind, track.id);
+            const audioElements = document.querySelectorAll("audio");
+            audioElements.forEach((audio) => {
+                const stream = audio.srcObject as MediaStream;
+                if (stream) {
+                    stream.getTracks().forEach((track) => {
+                        allTracks.push(track);
                     });
-                    mediaElement.srcObject = null;
+                    audio.srcObject = null;
                 }
             });
         } catch (e) {
-            console.error("[GoLive] Error in nuclear cleanup:", e);
+            console.error("[GoLive] Error collecting audio streams:", e);
         }
-        
+
+        // Stop ALL tracks immediately
+        allTracks.forEach((track) => {
+            try {
+                if (track.readyState !== "ended") {
+                    track.stop();
+                    console.log("[GoLive] Stopped track:", track.kind, track.id, track.label);
+                }
+            } catch (e) {
+                console.error("[GoLive] Error stopping track:", e);
+            }
+        });
+
         // Clear ingest URL to unmount Broadcast component
         setIngestUrl(null);
     }, []);
@@ -169,15 +184,15 @@ export function GoLiveModal({
             if (!streamKey) {
                 throw new Error("Stream key not available");
             }
-            
+
             const whipUrl = `https://livepeer.studio/webrtc/${streamKey}`;
             console.log("[GoLive] Using WHIP URL:", whipUrl);
             console.log("[GoLive] Stream Key:", streamKey);
             console.log("[GoLive] Playback ID:", stream.playback_id);
-            
+
             // Stop the preview camera - the Broadcast component will request its own
             stopCamera();
-            
+
             // Set the ingest URL to trigger broadcast mode
             setIngestUrl(whipUrl);
 
@@ -186,7 +201,9 @@ export function GoLiveModal({
             setStatus("live");
         } catch (e) {
             console.error("[GoLive] Error:", e);
-            setError(e instanceof Error ? e.message : "Failed to create stream");
+            setError(
+                e instanceof Error ? e.message : "Failed to create stream"
+            );
             // Restart preview camera on error
             startCamera();
         } finally {
@@ -204,16 +221,16 @@ export function GoLiveModal({
             // First, stop all media tracks BEFORE ending the stream
             // This ensures the Broadcast component releases the camera
             stopAllMediaTracks();
-            
+
             // Small delay to let the Broadcast component clean up
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
             await onEndStream(currentStream.id);
-            
+
             setStatus("preview");
             setDuration(0);
             setIngestUrl(null);
-            
+
             // Don't restart preview camera - user is ending the stream
             // They can reopen the modal if they want to go live again
         } catch (e) {
@@ -230,25 +247,31 @@ export function GoLiveModal({
             if (!confirm("You are currently live. End stream and close?")) {
                 return;
             }
+            // Stop all tracks immediately before ending stream
+            stopAllMediaTracks();
+            stopCamera();
             await handleEndStream();
         }
 
+        // IMMEDIATE cleanup - don't wait for anything
         // Clear ingest URL first to unmount Broadcast component
         setIngestUrl(null);
         
-        // Wait a bit for Broadcast component to unmount
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Comprehensive cleanup - stop all tracks
+        // Stop all tracks immediately
         stopAllMediaTracks();
         stopCamera();
-        
-        // Additional cleanup pass after a short delay
+
+        // Additional aggressive cleanup passes
         setTimeout(() => {
             stopAllMediaTracks();
             stopCamera();
-        }, 200);
+        }, 50);
         
+        setTimeout(() => {
+            stopAllMediaTracks();
+            stopCamera();
+        }, 150);
+
         setStatus("preview");
         onClose();
     };
@@ -258,7 +281,9 @@ export function GoLiveModal({
         if (isOpen && !ingestUrl && !isStarting) {
             // Check if we're reconnecting to an existing live stream
             if (currentStream?.status === "live" && currentStream?.stream_id) {
-                setIngestUrl(`https://livepeer.studio/webrtc/${currentStream.stream_key}`);
+                setIngestUrl(
+                    `https://livepeer.studio/webrtc/${currentStream.stream_key}`
+                );
                 setStatus("live");
             } else {
                 // Only start camera if not already ready (prevents interrupting play())
@@ -267,33 +292,55 @@ export function GoLiveModal({
                 }
             }
         } else if (!isOpen) {
-            // Modal is closing - comprehensive cleanup
+            // Modal is closing - IMMEDIATE comprehensive cleanup
             setIngestUrl(null); // Unmount Broadcast component first
+            // Stop tracks immediately, don't wait
+            stopAllMediaTracks();
+            stopCamera();
+            // Additional cleanup passes
             setTimeout(() => {
                 stopAllMediaTracks();
                 stopCamera();
-            }, 100);
+            }, 50);
+            setTimeout(() => {
+                stopAllMediaTracks();
+                stopCamera();
+            }, 150);
             setStatus("preview");
             setTitle("");
             setError(null);
             setDuration(0);
         }
-    }, [isOpen, currentStream?.status, currentStream?.stream_id, ingestUrl, isStarting, cameraReady, startCamera, stopCamera]);
+    }, [
+        isOpen,
+        currentStream?.status,
+        currentStream?.stream_id,
+        ingestUrl,
+        isStarting,
+        cameraReady,
+        startCamera,
+        stopCamera,
+    ]);
 
     // Cleanup on unmount - ensure camera is released
     useEffect(() => {
         return () => {
-            console.log("[GoLive] Component unmounting, cleaning up all media tracks...");
-            // Clear ingest URL first to unmount Broadcast component
+            console.log(
+                "[GoLive] Component unmounting, cleaning up all media tracks..."
+            );
+            // IMMEDIATE cleanup - don't wait
             setIngestUrl(null);
-            // Use the comprehensive cleanup function
             stopAllMediaTracks();
             stopCamera();
-            // Additional cleanup pass after a short delay
+            // Additional aggressive cleanup passes
             setTimeout(() => {
                 stopAllMediaTracks();
                 stopCamera();
-            }, 100);
+            }, 50);
+            setTimeout(() => {
+                stopAllMediaTracks();
+                stopCamera();
+            }, 150);
         };
     }, [stopAllMediaTracks, stopCamera]);
 
@@ -314,7 +361,9 @@ export function GoLiveModal({
         const mins = Math.floor((seconds % 3600) / 60);
         const secs = seconds % 60;
         if (hrs > 0) {
-            return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+            return `${hrs}:${mins.toString().padStart(2, "0")}:${secs
+                .toString()
+                .padStart(2, "0")}`;
         }
         return `${mins}:${secs.toString().padStart(2, "0")}`;
     };
@@ -345,7 +394,10 @@ export function GoLiveModal({
                                 // Livepeer SDK may call onError with null during initialization - ignore these
                                 if (!e) return;
                                 console.error("[Broadcast] Error:", e);
-                                setError("Broadcast error: " + (e?.message || "Connection failed"));
+                                setError(
+                                    "Broadcast error: " +
+                                        (e?.message || "Connection failed")
+                                );
                             }}
                         >
                             <Broadcast.Container className="absolute inset-0 flex items-center justify-center">
@@ -359,7 +411,9 @@ export function GoLiveModal({
                                 <Broadcast.LoadingIndicator className="absolute inset-0 flex items-center justify-center bg-black/60">
                                     <div className="text-center">
                                         <div className="w-16 h-16 border-4 border-red-500/30 border-t-red-500 rounded-full animate-spin mx-auto mb-4" />
-                                        <p className="text-white text-lg">Connecting...</p>
+                                        <p className="text-white text-lg">
+                                            Connecting...
+                                        </p>
                                     </div>
                                 </Broadcast.LoadingIndicator>
 
@@ -369,11 +423,25 @@ export function GoLiveModal({
                                     className="absolute inset-0 flex items-center justify-center bg-black/80"
                                 >
                                     <div className="text-center p-4">
-                                        <svg className="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        <svg
+                                            className="w-16 h-16 text-red-500 mx-auto mb-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
                                         </svg>
-                                        <p className="text-red-400 text-lg mb-2">Failed to start broadcast</p>
-                                        <p className="text-zinc-400">Please check camera permissions</p>
+                                        <p className="text-red-400 text-lg mb-2">
+                                            Failed to start broadcast
+                                        </p>
+                                        <p className="text-zinc-400">
+                                            Please check camera permissions
+                                        </p>
                                     </div>
                                 </Broadcast.ErrorIndicator>
 
@@ -408,8 +476,18 @@ export function GoLiveModal({
                                                 onClick={handleClose}
                                                 className="p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
                                             >
-                                                <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                                <svg
+                                                    className="w-7 h-7 text-white"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2.5}
+                                                        d="M6 18L18 6M6 6l12 12"
+                                                    />
                                                 </svg>
                                             </button>
                                         </div>
@@ -420,15 +498,44 @@ export function GoLiveModal({
                                         <div className="flex items-center justify-center gap-6">
                                             {/* Audio toggle */}
                                             <Broadcast.AudioEnabledTrigger className="p-4 bg-black/50 hover:bg-black/70 rounded-full transition-colors">
-                                                <Broadcast.AudioEnabledIndicator matcher={false}>
-                                                    <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                <Broadcast.AudioEnabledIndicator
+                                                    matcher={false}
+                                                >
+                                                    <svg
+                                                        className="w-7 h-7 text-red-500"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                                                        />
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                                                        />
                                                     </svg>
                                                 </Broadcast.AudioEnabledIndicator>
-                                                <Broadcast.AudioEnabledIndicator matcher={true}>
-                                                    <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                                <Broadcast.AudioEnabledIndicator
+                                                    matcher={true}
+                                                >
+                                                    <svg
+                                                        className="w-7 h-7 text-white"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                                                        />
                                                     </svg>
                                                 </Broadcast.AudioEnabledIndicator>
                                             </Broadcast.AudioEnabledTrigger>
@@ -438,22 +545,61 @@ export function GoLiveModal({
                                                 onClick={handleEndStream}
                                                 className="p-5 bg-red-500 hover:bg-red-600 rounded-full transition-colors"
                                             >
-                                                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                                                <svg
+                                                    className="w-8 h-8 text-white"
+                                                    fill="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <rect
+                                                        x="6"
+                                                        y="6"
+                                                        width="12"
+                                                        height="12"
+                                                        rx="2"
+                                                    />
                                                 </svg>
                                             </button>
 
                                             {/* Video toggle */}
                                             <Broadcast.VideoEnabledTrigger className="p-4 bg-black/50 hover:bg-black/70 rounded-full transition-colors">
-                                                <Broadcast.VideoEnabledIndicator matcher={false}>
-                                                    <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
+                                                <Broadcast.VideoEnabledIndicator
+                                                    matcher={false}
+                                                >
+                                                    <svg
+                                                        className="w-7 h-7 text-red-500"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                        />
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M3 3l18 18"
+                                                        />
                                                     </svg>
                                                 </Broadcast.VideoEnabledIndicator>
-                                                <Broadcast.VideoEnabledIndicator matcher={true}>
-                                                    <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                <Broadcast.VideoEnabledIndicator
+                                                    matcher={true}
+                                                >
+                                                    <svg
+                                                        className="w-7 h-7 text-white"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                        />
                                                     </svg>
                                                 </Broadcast.VideoEnabledIndicator>
                                             </Broadcast.VideoEnabledTrigger>
@@ -471,15 +617,39 @@ export function GoLiveModal({
                                                 >
                                                     {copied ? (
                                                         <>
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M5 13l4 4L19 7"
+                                                                />
                                                             </svg>
                                                             Copied!
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                                />
                                                             </svg>
                                                             Share
                                                         </>
@@ -508,7 +678,9 @@ export function GoLiveModal({
                                 <div className="absolute inset-0 flex items-center justify-center bg-black">
                                     <div className="text-center">
                                         <div className="w-16 h-16 border-4 border-red-500/30 border-t-red-500 rounded-full animate-spin mx-auto mb-4" />
-                                        <p className="text-white text-lg">Starting camera...</p>
+                                        <p className="text-white text-lg">
+                                            Starting camera...
+                                        </p>
                                     </div>
                                 </div>
                             )}
@@ -517,10 +689,22 @@ export function GoLiveModal({
                             {error && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                                     <div className="text-center p-6">
-                                        <svg className="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        <svg
+                                            className="w-16 h-16 text-red-500 mx-auto mb-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
                                         </svg>
-                                        <p className="text-red-400 text-lg mb-4">{error}</p>
+                                        <p className="text-red-400 text-lg mb-4">
+                                            {error}
+                                        </p>
                                         <button
                                             onClick={startCamera}
                                             className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
@@ -536,13 +720,25 @@ export function GoLiveModal({
                                 {/* Top bar - with safe area for notch */}
                                 <div className="absolute top-0 left-0 right-0 pt-[env(safe-area-inset-top,16px)] px-4 pb-4 bg-gradient-to-b from-black/70 to-transparent pointer-events-auto">
                                     <div className="flex items-center justify-between">
-                                        <h2 className="text-white font-bold text-lg">Go Live</h2>
+                                        <h2 className="text-white font-bold text-lg">
+                                            Go Live
+                                        </h2>
                                         <button
                                             onClick={handleClose}
                                             className="p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
                                         >
-                                            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                            <svg
+                                                className="w-7 h-7 text-white"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2.5}
+                                                    d="M6 18L18 6M6 6l12 12"
+                                                />
                                             </svg>
                                         </button>
                                     </div>
@@ -554,7 +750,9 @@ export function GoLiveModal({
                                     <input
                                         type="text"
                                         value={title}
-                                        onChange={(e) => setTitle(e.target.value)}
+                                        onChange={(e) =>
+                                            setTitle(e.target.value)
+                                        }
                                         placeholder="Add a title..."
                                         className="w-full px-4 py-3 mb-4 bg-black/50 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-red-500 backdrop-blur-sm"
                                     />
@@ -579,7 +777,8 @@ export function GoLiveModal({
                                     </button>
 
                                     <p className="text-white/60 text-xs text-center mt-3">
-                                        Stream will be recorded for later playback
+                                        Stream will be recorded for later
+                                        playback
                                     </p>
                                 </div>
                             </div>
@@ -592,8 +791,12 @@ export function GoLiveModal({
                     <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-10">
                         <div className="text-center">
                             <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
-                            <p className="text-white text-lg">Ending stream...</p>
-                            <p className="text-white/60 text-sm mt-2">Saving your recording</p>
+                            <p className="text-white text-lg">
+                                Ending stream...
+                            </p>
+                            <p className="text-white/60 text-sm mt-2">
+                                Saving your recording
+                            </p>
                         </div>
                     </div>
                 )}

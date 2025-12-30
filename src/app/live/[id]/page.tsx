@@ -68,6 +68,7 @@ export default function PublicLivePage() {
     const [userUsername, setUserUsername] = useState<string | null>(null);
     const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
     const [userEnsName, setUserEnsName] = useState<string | null>(null);
+    const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
     // Chat state
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -148,6 +149,7 @@ export default function PublicLivePage() {
                             setUserUsername(data.user.username || null);
                             setUserDisplayName(data.user.display_name || null);
                             setUserEnsName(data.user.ens_name || null);
+                            setUserAvatar(data.user.avatar_url || null);
                         }
                     }
                 } catch {
@@ -266,7 +268,14 @@ export default function PublicLivePage() {
                 if (data.messages && data.messages.length > 0) {
                     // Debug: log first message to see user data
                     if (data.messages.length > 0 && !lastMessageTimeRef.current) {
-                        console.log("[Live Chat] Sample message user data:", data.messages[0].user);
+                        console.log("[Live Chat] Sample message user data:", JSON.stringify(data.messages[0].user, null, 2));
+                        console.log("[Live Chat] Sample message:", {
+                            id: data.messages[0].id,
+                            user_address: data.messages[0].user_address,
+                            username: data.messages[0].user?.username,
+                            display_name: data.messages[0].user?.display_name,
+                            ens_name: data.messages[0].user?.ens_name,
+                        });
                     }
                     setMessages((prev) => {
                         // Merge new messages, avoiding duplicates
@@ -477,12 +486,25 @@ export default function PublicLivePage() {
         };
     }, []);
 
-    const togglePlay = () => {
+    const togglePlay = async () => {
         if (!videoRef.current) return;
+        const video = videoRef.current;
+        
         if (isPlaying) {
-            videoRef.current.pause();
+            video.pause();
         } else {
-            videoRef.current.play();
+            // If video is muted and user clicks to play, automatically unmute
+            if (video.muted && isMuted) {
+                video.muted = false;
+                setIsMuted(false);
+                // Set volume explicitly to trigger audio
+                const targetVolume = volume > 0 ? volume : 1;
+                video.volume = Math.max(0.01, targetVolume - 0.01);
+                await new Promise(resolve => setTimeout(resolve, 10));
+                video.volume = targetVolume;
+                setVolume(targetVolume);
+            }
+            await video.play();
         }
     };
 
@@ -622,6 +644,17 @@ export default function PublicLivePage() {
                 </a>
                 {userAddress ? (
                     <div className="flex items-center gap-2 text-sm">
+                        {userAvatar ? (
+                            <img
+                                src={userAvatar}
+                                alt=""
+                                className="w-6 h-6 rounded-full object-cover"
+                            />
+                        ) : (
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white text-xs font-medium">
+                                {getCurrentUserDisplayName().slice(0, 2).toUpperCase()}
+                            </div>
+                        )}
                         <span className="text-zinc-400">Signed in as</span>
                         <span className="text-white font-medium">{getCurrentUserDisplayName()}</span>
                     </div>
@@ -640,14 +673,26 @@ export default function PublicLivePage() {
                 {/* Video section */}
                 <div className="flex-1 flex flex-col bg-black relative min-h-0 overflow-hidden">
                     {/* Video container */}
-                    <div className="relative flex-1 flex items-center justify-center group min-h-0">
+                    <div 
+                        className="relative flex-1 flex items-center justify-center group min-h-0 cursor-pointer"
+                        onClick={async () => {
+                            // Auto-unmute and play when user clicks on video area
+                            if (videoRef.current && videoRef.current.muted) {
+                                await toggleMute();
+                            }
+                            togglePlay();
+                        }}
+                    >
                         <video
                             ref={videoRef}
                             className="w-full h-full object-contain max-w-full max-h-full"
                             playsInline
                             autoPlay
                             muted
-                            onClick={togglePlay}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                togglePlay();
+                            }}
                         />
 
                         {/* Floating reactions */}
@@ -867,9 +912,17 @@ export default function PublicLivePage() {
                                         </div>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-medium shrink-0">
-                                                {getDisplayName(msg).slice(0, 2).toUpperCase()}
-                                            </div>
+                                            {msg.user?.avatar_url ? (
+                                                <img
+                                                    src={msg.user.avatar_url}
+                                                    alt=""
+                                                    className="w-8 h-8 rounded-full object-cover shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-medium shrink-0">
+                                                    {getDisplayName(msg).slice(0, 2).toUpperCase()}
+                                                </div>
+                                            )}
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-baseline gap-2">
                                                     <span className="text-zinc-300 font-medium text-sm">
