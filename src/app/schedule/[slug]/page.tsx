@@ -1052,11 +1052,15 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
                                         </div>
                                     )}
 
-                                    {isConfirming && !isTxError ? (
+                                    {(isConfirming || isConfirmed || booking) && !isTxError ? (
                                         <div className="text-center py-4">
                                             <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                                            <p className="text-white font-medium">Confirming payment...</p>
-                                            <p className="text-zinc-500 text-sm">This may take a few seconds</p>
+                                            <p className="text-white font-medium">
+                                                {booking ? "Creating your booking..." : isConfirmed ? "Payment confirmed!" : "Confirming payment..."}
+                                            </p>
+                                            <p className="text-zinc-500 text-sm">
+                                                {booking ? "Almost done" : "This may take a few seconds"}
+                                            </p>
                                             {txHash && (
                                                 <a
                                                     href={`${EXPLORER_URLS[profile.scheduling.network] || "https://basescan.org"}/tx/${txHash}`}
@@ -1067,20 +1071,22 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
                                                     View on Explorer →
                                                 </a>
                                             )}
-                                            <button
-                                                onClick={() => {
-                                                    resetTransaction();
-                                                    setPaymentError(null);
-                                                }}
-                                                className="block mx-auto mt-4 text-zinc-500 hover:text-white text-sm"
-                                            >
-                                                Cancel & Try Again
-                                            </button>
+                                            {!booking && !isConfirmed && (
+                                                <button
+                                                    onClick={() => {
+                                                        resetTransaction();
+                                                        setPaymentError(null);
+                                                    }}
+                                                    className="block mx-auto mt-4 text-zinc-500 hover:text-white text-sm"
+                                                >
+                                                    Cancel & Try Again
+                                                </button>
+                                            )}
                                         </div>
                                     ) : (
                                         <button
                                             onClick={handlePayment}
-                                            disabled={isSending || isConfirming || isSwitchingNetwork || hasInsufficientBalance}
+                                            disabled={isSending || isConfirming || isConfirmed || booking || isSwitchingNetwork || hasInsufficientBalance}
                                             className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                                         >
                                             {isSwitchingNetwork ? (
