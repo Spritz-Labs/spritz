@@ -1,6 +1,6 @@
 # Spritz 🍊
 
-Real-time messaging, video calls, and AI agents for Web3. Connect with friends using passkeys or wallets, chat via decentralized messaging, make HD video calls, and create custom AI agents.
+Real-time messaging, video calls, livestreaming, and AI agents for Web3. Connect with friends using passkeys or wallets, chat via decentralized messaging, make HD video calls, go live with WebRTC streaming, and create custom AI agents.
 
 **Live at [app.spritz.chat](https://app.spritz.chat)**
 
@@ -25,6 +25,16 @@ Real-time messaging, video calls, and AI agents for Web3. Connect with friends u
 - **Voice Messages** - Record and send voice notes
 - **Push Notifications** - Get notified of incoming calls and messages
 - **Link Previews** - Rich previews for shared URLs
+
+### 📺 Livestreaming
+
+- **Go Live** - Broadcast live video to your friends with one tap
+- **WebRTC Streaming** - Low-latency streaming powered by Livepeer
+- **Vertical Video** - Optimized 9:16 portrait mode for mobile
+- **Real-time Viewer Count** - See how many people are watching live
+- **Auto-Recording** - Streams are automatically recorded for later playback
+- **HLS Playback** - Viewers watch via adaptive HLS streaming
+- **Live Badge** - Friends see when you're live on their dashboard
 
 ### 🔐 Identity & Authentication
 
@@ -58,6 +68,7 @@ Real-time messaging, video calls, and AI agents for Web3. Connect with friends u
 - **3D Globe** - Beautiful interactive globe visualization
 - **Dark Mode** - Sleek dark UI throughout
 - **Mobile Optimized** - Fully responsive design
+- **Censorship Resistance** - Optional decentralized calling via Huddle01
 
 ## Tech Stack
 
@@ -72,6 +83,7 @@ Real-time messaging, video calls, and AI agents for Web3. Connect with friends u
 | **Account Abstraction** | Pimlico, Safe Smart Accounts |
 | **Wallet Connection** | Reown AppKit (WalletConnect) |
 | **Video Calls** | Huddle01 SDK |
+| **Livestreaming** | Livepeer (WebRTC/WHIP + HLS) |
 | **Messaging** | Waku Protocol |
 | **AI/LLM** | Google Gemini API |
 | **Vector Search** | Supabase pgvector |
@@ -148,6 +160,13 @@ GOOGLE_GEMINI_API_KEY=your_gemini_api_key
 # Huddle01
 NEXT_PUBLIC_HUDDLE01_PROJECT_ID=your_huddle01_project_id
 HUDDLE01_API_KEY=your_huddle01_api_key
+```
+
+### Livestreaming
+
+```env
+# Livepeer
+LIVEPEER_API_KEY=your_livepeer_api_key
 ```
 
 ### Smart Accounts (Passkeys)
@@ -241,6 +260,13 @@ X402_FACILITATOR_URL=https://x402.org/facilitator
 1. Go to [Huddle01 Dashboard](https://docs.huddle01.com/)
 2. Create an account and project
 3. Copy your Project ID and API Key
+
+### Livepeer
+
+1. Go to [Livepeer Studio](https://livepeer.studio/)
+2. Create an account
+3. Go to Developers → API Keys
+4. Create a new API key with Stream and Asset permissions
 
 ## Database Setup
 
@@ -354,6 +380,47 @@ CREATE TABLE shout_agent_favorites (
 );
 ```
 
+### Livestreaming Tables
+
+```sql
+-- Streams table
+CREATE TABLE shout_streams (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_address TEXT NOT NULL,
+    stream_id TEXT NOT NULL,           -- Livepeer stream ID
+    stream_key TEXT,                    -- Livepeer stream key (for WHIP)
+    playback_id TEXT,                   -- Livepeer playback ID
+    title TEXT,
+    description TEXT,
+    status TEXT DEFAULT 'idle',         -- idle, live, ended
+    viewer_count INTEGER DEFAULT 0,
+    started_at TIMESTAMPTZ,
+    ended_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Stream assets (recordings)
+CREATE TABLE shout_stream_assets (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    stream_id UUID REFERENCES shout_streams(id) ON DELETE CASCADE,
+    user_address TEXT NOT NULL,
+    asset_id TEXT NOT NULL UNIQUE,      -- Livepeer asset ID
+    playback_id TEXT,
+    playback_url TEXT,
+    download_url TEXT,
+    duration_seconds NUMERIC,
+    size_bytes BIGINT,
+    status TEXT DEFAULT 'processing',   -- processing, ready, failed
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for faster queries
+CREATE INDEX idx_streams_user ON shout_streams(user_address);
+CREATE INDEX idx_streams_status ON shout_streams(status);
+CREATE INDEX idx_stream_assets_stream ON shout_stream_assets(stream_id);
+```
+
 See the `/migrations` folder for complete migration scripts.
 
 ## Project Structure
@@ -366,6 +433,7 @@ src/
 │   │   ├── agents/         # AI agent CRUD & chat
 │   │   ├── auth/           # SIWE/SIWS verification
 │   │   ├── huddle01/       # Video call rooms
+│   │   ├── streams/        # Livestreaming API
 │   │   ├── public/         # Public agent API (x402)
 │   │   └── ...
 │   ├── admin/              # Admin pages
@@ -379,6 +447,8 @@ src/
 │   ├── Dashboard.tsx       # Main dashboard
 │   ├── ChatModal.tsx       # P2P chat
 │   ├── VoiceCallUI.tsx     # Video/voice calls
+│   ├── GoLiveModal.tsx     # Livestream broadcaster
+│   ├── LiveStreamPlayer.tsx # Livestream viewer
 │   └── ...
 ├── context/
 │   ├── AuthProvider.tsx    # SIWE/SIWS auth
@@ -387,9 +457,11 @@ src/
 ├── hooks/
 │   ├── useAgents.ts        # Agent management
 │   ├── useAuth.ts          # Authentication
+│   ├── useStreams.ts       # Livestream management
 │   ├── useBetaAccess.ts    # Feature flags
 │   └── ...
 └── lib/
+    ├── livepeer.ts         # Livepeer API utils
     └── x402.ts             # x402 payment utils
 ```
 
@@ -436,6 +508,30 @@ const response = await paidFetch(
 );
 ```
 
+## Livestreaming
+
+### Going Live
+
+1. Tap the "Go Live" button on your dashboard
+2. Allow camera and microphone access
+3. Add an optional title for your stream
+4. Tap "Go Live" to start broadcasting
+5. Share with friends - they'll see your live badge
+
+### Watching Streams
+
+- Friends who are live show a red "LIVE" badge on their avatar
+- Tap their avatar to join the stream
+- See real-time viewer count
+- Streams auto-retry if connection drops
+
+### Technical Details
+
+- **Broadcast**: WebRTC via WHIP protocol to Livepeer
+- **Playback**: HLS adaptive streaming via Livepeer CDN
+- **Resolution**: 1080x1920 (9:16 vertical/portrait)
+- **Recording**: Automatic recording stored on Livepeer
+
 ## PWA Installation
 
 Spritz works as a Progressive Web App:
@@ -456,4 +552,4 @@ MIT
 
 Built with 🍊 by the Spritz team
 
-Powered by [Google Gemini](https://ai.google.dev/), [Huddle01](https://huddle01.com), [Waku](https://waku.org), [Supabase](https://supabase.com), [Pimlico](https://pimlico.io), [Reown](https://reown.com), and [x402](https://x402.org)
+Powered by [Google Gemini](https://ai.google.dev/), [Huddle01](https://huddle01.com), [Livepeer](https://livepeer.org), [Waku](https://waku.org), [Supabase](https://supabase.com), [Pimlico](https://pimlico.io), [Reown](https://reown.com), and [x402](https://x402.org)
