@@ -97,7 +97,22 @@ export async function GET(request: NextRequest) {
 // POST /api/streams - Create a new stream
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
+        let body;
+        try {
+            const text = await request.text();
+            if (!text) {
+                return NextResponse.json(
+                    { error: "Request body is required" },
+                    { status: 400 }
+                );
+            }
+            body = JSON.parse(text);
+        } catch {
+            return NextResponse.json(
+                { error: "Invalid JSON in request body" },
+                { status: 400 }
+            );
+        }
         const { userAddress, title, description } = body;
 
         if (!userAddress) {
