@@ -32,8 +32,40 @@ export function LiveStreamPlayer({
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
 
-    const MAX_RETRIES = 30; // Retry for up to ~30 seconds
-    const RETRY_INTERVAL = 2000; // Every 2 seconds
+    const MAX_RETRIES = 60; // Retry for up to ~60 seconds
+    const RETRY_INTERVAL = 1000; // Every 1 second
+    const hasTrackedViewerRef = useRef(false);
+
+    // Track viewer count when opening/closing
+    useEffect(() => {
+        if (isOpen && stream.id && !hasTrackedViewerRef.current) {
+            // Increment viewer count
+            hasTrackedViewerRef.current = true;
+            fetch(`/api/streams/${stream.id}/viewers`, { method: "POST" }).catch(() => {
+                // Ignore errors - viewer tracking is best-effort
+            });
+
+            // Handle browser close/navigation
+            const handleBeforeUnload = () => {
+                if (hasTrackedViewerRef.current) {
+                    // Use sendBeacon for reliable delivery on page unload
+                    navigator.sendBeacon(`/api/streams/${stream.id}/viewers?action=leave`);
+                }
+            };
+            window.addEventListener("beforeunload", handleBeforeUnload);
+
+            return () => {
+                window.removeEventListener("beforeunload", handleBeforeUnload);
+                // Decrement viewer count on cleanup
+                if (hasTrackedViewerRef.current) {
+                    hasTrackedViewerRef.current = false;
+                    fetch(`/api/streams/${stream.id}/viewers`, { method: "DELETE" }).catch(() => {
+                        // Ignore errors
+                    });
+                }
+            };
+        }
+    }, [isOpen, stream.id]);
 
     // Initialize HLS player
     const initHls = useCallback(() => {
