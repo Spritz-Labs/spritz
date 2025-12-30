@@ -582,6 +582,8 @@ Remember: The user asked a question and the answer is in the data above. Just pr
         // Handle scheduling capability (if enabled)
         const schedulingEnabled = agent.scheduling_enabled === true;
         let schedulingContext = "";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let schedulingResponseData: any = null;
         
         if (schedulingEnabled) {
             const messageLower = message.toLowerCase();
@@ -676,6 +678,23 @@ Remember: The user asked a question and the answer is in the data above. Just pr
                             : `${appUrl}/schedule/${agent.owner_address}`;
                         
                         const hasSlots = Object.keys(slotsByDate).length > 0;
+                        
+                        // Store scheduling data to return with response
+                        schedulingResponseData = {
+                            ownerAddress: agent.owner_address,
+                            slots: slots.slice(0, 50).map(s => ({
+                                start: s.start.toISOString(),
+                                end: s.end.toISOString(),
+                            })),
+                            slotsByDate,
+                            freeEnabled: ownerSettings.scheduling_free_enabled ?? true,
+                            paidEnabled: ownerSettings.scheduling_paid_enabled ?? false,
+                            freeDuration: ownerSettings.scheduling_free_duration_minutes || 15,
+                            paidDuration: ownerSettings.scheduling_paid_duration_minutes || 30,
+                            priceCents: ownerSettings.scheduling_price_cents || 0,
+                            timezone: userTimezone,
+                            scheduleLink,
+                        };
                         
                         schedulingContext = `
 ## SCHEDULING INFORMATION
@@ -1018,6 +1037,7 @@ ${apiResults.join("\n")}
             message: assistantMessage,
             agentName: agent.name,
             agentEmoji: agent.avatar_emoji,
+            scheduling: schedulingResponseData,
         });
     } catch (error) {
         console.error("[Agent Chat] Error:", error);

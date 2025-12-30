@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAgentChat, Agent } from "@/hooks/useAgents";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { SchedulingCard } from "./SchedulingCard";
 
 interface AgentChatModalProps {
     isOpen: boolean;
@@ -162,11 +163,20 @@ export function AgentChatModal({ isOpen, onClose, agent, userAddress }: AgentCha
                                                     </div>
                                                 )}
                                                 {msg.role === "assistant" ? (
-                                                    <div className="text-sm prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700 prose-code:text-pink-400 prose-code:before:content-[''] prose-code:after:content-['']">
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                            {msg.content}
-                                                        </ReactMarkdown>
-                                                    </div>
+                                                    <>
+                                                        <div className="text-sm prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700 prose-code:text-pink-400 prose-code:before:content-[''] prose-code:after:content-['']">
+                                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                                {msg.content}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                        {/* Render interactive scheduling card if present */}
+                                                        {msg.scheduling && msg.scheduling.slots.length > 0 && (
+                                                            <SchedulingCard 
+                                                                scheduling={msg.scheduling} 
+                                                                userAddress={userAddress}
+                                                            />
+                                                        )}
+                                                    </>
                                                 ) : (
                                                     <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                                                 )}

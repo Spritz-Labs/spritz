@@ -43,6 +43,7 @@ export type Agent = {
     use_knowledge_base: boolean;
     mcp_enabled: boolean;
     api_enabled: boolean;
+    scheduling_enabled?: boolean;
     message_count: number;
     created_at: string;
     updated_at: string;
@@ -62,11 +63,30 @@ export type Agent = {
     api_tools?: APITool[];
 };
 
+export type SchedulingSlot = {
+    start: string;
+    end: string;
+};
+
+export type SchedulingData = {
+    ownerAddress: string;
+    slots: SchedulingSlot[];
+    slotsByDate: Record<string, string[]>;
+    freeEnabled: boolean;
+    paidEnabled: boolean;
+    freeDuration: number;
+    paidDuration: number;
+    priceCents: number;
+    timezone: string;
+    scheduleLink: string;
+};
+
 export type ChatMessage = {
     id: string;
     role: "user" | "assistant";
     content: string;
     created_at: string;
+    scheduling?: SchedulingData;
 };
 
 export function useAgents(userAddress: string | null) {
@@ -298,12 +318,13 @@ export function useAgentChat(userAddress: string | null, agentId: string | null)
                 throw new Error(data.error || "Failed to send message");
             }
 
-            // Add assistant response
+            // Add assistant response with optional scheduling data
             const assistantMessage: ChatMessage = {
                 id: `resp-${Date.now()}`,
                 role: "assistant",
                 content: data.message,
                 created_at: new Date().toISOString(),
+                scheduling: data.scheduling || undefined,
             };
             setMessages(prev => [...prev, assistantMessage]);
 

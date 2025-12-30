@@ -602,7 +602,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                             description="Help users schedule meetings with you"
                                             enabled={schedulingEnabled}
                                             onChange={setSchedulingEnabled}
-                                            color="blue"
+                                            color="cyan"
                                         />
 
                                         {/* x402 API Access */}
