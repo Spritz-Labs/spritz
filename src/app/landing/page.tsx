@@ -177,17 +177,52 @@ export default function LandingPage() {
                     <h3 className="text-zinc-400 text-sm font-medium uppercase tracking-widest mb-8">
                         Powered by
                     </h3>
-                    <div className="flex justify-center items-center gap-8 sm:gap-12 flex-wrap opacity-60">
-                        {["Waku", "Livepeer", "Huddle01", "Supabase", "Next.js", "Ethereum", "Solana"].map(
-                            (tech) => (
-                                <span
-                                    key={tech}
-                                    className="text-zinc-400 font-medium"
-                                >
-                                    {tech}
-                                </span>
-                            )
-                        )}
+                    <div className="flex justify-center items-center gap-6 sm:gap-10 flex-wrap">
+                        <TechLogo name="Waku" href="https://waku.org">
+                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
+                                <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" strokeWidth="2"/>
+                                <circle cx="16" cy="10" r="3" />
+                                <circle cx="10" cy="20" r="3" />
+                                <circle cx="22" cy="20" r="3" />
+                                <line x1="16" y1="13" x2="12" y2="18" stroke="currentColor" strokeWidth="2"/>
+                                <line x1="16" y1="13" x2="20" y2="18" stroke="currentColor" strokeWidth="2"/>
+                            </svg>
+                        </TechLogo>
+                        <TechLogo name="Livepeer" href="https://livepeer.org">
+                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
+                                <path d="M8 6h4v20H8V6zm6 4h4v16h-4V10zm6 4h4v12h-4V14z"/>
+                            </svg>
+                        </TechLogo>
+                        <TechLogo name="Huddle01" href="https://huddle01.com">
+                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
+                                <rect x="4" y="8" width="24" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="2"/>
+                                <circle cx="12" cy="16" r="3"/>
+                                <circle cx="20" cy="16" r="3"/>
+                            </svg>
+                        </TechLogo>
+                        <TechLogo name="Supabase" href="https://supabase.com">
+                            <svg viewBox="0 0 32 32" className="w-8 h-8">
+                                <path d="M17.5 28.5c-.5.7-1.6.3-1.6-.6V18h10.7c1.2 0 1.8-1.4 1.1-2.3L17.5 3.5c-.5-.7-1.6-.3-1.6.6V14H5.2c-1.2 0-1.8 1.4-1.1 2.3l10.2 12.2z" fill="currentColor"/>
+                            </svg>
+                        </TechLogo>
+                        <TechLogo name="Next.js" href="https://nextjs.org">
+                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
+                                <path d="M16 2C8.3 2 2 8.3 2 16s6.3 14 14 14 14-6.3 14-14S23.7 2 16 2zm5.9 20.1l-8.4-11v8.4h-1.3V10.3h1.1l8.1 10.6V10.5h1.3v11.6h-.8z"/>
+                            </svg>
+                        </TechLogo>
+                        <TechLogo name="Ethereum" href="https://ethereum.org">
+                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
+                                <path d="M16 2l-9 14.5L16 21l9-4.5L16 2z" opacity="0.6"/>
+                                <path d="M7 16.5L16 30l9-13.5L16 21l-9-4.5z"/>
+                                <path d="M16 2v19l9-4.5L16 2z" opacity="0.8"/>
+                                <path d="M16 21v9l9-13.5L16 21z" opacity="0.8"/>
+                            </svg>
+                        </TechLogo>
+                        <TechLogo name="Solana" href="https://solana.com">
+                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
+                                <path d="M6 22.5l3.5-3.5h16l-3.5 3.5H6zm0-6.5l3.5-3.5h16L22 16H6zm16-6.5L18.5 6h-16L6 9.5h16z"/>
+                            </svg>
+                        </TechLogo>
                     </div>
                 </div>
             </section>
@@ -320,6 +355,30 @@ function FeatureCard({
             <h3 className="text-xl font-semibold mb-3">{title}</h3>
             <p className="text-zinc-400 text-sm leading-relaxed">{description}</p>
         </div>
+    );
+}
+
+function TechLogo({
+    name,
+    href,
+    children,
+}: {
+    name: string;
+    href: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors group"
+        >
+            <div className="opacity-60 group-hover:opacity-100 transition-opacity">
+                {children}
+            </div>
+            <span className="text-xs font-medium">{name}</span>
+        </a>
     );
 }
 
