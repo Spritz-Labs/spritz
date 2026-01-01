@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useAccount, useSignMessage } from "wagmi";
+import {
+    authStorage,
+    AUTH_CREDENTIALS_KEY,
+    AUTH_TTL,
+    type AuthCredentials,
+} from "@/lib/authStorage";
 
 type AdminState = {
     isAdmin: boolean;
@@ -17,10 +23,10 @@ type AdminCredentials = {
     message: string;
 };
 
-const ADMIN_CREDENTIALS_KEY = "spritz_admin_credentials";
+const ADMIN_CREDENTIALS_KEY_LOCAL = "spritz_admin_credentials";
 
 export function useAdmin() {
-    const { address, isConnected } = useAccount();
+    const { address, isConnected, isReconnecting } = useAccount();
     const { signMessageAsync } = useSignMessage();
     
     const [state, setState] = useState<AdminState>({
@@ -32,49 +38,77 @@ export function useAdmin() {
     });
 
     const [credentials, setCredentials] = useState<AdminCredentials | null>(null);
+    const credentialsLoaded = useRef(false);
+    const verificationAttempted = useRef(false);
+    
+    // Track the credentials source for display purposes
+    const [credentialsSource, setCredentialsSource] = useState<"main" | "admin" | null>(null);
     
     // Check if credentials are valid and ready to use
     const hasValidCredentials = useMemo(() => {
         return !!(credentials?.address && credentials?.signature && credentials?.message);
     }, [credentials]);
 
-    // Load saved credentials on mount
+    // Load saved credentials on mount - try main app credentials first, then admin-specific
     useEffect(() => {
-        if (typeof window === "undefined") return;
-        
-        try {
-            const saved = localStorage.getItem(ADMIN_CREDENTIALS_KEY);
-            if (saved) {
-                const parsed = JSON.parse(saved);
+        if (typeof window === "undefined" || credentialsLoaded.current) return;
+        credentialsLoaded.current = true;
+
+        const loadCredentials = async () => {
+            setState(prev => ({ ...prev, isLoading: true }));
+            
+            try {
+                // First, try to load credentials from main app auth (robust storage)
+                const mainAppCreds = await authStorage.load(AUTH_CREDENTIALS_KEY);
                 
-                // Validate the parsed data has all required fields as strings
-                if (
-                    parsed &&
-                    typeof parsed.address === 'string' && parsed.address.trim() &&
-                    typeof parsed.signature === 'string' && parsed.signature.trim() &&
-                    typeof parsed.message === 'string' && parsed.message.trim() &&
-                    parsed.address.toLowerCase() === address?.toLowerCase()
-                ) {
-                    console.log("[Admin] Loaded valid credentials from localStorage");
-                    setCredentials(parsed as AdminCredentials);
-                } else {
-                    console.log("[Admin] Invalid or mismatched credentials in localStorage, clearing");
-                    localStorage.removeItem(ADMIN_CREDENTIALS_KEY);
-                    setCredentials(null);
+                if (mainAppCreds && !authStorage.isExpired(mainAppCreds, AUTH_TTL)) {
+                    console.log("[Admin] Using main app credentials");
+                    setCredentials({
+                        address: mainAppCreds.address,
+                        signature: mainAppCreds.signature,
+                        message: mainAppCreds.message,
+                    });
+                    setCredentialsSource("main");
+                    return;
                 }
+                
+                // Fallback: try admin-specific credentials from localStorage
+                const savedAdmin = localStorage.getItem(ADMIN_CREDENTIALS_KEY_LOCAL);
+                if (savedAdmin) {
+                    const parsed = JSON.parse(savedAdmin);
+                    
+                    if (
+                        parsed &&
+                        typeof parsed.address === 'string' && parsed.address.trim() &&
+                        typeof parsed.signature === 'string' && parsed.signature.trim() &&
+                        typeof parsed.message === 'string' && parsed.message.trim()
+                    ) {
+                        console.log("[Admin] Loaded admin-specific credentials from localStorage");
+                        setCredentials(parsed as AdminCredentials);
+                        setCredentialsSource("admin");
+                        return;
+                    } else {
+                        console.log("[Admin] Invalid admin credentials in localStorage, clearing");
+                        localStorage.removeItem(ADMIN_CREDENTIALS_KEY_LOCAL);
+                    }
+                }
+                
+                // No valid credentials found
+                setState(prev => ({ ...prev, isLoading: false }));
+            } catch (e) {
+                console.error("[Admin] Error loading credentials:", e);
+                localStorage.removeItem(ADMIN_CREDENTIALS_KEY_LOCAL);
+                setCredentials(null);
+                setState(prev => ({ ...prev, isLoading: false }));
             }
-        } catch (e) {
-            console.error("[Admin] Error loading credentials:", e);
-            localStorage.removeItem(ADMIN_CREDENTIALS_KEY);
-            setCredentials(null);
-        }
-        
-        setState(prev => ({ ...prev, isLoading: false }));
-    }, [address]);
+        };
+
+        loadCredentials();
+    }, []);
 
     // Verify credentials when they change
     useEffect(() => {
-        if (!credentials || !address) {
+        if (!credentials) {
             setState(prev => ({ 
                 ...prev, 
                 isAdmin: false, 
@@ -85,8 +119,19 @@ export function useAdmin() {
             return;
         }
 
+        // Don't verify if wallet is reconnecting
+        if (isReconnecting) {
+            return;
+        }
+
+        // Skip if we've already verified these credentials
+        if (verificationAttempted.current && state.isAuthenticated) {
+            return;
+        }
+
         const verifyCredentials = async () => {
             setState(prev => ({ ...prev, isLoading: true, error: null }));
+            verificationAttempted.current = true;
             
             try {
                 const response = await fetch("/api/admin/verify", {
@@ -106,8 +151,10 @@ export function useAdmin() {
                         error: null,
                     });
                 } else {
-                    // Clear invalid credentials
-                    localStorage.removeItem(ADMIN_CREDENTIALS_KEY);
+                    // Only clear admin-specific credentials, not main app
+                    if (credentialsSource === "admin") {
+                        localStorage.removeItem(ADMIN_CREDENTIALS_KEY_LOCAL);
+                    }
                     setCredentials(null);
                     setState({
                         isAdmin: false,
@@ -127,7 +174,7 @@ export function useAdmin() {
         };
 
         verifyCredentials();
-    }, [credentials, address]);
+    }, [credentials, isReconnecting, state.isAuthenticated, credentialsSource]);
 
     // Sign in as admin
     const signIn = useCallback(async () => {
@@ -137,6 +184,7 @@ export function useAdmin() {
         }
 
         setState(prev => ({ ...prev, isLoading: true, error: null }));
+        verificationAttempted.current = false;
 
         try {
             // Get message to sign
@@ -152,9 +200,10 @@ export function useAdmin() {
                 message,
             };
 
-            // Save credentials
-            localStorage.setItem(ADMIN_CREDENTIALS_KEY, JSON.stringify(newCredentials));
+            // Save admin-specific credentials
+            localStorage.setItem(ADMIN_CREDENTIALS_KEY_LOCAL, JSON.stringify(newCredentials));
             setCredentials(newCredentials);
+            setCredentialsSource("admin");
 
             return true;
         } catch (err) {
@@ -168,10 +217,12 @@ export function useAdmin() {
         }
     }, [address, isConnected, signMessageAsync]);
 
-    // Sign out
+    // Sign out - only clears admin session, not main app
     const signOut = useCallback(() => {
-        localStorage.removeItem(ADMIN_CREDENTIALS_KEY);
+        localStorage.removeItem(ADMIN_CREDENTIALS_KEY_LOCAL);
         setCredentials(null);
+        setCredentialsSource(null);
+        verificationAttempted.current = false;
         setState({
             isAdmin: false,
             isSuperAdmin: false,
@@ -216,12 +267,19 @@ export function useAdmin() {
 
     // Only consider truly ready when authenticated AND credentials are valid
     const isReady = state.isAuthenticated && hasValidCredentials;
+    
+    // For admin purposes, we're "connected" if we have valid credentials
+    // This allows the admin page to work even when wallet isn't immediately connected
+    const effectivelyConnected = isConnected || hasValidCredentials;
+    
+    // Use address from credentials if wallet isn't connected
+    const effectiveAddress = address || credentials?.address;
 
     return {
         ...state,
         isReady, // Use this instead of isAuthenticated for data fetching
-        address,
-        isConnected,
+        address: effectiveAddress,
+        isConnected: effectivelyConnected,
         signIn,
         signOut,
         getAuthHeaders,

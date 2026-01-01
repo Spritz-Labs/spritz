@@ -234,7 +234,19 @@ export default function AdminPage() {
         }
     };
 
-    // Not connected
+    // Loading - show this first to give credentials time to load
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5500] mx-auto mb-4"></div>
+                    <p className="text-zinc-500 text-sm">Checking credentials...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Not connected and no cached credentials
     if (!isConnected) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
@@ -258,15 +270,6 @@ export default function AdminPage() {
                         ← Back to Home
                     </Link>
                 </div>
-            </div>
-        );
-    }
-
-    // Loading
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5500]"></div>
             </div>
         );
     }
