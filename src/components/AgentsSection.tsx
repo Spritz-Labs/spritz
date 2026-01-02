@@ -24,6 +24,7 @@ export function AgentsSection({ userAddress }: AgentsSectionProps) {
     const [selectedDiscoveredAgent, setSelectedDiscoveredAgent] = useState<DiscoveredAgent | null>(null);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isExpanded, setIsExpanded] = useState(true);
+    const [embedTabForAgent, setEmbedTabForAgent] = useState<Record<string, "iframe" | "js">>({});
 
     const handleCreateAgent = async (
         name: string,
@@ -430,6 +431,277 @@ export function AgentsSection({ userAddress }: AgentsSectionProps) {
                 userAddress={userAddress}
                 onSelectAgent={handleSelectDiscoveredAgent}
             />
+
+            {/* Metrics & Public URLs Section */}
+            {agents.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-zinc-800">
+                    <h3 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+                        <span>📊</span>
+                        Agent Metrics & Integration
+                    </h3>
+                    
+                    {/* Overall Metrics */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                            <p className="text-xs text-zinc-400 mb-1">Total Agents</p>
+                            <p className="text-lg font-bold text-white">{agents.length}</p>
+                        </div>
+                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                            <p className="text-xs text-zinc-400 mb-1">Total Messages</p>
+                            <p className="text-lg font-bold text-white">
+                                {agents.reduce((sum, a) => sum + (a.message_count || 0), 0).toLocaleString()}
+                            </p>
+                        </div>
+                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                            <p className="text-xs text-zinc-400 mb-1">Public Agents</p>
+                            <p className="text-lg font-bold text-emerald-400">
+                                {agents.filter(a => a.visibility === "public").length}
+                            </p>
+                        </div>
+                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                            <p className="text-xs text-zinc-400 mb-1">API Enabled</p>
+                            <p className="text-lg font-bold text-purple-400">
+                                {agents.filter(a => a.api_enabled).length}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* x402 Earnings (if any) */}
+                    {agents.some(a => a.x402_enabled && (a.x402_total_earnings_cents || 0) > 0) && (
+                        <div className="mb-6 p-4 bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20 rounded-xl">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-emerald-400 mb-1">💰 Total x402 Earnings</p>
+                                    <p className="text-xl font-bold text-emerald-400">
+                                        ${(agents.reduce((sum, a) => sum + ((a.x402_total_earnings_cents || 0) / 100), 0)).toFixed(2)}
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs text-zinc-400 mb-1">Paid Messages</p>
+                                    <p className="text-lg font-semibold text-white">
+                                        {agents.reduce((sum, a) => sum + (a.x402_message_count_paid || 0), 0).toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Public Agent URLs & Embed Code */}
+                    {agents.filter(a => a.visibility === "public").length > 0 && (
+                        <div className="space-y-4">
+                            <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                                <span>🔗</span>
+                                Public Agent URLs & Embed Code
+                            </h4>
+                            {agents
+                                .filter(a => a.visibility === "public")
+                                .map((agent) => {
+                                    const publicUrl = `${typeof window !== "undefined" ? window.location.origin : "https://app.spritz.chat"}/agent/${agent.id}`;
+                                    const embedCode = `<iframe 
+  src="${publicUrl}"
+  width="100%"
+  height="600"
+  frameborder="0"
+  allow="clipboard-read; clipboard-write"
+  style="border-radius: 12px; border: 1px solid #3f3f46;">
+</iframe>`;
+                                    
+                                    return (
+                                        <div
+                                            key={agent.id}
+                                            className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl"
+                                        >
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="text-xl">{agent.avatar_emoji}</span>
+                                                <h5 className="font-medium text-white">{agent.name}</h5>
+                                                {agent.x402_enabled && (
+                                                    <span className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
+                                                        💰 Paid
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Public URL */}
+                                            <div className="mb-3">
+                                                <label className="block text-xs text-zinc-400 mb-1.5">Public URL</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={publicUrl}
+                                                        readOnly
+                                                        className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm font-mono"
+                                                    />
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                await navigator.clipboard.writeText(publicUrl);
+                                                                // Brief feedback
+                                                                const btn = document.activeElement as HTMLElement;
+                                                                const original = btn?.textContent;
+                                                                if (btn) {
+                                                                    btn.textContent = "Copied!";
+                                                                    setTimeout(() => {
+                                                                        if (btn) btn.textContent = original || "Copy";
+                                                                    }, 2000);
+                                                                }
+                                                            } catch (err) {
+                                                                console.error("Copy failed:", err);
+                                                            }
+                                                        }}
+                                                        className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors"
+                                                    >
+                                                        Copy
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Embed Code - Tabs for iframe vs JS SDK */}
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <label className="block text-xs text-zinc-400">Embed Code</label>
+                                                    <div className="flex gap-1 bg-zinc-900 rounded-lg p-0.5">
+                                                        <button
+                                                            onClick={() => setEmbedTabForAgent(prev => ({ ...prev, [agent.id]: "iframe" }))}
+                                                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                (embedTabForAgent[agent.id] || "iframe") === "iframe"
+                                                                    ? "bg-zinc-800 text-zinc-300"
+                                                                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+                                                            }`}
+                                                        >
+                                                            iframe
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setEmbedTabForAgent(prev => ({ ...prev, [agent.id]: "js" }))}
+                                                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                embedTabForAgent[agent.id] === "js"
+                                                                    ? "bg-zinc-800 text-zinc-300"
+                                                                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+                                                            }`}
+                                                        >
+                                                            JavaScript
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* iframe Embed */}
+                                                {(embedTabForAgent[agent.id] || "iframe") === "iframe" && (
+                                                    <div>
+                                                        <div className="relative">
+                                                            <textarea
+                                                                value={embedCode}
+                                                                readOnly
+                                                                rows={6}
+                                                                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-xs font-mono resize-none"
+                                                            />
+                                                            <button
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        await navigator.clipboard.writeText(embedCode);
+                                                                        const btn = document.activeElement as HTMLElement;
+                                                                        const original = btn?.textContent;
+                                                                        if (btn) {
+                                                                            btn.textContent = "Copied!";
+                                                                            setTimeout(() => {
+                                                                                if (btn) btn.textContent = original || "Copy";
+                                                                            }, 2000);
+                                                                        }
+                                                                    } catch (err) {
+                                                                        console.error("Copy failed:", err);
+                                                                    }
+                                                                }}
+                                                                className="absolute top-2 right-2 px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded transition-colors"
+                                                            >
+                                                                Copy
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-xs text-zinc-500 mt-1.5">
+                                                            Paste this iframe code into your HTML
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {/* JavaScript SDK Embed */}
+                                                {embedTabForAgent[agent.id] === "js" && (
+                                                    <div>
+                                                        <div className="relative">
+                                                            <textarea
+                                                                value={`<!-- Add this to your HTML -->
+<div id="spritz-agent-${agent.id}"></div>
+<script>
+  (function() {
+    const iframe = document.createElement('iframe');
+    iframe.src = '${publicUrl}';
+    iframe.width = '100%';
+    iframe.height = '600';
+    iframe.frameBorder = '0';
+    iframe.allow = 'clipboard-read; clipboard-write';
+    iframe.style.borderRadius = '12px';
+    iframe.style.border = '1px solid #3f3f46';
+    document.getElementById('spritz-agent-${agent.id}').appendChild(iframe);
+  })();
+</script>`}
+                                                                readOnly
+                                                                rows={10}
+                                                                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-xs font-mono resize-none"
+                                                            />
+                                                            <button
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        const jsCode = `<!-- Add this to your HTML -->
+<div id="spritz-agent-${agent.id}"></div>
+<script>
+  (function() {
+    const iframe = document.createElement('iframe');
+    iframe.src = '${publicUrl}';
+    iframe.width = '100%';
+    iframe.height = '600';
+    iframe.frameBorder = '0';
+    iframe.allow = 'clipboard-read; clipboard-write';
+    iframe.style.borderRadius = '12px';
+    iframe.style.border = '1px solid #3f3f46';
+    document.getElementById('spritz-agent-${agent.id}').appendChild(iframe);
+  })();
+</script>`;
+                                                                        await navigator.clipboard.writeText(jsCode);
+                                                                        const btn = document.activeElement as HTMLElement;
+                                                                        const original = btn?.textContent;
+                                                                        if (btn) {
+                                                                            btn.textContent = "Copied!";
+                                                                            setTimeout(() => {
+                                                                                if (btn) btn.textContent = original || "Copy";
+                                                                            }, 2000);
+                                                                        }
+                                                                    } catch (err) {
+                                                                        console.error("Copy failed:", err);
+                                                                    }
+                                                                }}
+                                                                className="absolute top-2 right-2 px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded transition-colors"
+                                                            >
+                                                                Copy
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-xs text-zinc-500 mt-1.5">
+                                                            Use this JavaScript code for dynamic embedding
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+
+                    {/* No Public Agents Message */}
+                    {agents.filter(a => a.visibility === "public").length === 0 && (
+                        <div className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl text-center">
+                            <p className="text-sm text-zinc-400">
+                                Make an agent public to get a shareable URL and embed code
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
