@@ -3150,63 +3150,103 @@ function DashboardContent({
                                         </p>
                                     </div>
                                     {/* Quick call button */}
-                                    {friendsListData.length > 0 && (
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => setShowNewCallDropdown(!showNewCallDropdown)}
-                                                className="py-2 px-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:shadow-lg hover:shadow-green-500/25 transition-all flex items-center gap-2"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                                </svg>
-                                                New Call
-                                            </button>
-                                            {/* Dropdown with friends */}
-                                            <AnimatePresence>
-                                                {showNewCallDropdown && (
-                                                    <>
-                                                        {/* Backdrop to close dropdown */}
-                                                        <div 
-                                                            className="fixed inset-0 z-40" 
-                                                            onClick={() => setShowNewCallDropdown(false)}
-                                                        />
-                                                        <motion.div 
-                                                            initial={{ opacity: 0, y: -10 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: -10 }}
-                                                            className="absolute right-0 top-full mt-2 w-64 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto"
-                                                        >
-                                                            <div className="p-2">
-                                                                <p className="text-xs text-zinc-500 px-2 py-1">Select a friend to call</p>
-                                                                {friendsListData.slice(0, 10).map((friend) => (
-                                                                    <button
-                                                                        key={friend.id}
-                                                                        onClick={() => {
-                                                                            setShowNewCallDropdown(false);
-                                                                            handleCall(friend, false);
-                                                                        }}
-                                                                        disabled={callState !== "idle"}
-                                                                        className="w-full flex items-center gap-3 p-2 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
-                                                                    >
-                                                                        {friend.avatar ? (
-                                                                            <img src={friend.avatar} alt="" className="w-8 h-8 rounded-full" />
-                                                                        ) : (
-                                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-sm text-white">
-                                                                                {(friend.nickname || friend.reachUsername || friend.ensName || friend.address)?.[0]?.toUpperCase() || "?"}
-                                                                            </div>
-                                                                        )}
-                                                                        <span className="text-sm text-white truncate">
-                                                                            {friend.nickname || friend.reachUsername || friend.ensName || `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`}
-                                                                        </span>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </motion.div>
-                                                    </>
-                                                )}
-                                            </AnimatePresence>
-                                        </div>
-                                    )}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowNewCallDropdown(!showNewCallDropdown)}
+                                            className="py-2 px-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:shadow-lg hover:shadow-green-500/25 transition-all flex items-center gap-2"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            New
+                                        </button>
+                                        {/* Dropdown with options */}
+                                        <AnimatePresence>
+                                            {showNewCallDropdown && (
+                                                <>
+                                                    {/* Backdrop to close dropdown */}
+                                                    <div 
+                                                        className="fixed inset-0 z-40" 
+                                                        onClick={() => setShowNewCallDropdown(false)}
+                                                    />
+                                                    <motion.div 
+                                                        initial={{ opacity: 0, y: -10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0, y: -10 }}
+                                                        className="absolute right-0 top-full mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-50 max-h-80 overflow-y-auto"
+                                                    >
+                                                        <div className="p-2">
+                                                            {/* Instant Room Option */}
+                                                            <button
+                                                                onClick={async () => {
+                                                                    setShowNewCallDropdown(false);
+                                                                    try {
+                                                                        const res = await fetch("/api/rooms", {
+                                                                            method: "POST",
+                                                                            headers: { "Content-Type": "application/json" },
+                                                                            body: JSON.stringify({
+                                                                                hostWalletAddress: userAddress,
+                                                                                title: "Quick Meeting",
+                                                                            }),
+                                                                        });
+                                                                        const data = await res.json();
+                                                                        if (res.ok && data.room) {
+                                                                            // Copy link to clipboard and show notification
+                                                                            navigator.clipboard.writeText(data.room.joinUrl);
+                                                                            // Open the room in a new tab
+                                                                            window.open(data.room.joinUrl, "_blank");
+                                                                        } else {
+                                                                            alert(data.error || "Failed to create room");
+                                                                        }
+                                                                    } catch {
+                                                                        alert("Failed to create room");
+                                                                    }
+                                                                }}
+                                                                className="w-full flex items-center gap-3 p-3 hover:bg-zinc-800 rounded-lg transition-colors mb-1"
+                                                            >
+                                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-lg">
+                                                                    🔗
+                                                                </div>
+                                                                <div className="text-left">
+                                                                    <p className="text-sm font-medium text-white">Instant Room</p>
+                                                                    <p className="text-xs text-zinc-500">Share link, no login needed</p>
+                                                                </div>
+                                                            </button>
+
+                                                            {friendsListData.length > 0 && (
+                                                                <>
+                                                                    <div className="border-t border-zinc-800 my-2" />
+                                                                    <p className="text-xs text-zinc-500 px-2 py-1">Call a friend</p>
+                                                                    {friendsListData.slice(0, 8).map((friend) => (
+                                                                        <button
+                                                                            key={friend.id}
+                                                                            onClick={() => {
+                                                                                setShowNewCallDropdown(false);
+                                                                                handleCall(friend, false);
+                                                                            }}
+                                                                            disabled={callState !== "idle"}
+                                                                            className="w-full flex items-center gap-3 p-2 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+                                                                        >
+                                                                            {friend.avatar ? (
+                                                                                <img src={friend.avatar} alt="" className="w-8 h-8 rounded-full" />
+                                                                            ) : (
+                                                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-xs text-white">
+                                                                                    {(friend.nickname || friend.reachUsername || friend.ensName || friend.address)?.[0]?.toUpperCase() || "?"}
+                                                                                </div>
+                                                                            )}
+                                                                            <span className="text-sm text-white truncate">
+                                                                                {friend.nickname || friend.reachUsername || friend.ensName || `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`}
+                                                                            </span>
+                                                                        </button>
+                                                                    ))}
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </motion.div>
+                                                </>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
                                 </div>
                             </div>
                             <div className="p-6">
