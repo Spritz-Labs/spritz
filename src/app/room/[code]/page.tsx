@@ -4,6 +4,7 @@ import { useState, useEffect, use, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { huddle01ProjectId, isHuddle01Configured } from "@/config/huddle01";
+import { InstantRoomChat } from "@/components/InstantRoomChat";
 
 type RoomInfo = {
     id: string;
@@ -49,6 +50,8 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
     const [remotePeers, setRemotePeers] = useState<Map<string, RemotePeer>>(new Map());
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [unreadMessages, setUnreadMessages] = useState(0);
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const clientRef = useRef<any>(null);
@@ -408,7 +411,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         const hasRemotePeers = remotePeerArray.length > 0;
         
         return (
-            <div className="min-h-screen bg-zinc-950 flex flex-col">
+            <div className="min-h-screen bg-zinc-950 flex flex-col relative">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-zinc-800">
                     <div className="flex items-center gap-3">
@@ -416,21 +419,42 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                         <span className="text-white font-medium">{room.title}</span>
                         <span className="text-zinc-500 text-sm">{formatDuration(callDuration)}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                    <div className="flex items-center gap-3 text-sm text-zinc-400">
                         <span>👥 {remotePeerArray.length + 1}</span>
                         <span>🔗 {room.joinCode}</span>
+                        {/* Chat Toggle in Header for mobile */}
+                        <button
+                            onClick={() => setIsChatOpen(!isChatOpen)}
+                            className={`relative p-2 rounded-lg transition-colors ${
+                                isChatOpen 
+                                    ? "bg-orange-500/20 text-orange-400" 
+                                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                            }`}
+                            title="Toggle chat"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            {unreadMessages > 0 && !isChatOpen && (
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-xs text-white flex items-center justify-center font-medium">
+                                    {unreadMessages > 9 ? "9+" : unreadMessages}
+                                </span>
+                            )}
+                        </button>
                     </div>
                 </div>
 
-                {/* Video Area */}
-                <div className="flex-1 p-4 overflow-hidden">
-                    <div className={`h-full grid gap-4 ${
-                        hasRemotePeers 
-                            ? remotePeerArray.length === 1 
-                                ? "grid-cols-2" 
-                                : "grid-cols-2 grid-rows-2"
-                            : "grid-cols-1"
-                    }`}>
+                {/* Main content area with chat sidebar */}
+                <div className="flex-1 flex overflow-hidden relative">
+                    {/* Video Area */}
+                    <div className={`flex-1 p-4 overflow-hidden transition-all ${isChatOpen ? "pr-0 sm:pr-4" : ""}`}>
+                        <div className={`h-full grid gap-4 ${
+                            hasRemotePeers 
+                                ? remotePeerArray.length === 1 
+                                    ? "grid-cols-2" 
+                                    : "grid-cols-2 grid-rows-2"
+                                : "grid-cols-1"
+                        }`}>
                         {/* Local Video */}
                         <div className="relative bg-zinc-900 rounded-2xl overflow-hidden">
                             {!isVideoOff ? (
@@ -535,7 +559,17 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                                 </div>
                             </div>
                         )}
+                        </div>
                     </div>
+
+                    {/* Chat Panel - Slides in from right */}
+                    <InstantRoomChat
+                        roomCode={room.joinCode}
+                        displayName={displayName}
+                        isOpen={isChatOpen}
+                        onClose={() => setIsChatOpen(false)}
+                        onUnreadChange={setUnreadMessages}
+                    />
                 </div>
 
                 {/* Controls */}
@@ -581,6 +615,26 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                                 </svg>
+                            )}
+                        </button>
+
+                        {/* Chat Toggle */}
+                        <button
+                            onClick={() => setIsChatOpen(!isChatOpen)}
+                            className={`relative p-4 rounded-full transition-all ${
+                                isChatOpen 
+                                    ? "bg-orange-500 hover:bg-orange-600 text-white" 
+                                    : "bg-zinc-800 hover:bg-zinc-700 text-white"
+                            }`}
+                            title={isChatOpen ? "Close chat" : "Open chat"}
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            {unreadMessages > 0 && !isChatOpen && (
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-xs text-white flex items-center justify-center font-medium animate-pulse">
+                                    {unreadMessages > 9 ? "9+" : unreadMessages}
+                                </span>
                             )}
                         </button>
 
