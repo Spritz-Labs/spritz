@@ -3121,41 +3121,14 @@ function DashboardContent({
                     {/* Calls Section */}
                     {activeNavTab === "calls" && (
                     <div className="space-y-4">
-                        {/* Scheduled Calls Card */}
+                        {/* New Call Actions - Top Section */}
                         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                            <div className="p-6 border-b border-zinc-800">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                            📅 Scheduled Calls
-                                        </h2>
-                                        <p className="text-zinc-500 text-sm mt-1">
-                                            Your upcoming and past scheduled meetings
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
                             <div className="p-6">
-                                <ScheduledCalls userAddress={userAddress} />
-                            </div>
-                        </div>
-
-                        {/* Call History Card */}
-                        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                            <div className="p-6 border-b border-zinc-800">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                            📞 Call History
-                                        </h2>
-                                        <p className="text-zinc-500 text-sm mt-1">
-                                            Voice and video calls with friends
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                {/* Three New Call Buttons */}
-                                <div className="flex flex-wrap gap-2">
+                                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                    <span>📞</span>
+                                    Start a Call
+                                </h2>
+                                <div className="flex flex-wrap gap-3">
                                     {/* New Instant Room */}
                                     <button
                                         onClick={async () => {
@@ -3181,9 +3154,9 @@ function DashboardContent({
                                                 alert("Failed to create room");
                                             }
                                         }}
-                                        className="flex-1 min-w-[120px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-medium hover:shadow-lg hover:shadow-purple-500/25 transition-all flex items-center justify-center gap-2"
+                                        className="flex-1 min-w-[140px] py-3 px-5 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-medium hover:shadow-lg hover:shadow-purple-500/25 transition-all flex items-center justify-center gap-2"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                         </svg>
                                         New Instant
@@ -3192,9 +3165,9 @@ function DashboardContent({
                                     {/* New Scheduled */}
                                     <button
                                         onClick={() => setShowNewScheduledModal(true)}
-                                        className="flex-1 min-w-[120px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center justify-center gap-2"
+                                        className="flex-1 min-w-[140px] py-3 px-5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center justify-center gap-2"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                         </svg>
                                         New Scheduled
@@ -3204,13 +3177,48 @@ function DashboardContent({
                                     <button
                                         onClick={() => setShowNewCallModal(true)}
                                         disabled={callState !== "idle" || friendsListData.length === 0}
-                                        className="flex-1 min-w-[120px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:shadow-lg hover:shadow-green-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="flex-1 min-w-[140px] py-3 px-5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:shadow-lg hover:shadow-green-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                         </svg>
                                         New Call
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Scheduled Calls Card */}
+                        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
+                            <div className="p-6 border-b border-zinc-800">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                            📅 Scheduled Calls
+                                        </h2>
+                                        <p className="text-zinc-500 text-sm mt-1">
+                                            Your upcoming and past scheduled meetings
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="p-6">
+                                <ScheduledCalls userAddress={userAddress} />
+                            </div>
+                        </div>
+
+                        {/* Call History Card */}
+                        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
+                            <div className="p-6 border-b border-zinc-800">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                            📞 Call History
+                                        </h2>
+                                        <p className="text-zinc-500 text-sm mt-1">
+                                            Voice and video calls with friends
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                             <div className="p-6">
