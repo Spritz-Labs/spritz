@@ -65,6 +65,22 @@ export default function RoomPage({
     const [selectedPeerMenu, setSelectedPeerMenu] = useState<string | null>(
         null
     );
+    const [showDeviceMenu, setShowDeviceMenu] = useState(false);
+    const [audioInputDevices, setAudioInputDevices] = useState<
+        MediaDeviceInfo[]
+    >([]);
+    const [audioOutputDevices, setAudioOutputDevices] = useState<
+        MediaDeviceInfo[]
+    >([]);
+    const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
+    const [selectedSpeakerId, setSelectedSpeakerId] = useState<string | null>(
+        null
+    );
+    const selectedSpeakerIdRef = useRef<string | null>(null);
+    const [micPermissionStatus, setMicPermissionStatus] = useState<
+        "granted" | "denied" | "prompt" | "checking"
+    >("checking");
+    const [showMicPermissionAlert, setShowMicPermissionAlert] = useState(false);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const clientRef = useRef<any>(null);
@@ -123,6 +139,9 @@ export default function RoomPage({
         setError(null);
 
         try {
+            // Check microphone permissions before joining
+            await checkMicPermissions();
+
             console.log("[Room] Getting token for room:", room.roomId);
 
             // Get token
@@ -434,6 +453,25 @@ export default function RoomPage({
                                     if (audioEl) {
                                         const stream = new MediaStream([track]);
                                         audioEl.srcObject = stream;
+
+                                        // Set speaker if one is selected
+                                        const speakerId =
+                                            selectedSpeakerIdRef.current;
+                                        if (
+                                            speakerId &&
+                                            "setSinkId" in audioEl
+                                        ) {
+                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                            (audioEl as any)
+                                                .setSinkId(speakerId)
+                                                .catch((err: Error) => {
+                                                    console.warn(
+                                                        "[Room] Failed to set sink ID:",
+                                                        err
+                                                    );
+                                                });
+                                        }
+
                                         audioEl
                                             .play()
                                             .catch((e) =>
@@ -630,6 +668,206 @@ export default function RoomPage({
         }
     }, [isVideoOff]);
 
+    // Check microphone permissions
+    const checkMicPermissions = useCallback(async (): Promise<boolean> => {
+        try {
+            setMicPermissionStatus("checking");
+
+            // Check if permissions API is available
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    const result = await navigator.permissions.query({
+                        name: "microphone" as PermissionName,
+                    });
+                    if (result.state === "denied") {
+                        setMicPermissionStatus("denied");
+                        setShowMicPermissionAlert(true);
+                        return false;
+                    } else if (result.state === "granted") {
+                        setMicPermissionStatus("granted");
+                        setShowMicPermissionAlert(false);
+                        return true;
+                    }
+                } catch (permErr) {
+                    // Permissions API might not support microphone query, fall through to getUserMedia check
+                    console.log(
+                        "[Room] Permissions API not available, using getUserMedia check"
+                    );
+                }
+            }
+
+            // Fallback: Try to get user media to check permissions
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                });
+                // Stop the test stream immediately
+                stream.getTracks().forEach((track) => track.stop());
+                setMicPermissionStatus("granted");
+                setShowMicPermissionAlert(false);
+                return true;
+            } catch (err: any) {
+                const errorMessage = err?.message || String(err);
+                if (
+                    errorMessage.includes("NotAllowed") ||
+                    errorMessage.includes("Permission denied") ||
+                    errorMessage.includes("permission")
+                ) {
+                    setMicPermissionStatus("denied");
+                    setShowMicPermissionAlert(true);
+                    return false;
+                } else if (
+                    errorMessage.includes("NotFound") ||
+                    errorMessage.includes("no device")
+                ) {
+                    setMicPermissionStatus("denied");
+                    setShowMicPermissionAlert(true);
+                    return false;
+                } else {
+                    setMicPermissionStatus("prompt");
+                    return false;
+                }
+            }
+        } catch (err) {
+            console.error("[Room] Error checking mic permissions:", err);
+            setMicPermissionStatus("denied");
+            setShowMicPermissionAlert(true);
+            return false;
+        }
+    }, []);
+
+    // Enumerate available audio devices
+    const enumerateDevices = useCallback(async () => {
+        try {
+            // Request permission first if needed
+            await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: false,
+            });
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter((d) => d.kind === "audioinput");
+            const audioOutputs = devices.filter(
+                (d) => d.kind === "audiooutput"
+            );
+
+            setAudioInputDevices(audioInputs);
+            setAudioOutputDevices(audioOutputs);
+
+            // Set default devices if not already set
+            if (!selectedMicId && audioInputs.length > 0) {
+                setSelectedMicId(audioInputs[0].deviceId);
+            }
+            if (!selectedSpeakerId && audioOutputs.length > 0) {
+                const defaultSpeakerId = audioOutputs[0].deviceId;
+                setSelectedSpeakerId(defaultSpeakerId);
+                selectedSpeakerIdRef.current = defaultSpeakerId;
+            }
+        } catch (err) {
+            console.error("[Room] Error enumerating devices:", err);
+        }
+    }, [selectedMicId, selectedSpeakerId]);
+
+    // Request microphone permissions
+    const requestMicPermissions = useCallback(async () => {
+        try {
+            setMicPermissionStatus("checking");
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+            });
+            // Stop the test stream immediately
+            stream.getTracks().forEach((track) => track.stop());
+            setMicPermissionStatus("granted");
+            setShowMicPermissionAlert(false);
+
+            // Refresh device list
+            await enumerateDevices();
+
+            // If in call, try to enable audio
+            if (inCall && clientRef.current && isMuted) {
+                try {
+                    await clientRef.current.localPeer.enableAudio();
+                    setIsMuted(false);
+                } catch (err) {
+                    console.error(
+                        "[Room] Failed to enable audio after permission grant:",
+                        err
+                    );
+                }
+            }
+        } catch (err: any) {
+            const errorMessage = err?.message || String(err);
+            if (
+                errorMessage.includes("NotAllowed") ||
+                errorMessage.includes("Permission denied")
+            ) {
+                setMicPermissionStatus("denied");
+                setShowMicPermissionAlert(true);
+                alert(
+                    "Microphone permission denied. Please allow microphone access in your browser settings and try again."
+                );
+            } else {
+                setMicPermissionStatus("denied");
+                setShowMicPermissionAlert(true);
+                alert(
+                    "Failed to access microphone. Please check your device settings."
+                );
+            }
+        }
+    }, [inCall, isMuted, enumerateDevices]);
+
+    // Switch microphone
+    const switchMicrophone = useCallback(async (deviceId: string) => {
+        if (!clientRef.current) return;
+        try {
+            setSelectedMicId(deviceId);
+
+            // Get new audio track with selected device
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: { deviceId: { exact: deviceId } },
+            });
+
+            const audioTrack = stream.getAudioTracks()[0];
+
+            // Replace the audio track in Huddle01
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const localPeer = clientRef.current.localPeer as any;
+            if (localPeer.replaceTrack) {
+                await localPeer.replaceTrack(audioTrack, "audio");
+            } else if (localPeer.updateAudioTrack) {
+                await localPeer.updateAudioTrack(audioTrack);
+            }
+
+            // Stop the old track
+            stream.getTracks().forEach((track) => {
+                if (track !== audioTrack) track.stop();
+            });
+
+            console.log("[Room] Switched to microphone:", deviceId);
+        } catch (err) {
+            console.error("[Room] Error switching microphone:", err);
+            alert("Failed to switch microphone. Please try again.");
+        }
+    }, []);
+
+    // Switch speaker (audio output)
+    const switchSpeaker = useCallback((deviceId: string) => {
+        setSelectedSpeakerId(deviceId);
+        selectedSpeakerIdRef.current = deviceId;
+
+        // Set sink ID for all remote audio elements
+        remoteAudioRefs.current.forEach((audioEl) => {
+            if (audioEl && "setSinkId" in audioEl) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (audioEl as any).setSinkId(deviceId).catch((err: Error) => {
+                    console.warn("[Room] Failed to set sink ID:", err);
+                });
+            }
+        });
+
+        console.log("[Room] Switched to speaker:", deviceId);
+    }, []);
+
     const formatDuration = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -690,6 +928,40 @@ export default function RoomPage({
         },
         [isHost]
     );
+
+    // Enumerate devices when joining call
+    useEffect(() => {
+        if (inCall) {
+            enumerateDevices();
+
+            // Check microphone permissions after joining
+            checkMicPermissions();
+
+            // Listen for device changes
+            const handleDeviceChange = () => {
+                enumerateDevices();
+            };
+
+            navigator.mediaDevices.addEventListener(
+                "devicechange",
+                handleDeviceChange
+            );
+
+            return () => {
+                navigator.mediaDevices.removeEventListener(
+                    "devicechange",
+                    handleDeviceChange
+                );
+            };
+        }
+    }, [inCall, enumerateDevices, checkMicPermissions]);
+
+    // Enumerate devices when device menu is opened
+    useEffect(() => {
+        if (showDeviceMenu && inCall) {
+            enumerateDevices();
+        }
+    }, [showDeviceMenu, inCall, enumerateDevices]);
 
     // Cleanup on unmount
     useEffect(() => {
@@ -835,6 +1107,73 @@ export default function RoomPage({
                     </div>
                 </div>
 
+                {/* Microphone Permission Alert */}
+                <AnimatePresence>
+                    {showMicPermissionAlert &&
+                        micPermissionStatus === "denied" && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className="flex-shrink-0 mx-4 mt-3 mb-2 p-4 bg-red-500/10 border border-red-500/30 rounded-xl"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="flex-shrink-0 w-5 h-5 text-red-400 mt-0.5">
+                                        <svg
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                            />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="text-red-400 font-semibold text-sm mb-1">
+                                            Microphone Access Denied
+                                        </h4>
+                                        <p className="text-red-300/80 text-xs mb-3">
+                                            Others cannot hear you. Please allow
+                                            microphone access in your browser
+                                            settings.
+                                        </p>
+                                        <button
+                                            onClick={requestMicPermissions}
+                                            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 rounded-lg text-red-400 text-xs font-medium transition-colors"
+                                        >
+                                            Grant Microphone Permission
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={() =>
+                                            setShowMicPermissionAlert(false)
+                                        }
+                                        className="flex-shrink-0 text-red-400/60 hover:text-red-400 transition-colors"
+                                        title="Dismiss"
+                                    >
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+                </AnimatePresence>
+
                 {/* Main content area - fills remaining space */}
                 <div className="flex-1 flex min-h-0 max-h-full overflow-hidden">
                     {/* Video Area - shrinks when chat is open */}
@@ -942,6 +1281,31 @@ export default function RoomPage({
                                                         peer.peerId,
                                                         el
                                                     );
+
+                                                    // Set speaker if one is selected
+                                                    const speakerId =
+                                                        selectedSpeakerIdRef.current;
+                                                    if (
+                                                        speakerId &&
+                                                        "setSinkId" in el
+                                                    ) {
+                                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                        (el as any)
+                                                            .setSinkId(
+                                                                speakerId
+                                                            )
+                                                            .catch(
+                                                                (
+                                                                    err: Error
+                                                                ) => {
+                                                                    console.warn(
+                                                                        "[Room] Failed to set sink ID:",
+                                                                        err
+                                                                    );
+                                                                }
+                                                            );
+                                                    }
+
                                                     // Try to play if we have a track
                                                     if (
                                                         peer.audioTrack &&
@@ -1103,15 +1467,43 @@ export default function RoomPage({
                     <div className="flex items-center justify-center gap-3">
                         {/* Mic Toggle */}
                         <button
-                            onClick={toggleMute}
-                            className={`p-3 rounded-full transition-all ${
-                                !isMuted
+                            onClick={() => {
+                                if (micPermissionStatus === "denied") {
+                                    requestMicPermissions();
+                                } else {
+                                    toggleMute();
+                                }
+                            }}
+                            className={`relative p-3 rounded-full transition-all ${
+                                micPermissionStatus === "denied"
+                                    ? "bg-red-500/50 hover:bg-red-500/70 text-white border-2 border-red-400"
+                                    : !isMuted
                                     ? "bg-zinc-800 hover:bg-zinc-700 text-white"
                                     : "bg-red-500 hover:bg-red-600 text-white"
                             }`}
-                            title={isMuted ? "Unmute" : "Mute"}
+                            title={
+                                micPermissionStatus === "denied"
+                                    ? "Microphone permission denied - Click to grant"
+                                    : isMuted
+                                    ? "Unmute"
+                                    : "Mute"
+                            }
                         >
-                            {!isMuted ? (
+                            {micPermissionStatus === "denied" ? (
+                                <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                    />
+                                </svg>
+                            ) : !isMuted ? (
                                 <svg
                                     className="w-5 h-5"
                                     fill="none"
@@ -1192,6 +1584,148 @@ export default function RoomPage({
                                 </svg>
                             )}
                         </button>
+
+                        {/* Device Selection */}
+                        <div className="relative">
+                            <button
+                                onClick={() => {
+                                    setShowDeviceMenu(!showDeviceMenu);
+                                    if (!showDeviceMenu) {
+                                        enumerateDevices();
+                                    }
+                                }}
+                                className="p-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white transition-all"
+                                title="Audio devices"
+                            >
+                                <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                                    />
+                                </svg>
+                            </button>
+
+                            {/* Device Menu Dropdown */}
+                            <AnimatePresence>
+                                {showDeviceMenu && (
+                                    <>
+                                        <div
+                                            className="fixed inset-0 z-40"
+                                            onClick={() =>
+                                                setShowDeviceMenu(false)
+                                            }
+                                        />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: 10 }}
+                                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden"
+                                        >
+                                            <div className="p-3 border-b border-zinc-800">
+                                                <h3 className="text-sm font-semibold text-white">
+                                                    Audio Devices
+                                                </h3>
+                                            </div>
+
+                                            {/* Microphone Selection */}
+                                            <div className="p-3 border-b border-zinc-800">
+                                                <label className="block text-xs text-zinc-400 mb-2">
+                                                    Microphone
+                                                </label>
+                                                <select
+                                                    value={selectedMicId || ""}
+                                                    onChange={(e) => {
+                                                        if (e.target.value) {
+                                                            switchMicrophone(
+                                                                e.target.value
+                                                            );
+                                                        }
+                                                    }}
+                                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                >
+                                                    {audioInputDevices.map(
+                                                        (device) => (
+                                                            <option
+                                                                key={
+                                                                    device.deviceId
+                                                                }
+                                                                value={
+                                                                    device.deviceId
+                                                                }
+                                                            >
+                                                                {device.label ||
+                                                                    `Microphone ${device.deviceId.slice(
+                                                                        0,
+                                                                        8
+                                                                    )}`}
+                                                            </option>
+                                                        )
+                                                    )}
+                                                    {audioInputDevices.length ===
+                                                        0 && (
+                                                        <option value="">
+                                                            No microphones found
+                                                        </option>
+                                                    )}
+                                                </select>
+                                            </div>
+
+                                            {/* Speaker Selection */}
+                                            <div className="p-3">
+                                                <label className="block text-xs text-zinc-400 mb-2">
+                                                    Speaker
+                                                </label>
+                                                <select
+                                                    value={
+                                                        selectedSpeakerId || ""
+                                                    }
+                                                    onChange={(e) => {
+                                                        if (e.target.value) {
+                                                            switchSpeaker(
+                                                                e.target.value
+                                                            );
+                                                        }
+                                                    }}
+                                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                >
+                                                    {audioOutputDevices.map(
+                                                        (device) => (
+                                                            <option
+                                                                key={
+                                                                    device.deviceId
+                                                                }
+                                                                value={
+                                                                    device.deviceId
+                                                                }
+                                                            >
+                                                                {device.label ||
+                                                                    `Speaker ${device.deviceId.slice(
+                                                                        0,
+                                                                        8
+                                                                    )}`}
+                                                            </option>
+                                                        )
+                                                    )}
+                                                    {audioOutputDevices.length ===
+                                                        0 && (
+                                                        <option value="">
+                                                            No speakers found
+                                                        </option>
+                                                    )}
+                                                </select>
+                                            </div>
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </div>
 
                         {/* Chat Toggle */}
                         <button
