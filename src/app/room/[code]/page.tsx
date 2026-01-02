@@ -228,6 +228,9 @@ export default function RoomPage({
                         data.producer?.track &&
                         localScreenShareRef.current
                     ) {
+                        console.log(
+                            "[Room] Local screen share stream playable"
+                        );
                         const stream = new MediaStream([data.producer.track]);
                         localScreenShareRef.current.srcObject = stream;
                         localScreenShareRef.current
@@ -882,8 +885,36 @@ export default function RoomPage({
             const localPeer = clientRef.current.localPeer as any;
 
             if (isScreenSharing) {
-                // Stop screen share
-                await localPeer.stopScreenShare();
+                // Stop screen share - try multiple methods
+                try {
+                    if (typeof localPeer.stopScreenShare === "function") {
+                        await localPeer.stopScreenShare();
+                    } else if (typeof localPeer.stopProducing === "function") {
+                        // Try to find and stop screen share producer
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const producers = (clientRef.current.room as any)
+                            ?.producers;
+                        if (producers) {
+                            for (const producer of Array.from(
+                                producers.values()
+                            )) {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                if ((producer as any)?.kind === "screen") {
+                                    await localPeer.stopProducing(
+                                        (producer as any).id
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (stopErr) {
+                    console.warn(
+                        "[Room] Error stopping screen share:",
+                        stopErr
+                    );
+                }
+
                 setIsScreenSharing(false);
 
                 // Clean up local screen share ref
@@ -896,28 +927,184 @@ export default function RoomPage({
                     localScreenShareRef.current.srcObject = null;
                 }
             } else {
-                // Start screen share
-                const screenStream = await localPeer.startScreenShare();
-                setIsScreenSharing(true);
+                // Start screen share - try multiple methods
+                console.log("[Room] Attempting to start screen share...");
+                console.log(
+                    "[Room] localPeer methods:",
+                    Object.keys(localPeer)
+                );
 
-                // Display local screen share preview
-                if (localScreenShareRef.current && screenStream) {
-                    localScreenShareRef.current.srcObject = screenStream;
-                    localScreenShareRef.current
-                        .play()
-                        .catch((e) =>
-                            console.warn(
-                                "[Room] Screen share preview play failed:",
-                                e
-                            )
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const room = clientRef.current.room as any;
+                console.log(
+                    "[Room] room methods:",
+                    room ? Object.keys(room) : "room is null"
+                );
+
+                try {
+                    // Method 1: Try startScreenShare on localPeer
+                    if (typeof localPeer.startScreenShare === "function") {
+                        console.log(
+                            "[Room] Using localPeer.startScreenShare method"
                         );
+                        const result = await localPeer.startScreenShare();
+                        console.log("[Room] startScreenShare result:", result);
+                        setIsScreenSharing(true);
+                        // Stream will come through stream-playable event
+                    }
+                    // Method 2: Try produceScreenShare on localPeer
+                    else if (
+                        typeof localPeer.produceScreenShare === "function"
+                    ) {
+                        console.log(
+                            "[Room] Using localPeer.produceScreenShare method"
+                        );
+                        const result = await localPeer.produceScreenShare();
+                        console.log(
+                            "[Room] produceScreenShare result:",
+                            result
+                        );
+                        setIsScreenSharing(true);
+                        // Stream will come through stream-playable event
+                    }
+                    // Method 3: Try startScreenShare on room
+                    else if (
+                        room &&
+                        typeof room.startScreenShare === "function"
+                    ) {
+                        console.log(
+                            "[Room] Using room.startScreenShare method"
+                        );
+                        await room.startScreenShare();
+                        setIsScreenSharing(true);
+                        // Stream will come through stream-playable event
+                    }
+                    // Method 4: Manual getDisplayMedia + produce
+                    else {
+                        console.log(
+                            "[Room] Using manual getDisplayMedia + produce method"
+                        );
+                        // Method 3: Get screen stream manually and produce it
+                        const screenStream =
+                            await navigator.mediaDevices.getDisplayMedia({
+                                video: {
+                                    displaySurface: "monitor",
+                                } as MediaTrackConstraints,
+                                audio: true,
+                            });
+                        console.log(
+                            "[Room] Got screen stream via getDisplayMedia"
+                        );
+
+                        // Produce the screen stream - try different produce methods
+                        const videoTrack = screenStream.getVideoTracks()[0];
+                        const audioTrack = screenStream.getAudioTracks()[0];
+
+                        if (!videoTrack) {
+                            screenStream.getTracks().forEach((t) => t.stop());
+                            throw new Error("No video track in screen stream");
+                        }
+
+                        let produced = false;
+
+                        // Try produce with track
+                        if (typeof localPeer.produce === "function") {
+                            try {
+                                await localPeer.produce({
+                                    track: videoTrack,
+                                    appData: { source: "screen" },
+                                });
+                                console.log(
+                                    "[Room] Produced screen track via produce()"
+                                );
+                                produced = true;
+                            } catch (produceErr) {
+                                console.warn(
+                                    "[Room] produce() failed, trying alternatives:",
+                                    produceErr
+                                );
+                            }
+                        }
+
+                        // Try produceScreen if produce failed
+                        if (
+                            !produced &&
+                            typeof localPeer.produceScreen === "function"
+                        ) {
+                            try {
+                                await localPeer.produceScreen(videoTrack);
+                                console.log(
+                                    "[Room] Produced screen track via produceScreen()"
+                                );
+                                produced = true;
+                            } catch (produceErr) {
+                                console.warn(
+                                    "[Room] produceScreen() failed:",
+                                    produceErr
+                                );
+                            }
+                        }
+
+                        // Try shareScreen if still not produced
+                        if (
+                            !produced &&
+                            typeof localPeer.shareScreen === "function"
+                        ) {
+                            try {
+                                await localPeer.shareScreen(screenStream);
+                                console.log(
+                                    "[Room] Shared screen via shareScreen()"
+                                );
+                                produced = true;
+                            } catch (produceErr) {
+                                console.warn(
+                                    "[Room] shareScreen() failed:",
+                                    produceErr
+                                );
+                            }
+                        }
+
+                        if (!produced) {
+                            screenStream.getTracks().forEach((t) => t.stop());
+                            throw new Error(
+                                "Could not produce screen share - no compatible method found"
+                            );
+                        }
+
+                        // Display local preview
+                        if (localScreenShareRef.current) {
+                            localScreenShareRef.current.srcObject =
+                                screenStream;
+                            localScreenShareRef.current
+                                .play()
+                                .catch((e) =>
+                                    console.warn(
+                                        "[Room] Screen share preview play failed:",
+                                        e
+                                    )
+                                );
+                        }
+                        setIsScreenSharing(true);
+                    }
+                } catch (shareErr: any) {
+                    console.error("[Room] Screen share error:", shareErr);
+                    throw shareErr;
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("[Room] Toggle screen share error:", err);
-            alert(
-                "Failed to share screen. Please check your browser permissions."
-            );
+            const errorMsg = err?.message || String(err);
+            if (
+                errorMsg.includes("NotAllowed") ||
+                errorMsg.includes("permission")
+            ) {
+                alert(
+                    "Screen sharing permission denied. Please allow screen sharing in your browser."
+                );
+            } else {
+                alert("Failed to share screen. Please try again.");
+            }
+            setIsScreenSharing(false);
         }
     }, [isScreenSharing]);
 
