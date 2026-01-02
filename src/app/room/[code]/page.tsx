@@ -49,7 +49,10 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        fetchRoom();
+        if (code) {
+            fetchRoom();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [code]);
 
     const fetchRoom = async () => {
@@ -74,7 +77,11 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         if (!displayName.trim() || !room) return;
 
         setJoiningRoom(true);
+        setError(null);
+        
         try {
+            console.log("[Room] Getting token for room:", room.roomId);
+            
             // Get token
             const tokenRes = await fetch(`/api/rooms/${code}/token`, {
                 method: "POST",
@@ -83,16 +90,28 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
             });
 
             const tokenData = await tokenRes.json();
+            console.log("[Room] Token response:", tokenRes.ok, tokenData);
+            
             if (!tokenRes.ok) {
-                setError(tokenData.error || "Failed to join room");
+                setError(tokenData.error || "Failed to get access token");
                 setJoiningRoom(false);
                 return;
             }
 
+            console.log("[Room] Loading Huddle01 SDK...");
+            
             // Load Huddle01 SDK
             await loadHuddle01SDK();
             if (!HuddleClient) {
                 setError("Failed to load video SDK");
+                setJoiningRoom(false);
+                return;
+            }
+
+            console.log("[Room] Creating Huddle01 client with projectId:", huddle01ProjectId);
+            
+            if (!huddle01ProjectId) {
+                setError("Video calling not configured (missing project ID)");
                 setJoiningRoom(false);
                 return;
             }
@@ -126,14 +145,27 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                 console.log("[Room] Peer left:", peer);
             });
 
+            console.log("[Room] Joining room:", room.roomId);
+            
             await client.joinRoom({
                 roomId: room.roomId,
                 token: tokenData.token,
             });
 
+            console.log("[Room] Joined! Enabling audio/video...");
+
             // Enable media after joining
-            await client.localPeer.enableAudio();
-            await client.localPeer.enableVideo();
+            try {
+                await client.localPeer.enableAudio();
+            } catch (audioErr) {
+                console.warn("[Room] Could not enable audio:", audioErr);
+            }
+            
+            try {
+                await client.localPeer.enableVideo();
+            } catch (videoErr) {
+                console.warn("[Room] Could not enable video:", videoErr);
+            }
 
             // Start duration timer
             durationIntervalRef.current = setInterval(() => {
@@ -144,7 +176,8 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
             setJoiningRoom(false);
         } catch (err) {
             console.error("[Room] Join error:", err);
-            setError("Failed to join room");
+            const errorMessage = err instanceof Error ? err.message : "Unknown error";
+            setError(`Failed to join room: ${errorMessage}`);
             setJoiningRoom(false);
         }
     };
@@ -230,6 +263,8 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     }
 
     if (error || !room) {
+        const isJoinError = error?.includes("Failed to join");
+        
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <motion.div
@@ -238,12 +273,13 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                     className="text-center max-w-md"
                 >
                     <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-zinc-800/50 flex items-center justify-center">
-                        <span className="text-4xl">🚫</span>
+                        <span className="text-4xl">{isJoinError ? "⚠️" : "🚫"}</span>
                     </div>
                     <h1 className="text-2xl font-bold text-white mb-3">
                         {error === "Room not found" ? "Room Not Found" : 
                          error === "This room has ended" ? "Room Ended" :
-                         error === "This room has expired" ? "Room Expired" : "Error"}
+                         error === "This room has expired" ? "Room Expired" :
+                         isJoinError ? "Connection Issue" : "Error"}
                     </h1>
                     <p className="text-zinc-400 mb-8">
                         {error === "Room not found" 
@@ -254,12 +290,26 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                             ? "This room has expired. Rooms are only available for 24 hours."
                             : error}
                     </p>
-                    <Link
-                        href="/"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium rounded-xl hover:shadow-lg hover:shadow-orange-500/25 transition-all"
-                    >
-                        Go to Spritz
-                    </Link>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        {isJoinError && (
+                            <button
+                                onClick={() => {
+                                    setError(null);
+                                    setLoading(true);
+                                    fetchRoom();
+                                }}
+                                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-xl transition-all"
+                            >
+                                Try Again
+                            </button>
+                        )}
+                        <Link
+                            href="/"
+                            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium rounded-xl hover:shadow-lg hover:shadow-orange-500/25 transition-all"
+                        >
+                            Go to Spritz
+                        </Link>
+                    </div>
                 </motion.div>
             </div>
         );
