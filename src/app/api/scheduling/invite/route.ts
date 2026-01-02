@@ -11,7 +11,8 @@ const supabase = createClient(
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.spritz.chat";
+// Always use app.spritz.chat for email links (not spritz.chat which is landing page)
+const BASE_URL = "https://app.spritz.chat";
 
 // Generate ICS calendar file content
 function generateICSFile({
