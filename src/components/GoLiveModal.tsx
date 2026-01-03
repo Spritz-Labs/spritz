@@ -32,6 +32,7 @@ export function GoLiveModal({
     const videoPreviewRef = useRef<HTMLVideoElement>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const broadcastKeyRef = useRef(0); // Key to force Broadcast remount
+    const isCleaningUpRef = useRef(false); // Track if cleanup is in progress
 
     const [title, setTitle] = useState("");
     const [status, setStatus] = useState<StreamStatus>("preview");
@@ -215,10 +216,24 @@ export function GoLiveModal({
 
     // Handle creating stream and getting ingest URL
     const handleGoLive = async () => {
+        // Don't allow starting if cleanup is in progress
+        if (isCleaningUpRef.current) {
+            console.log("[GoLive] Cleanup in progress, waiting...");
+            setError("Please wait for previous stream to fully stop...");
+            return;
+        }
+
         setIsStarting(true);
         setError(null);
 
         try {
+            // Ensure all previous tracks are stopped before starting new broadcast
+            stopAllMediaTracks();
+            stopCamera();
+
+            // Wait a bit to ensure camera is fully released (especially on iOS)
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
             // Create stream if we don't have one
             let stream = currentStream;
             if (!stream) {
@@ -243,6 +258,9 @@ export function GoLiveModal({
             // Stop the preview camera - the Broadcast component will request its own
             stopCamera();
 
+            // Small delay to ensure camera is released before Broadcast component tries to access it
+            await new Promise((resolve) => setTimeout(resolve, 300));
+
             // Set the ingest URL to trigger broadcast mode
             setIngestUrl(whipUrl);
 
@@ -265,6 +283,8 @@ export function GoLiveModal({
     const handleEndStream = async () => {
         if (!currentStream) return;
 
+        // Mark cleanup as in progress
+        isCleaningUpRef.current = true;
         setStatus("ending");
 
         try {
@@ -295,6 +315,9 @@ export function GoLiveModal({
             // End the stream in the database
             await onEndStream(currentStream.id);
 
+            // Wait a bit more before allowing new broadcasts
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
             setStatus("preview");
             setDuration(0);
 
@@ -317,6 +340,8 @@ export function GoLiveModal({
             setTimeout(() => {
                 console.log("[GoLive] Final cleanup pass 4 (3000ms)");
                 stopAllMediaTracks();
+                // Mark cleanup as complete after final pass
+                isCleaningUpRef.current = false;
             }, 3000);
 
             // Don't restart preview camera - user is ending the stream
@@ -331,7 +356,10 @@ export function GoLiveModal({
             stopAllMediaTracks();
             setTimeout(() => stopAllMediaTracks(), 200);
             setTimeout(() => stopAllMediaTracks(), 500);
-            setTimeout(() => stopAllMediaTracks(), 1000);
+            setTimeout(() => {
+                stopAllMediaTracks();
+                isCleaningUpRef.current = false;
+            }, 1000);
         }
     };
 
