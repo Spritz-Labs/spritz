@@ -346,116 +346,117 @@ export function GoLiveModal({
     const handleEndStream = async () => {
         if (!currentStream) return;
 
-        // Mark cleanup as in progress
+        // Mark cleanup as in progress IMMEDIATELY
         isCleaningUpRef.current = true;
         setStatus("ending");
 
-        try {
-            // CRITICAL: Set status to "ending" first - this will unmount Broadcast component
-            // The conditional rendering will remove Broadcast.Root from DOM
-            
-            // CRITICAL: Force Broadcast component remount by changing key
-            broadcastKeyRef.current += 1;
-            
-            // CRITICAL: Clear ingestUrl to ensure Broadcast component is not rendered
-            // This must happen before stopping tracks to ensure the component releases them
-            setIngestUrl(null);
+        // IMMEDIATE cleanup - don't wait
+        // CRITICAL: Set status to "ending" first - this will unmount Broadcast component
+        // The conditional rendering will remove Broadcast.Root from DOM
+        
+        // CRITICAL: Force Broadcast component remount by changing key
+        broadcastKeyRef.current += 1;
+        
+        // CRITICAL: Clear ingestUrl to ensure Broadcast component is not rendered
+        // This must happen before stopping tracks to ensure the component releases them
+        setIngestUrl(null);
 
-            // Wait for Broadcast component to fully unmount from DOM
-            // iOS needs MUCH more time for WebRTC to disconnect - try 2 seconds
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+        // IMMEDIATE track stopping - don't wait
+        stopAllMediaTracks();
+        stopCamera();
 
-            // Now stop all media tracks - the Broadcast component should be completely unmounted
-            stopAllMediaTracks();
+        // Continue cleanup in background (non-blocking)
+        (async () => {
+            try {
+                // Wait for Broadcast component to fully unmount from DOM
+                // iOS needs MUCH more time for WebRTC to disconnect - try 2 seconds
+                await new Promise((resolve) => setTimeout(resolve, 2000));
 
-            // Additional cleanup passes with increasing delays for iOS
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            stopAllMediaTracks();
-
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-            stopAllMediaTracks();
-
-            // End the stream in the database
-            await onEndStream(currentStream.id);
-
-            // Wait much longer before allowing new broadcasts - iOS needs significant time to fully release
-            // The green light and mic indicator suggest WebRTC connection is still active
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-
-            setStatus("preview");
-            setDuration(0);
-
-            // Final cleanup passes for iOS - more aggressive
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 1 (500ms)");
+                // Additional cleanup passes with increasing delays for iOS
                 stopAllMediaTracks();
-            }, 500);
-
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 2 (1000ms)");
+                await new Promise((resolve) => setTimeout(resolve, 1000));
                 stopAllMediaTracks();
-            }, 1000);
-
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 3 (2000ms)");
+                await new Promise((resolve) => setTimeout(resolve, 1500));
                 stopAllMediaTracks();
-            }, 2000);
 
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 4 (3000ms)");
-                stopAllMediaTracks();
-            }, 3000);
+                // End the stream in the database
+                await onEndStream(currentStream.id);
 
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 5 (5000ms)");
-                stopAllMediaTracks();
-            }, 5000);
+                setStatus("preview");
+                setDuration(0);
 
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 6 (7000ms)");
-                stopAllMediaTracks();
-            }, 7000);
+                // Final cleanup passes for iOS - more aggressive (non-blocking)
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 1 (500ms)");
+                    stopAllMediaTracks();
+                }, 500);
 
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 7 (10000ms)");
-                stopAllMediaTracks();
-            }, 10000);
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 2 (1000ms)");
+                    stopAllMediaTracks();
+                }, 1000);
 
-            setTimeout(() => {
-                console.log("[GoLive] Final cleanup pass 8 (15000ms)");
-                stopAllMediaTracks();
-                // Mark cleanup as complete after final pass
-                // iOS Safari can take up to 15 seconds to fully release WebRTC resources
-                isCleaningUpRef.current = false;
-            }, 15000);
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 3 (2000ms)");
+                    stopAllMediaTracks();
+                }, 2000);
 
-            // Don't restart preview camera - user is ending the stream
-            // They can reopen the modal if they want to go live again
-        } catch (e) {
-            console.error("[GoLive] Error ending stream:", e);
-            setError("Failed to end stream properly");
-            // Still try to clean up
-            broadcastKeyRef.current += 1;
-            setIngestUrl(null);
-            setStatus("ending"); // Force unmount
-            stopAllMediaTracks();
-            setTimeout(() => stopAllMediaTracks(), 200);
-            setTimeout(() => stopAllMediaTracks(), 500);
-            setTimeout(() => {
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 4 (3000ms)");
+                    stopAllMediaTracks();
+                }, 3000);
+
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 5 (5000ms)");
+                    stopAllMediaTracks();
+                }, 5000);
+
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 6 (7000ms)");
+                    stopAllMediaTracks();
+                }, 7000);
+
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 7 (10000ms)");
+                    stopAllMediaTracks();
+                }, 10000);
+
+                setTimeout(() => {
+                    console.log("[GoLive] Final cleanup pass 8 (15000ms)");
+                    stopAllMediaTracks();
+                    // Mark cleanup as complete after final pass
+                    // iOS Safari can take up to 15 seconds to fully release WebRTC resources
+                    isCleaningUpRef.current = false;
+                }, 15000);
+
+                // Don't restart preview camera - user is ending the stream
+                // They can reopen the modal if they want to go live again
+            } catch (e) {
+                console.error("[GoLive] Error ending stream:", e);
+                setError("Failed to end stream properly");
+                // Still try to clean up
+                broadcastKeyRef.current += 1;
+                setIngestUrl(null);
+                setStatus("ending"); // Force unmount
                 stopAllMediaTracks();
-                isCleaningUpRef.current = false;
-            }, 1000);
-        }
+                setTimeout(() => stopAllMediaTracks(), 200);
+                setTimeout(() => stopAllMediaTracks(), 500);
+                setTimeout(() => {
+                    stopAllMediaTracks();
+                    isCleaningUpRef.current = false;
+                }, 1000);
+            }
+        })();
     };
 
     // Handle close
-    const handleClose = async () => {
+    const handleClose = () => {
         if (status === "live") {
             if (!confirm("You are currently live. End stream and close?")) {
                 return;
             }
-            // End stream first (which will handle cleanup)
-            await handleEndStream();
+            // Trigger end stream (non-blocking)
+            handleEndStream();
         }
 
         // IMMEDIATE cleanup - don't wait for anything
@@ -465,14 +466,11 @@ export function GoLiveModal({
         // Clear ingest URL first to unmount Broadcast component
         setIngestUrl(null);
 
-        // Wait for component to unmount, then stop tracks
-        setTimeout(() => {
-            stopAllMediaTracks();
-            stopCamera();
-        }, 100);
+        // IMMEDIATE track stopping
+        stopAllMediaTracks();
+        stopCamera();
 
-        // Additional aggressive cleanup passes with longer delays for iOS
-        // The Broadcast component needs time to fully unmount and release tracks
+        // Additional aggressive cleanup passes with longer delays for iOS (non-blocking)
         setTimeout(() => {
             console.log("[GoLive] Cleanup pass 1 (200ms)");
             stopAllMediaTracks();
@@ -806,8 +804,13 @@ export function GoLiveModal({
 
                                             {/* End stream button */}
                                             <button
-                                                onClick={handleEndStream}
-                                                className="p-5 bg-red-500 hover:bg-red-600 rounded-full transition-colors"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleEndStream();
+                                                }}
+                                                disabled={isCleaningUpRef.current}
+                                                className="p-5 bg-red-500 hover:bg-red-600 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 <svg
                                                     className="w-8 h-8 text-white"
