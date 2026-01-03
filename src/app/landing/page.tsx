@@ -45,6 +45,14 @@ export default function LandingPage() {
                             Privacy
                         </a>
                         <a
+                            href="https://docs.spritz.chat"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-zinc-400 hover:text-white font-medium transition-colors"
+                        >
+                            Docs
+                        </a>
+                        <a
                             href="https://github.com/Spritz-Labs/spritz"
                             target="_blank"
                             rel="noopener noreferrer"
@@ -301,6 +309,14 @@ export default function LandingPage() {
                             className="text-zinc-400 hover:text-white text-sm transition-colors"
                         >
                             GitHub
+                        </a>
+                        <a
+                            href="https://docs.spritz.chat"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-zinc-400 hover:text-white text-sm transition-colors"
+                        >
+                            Docs
                         </a>
                         <a
                             href="https://x.com/spritzchat"

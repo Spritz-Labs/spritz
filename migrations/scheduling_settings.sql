@@ -38,3 +38,4 @@ COMMENT ON COLUMN shout_user_settings.scheduling_duration_minutes IS 'Default du
 COMMENT ON COLUMN shout_user_settings.scheduling_buffer_minutes IS 'Buffer time between scheduled calls';
 COMMENT ON COLUMN shout_user_settings.scheduling_advance_notice_hours IS 'Minimum hours of advance notice required for scheduling';
 
+

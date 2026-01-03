@@ -412,13 +412,30 @@ export function useMessageReactions(
                     .single();
 
                 if (existing) {
-                    await client
+                    const { error: deleteError } = await client
                         .from("shout_message_reactions")
                         .delete()
                         .eq("id", existing.id);
 
+                    if (deleteError) {
+                        console.error("[MessageReactions] Delete error:", deleteError);
+                        throw deleteError;
+                    }
+
                     setReactions((prev) => {
-                        const msgReactions = [...(prev[messageId] || [])];
+                        // Initialize reactions for this message if not already present
+                        let msgReactions = prev[messageId];
+                        if (!msgReactions) {
+                            msgReactions = MESSAGE_REACTION_EMOJIS.map((e) => ({
+                                emoji: e,
+                                count: 0,
+                                hasReacted: false,
+                                users: [],
+                            }));
+                        } else {
+                            msgReactions = [...msgReactions];
+                        }
+
                         const idx = msgReactions.findIndex((r) => r.emoji === emoji);
                         if (idx >= 0) {
                             msgReactions[idx] = {
@@ -433,15 +450,32 @@ export function useMessageReactions(
                         return { ...prev, [messageId]: msgReactions };
                     });
                 } else {
-                    await client.from("shout_message_reactions").insert({
+                    const { error: insertError } = await client.from("shout_message_reactions").insert({
                         message_id: messageId,
                         conversation_id: conversationId,
                         user_address: userAddress.toLowerCase(),
                         emoji,
                     });
 
+                    if (insertError) {
+                        console.error("[MessageReactions] Insert error:", insertError);
+                        throw insertError;
+                    }
+
                     setReactions((prev) => {
-                        const msgReactions = [...(prev[messageId] || [])];
+                        // Initialize reactions for this message if not already present
+                        let msgReactions = prev[messageId];
+                        if (!msgReactions) {
+                            msgReactions = MESSAGE_REACTION_EMOJIS.map((e) => ({
+                                emoji: e,
+                                count: 0,
+                                hasReacted: false,
+                                users: [],
+                            }));
+                        } else {
+                            msgReactions = [...msgReactions];
+                        }
+
                         const idx = msgReactions.findIndex((r) => r.emoji === emoji);
                         if (idx >= 0) {
                             msgReactions[idx] = {
@@ -479,9 +513,16 @@ export function useMessageReactions(
                     table: "shout_message_reactions",
                     filter: `conversation_id=eq.${conversationId}`,
                 },
-                () => {
-                    // Refetch reactions for this conversation
-                    // (simple approach - could optimize)
+                (payload) => {
+                    // When reactions change, refetch for the affected message
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const newData = payload.new as any;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const oldData = payload.old as any;
+                    const messageId = newData?.message_id || oldData?.message_id;
+                    if (messageId) {
+                        fetchReactions([messageId]);
+                    }
                 }
             )
             .subscribe();
@@ -489,7 +530,7 @@ export function useMessageReactions(
         return () => {
             client.removeChannel(channel);
         };
-    }, [conversationId]);
+    }, [conversationId, fetchReactions]);
 
     return {
         reactions,

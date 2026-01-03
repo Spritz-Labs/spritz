@@ -596,6 +596,14 @@ export function ChatModal({
         }
     }, [messages, fetchReactions]);
 
+    // Fetch reactions for all messages
+    useEffect(() => {
+        const messageIds = messages.map((msg) => msg.id);
+        if (messageIds.length > 0) {
+            fetchMsgReactions(messageIds);
+        }
+    }, [messages, fetchMsgReactions]);
+
     // Handle reaction click
     const handleReaction = async (ipfsUrl: string, emoji: string) => {
         await toggleReaction(ipfsUrl, emoji);
@@ -1275,14 +1283,19 @@ export function ChatModal({
                                                                             null
                                                                         )
                                                                     }
-                                                                    onSelect={(
+                                                                    onSelect={async (
                                                                         emoji
-                                                                    ) =>
-                                                                        toggleMsgReaction(
+                                                                    ) => {
+                                                                        const success = await toggleMsgReaction(
                                                                             msg.id,
                                                                             emoji
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                        if (success) {
+                                                                            setShowMsgReactions(null);
+                                                                        } else {
+                                                                            console.error("[ChatModal] Failed to save reaction");
+                                                                        }
+                                                                    }}
                                                                     emojis={
                                                                         MESSAGE_REACTION_EMOJIS
                                                                     }

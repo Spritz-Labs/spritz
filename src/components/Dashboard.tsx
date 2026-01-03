@@ -375,6 +375,9 @@ function DashboardContent({
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
+    // Cache for user info fetched from API
+    const [userInfoCache, setUserInfoCache] = useState<Map<string, { name: string | null; avatar: string | null }>>(new Map());
+
     const { resolveAddressOrENS } = useENS();
 
     // Network check
@@ -405,6 +408,53 @@ function DashboardContent({
         isConfigured: isSupabaseConfigured,
         refresh: refreshFriends,
     } = useFriendRequests(userAddress);
+
+    // Fetch user info for all unique senders in alpha chat messages
+    useEffect(() => {
+        if (!alphaChat.messages || alphaChat.messages.length === 0) return;
+
+        const uniqueSenders = new Set<string>();
+        alphaChat.messages.forEach(msg => {
+            const sender = msg.sender_address.toLowerCase();
+            // Skip current user and friends (already handled)
+            if (sender !== userAddress.toLowerCase() && 
+                !friends.some(f => f.friend_address.toLowerCase() === sender)) {
+                uniqueSenders.add(sender);
+            }
+        });
+
+        // Only fetch for senders not in cache
+        const sendersToFetch = Array.from(uniqueSenders).filter(
+            address => !userInfoCache.has(address)
+        );
+
+        // Fetch user info for all unique senders not in cache
+        sendersToFetch.forEach(address => {
+            fetch(`/api/public/user?address=${encodeURIComponent(address)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.user) {
+                        const name = data.user.username 
+                            ? `@${data.user.username}` 
+                            : data.user.display_name || data.user.ens_name || null;
+                        const userInfo = {
+                            name,
+                            avatar: data.user.avatar_url || null,
+                        };
+                        setUserInfoCache(prev => {
+                            // Check again to avoid race conditions
+                            if (prev.has(address.toLowerCase())) {
+                                return prev;
+                            }
+                            return new Map(prev).set(address.toLowerCase(), userInfo);
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error("[Dashboard] Error fetching user info for", address, err);
+                });
+        });
+    }, [alphaChat.messages, userAddress, friends]); // Removed userInfoCache from deps to avoid infinite loops
 
     // Presence heartbeat - updates last_seen every 30 seconds
     usePresence(userAddress);
@@ -703,8 +753,15 @@ function DashboardContent({
             };
         }
         
+        // Check cache
+        const cached = userInfoCache.get(normalizedAddress);
+        if (cached) {
+            return cached;
+        }
+        
+        // Return null if not found (will be fetched by useEffect)
         return null;
-    }, [userAddress, friends, reachUsername, userENS]);
+    }, [userAddress, friends, reachUsername, userENS, userInfoCache]);
 
     // Convert friends to the format FriendsList expects - memoized to prevent unnecessary re-renders
     const friendsListData: FriendsListFriend[] = useMemo(
@@ -3202,57 +3259,59 @@ function DashboardContent({
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                     <input
                                         type="text"
                                         value={`https://app.spritz.chat/room/${userAddress}`}
                                         readOnly
-                                        className="flex-1 px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm font-mono"
+                                        className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm font-mono"
                                     />
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                // Ensure permanent room exists
-                                                await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
-                                                // Copy URL
-                                                await navigator.clipboard.writeText(`https://app.spritz.chat/room/${userAddress}`);
-                                                // Show feedback
-                                                const btn = document.activeElement as HTMLElement;
-                                                const original = btn?.textContent;
-                                                if (btn) {
-                                                    btn.textContent = "Copied!";
-                                                    setTimeout(() => {
-                                                        if (btn) btn.textContent = original || "Copy";
-                                                    }, 2000);
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    // Ensure permanent room exists
+                                                    await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
+                                                    // Copy URL
+                                                    await navigator.clipboard.writeText(`https://app.spritz.chat/room/${userAddress}`);
+                                                    // Show feedback
+                                                    const btn = document.activeElement as HTMLElement;
+                                                    const original = btn?.textContent;
+                                                    if (btn) {
+                                                        btn.textContent = "Copied!";
+                                                        setTimeout(() => {
+                                                            if (btn) btn.textContent = original || "Copy";
+                                                        }, 2000);
+                                                    }
+                                                } catch (err) {
+                                                    console.error("Failed to copy:", err);
+                                                    alert("Failed to copy link");
                                                 }
-                                            } catch (err) {
-                                                console.error("Failed to copy:", err);
-                                                alert("Failed to copy link");
-                                            }
-                                        }}
-                                        className="px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors whitespace-nowrap"
-                                    >
-                                        Copy Link
-                                    </button>
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                // Ensure permanent room exists
-                                                const res = await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
-                                                if (res.ok) {
-                                                    window.open(`https://app.spritz.chat/room/${userAddress}`, "_blank");
-                                                } else {
+                                            }}
+                                            className="flex-1 sm:flex-none px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors whitespace-nowrap"
+                                        >
+                                            Copy Link
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    // Ensure permanent room exists
+                                                    const res = await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
+                                                    if (res.ok) {
+                                                        window.open(`https://app.spritz.chat/room/${userAddress}`, "_blank");
+                                                    } else {
+                                                        alert("Failed to open room");
+                                                    }
+                                                } catch (err) {
+                                                    console.error("Failed to open room:", err);
                                                     alert("Failed to open room");
                                                 }
-                                            } catch (err) {
-                                                console.error("Failed to open room:", err);
-                                                alert("Failed to open room");
-                                            }
-                                        }}
-                                        className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-sm rounded-lg transition-all whitespace-nowrap"
-                                    >
-                                        Open Room
-                                    </button>
+                                            }}
+                                            className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-sm rounded-lg transition-all whitespace-nowrap"
+                                        >
+                                            Open Room
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

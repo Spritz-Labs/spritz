@@ -987,6 +987,104 @@ export default function RoomPage({
                     }
                     localScreenShareRef.current.srcObject = null;
                 }
+
+                // Reattach local video stream if video is enabled
+                // Use a small delay to ensure screen share is fully stopped
+                setTimeout(async () => {
+                    if (!isVideoOff && localVideoRef.current) {
+                        try {
+                            // Method 1: Try to get video stream from local peer's getStream method
+                            if (typeof localPeer.getStream === "function") {
+                                try {
+                                    const videoStream =
+                                        await localPeer.getStream("video");
+                                    if (videoStream && localVideoRef.current) {
+                                        localVideoRef.current.srcObject =
+                                            videoStream;
+                                        localVideoRef.current
+                                            .play()
+                                            .catch((e) =>
+                                                console.warn(
+                                                    "[Room] Video reattach play failed:",
+                                                    e
+                                                )
+                                            );
+                                        console.log(
+                                            "[Room] Reattached local video via getStream"
+                                        );
+                                        return; // Success, exit early
+                                    }
+                                } catch (getStreamErr) {
+                                    console.log(
+                                        "[Room] getStream('video') failed, trying alternatives:",
+                                        getStreamErr
+                                    );
+                                }
+                            }
+
+                            // Method 2: Try to get the current video track from producers
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const producers = (clientRef.current.room as any)
+                                ?.producers;
+                            if (producers) {
+                                for (const producer of Array.from(
+                                    producers.values()
+                                )) {
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const prod = producer as any;
+                                    // Check for video producer (not screen share)
+                                    if (
+                                        prod?.kind === "video" &&
+                                        prod?.track &&
+                                        !prod?.appData?.source?.includes(
+                                            "screen"
+                                        )
+                                    ) {
+                                        const videoStream = new MediaStream([
+                                            prod.track,
+                                        ]);
+                                        if (localVideoRef.current) {
+                                            localVideoRef.current.srcObject =
+                                                videoStream;
+                                            localVideoRef.current
+                                                .play()
+                                                .catch((e) =>
+                                                    console.warn(
+                                                        "[Room] Video reattach play failed:",
+                                                        e
+                                                    )
+                                                );
+                                            console.log(
+                                                "[Room] Reattached local video from producer"
+                                            );
+                                            return; // Success, exit early
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Method 3: Fallback - re-enable video to trigger stream-playable event
+                            console.log(
+                                "[Room] Re-enabling video to trigger stream-playable event"
+                            );
+                            await localPeer.enableVideo();
+                        } catch (err) {
+                            console.warn(
+                                "[Room] Error reattaching video after screen share:",
+                                err
+                            );
+                            // Last resort: try to enable video again
+                            try {
+                                await localPeer.enableVideo();
+                            } catch (enableErr) {
+                                console.warn(
+                                    "[Room] Error re-enabling video:",
+                                    enableErr
+                                );
+                            }
+                        }
+                    }
+                }, 100); // Small delay to ensure screen share is fully stopped
             } else {
                 // Start screen share - try multiple methods
                 console.log("[Room] Attempting to start screen share...");
@@ -1610,8 +1708,20 @@ export default function RoomPage({
         const hasRemotePeers = remotePeerArray.length > 0;
         const totalParticipants = remotePeerArray.length + 1;
 
-        // Calculate grid layout based on participants
+        // Check if anyone is screen sharing (local or remote)
+        const hasAnyScreenShare =
+            isScreenSharing ||
+            remotePeerArray.some((peer) => peer.screenShareTrack);
+        const screenSharingPeer = remotePeerArray.find(
+            (peer) => peer.screenShareTrack
+        );
+
+        // Calculate grid layout based on participants and screen sharing
         const getGridClass = () => {
+            if (hasAnyScreenShare) {
+                // When screen sharing, use a layout with screen share on top and small videos below
+                return "grid-cols-1";
+            }
             if (totalParticipants === 1) return "grid-cols-1";
             if (totalParticipants === 2) return "grid-cols-2";
             if (totalParticipants <= 4) return "grid-cols-2 grid-rows-2";
@@ -1745,174 +1855,34 @@ export default function RoomPage({
                                 : "flex-1"
                         }`}
                     >
-                        <div
-                            className={`h-full min-h-0 max-h-full grid gap-2 sm:gap-3 ${getGridClass()}`}
-                        >
-                            {/* Local Video / Screen Share */}
-                            <div className="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-0">
-                                {isScreenSharing ? (
-                                    <video
-                                        ref={localScreenShareRef}
-                                        autoPlay
-                                        playsInline
-                                        muted
-                                        className="w-full h-full min-h-0 object-contain bg-black"
-                                    />
-                                ) : !isVideoOff ? (
-                                    <video
-                                        ref={localVideoRef}
-                                        autoPlay
-                                        playsInline
-                                        muted
-                                        className="w-full h-full min-h-0 object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
-                                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
-                                            <span className="text-3xl sm:text-4xl text-white font-bold">
-                                                {displayName[0]?.toUpperCase() ||
-                                                    "?"}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                                    <span className="px-2 py-1 bg-black/60 rounded-lg text-white text-xs sm:text-sm">
-                                        {displayName} (You)
-                                        {isScreenSharing && " - Sharing Screen"}
-                                    </span>
-                                    {isHost && (
-                                        <span className="px-2 py-1 bg-orange-500/80 rounded-lg text-white text-xs font-medium">
-                                            👑 Host
-                                        </span>
-                                    )}
-                                    {isMuted && (
-                                        <span className="px-2 py-1 bg-red-500/80 rounded-lg text-white text-xs">
-                                            🔇
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Remote Peers */}
-                            <AnimatePresence>
-                                {remotePeerArray.map((peer) => (
-                                    <motion.div
-                                        key={peer.peerId}
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.9 }}
-                                        className="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-0"
-                                    >
-                                        {peer.screenShareTrack ? (
-                                            <video
-                                                ref={(el) => {
-                                                    if (el) {
-                                                        remoteScreenShareRefs.current.set(
-                                                            peer.peerId,
-                                                            el
-                                                        );
-                                                        // Try to play if we have a track
-                                                        if (
-                                                            peer.screenShareTrack &&
-                                                            !el.srcObject
-                                                        ) {
-                                                            el.srcObject =
-                                                                new MediaStream(
-                                                                    [
-                                                                        peer.screenShareTrack,
-                                                                    ]
-                                                                );
-                                                            el.play().catch(
-                                                                () => {}
-                                                            );
-                                                        }
-                                                    }
-                                                }}
-                                                autoPlay
-                                                playsInline
-                                                className="w-full h-full min-h-0 object-contain bg-black"
-                                            />
-                                        ) : peer.videoTrack ? (
-                                            <video
-                                                ref={(el) => {
-                                                    if (el) {
-                                                        remoteVideoRefs.current.set(
-                                                            peer.peerId,
-                                                            el
-                                                        );
-                                                        // Try to play if we have a track
-                                                        if (
-                                                            peer.videoTrack &&
-                                                            !el.srcObject
-                                                        ) {
-                                                            el.srcObject =
-                                                                new MediaStream(
-                                                                    [
-                                                                        peer.videoTrack,
-                                                                    ]
-                                                                );
-                                                            el.play().catch(
-                                                                () => {}
-                                                            );
-                                                        }
-                                                    }
-                                                }}
-                                                autoPlay
-                                                playsInline
-                                                className="w-full h-full min-h-0 object-cover"
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
-                                                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-                                                    <span className="text-3xl sm:text-4xl text-white font-bold">
-                                                        {peer.displayName[0]?.toUpperCase() ||
-                                                            "?"}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )}
-                                        {/* Remote Audio Element (hidden) */}
-                                        <audio
+                        {hasAnyScreenShare ? (
+                            // Screen sharing layout: large screen share on top, small videos below
+                            <div className="h-full min-h-0 max-h-full flex flex-col gap-2 sm:gap-3">
+                                {/* Screen Share - takes up most of the space */}
+                                <div className="flex-1 min-h-0 relative bg-zinc-900 rounded-2xl overflow-hidden">
+                                    {isScreenSharing ? (
+                                        <video
+                                            ref={localScreenShareRef}
+                                            autoPlay
+                                            playsInline
+                                            muted
+                                            className="w-full h-full min-h-0 object-contain bg-black"
+                                        />
+                                    ) : screenSharingPeer ? (
+                                        <video
                                             ref={(el) => {
                                                 if (el) {
-                                                    remoteAudioRefs.current.set(
-                                                        peer.peerId,
+                                                    remoteScreenShareRefs.current.set(
+                                                        screenSharingPeer.peerId,
                                                         el
                                                     );
-
-                                                    // Set speaker if one is selected
-                                                    const speakerId =
-                                                        selectedSpeakerIdRef.current;
                                                     if (
-                                                        speakerId &&
-                                                        "setSinkId" in el
-                                                    ) {
-                                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                                        (el as any)
-                                                            .setSinkId(
-                                                                speakerId
-                                                            )
-                                                            .catch(
-                                                                (
-                                                                    err: Error
-                                                                ) => {
-                                                                    console.warn(
-                                                                        "[Room] Failed to set sink ID:",
-                                                                        err
-                                                                    );
-                                                                }
-                                                            );
-                                                    }
-
-                                                    // Try to play if we have a track
-                                                    if (
-                                                        peer.audioTrack &&
+                                                        screenSharingPeer.screenShareTrack &&
                                                         !el.srcObject
                                                     ) {
                                                         el.srcObject =
                                                             new MediaStream([
-                                                                peer.audioTrack,
+                                                                screenSharingPeer.screenShareTrack,
                                                             ]);
                                                         el.play().catch(
                                                             () => {}
@@ -1921,116 +1891,447 @@ export default function RoomPage({
                                                 }
                                             }}
                                             autoPlay
-                                            className="hidden"
+                                            playsInline
+                                            className="w-full h-full min-h-0 object-contain bg-black"
                                         />
-                                        <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                                            <span className="px-2 py-1 bg-black/60 rounded-lg text-white text-xs sm:text-sm">
-                                                {peer.displayName}
-                                                {peer.screenShareTrack &&
-                                                    " - Sharing Screen"}
-                                            </span>
+                                    ) : null}
+                                    <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                                        <span className="px-2 py-1 bg-black/60 rounded-lg text-white text-xs sm:text-sm">
+                                            {isScreenSharing
+                                                ? `${displayName} (You) - Sharing Screen`
+                                                : screenSharingPeer
+                                                ? `${screenSharingPeer.displayName} - Sharing Screen`
+                                                : "Screen Share"}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Small video feeds row at bottom */}
+                                <div className="flex-shrink-0 h-24 sm:h-32 flex gap-2 sm:gap-3 overflow-x-auto">
+                                    {/* Local video (if not screen sharing) */}
+                                    {!isScreenSharing && (
+                                        <div className="flex-shrink-0 w-32 sm:w-40 relative bg-zinc-900 rounded-xl overflow-hidden">
+                                            {!isVideoOff ? (
+                                                <video
+                                                    ref={localVideoRef}
+                                                    autoPlay
+                                                    playsInline
+                                                    muted
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
+                                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                                        <span className="text-lg text-white font-bold">
+                                                            {displayName[0]?.toUpperCase() ||
+                                                                "?"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div className="absolute bottom-1 left-1">
+                                                <span className="px-1.5 py-0.5 bg-black/60 rounded text-white text-[10px]">
+                                                    {displayName} (You)
+                                                </span>
+                                            </div>
                                         </div>
+                                    )}
 
-                                        {/* Host Controls - Menu Button */}
-                                        {isHost && (
-                                            <div className="absolute top-3 right-3">
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedPeerMenu(
-                                                                selectedPeerMenu ===
-                                                                    peer.peerId
-                                                                    ? null
-                                                                    : peer.peerId
-                                                            );
+                                    {/* Remote peers (excluding the one sharing screen) */}
+                                    {remotePeerArray
+                                        .filter(
+                                            (peer) =>
+                                                peer.peerId !==
+                                                screenSharingPeer?.peerId
+                                        )
+                                        .map((peer) => (
+                                            <div
+                                                key={peer.peerId}
+                                                className="flex-shrink-0 w-32 sm:w-40 relative bg-zinc-900 rounded-xl overflow-hidden"
+                                            >
+                                                {peer.videoTrack ? (
+                                                    <video
+                                                        ref={(el) => {
+                                                            if (el) {
+                                                                remoteVideoRefs.current.set(
+                                                                    peer.peerId,
+                                                                    el
+                                                                );
+                                                                if (
+                                                                    peer.videoTrack &&
+                                                                    !el.srcObject
+                                                                ) {
+                                                                    el.srcObject =
+                                                                        new MediaStream(
+                                                                            [
+                                                                                peer.videoTrack,
+                                                                            ]
+                                                                        );
+                                                                    el.play().catch(
+                                                                        () => {}
+                                                                    );
+                                                                }
+                                                            }
                                                         }}
-                                                        className="p-2 bg-black/60 hover:bg-black/80 rounded-lg text-white transition-colors"
-                                                        title="Manage participant"
-                                                    >
-                                                        <svg
-                                                            className="w-4 h-4"
-                                                            fill="none"
-                                                            viewBox="0 0 24 24"
-                                                            stroke="currentColor"
-                                                        >
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={2}
-                                                                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                                                            />
-                                                        </svg>
-                                                    </button>
+                                                        autoPlay
+                                                        playsInline
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                                                            <span className="text-lg text-white font-bold">
+                                                                {peer.displayName[0]?.toUpperCase() ||
+                                                                    "?"}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <div className="absolute bottom-1 left-1">
+                                                    <span className="px-1.5 py-0.5 bg-black/60 rounded text-white text-[10px]">
+                                                        {peer.displayName}
+                                                    </span>
+                                                </div>
+                                                {/* Remote Audio Element (hidden) */}
+                                                <audio
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            remoteAudioRefs.current.set(
+                                                                peer.peerId,
+                                                                el
+                                                            );
+                                                            const speakerId =
+                                                                selectedSpeakerIdRef.current;
+                                                            if (
+                                                                speakerId &&
+                                                                "setSinkId" in
+                                                                    el
+                                                            ) {
+                                                                (el as any)
+                                                                    .setSinkId(
+                                                                        speakerId
+                                                                    )
+                                                                    .catch(
+                                                                        () => {}
+                                                                    );
+                                                            }
+                                                            if (
+                                                                peer.audioTrack &&
+                                                                !el.srcObject
+                                                            ) {
+                                                                el.srcObject =
+                                                                    new MediaStream(
+                                                                        [
+                                                                            peer.audioTrack,
+                                                                        ]
+                                                                    );
+                                                                el.play().catch(
+                                                                    () => {}
+                                                                );
+                                                            }
+                                                        }
+                                                    }}
+                                                    autoPlay
+                                                    className="hidden"
+                                                />
+                                            </div>
+                                        ))}
+                                </div>
+                            </div>
+                        ) : (
+                            // Normal grid layout when no screen sharing
+                            <div
+                                className={`h-full min-h-0 max-h-full grid gap-2 sm:gap-3 ${getGridClass()}`}
+                            >
+                                {/* Local Video / Screen Share */}
+                                <div className="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-0">
+                                    {isScreenSharing ? (
+                                        <video
+                                            ref={localScreenShareRef}
+                                            autoPlay
+                                            playsInline
+                                            muted
+                                            className="w-full h-full min-h-0 object-contain bg-black"
+                                        />
+                                    ) : !isVideoOff ? (
+                                        <video
+                                            ref={localVideoRef}
+                                            autoPlay
+                                            playsInline
+                                            muted
+                                            className="w-full h-full min-h-0 object-cover"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
+                                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                                <span className="text-3xl sm:text-4xl text-white font-bold">
+                                                    {displayName[0]?.toUpperCase() ||
+                                                        "?"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                                        <span className="px-2 py-1 bg-black/60 rounded-lg text-white text-xs sm:text-sm">
+                                            {displayName} (You)
+                                            {isScreenSharing &&
+                                                " - Sharing Screen"}
+                                        </span>
+                                        {isHost && (
+                                            <span className="px-2 py-1 bg-orange-500/80 rounded-lg text-white text-xs font-medium">
+                                                👑 Host
+                                            </span>
+                                        )}
+                                        {isMuted && (
+                                            <span className="px-2 py-1 bg-red-500/80 rounded-lg text-white text-xs">
+                                                🔇
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
 
-                                                    {/* Dropdown Menu */}
-                                                    <AnimatePresence>
-                                                        {selectedPeerMenu ===
-                                                            peer.peerId && (
-                                                            <>
-                                                                <div
-                                                                    className="fixed inset-0 z-40"
-                                                                    onClick={() =>
-                                                                        setSelectedPeerMenu(
-                                                                            null
-                                                                        )
+                                {/* Remote Peers */}
+                                <AnimatePresence>
+                                    {remotePeerArray.map((peer) => (
+                                        <motion.div
+                                            key={peer.peerId}
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.9 }}
+                                            className="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-0"
+                                        >
+                                            {peer.screenShareTrack ? (
+                                                <video
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            remoteScreenShareRefs.current.set(
+                                                                peer.peerId,
+                                                                el
+                                                            );
+                                                            // Try to play if we have a track
+                                                            if (
+                                                                peer.screenShareTrack &&
+                                                                !el.srcObject
+                                                            ) {
+                                                                el.srcObject =
+                                                                    new MediaStream(
+                                                                        [
+                                                                            peer.screenShareTrack,
+                                                                        ]
+                                                                    );
+                                                                el.play().catch(
+                                                                    () => {}
+                                                                );
+                                                            }
+                                                        }
+                                                    }}
+                                                    autoPlay
+                                                    playsInline
+                                                    className="w-full h-full min-h-0 object-contain bg-black"
+                                                />
+                                            ) : peer.videoTrack ? (
+                                                <video
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            remoteVideoRefs.current.set(
+                                                                peer.peerId,
+                                                                el
+                                                            );
+                                                            // Try to play if we have a track
+                                                            if (
+                                                                peer.videoTrack &&
+                                                                !el.srcObject
+                                                            ) {
+                                                                el.srcObject =
+                                                                    new MediaStream(
+                                                                        [
+                                                                            peer.videoTrack,
+                                                                        ]
+                                                                    );
+                                                                el.play().catch(
+                                                                    () => {}
+                                                                );
+                                                            }
+                                                        }
+                                                    }}
+                                                    autoPlay
+                                                    playsInline
+                                                    className="w-full h-full min-h-0 object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
+                                                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                                                        <span className="text-3xl sm:text-4xl text-white font-bold">
+                                                            {peer.displayName[0]?.toUpperCase() ||
+                                                                "?"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {/* Remote Audio Element (hidden) */}
+                                            <audio
+                                                ref={(el) => {
+                                                    if (el) {
+                                                        remoteAudioRefs.current.set(
+                                                            peer.peerId,
+                                                            el
+                                                        );
+
+                                                        // Set speaker if one is selected
+                                                        const speakerId =
+                                                            selectedSpeakerIdRef.current;
+                                                        if (
+                                                            speakerId &&
+                                                            "setSinkId" in el
+                                                        ) {
+                                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                            (el as any)
+                                                                .setSinkId(
+                                                                    speakerId
+                                                                )
+                                                                .catch(
+                                                                    (
+                                                                        err: Error
+                                                                    ) => {
+                                                                        console.warn(
+                                                                            "[Room] Failed to set sink ID:",
+                                                                            err
+                                                                        );
                                                                     }
+                                                                );
+                                                        }
+
+                                                        // Try to play if we have a track
+                                                        if (
+                                                            peer.audioTrack &&
+                                                            !el.srcObject
+                                                        ) {
+                                                            el.srcObject =
+                                                                new MediaStream(
+                                                                    [
+                                                                        peer.audioTrack,
+                                                                    ]
+                                                                );
+                                                            el.play().catch(
+                                                                () => {}
+                                                            );
+                                                        }
+                                                    }
+                                                }}
+                                                autoPlay
+                                                className="hidden"
+                                            />
+                                            <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                                                <span className="px-2 py-1 bg-black/60 rounded-lg text-white text-xs sm:text-sm">
+                                                    {peer.displayName}
+                                                    {peer.screenShareTrack &&
+                                                        " - Sharing Screen"}
+                                                </span>
+                                            </div>
+
+                                            {/* Host Controls - Menu Button */}
+                                            {isHost && (
+                                                <div className="absolute top-3 right-3">
+                                                    <div className="relative">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedPeerMenu(
+                                                                    selectedPeerMenu ===
+                                                                        peer.peerId
+                                                                        ? null
+                                                                        : peer.peerId
+                                                                );
+                                                            }}
+                                                            className="p-2 bg-black/60 hover:bg-black/80 rounded-lg text-white transition-colors"
+                                                            title="Manage participant"
+                                                        >
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
                                                                 />
-                                                                <motion.div
-                                                                    initial={{
-                                                                        opacity: 0,
-                                                                        y: -10,
-                                                                    }}
-                                                                    animate={{
-                                                                        opacity: 1,
-                                                                        y: 0,
-                                                                    }}
-                                                                    exit={{
-                                                                        opacity: 0,
-                                                                        y: -10,
-                                                                    }}
-                                                                    className="absolute right-0 top-full mt-2 w-48 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden"
-                                                                >
-                                                                    <button
+                                                            </svg>
+                                                        </button>
+
+                                                        {/* Dropdown Menu */}
+                                                        <AnimatePresence>
+                                                            {selectedPeerMenu ===
+                                                                peer.peerId && (
+                                                                <>
+                                                                    <div
+                                                                        className="fixed inset-0 z-40"
                                                                         onClick={() =>
-                                                                            handleKickPeer(
-                                                                                peer.peerId
+                                                                            setSelectedPeerMenu(
+                                                                                null
                                                                             )
                                                                         }
-                                                                        className="w-full px-4 py-3 text-left text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                                                                    />
+                                                                    <motion.div
+                                                                        initial={{
+                                                                            opacity: 0,
+                                                                            y: -10,
+                                                                        }}
+                                                                        animate={{
+                                                                            opacity: 1,
+                                                                            y: 0,
+                                                                        }}
+                                                                        exit={{
+                                                                            opacity: 0,
+                                                                            y: -10,
+                                                                        }}
+                                                                        className="absolute right-0 top-full mt-2 w-48 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden"
                                                                     >
-                                                                        <svg
-                                                                            className="w-4 h-4"
-                                                                            fill="none"
-                                                                            viewBox="0 0 24 24"
-                                                                            stroke="currentColor"
+                                                                        <button
+                                                                            onClick={() =>
+                                                                                handleKickPeer(
+                                                                                    peer.peerId
+                                                                                )
+                                                                            }
+                                                                            className="w-full px-4 py-3 text-left text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
                                                                         >
-                                                                            <path
-                                                                                strokeLinecap="round"
-                                                                                strokeLinejoin="round"
-                                                                                strokeWidth={
-                                                                                    2
-                                                                                }
-                                                                                d="M18 12H6"
-                                                                            />
-                                                                        </svg>
-                                                                        <span className="text-sm font-medium">
-                                                                            Remove
-                                                                            from
-                                                                            room
-                                                                        </span>
-                                                                    </button>
-                                                                </motion.div>
-                                                            </>
-                                                        )}
-                                                    </AnimatePresence>
+                                                                            <svg
+                                                                                className="w-4 h-4"
+                                                                                fill="none"
+                                                                                viewBox="0 0 24 24"
+                                                                                stroke="currentColor"
+                                                                            >
+                                                                                <path
+                                                                                    strokeLinecap="round"
+                                                                                    strokeLinejoin="round"
+                                                                                    strokeWidth={
+                                                                                        2
+                                                                                    }
+                                                                                    d="M18 12H6"
+                                                                                />
+                                                                            </svg>
+                                                                            <span className="text-sm font-medium">
+                                                                                Remove
+                                                                                from
+                                                                                room
+                                                                            </span>
+                                                                        </button>
+                                                                    </motion.div>
+                                                                </>
+                                                            )}
+                                                        </AnimatePresence>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
-                        </div>
+                                            )}
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                        )}
                     </div>
 
                     {/* Chat Panel - Slides in from right */}
