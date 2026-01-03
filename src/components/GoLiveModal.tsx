@@ -31,6 +31,7 @@ export function GoLiveModal({
 }: GoLiveModalProps) {
     const videoPreviewRef = useRef<HTMLVideoElement>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
+    const broadcastKeyRef = useRef(0); // Key to force Broadcast remount
 
     const [title, setTitle] = useState("");
     const [status, setStatus] = useState<StreamStatus>("preview");
@@ -157,13 +158,31 @@ export function GoLiveModal({
             console.error("[GoLive] Error collecting audio streams:", e);
         }
 
-        // Stop ALL tracks immediately
+        // AGGRESSIVE: Try to get all active media streams from getUserMedia
+        // This might catch streams that aren't attached to DOM elements
+        try {
+            // Access navigator.mediaDevices.getUserMedia's active streams
+            // Note: There's no direct API for this, but we can try to enumerate
+            // all possible tracks by checking if they're still active
+        } catch (e) {
+            // Ignore
+        }
+
+        // Stop ALL tracks immediately with iOS-specific handling
         allTracks.forEach((track) => {
             try {
                 if (track.readyState !== "ended") {
-                    // Set enabled to false first (iOS specific - helps release camera indicator)
+                    // iOS-specific: Set enabled to false first
                     track.enabled = false;
+                    
+                    // Stop the track
                     track.stop();
+                    
+                    // iOS-specific: Try to close the track if available
+                    if (typeof (track as any).close === "function") {
+                        (track as any).close();
+                    }
+                    
                     console.log(
                         "[GoLive] Stopped track:",
                         track.kind,
@@ -177,6 +196,17 @@ export function GoLiveModal({
                 console.error("[GoLive] Error stopping track:", e);
             }
         });
+
+        // Force garbage collection hint (iOS Safari sometimes needs this)
+        // Request a repaint to help iOS release the camera indicator
+        if (typeof window !== "undefined") {
+            requestAnimationFrame(() => {
+                // Force a repaint
+                document.body.style.display = "none";
+                document.body.offsetHeight; // Trigger reflow
+                document.body.style.display = "";
+            });
+        }
 
         // Log how many tracks we stopped
         console.log(`[GoLive] Stopped ${allTracks.length} media tracks`);
@@ -237,18 +267,25 @@ export function GoLiveModal({
         setStatus("ending");
 
         try {
+            // CRITICAL: Force Broadcast component remount by changing key
+            broadcastKeyRef.current += 1;
+            
             // CRITICAL: Clear ingestUrl FIRST to unmount Broadcast component
             // This must happen before stopping tracks to ensure the component releases them
             setIngestUrl(null);
 
             // Wait for Broadcast component to unmount and release tracks
-            await new Promise((resolve) => setTimeout(resolve, 200));
+            // iOS needs more time
+            await new Promise((resolve) => setTimeout(resolve, 300));
 
             // Now stop all media tracks - the Broadcast component should be unmounted
             stopAllMediaTracks();
 
-            // Additional cleanup pass after a short delay
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Additional cleanup passes with increasing delays for iOS
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            stopAllMediaTracks();
+
+            await new Promise((resolve) => setTimeout(resolve, 300));
             stopAllMediaTracks();
 
             // End the stream in the database
@@ -257,10 +294,21 @@ export function GoLiveModal({
             setStatus("preview");
             setDuration(0);
 
-            // Final cleanup pass
+            // Final cleanup passes for iOS
             setTimeout(() => {
+                console.log("[GoLive] Final cleanup pass 1 (500ms)");
                 stopAllMediaTracks();
-            }, 300);
+            }, 500);
+
+            setTimeout(() => {
+                console.log("[GoLive] Final cleanup pass 2 (1000ms)");
+                stopAllMediaTracks();
+            }, 1000);
+
+            setTimeout(() => {
+                console.log("[GoLive] Final cleanup pass 3 (2000ms)");
+                stopAllMediaTracks();
+            }, 2000);
 
             // Don't restart preview camera - user is ending the stream
             // They can reopen the modal if they want to go live again
@@ -268,9 +316,11 @@ export function GoLiveModal({
             console.error("[GoLive] Error ending stream:", e);
             setError("Failed to end stream properly");
             // Still try to clean up
+            broadcastKeyRef.current += 1;
             setIngestUrl(null);
             stopAllMediaTracks();
             setTimeout(() => stopAllMediaTracks(), 200);
+            setTimeout(() => stopAllMediaTracks(), 500);
         }
     };
 
@@ -285,6 +335,9 @@ export function GoLiveModal({
         }
 
         // IMMEDIATE cleanup - don't wait for anything
+        // Force Broadcast remount
+        broadcastKeyRef.current += 1;
+        
         // Clear ingest URL first to unmount Broadcast component
         setIngestUrl(null);
 
@@ -294,7 +347,7 @@ export function GoLiveModal({
             stopCamera();
         }, 100);
 
-        // Additional aggressive cleanup passes with longer delays
+        // Additional aggressive cleanup passes with longer delays for iOS
         // The Broadcast component needs time to fully unmount and release tracks
         setTimeout(() => {
             console.log("[GoLive] Cleanup pass 1 (200ms)");
@@ -320,6 +373,12 @@ export function GoLiveModal({
             stopCamera();
         }, 1000);
 
+        setTimeout(() => {
+            console.log("[GoLive] Cleanup pass 5 (2000ms)");
+            stopAllMediaTracks();
+            stopCamera();
+        }, 2000);
+
         setStatus("preview");
         onClose();
     };
@@ -341,13 +400,14 @@ export function GoLiveModal({
             }
         } else if (!isOpen) {
             // Modal is closing - IMMEDIATE comprehensive cleanup
+            broadcastKeyRef.current += 1; // Force Broadcast remount
             setIngestUrl(null); // Unmount Broadcast component first
             // Wait for component to unmount, then stop tracks
             setTimeout(() => {
                 stopAllMediaTracks();
                 stopCamera();
             }, 100);
-            // Additional cleanup passes with longer delays
+            // Additional cleanup passes with longer delays for iOS
             setTimeout(() => {
                 console.log("[GoLive] useEffect cleanup pass 1 (200ms)");
                 stopAllMediaTracks();
@@ -368,6 +428,11 @@ export function GoLiveModal({
                 stopAllMediaTracks();
                 stopCamera();
             }, 1000);
+            setTimeout(() => {
+                console.log("[GoLive] useEffect cleanup pass 5 (2000ms)");
+                stopAllMediaTracks();
+                stopCamera();
+            }, 2000);
             setStatus("preview");
             setTitle("");
             setError(null);
@@ -457,6 +522,7 @@ export function GoLiveModal({
                     {ingestUrl ? (
                         /* Live broadcast mode */
                         <Broadcast.Root
+                            key={broadcastKeyRef.current}
                             ingestUrl={ingestUrl}
                             aspectRatio={null}
                             video={{
