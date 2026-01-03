@@ -362,24 +362,25 @@ export function GoLiveModal({
             setIngestUrl(null);
 
             // Wait for Broadcast component to fully unmount from DOM
-            // iOS needs more time for WebRTC to disconnect
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // iOS needs MUCH more time for WebRTC to disconnect - try 2 seconds
+            await new Promise((resolve) => setTimeout(resolve, 2000));
 
             // Now stop all media tracks - the Broadcast component should be completely unmounted
             stopAllMediaTracks();
 
             // Additional cleanup passes with increasing delays for iOS
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
             stopAllMediaTracks();
 
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             stopAllMediaTracks();
 
             // End the stream in the database
             await onEndStream(currentStream.id);
 
-            // Wait a bit more before allowing new broadcasts
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait much longer before allowing new broadcasts - iOS needs significant time to fully release
+            // The green light and mic indicator suggest WebRTC connection is still active
+            await new Promise((resolve) => setTimeout(resolve, 2000));
 
             setStatus("preview");
             setDuration(0);
@@ -403,9 +404,30 @@ export function GoLiveModal({
             setTimeout(() => {
                 console.log("[GoLive] Final cleanup pass 4 (3000ms)");
                 stopAllMediaTracks();
-                // Mark cleanup as complete after final pass
-                isCleaningUpRef.current = false;
             }, 3000);
+
+            setTimeout(() => {
+                console.log("[GoLive] Final cleanup pass 5 (5000ms)");
+                stopAllMediaTracks();
+            }, 5000);
+
+            setTimeout(() => {
+                console.log("[GoLive] Final cleanup pass 6 (7000ms)");
+                stopAllMediaTracks();
+            }, 7000);
+
+            setTimeout(() => {
+                console.log("[GoLive] Final cleanup pass 7 (10000ms)");
+                stopAllMediaTracks();
+            }, 10000);
+
+            setTimeout(() => {
+                console.log("[GoLive] Final cleanup pass 8 (15000ms)");
+                stopAllMediaTracks();
+                // Mark cleanup as complete after final pass
+                // iOS Safari can take up to 15 seconds to fully release WebRTC resources
+                isCleaningUpRef.current = false;
+            }, 15000);
 
             // Don't restart preview camera - user is ending the stream
             // They can reopen the modal if they want to go live again
