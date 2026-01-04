@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { type UserSettings } from "@/hooks/useUserSettings";
 import { useCalendar } from "@/hooks/useCalendar";
 import { AvailabilityWindowsModal } from "./AvailabilityWindowsModal";
+import { supabase } from "@/config/supabase";
 
 // Supported payment networks
 const PAYMENT_NETWORKS = [
@@ -24,7 +25,7 @@ type SettingsModalProps = {
     // Censorship resistance props
     onToggleDecentralizedCalls: () => void;
     isHuddle01Configured: boolean;
-    // Public landing page props
+    // Public profile props
     onTogglePublicLanding: () => void;
     // Push notification props
     pushSupported: boolean;
@@ -88,6 +89,7 @@ export function SettingsModal({
     } = useCalendar(userAddress);
 
     const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+    const [copiedLink, setCopiedLink] = useState(false);
     
     // Scheduling settings state
     const [schedulingEnabled, setSchedulingEnabled] = useState(false);
@@ -393,7 +395,7 @@ export function SettingsModal({
                                         </p>
                                     )}
 
-                                    {/* Public Landing Page Toggle */}
+                                    {/* Public Profile Toggle */}
                                     <button
                                         onClick={onTogglePublicLanding}
                                         className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
@@ -424,7 +426,7 @@ export function SettingsModal({
                                             </div>
                                             <div className="text-left">
                                                 <p className="text-white font-medium">
-                                                    Enable Public Landing Page
+                                                    Enable Public Profile
                                                 </p>
                                                 <p className="text-zinc-500 text-xs">
                                                     {settings.publicLandingEnabled
@@ -449,6 +451,88 @@ export function SettingsModal({
                                             />
                                         </div>
                                     </button>
+
+                                    {/* Copy Profile Link - Only show when enabled */}
+                                    {settings.publicLandingEnabled && userAddress && (
+                                        <div className="mt-3 px-4">
+                                            <button
+                                                onClick={async () => {
+                                                    // Try to get username or ENS for prettier URL
+                                                    let profilePath = userAddress.toLowerCase();
+                                                    
+                                                    // Fetch username
+                                                    if (supabase) {
+                                                        const { data: usernameData } = await supabase
+                                                            .from("shout_usernames")
+                                                            .select("username")
+                                                            .eq("wallet_address", userAddress.toLowerCase())
+                                                            .maybeSingle();
+                                                        
+                                                        if (usernameData?.username) {
+                                                            profilePath = usernameData.username;
+                                                        } else {
+                                                            // Try ENS
+                                                            const { data: userData } = await supabase
+                                                                .from("shout_users")
+                                                                .select("ens_name")
+                                                                .eq("wallet_address", userAddress.toLowerCase())
+                                                                .maybeSingle();
+                                                            
+                                                            if (userData?.ens_name) {
+                                                                profilePath = userData.ens_name;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    const profileUrl = `${window.location.origin}/user/${profilePath}`;
+                                                    try {
+                                                        await navigator.clipboard.writeText(profileUrl);
+                                                        setCopiedLink(true);
+                                                        setTimeout(() => setCopiedLink(false), 2000);
+                                                    } catch (err) {
+                                                        console.error("[Settings] Failed to copy link:", err);
+                                                    }
+                                                }}
+                                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl hover:bg-blue-500/20 transition-colors text-blue-400"
+                                            >
+                                                {copiedLink ? (
+                                                    <>
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M5 13l4 4L19 7"
+                                                            />
+                                                        </svg>
+                                                        <span className="text-sm font-medium">Copied!</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                            />
+                                                        </svg>
+                                                        <span className="text-sm font-medium">Copy Profile Link</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Sound & Notifications Section */}

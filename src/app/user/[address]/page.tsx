@@ -9,6 +9,7 @@ type PublicProfile = {
     user: {
         address: string;
         name: string | null;
+        username: string | null;
         ensName: string | null;
         avatarUrl: string | null;
     };
@@ -179,7 +180,7 @@ export default function PublicUserPage() {
                 )}
 
                 {/* Scheduling Link */}
-                {profile.scheduling && (
+                {profile.scheduling && profile.scheduling.slug && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}

@@ -7,13 +7,48 @@ const supabase = createClient(
 );
 
 // GET /api/public/user/[address] - Get public user profile (only if enabled)
+// Supports: wallet address, username, or ENS name
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ address: string }> }
 ) {
     try {
         const { address } = await params;
-        const normalizedAddress = address.toLowerCase();
+        let normalizedAddress: string | null = null;
+
+        // Check if input is a wallet address (starts with 0x)
+        if (address.toLowerCase().startsWith("0x")) {
+            normalizedAddress = address.toLowerCase();
+        } else {
+            // Try to resolve as username first
+            const { data: usernameData } = await supabase
+                .from("shout_usernames")
+                .select("wallet_address")
+                .eq("username", address.toLowerCase())
+                .maybeSingle();
+
+            if (usernameData) {
+                normalizedAddress = usernameData.wallet_address.toLowerCase();
+            } else {
+                // Try to resolve as ENS name
+                const { data: userData } = await supabase
+                    .from("shout_users")
+                    .select("wallet_address")
+                    .eq("ens_name", address.toLowerCase())
+                    .maybeSingle();
+
+                if (userData) {
+                    normalizedAddress = userData.wallet_address.toLowerCase();
+                }
+            }
+        }
+
+        if (!normalizedAddress) {
+            return NextResponse.json(
+                { error: "User not found" },
+                { status: 404 }
+            );
+        }
 
         // Check if user has public landing enabled
         const { data: settings, error: settingsError } = await supabase
@@ -69,6 +104,7 @@ export async function GET(
             user: {
                 address: normalizedAddress,
                 name: user?.display_name || usernameData?.username || null,
+                username: usernameData?.username || null,
                 ensName: user?.ens_name || null,
                 avatarUrl: user?.avatar_url || null,
             },
@@ -76,7 +112,7 @@ export async function GET(
             agents: agents || [],
             scheduling: schedulingSettings?.scheduling_enabled
                 ? {
-                      slug: schedulingSettings.scheduling_slug,
+                      slug: schedulingSettings.scheduling_slug || normalizedAddress, // Use wallet address as fallback
                       title: schedulingSettings.scheduling_title,
                       bio: schedulingSettings.scheduling_bio,
                   }
