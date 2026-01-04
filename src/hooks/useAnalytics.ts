@@ -46,13 +46,23 @@ export function useAnalytics(walletAddress: string | null) {
                 // Send each event (could batch these in future)
                 for (const evt of events) {
                     try {
-                        await fetch("/api/admin/track-analytics", {
+                        const response = await fetch("/api/admin/track-analytics", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ walletAddress, event: evt }),
                         });
+
+                        // Check if response is ok, but don't throw on errors
+                        // Analytics failures should be silent to not disrupt user experience
+                        if (!response.ok) {
+                            console.warn("[Analytics] Failed to track event:", response.status, response.statusText);
+                        }
                     } catch (err) {
-                        console.error("[Analytics] Failed to track event:", err);
+                        // Silently fail - analytics should never break the app
+                        // Only log in development
+                        if (process.env.NODE_ENV === "development") {
+                            console.warn("[Analytics] Failed to track event:", err);
+                        }
                     }
                 }
             }, 500);
