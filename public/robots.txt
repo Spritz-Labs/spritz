@@ -2,12 +2,17 @@ User-agent: *
 Allow: /
 Allow: /privacy
 Allow: /tos
+Allow: /landing
 Allow: /live/
+Allow: /user/
+Allow: /agent/
+Allow: /schedule/
 
 # Disallow private/dynamic routes
 Disallow: /api/
 Disallow: /admin
-Disallow: /agent/
+Disallow: /room/
+Disallow: /join/
 
 # Sitemap
 Sitemap: https://app.spritz.chat/sitemap.xml

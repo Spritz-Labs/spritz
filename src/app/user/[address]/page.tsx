@@ -111,8 +111,32 @@ export default function PublicUserPage() {
         );
     }
 
+    // Generate structured data for SEO
+    const structuredData = profile
+        ? {
+              "@context": "https://schema.org",
+              "@type": "ProfilePage",
+              mainEntity: {
+                  "@type": "Person",
+                  name: profile.user.name || profile.user.ensName || formatAddress(profile.user.address),
+                  identifier: profile.user.address,
+                  url: `https://app.spritz.chat/user/${address}`,
+                  image: profile.user.avatarUrl || undefined,
+                  sameAs: profile.socials.map((s) => s.url),
+              },
+          }
+        : null;
+
     return (
         <div className="min-h-screen bg-zinc-950 text-white">
+            {structuredData && (
+                <script
+                    type="application/ld+json"
+                    dangerouslySetInnerHTML={{
+                        __html: JSON.stringify(structuredData),
+                    }}
+                />
+            )}
             <div className="max-w-4xl mx-auto px-4 py-12">
                 {/* Header */}
                 <div className="text-center mb-12">
