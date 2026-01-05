@@ -446,18 +446,26 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
     };
 
     // Generate calendar days
+    // IMPORTANT: Set to noon UTC to avoid date boundary issues (same as backend)
+    // This ensures the day-of-week calculation is consistent across timezones
     const calendarDays = Array.from({ length: 14 }, (_, i) => {
-        const date = addDays(startOfDay(new Date()), i);
+        const today = new Date();
+        today.setUTCHours(12, 0, 0, 0); // Set to noon UTC to avoid date boundary issues
+        const date = addDays(today, i);
         return date;
     });
 
     // Check if a day has availability
     // IMPORTANT: Use the user's timezone to calculate day of week, not browser's local timezone
+    // Also set date to noon UTC to match backend behavior and avoid date boundary issues
     const dayHasAvailability = (date: Date) => {
         if (!profile) return false;
         const userTimezone = profile.availability.timezone || "UTC";
+        // Set to noon UTC to avoid date boundary issues (same as backend)
+        const dateAtNoonUTC = new Date(date);
+        dateAtNoonUTC.setUTCHours(12, 0, 0, 0);
         // Use the same timezone-aware calculation as the backend
-        const dayOfWeek = getDayOfWeekInTimezone(date, userTimezone);
+        const dayOfWeek = getDayOfWeekInTimezone(dateAtNoonUTC, userTimezone);
         return profile.availability.windows.some(w => w.dayOfWeek === dayOfWeek);
     };
 
