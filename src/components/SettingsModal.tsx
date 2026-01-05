@@ -484,36 +484,15 @@ export function SettingsModal({
                                                         }
                                                     }
                                                     
-                                                    // Use a more reliable method for PWA
-                                                    const baseUrl = typeof window !== 'undefined' 
-                                                        ? (window.location.origin || 'https://app.spritz.chat')
-                                                        : 'https://app.spritz.chat';
-                                                    const profileUrl = `${baseUrl}/user/${profilePath}`;
+                                                    // Use same method as working scheduling link
+                                                    const profileUrl = `${window.location.origin}/user/${profilePath}`;
                                                     
-                                                    try {
-                                                        // Try modern clipboard API first
-                                                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                                                            await navigator.clipboard.writeText(profileUrl);
-                                                        } else {
-                                                            // Fallback for older browsers/PWA
-                                                            const textArea = document.createElement('textarea');
-                                                            textArea.value = profileUrl;
-                                                            textArea.style.position = 'fixed';
-                                                            textArea.style.left = '-999999px';
-                                                            textArea.style.top = '-999999px';
-                                                            document.body.appendChild(textArea);
-                                                            textArea.focus();
-                                                            textArea.select();
-                                                            document.execCommand('copy');
-                                                            document.body.removeChild(textArea);
-                                                        }
+                                                    navigator.clipboard.writeText(profileUrl).then(() => {
                                                         setCopiedLink(true);
                                                         setTimeout(() => setCopiedLink(false), 2000);
-                                                    } catch (err) {
+                                                    }).catch((err) => {
                                                         console.error("[Settings] Failed to copy link:", err);
-                                                        // Show the URL in an alert as last resort
-                                                        alert(`Profile URL: ${profileUrl}`);
-                                                    }
+                                                    });
                                                 }}
                                                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl hover:bg-blue-500/20 transition-colors text-blue-400"
                                             >

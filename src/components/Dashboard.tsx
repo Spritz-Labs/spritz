@@ -3419,25 +3419,21 @@ function DashboardContent({
                                     />
                                     <div className="flex items-center gap-2">
                                         <button
-                                            onClick={async () => {
-                                                try {
-                                                    // Ensure permanent room exists
-                                                    await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
-                                                    // Copy URL
-                                                    await navigator.clipboard.writeText(`https://app.spritz.chat/room/${userAddress}`);
+                                            onClick={() => {
+                                                const link = `${window.location.origin}/room/${userAddress}`;
+                                                navigator.clipboard.writeText(link).then(() => {
                                                     // Show feedback
                                                     const btn = document.activeElement as HTMLElement;
                                                     const original = btn?.textContent;
                                                     if (btn) {
                                                         btn.textContent = "Copied!";
                                                         setTimeout(() => {
-                                                            if (btn) btn.textContent = original || "Copy";
+                                                            if (btn) btn.textContent = original || "Copy Link";
                                                         }, 2000);
                                                     }
-                                                } catch (err) {
+                                                }).catch((err) => {
                                                     console.error("Failed to copy:", err);
-                                                    alert("Failed to copy link");
-                                                }
+                                                });
                                             }}
                                             className="flex-1 sm:flex-none px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors whitespace-nowrap"
                                         >
