@@ -93,7 +93,15 @@ export async function GET(request: NextRequest) {
             const dayOfWeek = getDayOfWeekInTimezone(current, userTimezone);
             const matchingWindows = windows.filter((w) => w.day_of_week === dayOfWeek);
             
-            console.log("[Scheduling] Checking date:", current.toISOString(), "dayOfWeek:", dayOfWeek, "matching windows:", matchingWindows.length);
+            // Get day name for better logging
+            const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            const dayName = dayNames[dayOfWeek];
+            
+            console.log(`[Scheduling] Checking date: ${current.toISOString()}, dayOfWeek: ${dayOfWeek} (${dayName}), matching windows: ${matchingWindows.length}`);
+            
+            if (matchingWindows.length === 0) {
+                console.log(`[Scheduling] No windows match for ${dayName} (dayOfWeek=${dayOfWeek}). Available windows:`, windows.map(w => `${dayNames[w.day_of_week]} (${w.day_of_week})`));
+            }
 
             for (const window of matchingWindows) {
                 // Get the timezone for this window (default to user's timezone)
