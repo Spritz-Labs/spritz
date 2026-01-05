@@ -43,6 +43,10 @@ type SettingsModalProps = {
     availableInvites: number;
     usedInvites: number;
     onOpenInvitesModal: () => void;
+    // Email props
+    userEmail: string | null;
+    isEmailVerified: boolean;
+    onOpenEmailModal: () => void;
 };
 
 export function SettingsModal({
@@ -65,6 +69,9 @@ export function SettingsModal({
     availableInvites,
     usedInvites,
     onOpenInvitesModal,
+    userEmail,
+    isEmailVerified,
+    onOpenEmailModal,
 }: SettingsModalProps) {
     const handlePushToggle = async () => {
         // Prevent double-clicks by checking loading state
@@ -797,7 +804,17 @@ export function SettingsModal({
                                     {/* Enable Scheduling Toggle */}
                                     <div className="mb-3">
                                         <button
-                                            onClick={() => setSchedulingEnabled(!schedulingEnabled)}
+                                            onClick={() => {
+                                                // Check if email is required and not present
+                                                if (!schedulingEnabled && (!userEmail || !isEmailVerified)) {
+                                                    setSchedulingError("Email verification is required to enable scheduling. Please verify your email first.");
+                                                    setTimeout(() => {
+                                                        onOpenEmailModal();
+                                                    }, 500);
+                                                    return;
+                                                }
+                                                setSchedulingEnabled(!schedulingEnabled);
+                                            }}
                                             className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
                                         >
                                             <div className="flex items-center gap-3">
@@ -807,7 +824,9 @@ export function SettingsModal({
                                                         Enable Scheduling
                                                     </p>
                                                     <p className="text-zinc-500 text-xs">
-                                                        Get a public booking page
+                                                        {!userEmail || !isEmailVerified 
+                                                            ? "Email verification required" 
+                                                            : "Get a public booking page"}
                                                     </p>
                                                 </div>
                                             </div>

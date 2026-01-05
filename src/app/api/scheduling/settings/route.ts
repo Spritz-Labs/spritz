@@ -118,6 +118,22 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // If enabling scheduling, require verified email
+        if (scheduling_enabled === true) {
+            const { data: user } = await supabase
+                .from("shout_users")
+                .select("email, email_verified")
+                .eq("wallet_address", userAddress.toLowerCase())
+                .single();
+
+            if (!user?.email || !user?.email_verified) {
+                return NextResponse.json(
+                    { error: "Email verification is required to enable scheduling. Please verify your email first." },
+                    { status: 400 }
+                );
+            }
+        }
+
         // Validate price (must be >= 0)
         if (scheduling_price_cents !== undefined && scheduling_price_cents < 0) {
             return NextResponse.json(

@@ -3815,6 +3815,9 @@ function DashboardContent({
                 availableInvites={availableInvites}
                 usedInvites={usedInvites}
                 onOpenInvitesModal={() => setIsInvitesModalOpen(true)}
+                userEmail={userEmail}
+                isEmailVerified={isEmailVerified}
+                onOpenEmailModal={() => setIsEmailModalOpen(true)}
             />
 
             {/* First-time Push Notification Prompt */}
