@@ -75,14 +75,25 @@ export async function GET(request: NextRequest) {
             dayOfWeek: number;
         }> = [];
 
-        // Iterate through each day in the range
-        const current = new Date(start);
-        current.setUTCHours(12, 0, 0, 0); // Set to noon UTC to avoid date boundary issues
+        // Normalize start and end dates to noon UTC to avoid date boundary issues
+        const normalizedStart = new Date(start);
+        normalizedStart.setUTCHours(12, 0, 0, 0);
+        const normalizedEnd = new Date(end);
+        normalizedEnd.setUTCHours(12, 0, 0, 0);
         
-        while (current <= end) {
+        // Iterate through each day in the range
+        const current = new Date(normalizedStart);
+        
+        console.log("[Scheduling] Checking availability from", normalizedStart.toISOString(), "to", normalizedEnd.toISOString());
+        console.log("[Scheduling] User timezone:", userTimezone);
+        console.log("[Scheduling] Availability windows:", windows.map(w => ({ day: w.day_of_week, start: w.start_time, end: w.end_time })));
+        
+        while (current <= normalizedEnd) {
             // Get day of week in user's timezone (important for correct day matching)
             const dayOfWeek = getDayOfWeekInTimezone(current, userTimezone);
             const matchingWindows = windows.filter((w) => w.day_of_week === dayOfWeek);
+            
+            console.log("[Scheduling] Checking date:", current.toISOString(), "dayOfWeek:", dayOfWeek, "matching windows:", matchingWindows.length);
 
             for (const window of matchingWindows) {
                 // Get the timezone for this window (default to user's timezone)

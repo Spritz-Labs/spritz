@@ -310,8 +310,14 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
 
         setSlotsLoading(true);
         try {
-            const startDate = selectedDate.toISOString();
-            const endDate = addDays(selectedDate, 1).toISOString();
+            // Normalize dates to noon UTC to match backend behavior
+            const startDateNormalized = new Date(selectedDate);
+            startDateNormalized.setUTCHours(12, 0, 0, 0);
+            const endDateNormalized = addDays(startDateNormalized, 1);
+            endDateNormalized.setUTCHours(12, 0, 0, 0);
+            
+            const startDate = startDateNormalized.toISOString();
+            const endDate = endDateNormalized.toISOString();
 
             const res = await fetch(
                 `/api/scheduling/availability?userAddress=${profile.profile.walletAddress}&startDate=${startDate}&endDate=${endDate}`
@@ -320,6 +326,8 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
 
             if (res.ok) {
                 setAvailableSlots(data.availableSlots || []);
+            } else {
+                console.error("[Schedule] Availability API error:", data);
             }
         } catch (err) {
             console.error("Failed to fetch slots:", err);
