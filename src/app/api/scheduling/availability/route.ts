@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         // Check if user has scheduling enabled
         const { data: settings } = await supabase
             .from("shout_user_settings")
-            .select("scheduling_enabled, scheduling_duration_minutes, scheduling_buffer_minutes, scheduling_advance_notice_hours")
+            .select("scheduling_enabled, scheduling_duration_minutes, scheduling_free_duration_minutes, scheduling_paid_duration_minutes, scheduling_buffer_minutes, scheduling_advance_notice_hours")
             .eq("wallet_address", userAddress.toLowerCase())
             .single();
 
@@ -112,9 +112,22 @@ export async function GET(request: NextRequest) {
                 }
 
                 // Split into slots based on duration
-                const duration = settings.scheduling_duration_minutes || 30;
+                // IMPORTANT: Use the minimum duration (free duration) to generate slots
+                // This ensures slots work for both free and paid bookings
+                // Slots are generated at the minimum interval, but can accommodate longer bookings
+                const freeDuration = settings.scheduling_free_duration_minutes ?? settings.scheduling_duration_minutes ?? 15;
+                const paidDuration = settings.scheduling_paid_duration_minutes ?? settings.scheduling_duration_minutes ?? 30;
+                
+                // Use free duration for slot generation (smallest interval)
+                // Paid bookings can use multiple consecutive slots if needed
+                const slotGenerationDuration = freeDuration;
                 const buffer = settings.scheduling_buffer_minutes || 15;
-                const slotDuration = duration + buffer;
+                const slotDuration = slotGenerationDuration + buffer;
+                
+                console.log(`[Scheduling] Slot generation for ${dayOfWeek}: freeDuration=${freeDuration}, paidDuration=${paidDuration}, slotGenerationDuration=${slotGenerationDuration}, buffer=${buffer}, slotDuration=${slotDuration}`);
+                
+                // Store the actual duration for this slot (will be determined by booking type)
+                const duration = slotGenerationDuration;
 
                 let currentSlotStart = new Date(slotStartUTC);
                 while (currentSlotStart.getTime() + slotDuration * 60 * 1000 <= slotEndUTC.getTime()) {
