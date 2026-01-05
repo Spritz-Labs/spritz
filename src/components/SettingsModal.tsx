@@ -456,65 +456,49 @@ export function SettingsModal({
                                     {settings.publicLandingEnabled && userAddress && (
                                         <div className="mt-3 px-4">
                                             <button
-                                                onClick={async (e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    
+                                                onClick={async () => {
                                                     if (!userAddress) {
                                                         console.error("[Settings] No user address available");
-                                                        alert("No user address available");
                                                         return;
                                                     }
                                                     
-                                                    try {
-                                                        // Try to get username or ENS for prettier URL
-                                                        let profilePath = userAddress.toLowerCase();
-                                                        
-                                                        // Fetch username
-                                                        if (supabase) {
-                                                            try {
-                                                                const { data: usernameData } = await supabase
-                                                                    .from("shout_usernames")
-                                                                    .select("username")
+                                                    // Try to get username or ENS for prettier URL
+                                                    let profilePath = userAddress.toLowerCase();
+                                                    
+                                                    // Fetch username (non-blocking)
+                                                    if (supabase) {
+                                                        try {
+                                                            const { data: usernameData } = await supabase
+                                                                .from("shout_usernames")
+                                                                .select("username")
+                                                                .eq("wallet_address", userAddress.toLowerCase())
+                                                                .maybeSingle();
+                                                            
+                                                            if (usernameData?.username) {
+                                                                profilePath = usernameData.username;
+                                                            } else {
+                                                                // Try ENS
+                                                                const { data: userData } = await supabase
+                                                                    .from("shout_users")
+                                                                    .select("ens_name")
                                                                     .eq("wallet_address", userAddress.toLowerCase())
                                                                     .maybeSingle();
                                                                 
-                                                                if (usernameData?.username) {
-                                                                    profilePath = usernameData.username;
-                                                                } else {
-                                                                    // Try ENS
-                                                                    const { data: userData } = await supabase
-                                                                        .from("shout_users")
-                                                                        .select("ens_name")
-                                                                        .eq("wallet_address", userAddress.toLowerCase())
-                                                                        .maybeSingle();
-                                                                    
-                                                                    if (userData?.ens_name) {
-                                                                        profilePath = userData.ens_name;
-                                                                    }
+                                                                if (userData?.ens_name) {
+                                                                    profilePath = userData.ens_name;
                                                                 }
-                                                            } catch (dbErr) {
-                                                                console.error("[Settings] DB error:", dbErr);
-                                                                // Continue with wallet address as fallback
                                                             }
+                                                        } catch (dbErr) {
+                                                            console.error("[Settings] DB error:", dbErr);
+                                                            // Continue with wallet address as fallback
                                                         }
-                                                        
-                                                        // CRITICAL: Use /user/ path, NOT /room/
-                                                        const baseUrl = window.location.origin || 'https://app.spritz.chat';
-                                                        const profileUrl = `${baseUrl}/user/${profilePath}`;
-                                                        
-                                                        console.log("[Settings] Copying profile URL:", profileUrl);
-                                                        console.log("[Settings] User address:", userAddress);
-                                                        console.log("[Settings] Profile path:", profilePath);
-                                                        
-                                                        // Copy to clipboard
-                                                        navigator.clipboard.writeText(profileUrl);
-                                                        setCopiedLink(true);
-                                                        setTimeout(() => setCopiedLink(false), 2000);
-                                                    } catch (err) {
-                                                        console.error("[Settings] Failed to copy profile link:", err);
-                                                        alert("Failed to copy link. Please try again.");
                                                     }
+                                                    
+                                                    // Use exact same method as working scheduling link
+                                                    const profileUrl = `${window.location.origin}/user/${profilePath}`;
+                                                    navigator.clipboard.writeText(profileUrl);
+                                                    setCopiedLink(true);
+                                                    setTimeout(() => setCopiedLink(false), 2000);
                                                 }}
                                                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl hover:bg-blue-500/20 transition-colors text-blue-400"
                                             >

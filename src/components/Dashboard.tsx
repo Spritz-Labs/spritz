@@ -3420,45 +3420,32 @@ function DashboardContent({
                                     <div className="flex items-center gap-2">
                                         <button
                                             type="button"
-                                            onClick={async (e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                
+                                            onClick={async () => {
                                                 if (!userAddress) {
                                                     console.error("[Dashboard] No user address for room link");
-                                                    alert("No user address available");
                                                     return;
                                                 }
                                                 
+                                                // Ensure permanent room exists first (non-blocking)
                                                 try {
-                                                    // Ensure permanent room exists first
-                                                    try {
-                                                        await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
-                                                    } catch (err) {
-                                                        console.error("Failed to ensure room exists:", err);
-                                                        // Continue anyway - room might already exist
-                                                    }
-                                                    
-                                                    // Copy link using same method as working scheduling link
-                                                    const baseUrl = window.location.origin || 'https://app.spritz.chat';
-                                                    const link = `${baseUrl}/room/${userAddress}`;
-                                                    console.log("[Dashboard] Copying room link:", link);
-                                                    
-                                                    // Copy to clipboard
-                                                    navigator.clipboard.writeText(link);
-                                                    
-                                                    // Show feedback
-                                                    const btn = e.currentTarget;
-                                                    const original = btn.textContent;
-                                                    if (btn) {
-                                                        btn.textContent = "Copied!";
-                                                        setTimeout(() => {
-                                                            if (btn) btn.textContent = original || "Copy Link";
-                                                        }, 2000);
-                                                    }
+                                                    await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
                                                 } catch (err) {
-                                                    console.error("[Dashboard] Failed to copy room link:", err);
-                                                    alert("Failed to copy link. Please try again.");
+                                                    console.error("Failed to ensure room exists:", err);
+                                                    // Continue anyway - room might already exist
+                                                }
+                                                
+                                                // Use exact same method as working scheduling link
+                                                const link = `${window.location.origin}/room/${userAddress}`;
+                                                navigator.clipboard.writeText(link);
+                                                
+                                                // Show feedback
+                                                const btn = document.activeElement as HTMLElement;
+                                                const original = btn?.textContent;
+                                                if (btn) {
+                                                    btn.textContent = "Copied!";
+                                                    setTimeout(() => {
+                                                        if (btn) btn.textContent = original || "Copy Link";
+                                                    }, 2000);
                                                 }
                                             }}
                                             className="flex-1 sm:flex-none px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors whitespace-nowrap"
