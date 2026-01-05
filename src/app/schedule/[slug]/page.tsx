@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import { format, addDays, startOfDay, isSameDay } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
+import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
 import { getDayOfWeekInTimezone } from "@/lib/timezone";
 import { useAccount, useDisconnect, useSendTransaction, useWaitForTransactionReceipt, useSwitchChain, useReadContract, useConnect, useReconnect } from "wagmi";
 import { createPublicClient, http, parseUnits, encodeFunctionData, formatUnits } from "viem";
@@ -788,7 +788,7 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
                                             }`}
                                         >
                                             <div className="text-xs uppercase tracking-wide mb-1 opacity-70">
-                                                {format(date, "EEE")}
+                                                {formatInTimeZone(date, userTimezone, "EEE")}
                                             </div>
                                             <div className="text-lg font-semibold">
                                                 {format(date, "d")}
@@ -805,7 +805,7 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
                             {selectedDate && (
                                 <div className="mt-6">
                                     <h3 className="text-sm font-medium text-zinc-400 mb-3">
-                                        Available times on {format(selectedDate, "EEEE, MMMM d")}
+                                        Available times on {formatInTimeZone(selectedDate, userTimezone, "EEEE, MMMM d")}
                                     </h3>
 
                                     {slotsLoading ? (

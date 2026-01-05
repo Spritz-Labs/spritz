@@ -99,6 +99,28 @@ export default function RoomPage({
         }
     }, []);
 
+    // Safari-specific: Update video elements when tracks change
+    // Safari needs explicit srcObject updates when tracks are added/updated
+    useEffect(() => {
+        if (!inCall) return;
+
+        remotePeers.forEach((peer, peerId) => {
+            if (peer.videoTrack) {
+                const videoEl = remoteVideoRefs.current.get(peerId);
+                if (videoEl) {
+                    // Safari needs explicit updates - always set srcObject
+                    const stream = new MediaStream([peer.videoTrack]);
+                    if (videoEl.srcObject !== stream) {
+                        videoEl.srcObject = stream;
+                        videoEl.play().catch((e) => {
+                            console.warn(`[Room] Safari video play failed for ${peerId}:`, e);
+                        });
+                    }
+                }
+            }
+        });
+    }, [remotePeers, inCall]);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const clientRef = useRef<any>(null);
     const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -2459,25 +2481,19 @@ export default function RoomPage({
                                                                 peer.peerId,
                                                                 el
                                                             );
-                                                            // Try to play if we have a track
-                                                            if (
-                                                                peer.videoTrack &&
-                                                                !el.srcObject
-                                                            ) {
-                                                                el.srcObject =
-                                                                    new MediaStream(
-                                                                        [
-                                                                            peer.videoTrack,
-                                                                        ]
-                                                                    );
-                                                                el.play().catch(
-                                                                    () => {}
-                                                                );
+                                                            // Always update srcObject for Safari compatibility
+                                                            if (peer.videoTrack) {
+                                                                const stream = new MediaStream([peer.videoTrack]);
+                                                                el.srcObject = stream;
+                                                                el.play().catch((e) => {
+                                                                    console.warn("[Room] Video play failed:", e);
+                                                                });
                                                             }
                                                         }
                                                     }}
                                                     autoPlay
                                                     playsInline
+                                                    muted={false}
                                                     className="w-full h-full min-h-0 object-cover"
                                                 />
                                             ) : (
