@@ -3426,36 +3426,39 @@ function DashboardContent({
                                                 
                                                 if (!userAddress) {
                                                     console.error("[Dashboard] No user address for room link");
+                                                    alert("No user address available");
                                                     return;
                                                 }
                                                 
-                                                // Ensure permanent room exists first
                                                 try {
-                                                    await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
+                                                    // Ensure permanent room exists first
+                                                    try {
+                                                        await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
+                                                    } catch (err) {
+                                                        console.error("Failed to ensure room exists:", err);
+                                                        // Continue anyway - room might already exist
+                                                    }
+                                                    
+                                                    // Copy link using same method as working scheduling link
+                                                    const baseUrl = window.location.origin || 'https://app.spritz.chat';
+                                                    const link = `${baseUrl}/room/${userAddress}`;
+                                                    console.log("[Dashboard] Copying room link:", link);
+                                                    
+                                                    // Copy to clipboard
+                                                    navigator.clipboard.writeText(link);
+                                                    
+                                                    // Show feedback
+                                                    const btn = e.currentTarget;
+                                                    const original = btn.textContent;
+                                                    if (btn) {
+                                                        btn.textContent = "Copied!";
+                                                        setTimeout(() => {
+                                                            if (btn) btn.textContent = original || "Copy Link";
+                                                        }, 2000);
+                                                    }
                                                 } catch (err) {
-                                                    console.error("Failed to ensure room exists:", err);
-                                                }
-                                                
-                                                // Copy link using same method as working scheduling link
-                                                const link = `${window.location.origin}/room/${userAddress}`;
-                                                console.log("[Dashboard] Copying room link:", link);
-                                                
-                                                // Ensure it's a room URL, not a user URL
-                                                if (!link.includes('/room/')) {
-                                                    console.error("[Dashboard] ERROR: Generated wrong URL type!");
-                                                    return;
-                                                }
-                                                
-                                                navigator.clipboard.writeText(link);
-                                                
-                                                // Show feedback
-                                                const btn = e.currentTarget;
-                                                const original = btn.textContent;
-                                                if (btn) {
-                                                    btn.textContent = "Copied!";
-                                                    setTimeout(() => {
-                                                        if (btn) btn.textContent = original || "Copy Link";
-                                                    }, 2000);
+                                                    console.error("[Dashboard] Failed to copy room link:", err);
+                                                    alert("Failed to copy link. Please try again.");
                                                 }
                                             }}
                                             className="flex-1 sm:flex-none px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors whitespace-nowrap"

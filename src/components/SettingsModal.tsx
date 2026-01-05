@@ -462,6 +462,7 @@ export function SettingsModal({
                                                     
                                                     if (!userAddress) {
                                                         console.error("[Settings] No user address available");
+                                                        alert("No user address available");
                                                         return;
                                                     }
                                                     
@@ -471,47 +472,48 @@ export function SettingsModal({
                                                         
                                                         // Fetch username
                                                         if (supabase) {
-                                                            const { data: usernameData } = await supabase
-                                                                .from("shout_usernames")
-                                                                .select("username")
-                                                                .eq("wallet_address", userAddress.toLowerCase())
-                                                                .maybeSingle();
-                                                            
-                                                            if (usernameData?.username) {
-                                                                profilePath = usernameData.username;
-                                                            } else {
-                                                                // Try ENS
-                                                                const { data: userData } = await supabase
-                                                                    .from("shout_users")
-                                                                    .select("ens_name")
+                                                            try {
+                                                                const { data: usernameData } = await supabase
+                                                                    .from("shout_usernames")
+                                                                    .select("username")
                                                                     .eq("wallet_address", userAddress.toLowerCase())
                                                                     .maybeSingle();
                                                                 
-                                                                if (userData?.ens_name) {
-                                                                    profilePath = userData.ens_name;
+                                                                if (usernameData?.username) {
+                                                                    profilePath = usernameData.username;
+                                                                } else {
+                                                                    // Try ENS
+                                                                    const { data: userData } = await supabase
+                                                                        .from("shout_users")
+                                                                        .select("ens_name")
+                                                                        .eq("wallet_address", userAddress.toLowerCase())
+                                                                        .maybeSingle();
+                                                                    
+                                                                    if (userData?.ens_name) {
+                                                                        profilePath = userData.ens_name;
+                                                                    }
                                                                 }
+                                                            } catch (dbErr) {
+                                                                console.error("[Settings] DB error:", dbErr);
+                                                                // Continue with wallet address as fallback
                                                             }
                                                         }
                                                         
                                                         // CRITICAL: Use /user/ path, NOT /room/
-                                                        const baseUrl = window.location.origin;
+                                                        const baseUrl = window.location.origin || 'https://app.spritz.chat';
                                                         const profileUrl = `${baseUrl}/user/${profilePath}`;
-                                                        
-                                                        // Double-check it's not a room URL
-                                                        if (profileUrl.includes('/room/')) {
-                                                            console.error("[Settings] ERROR: Generated room URL instead of profile URL!");
-                                                            return;
-                                                        }
                                                         
                                                         console.log("[Settings] Copying profile URL:", profileUrl);
                                                         console.log("[Settings] User address:", userAddress);
                                                         console.log("[Settings] Profile path:", profilePath);
                                                         
+                                                        // Copy to clipboard
                                                         navigator.clipboard.writeText(profileUrl);
                                                         setCopiedLink(true);
                                                         setTimeout(() => setCopiedLink(false), 2000);
                                                     } catch (err) {
                                                         console.error("[Settings] Failed to copy profile link:", err);
+                                                        alert("Failed to copy link. Please try again.");
                                                     }
                                                 }}
                                                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl hover:bg-blue-500/20 transition-colors text-blue-400"
