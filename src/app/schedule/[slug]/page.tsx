@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import { format, addDays, startOfDay, isSameDay } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
+import { getDayOfWeekInTimezone } from "@/lib/timezone";
 import { useAccount, useDisconnect, useSendTransaction, useWaitForTransactionReceipt, useSwitchChain, useReadContract, useConnect, useReconnect } from "wagmi";
 import { createPublicClient, http, parseUnits, encodeFunctionData, formatUnits } from "viem";
 import { injected, coinbaseWallet } from "wagmi/connectors";
@@ -451,9 +452,12 @@ export default function SchedulePage({ params }: { params: Promise<{ slug: strin
     });
 
     // Check if a day has availability
+    // IMPORTANT: Use the user's timezone to calculate day of week, not browser's local timezone
     const dayHasAvailability = (date: Date) => {
         if (!profile) return false;
-        const dayOfWeek = date.getDay();
+        const userTimezone = profile.availability.timezone || "UTC";
+        // Use the same timezone-aware calculation as the backend
+        const dayOfWeek = getDayOfWeekInTimezone(date, userTimezone);
         return profile.availability.windows.some(w => w.dayOfWeek === dayOfWeek);
     };
 
