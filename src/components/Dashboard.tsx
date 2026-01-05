@@ -3419,7 +3419,16 @@ function DashboardContent({
                                     />
                                     <div className="flex items-center gap-2">
                                         <button
-                                            onClick={async () => {
+                                            type="button"
+                                            onClick={async (e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                
+                                                if (!userAddress) {
+                                                    console.error("[Dashboard] No user address for room link");
+                                                    return;
+                                                }
+                                                
                                                 // Ensure permanent room exists first
                                                 try {
                                                     await fetch(`/api/rooms/permanent?wallet_address=${userAddress}`);
@@ -3430,11 +3439,18 @@ function DashboardContent({
                                                 // Copy link using same method as working scheduling link
                                                 const link = `${window.location.origin}/room/${userAddress}`;
                                                 console.log("[Dashboard] Copying room link:", link);
+                                                
+                                                // Ensure it's a room URL, not a user URL
+                                                if (!link.includes('/room/')) {
+                                                    console.error("[Dashboard] ERROR: Generated wrong URL type!");
+                                                    return;
+                                                }
+                                                
                                                 navigator.clipboard.writeText(link);
                                                 
                                                 // Show feedback
-                                                const btn = document.activeElement as HTMLElement;
-                                                const original = btn?.textContent;
+                                                const btn = e.currentTarget;
+                                                const original = btn.textContent;
                                                 if (btn) {
                                                     btn.textContent = "Copied!";
                                                     setTimeout(() => {

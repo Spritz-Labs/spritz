@@ -456,7 +456,15 @@ export function SettingsModal({
                                     {settings.publicLandingEnabled && userAddress && (
                                         <div className="mt-3 px-4">
                                             <button
-                                                onClick={async () => {
+                                                onClick={async (e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    
+                                                    if (!userAddress) {
+                                                        console.error("[Settings] No user address available");
+                                                        return;
+                                                    }
+                                                    
                                                     try {
                                                         // Try to get username or ENS for prettier URL
                                                         let profilePath = userAddress.toLowerCase();
@@ -485,9 +493,20 @@ export function SettingsModal({
                                                             }
                                                         }
                                                         
-                                                        // Ensure we're using /user/ path, not /room/
-                                                        const profileUrl = `${window.location.origin}/user/${profilePath}`;
+                                                        // CRITICAL: Use /user/ path, NOT /room/
+                                                        const baseUrl = window.location.origin;
+                                                        const profileUrl = `${baseUrl}/user/${profilePath}`;
+                                                        
+                                                        // Double-check it's not a room URL
+                                                        if (profileUrl.includes('/room/')) {
+                                                            console.error("[Settings] ERROR: Generated room URL instead of profile URL!");
+                                                            return;
+                                                        }
+                                                        
                                                         console.log("[Settings] Copying profile URL:", profileUrl);
+                                                        console.log("[Settings] User address:", userAddress);
+                                                        console.log("[Settings] Profile path:", profilePath);
+                                                        
                                                         navigator.clipboard.writeText(profileUrl);
                                                         setCopiedLink(true);
                                                         setTimeout(() => setCopiedLink(false), 2000);
