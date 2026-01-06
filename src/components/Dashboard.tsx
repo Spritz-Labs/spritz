@@ -3770,7 +3770,12 @@ function DashboardContent({
                 onClose={() => setIsUsernameModalOpen(false)}
                 userAddress={userAddress}
                 currentUsername={reachUsername}
-                onSuccess={() => {}}
+                onSuccess={(username) => {
+                    // If username is empty string, it was removed
+                    // Otherwise, it was updated/claimed
+                    // Refresh to update UI
+                    window.location.reload();
+                }}
             />
 
             {/* Phone Verification Modal */}

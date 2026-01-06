@@ -226,20 +226,33 @@ button:focus {
 }
 
 /* AppKit/Reown Wallet Connect Modal - PWA optimizations */
-/* Reorder wallet and social sections: wallets first, social at bottom */
-@media (display-mode: standalone) {
-    /* Target AppKit modal container */
-    w3m-modal,
-    [data-appkit-modal] {
-        /* Ensure wallet section appears first */
-    }
-    
-    /* Hide or delay social login section initially for faster loading */
-    w3m-social-login,
-    [data-appkit-social] {
-        /* Social logins will load after wallets are displayed */
-        animation: fadeIn 0.3s ease-in 0.5s both;
-    }
+/* Hide social login section due to performance issues */
+w3m-social-login,
+[data-appkit-social],
+w3m-socials,
+w3m-connector-wrapper[data-social],
+button[data-social],
+a[data-social] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Hide social login divider/separator */
+w3m-social-divider,
+[data-appkit-social-divider],
+.w3m-social-divider {
+    display: none !important;
+}
+
+/* Ensure wallet section is visible and prioritized */
+w3m-wallet-button,
+[data-appkit-wallet],
+w3m-connector-wrapper:not([data-social]) {
+    display: block !important;
+    visibility: visible !important;
 }
 
 @keyframes fadeIn {

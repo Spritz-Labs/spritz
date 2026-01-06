@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { useAccount, useReconnect } from "wagmi";
 import { useAppKitAccount, useDisconnect } from "@reown/appkit/react";
 import { PasskeyAuth } from "@/components/PasskeyAuth";
+import { EmailAuth } from "@/components/EmailAuth";
 import { WalletConnect } from "@/components/WalletConnect";
 import { Dashboard } from "@/components/Dashboard";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { Globe } from "@/components/Globe";
 import { SpritzLogo } from "@/components/SpritzLogo";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
+import { useEmailAuthContext } from "@/context/EmailAuthProvider";
 import { useWalletType, type WalletType } from "@/hooks/useWalletType";
 import { useAuth } from "@/context/AuthProvider";
 import {
@@ -60,6 +62,8 @@ function hasSavedWalletSession(): boolean {
 }
 
 export default function Home() {
+    const [activeTab, setActiveTab] = useState<"wallet" | "email" | "passkey">("wallet");
+    
     // EVM wallet via wagmi
     const { address: wagmiAddress, isConnected: isWagmiConnected, isReconnecting } = useAccount();
     const { reconnect } = useReconnect();
@@ -83,10 +87,17 @@ export default function Home() {
 
     const {
         isAuthenticated: isPasskeyAuthenticated,
-        smartAccountAddress,
+        smartAccountAddress: passkeyAddress,
         logout: passkeyLogout,
         isLoading: isPasskeyLoading,
     } = usePasskeyContext();
+
+    const {
+        isAuthenticated: isEmailAuthenticated,
+        smartAccountAddress: emailAddress,
+        isLoading: isEmailLoading,
+        logout: emailLogout,
+    } = useEmailAuthContext();
 
     // SIWE Authentication
     const {
@@ -179,9 +190,9 @@ export default function Home() {
     }, [mounted, initializing, isWalletConnected, walletAddress, isSiweAuthenticated, isSiweLoading, signingIn, siweSignIn, walletType]);
 
     // Determine the active user address (supports both EVM and Solana)
-    // Can come from passkey (smartAccountAddress), connected wallet, or authenticated SIWE user
+    // Can come from email auth, passkey, connected wallet, or authenticated SIWE user
     const userAddress: string | null = mounted
-        ? smartAccountAddress || walletAddress || siweUser?.walletAddress || null
+        ? emailAddress || passkeyAddress || walletAddress || siweUser?.walletAddress || null
         : null;
 
     // Determine wallet type for dashboard
@@ -190,20 +201,21 @@ export default function Home() {
         ? "evm" // Passkey users always use EVM (smart accounts)
         : walletType || (siweUser?.walletAddress?.startsWith("0x") ? "evm" : siweUser?.walletAddress ? "solana" : null);
 
-    // Require SIWE/SIWS authentication for all wallet users
-    // Note: We allow SIWE auth even without wallet connected - credentials are self-contained
-    // This enables persistent sessions even if wallet takes time to reconnect
+    // Require authentication for all users
+    // Email auth, passkey auth, or SIWE/SIWS authentication
     const isFullyAuthenticated = mounted && (
+        isEmailAuthenticated ||
         isPasskeyAuthenticated || 
         isSiweAuthenticated
     );
 
     // Show loading while checking auth state
-    // If already authenticated via SIWE, don't wait for wallet reconnection
+    // If already authenticated via email/passkey/SIWE, don't wait for wallet reconnection
     // Auth credentials are self-contained and can work without wallet
     const isCheckingAuth =
         !mounted || 
-        isPasskeyLoading || 
+        isPasskeyLoading ||
+        isEmailLoading || 
         (isSiweLoading && !isSiweAuthenticated) ||
         (initializing && !isSiweAuthenticated) ||
         (isWalletReconnecting && !isSiweAuthenticated);
@@ -221,6 +233,12 @@ export default function Home() {
         // Logout passkey if authenticated
         if (isPasskeyAuthenticated) {
             passkeyLogout();
+        }
+        // Logout email if authenticated
+        if (isEmailAuthenticated) {
+            emailLogout();
+            // emailLogout already reloads, so return early
+            return;
         }
         // Clear wallet-related localStorage to ensure clean state
         try {
@@ -434,15 +452,15 @@ export default function Home() {
             </div>
 
             {/* Content */}
-            <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-12 safe-area-inset">
-                {/* Header */}
-                <header className="text-center mb-12">
+            <div className="relative z-10 flex flex-col items-center min-h-screen px-4 pt-6 md:pt-12 pb-6 md:pb-12 safe-area-inset">
+                {/* Header - at top */}
+                <header className="text-center mb-8 md:mb-12 mt-12 md:mt-16">
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
                 >
-                    <div className="flex items-center justify-center gap-3 mb-4">
+                    <div className="flex items-center justify-center gap-3 mb-2 md:mb-4">
                         <motion.div
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
@@ -460,7 +478,7 @@ export default function Home() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.3 }}
-                        className="text-4xl md:text-5xl font-bold text-white mb-3 tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                        className="text-3xl md:text-5xl font-bold text-white mb-2 md:mb-3 tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
                     >
                         Spritz
                     </motion.h1>
@@ -469,7 +487,7 @@ export default function Home() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.4 }}
-                        className="text-zinc-300 text-lg max-w-md mx-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                        className="text-zinc-300 text-base md:text-xl max-w-md mx-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
                     >
                         Voice calls over Ethereum & Solana. Connect your wallet
                         and start talking.
@@ -486,45 +504,88 @@ export default function Home() {
                 </motion.div>
                 </header>
 
-                {/* Auth Card */}
+                {/* Auth Card - pushed to bottom */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, delay: 0.2 }}
-                    className="w-full max-w-md"
+                    className="w-full max-w-md mt-auto"
                 >
-                    <div className="glass-card rounded-3xl p-8 shadow-2xl">
-                        {/* Wallet Section */}
-                        <div className="mb-8">
-                            <div className="flex items-center gap-2 mb-6">
-                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-                                <span className="text-zinc-500 text-sm font-medium uppercase tracking-wider">
-                                    Connect Wallet
-                                </span>
-                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-                            </div>
-
-                            <WalletConnect />
+                    <div className="glass-card rounded-2xl md:rounded-3xl p-5 md:p-8 shadow-2xl">
+                        {/* Tabs */}
+                        <div className="flex bg-zinc-900/50 rounded-xl p-1 mb-6">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab("wallet")}
+                                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                                    activeTab === "wallet"
+                                        ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
+                                        : "text-zinc-400 hover:text-white"
+                                }`}
+                            >
+                                Wallet
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab("email")}
+                                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                                    activeTab === "email"
+                                        ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
+                                        : "text-zinc-400 hover:text-white"
+                                }`}
+                            >
+                                Email
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab("passkey")}
+                                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                                    activeTab === "passkey"
+                                        ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
+                                        : "text-zinc-400 hover:text-white"
+                                }`}
+                            >
+                                Passkey
+                            </button>
                         </div>
 
-                        {/* Divider */}
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className="h-px flex-1 bg-zinc-800" />
-                            <span className="text-zinc-600 text-sm">or</span>
-                            <div className="h-px flex-1 bg-zinc-800" />
-                        </div>
-
-                        {/* Passkey Section */}
-                        <div>
-                            <div className="flex items-center gap-2 mb-6">
-                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-                                <span className="text-zinc-500 text-sm font-medium uppercase tracking-wider">
-                                    Passkey Login
-                                </span>
-                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-                            </div>
-
-                            <PasskeyAuth />
+                        {/* Tab Content */}
+                        <div className="min-h-[200px]">
+                            <AnimatePresence mode="wait">
+                                {activeTab === "wallet" && (
+                                    <motion.div
+                                        key="wallet"
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 10 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        <WalletConnect />
+                                    </motion.div>
+                                )}
+                                {activeTab === "email" && (
+                                    <motion.div
+                                        key="email"
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 10 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        <EmailAuth />
+                                    </motion.div>
+                                )}
+                                {activeTab === "passkey" && (
+                                    <motion.div
+                                        key="passkey"
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 10 }}
+                                        transition={{ duration: 0.2 }}
+                                    >
+                                        <PasskeyAuth />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </div>
 
@@ -533,7 +594,7 @@ export default function Home() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.8 }}
-                        className="text-center text-zinc-600 text-sm mt-6 space-y-2"
+                        className="text-center text-zinc-600 text-sm mt-6 mb-0 space-y-2"
                     >
                         <div className="flex items-center justify-center gap-4 flex-wrap">
                             <Link

@@ -181,6 +181,9 @@ LIVEPEER_API_KEY=your_livepeer_api_key
 ```env
 # Pimlico (ERC-4337)
 NEXT_PUBLIC_PIMLICO_API_KEY=your_pimlico_api_key
+
+# Email Auth (Optional - for email login feature)
+EMAIL_AUTH_SECRET=your_secure_secret_for_email_key_derivation
 ```
 
 ### Push Notifications

@@ -3,6 +3,7 @@ import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Web3Provider } from "@/context/Web3Provider";
 import { PasskeyProvider } from "@/context/PasskeyProvider";
+import { EmailAuthProvider } from "@/context/EmailAuthProvider";
 import { AuthProvider } from "@/context/AuthProvider";
 
 const dmSans = DM_Sans({
@@ -234,7 +235,9 @@ export default function RootLayout({
             >
                 <Web3Provider>
                     <AuthProvider>
-                        <PasskeyProvider>{children}</PasskeyProvider>
+                        <PasskeyProvider>
+                            <EmailAuthProvider>{children}</EmailAuthProvider>
+                        </PasskeyProvider>
                     </AuthProvider>
                 </Web3Provider>
             </body>

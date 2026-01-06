@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useUsername } from "@/hooks/useUsername";
 
@@ -31,10 +31,25 @@ export function PushNotificationPrompt({
     const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
     const [isClaiming, setIsClaiming] = useState(false);
     
+    // Use ref to track if we've already shown the prompt in this session
+    const hasShownRef = useRef(false);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    
     const { username: currentUsername, claimUsername, checkAvailability } = useUsername(userAddress);
 
     // Check if we should show the prompt
     useEffect(() => {
+        // Clear any existing timer
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+
+        // If already shown in this session, don't show again
+        if (hasShownRef.current) {
+            return;
+        }
+
         if (!userAddress || !isSupported || isSubscribed) {
             return;
         }
@@ -44,14 +59,21 @@ export function PushNotificationPrompt({
             return;
         }
 
-        // Check if already prompted
-        const hasPrompted = localStorage.getItem(PUSH_PROMPTED_KEY);
+        // Check if already prompted for this specific address
+        // This allows showing the prompt again if user logs in with a different method/address
+        const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
+        const hasPrompted = localStorage.getItem(promptedKey);
         if (hasPrompted) {
             return;
         }
 
         // Show prompt after a short delay (let the app settle first)
-        const timer = setTimeout(() => {
+        timerRef.current = setTimeout(() => {
+            // Double-check we haven't shown it already
+            if (hasShownRef.current) {
+                return;
+            }
+            hasShownRef.current = true;
             setIsOpen(true);
             // If user already has username, skip to notifications step
             if (currentUsername) {
@@ -61,7 +83,12 @@ export function PushNotificationPrompt({
             }
         }, 2000);
 
-        return () => clearTimeout(timer);
+        return () => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+                timerRef.current = null;
+            }
+        };
     }, [userAddress, isSupported, isSubscribed, permission, currentUsername]);
 
     // Debounced username availability check
@@ -111,24 +138,35 @@ export function PushNotificationPrompt({
 
     const handleEnable = async () => {
         setIsEnabling(true);
-        localStorage.setItem(PUSH_PROMPTED_KEY, "true");
+        // Store prompted flag per address
+        if (userAddress) {
+            const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
+            localStorage.setItem(promptedKey, "true");
+        }
         
         const success = await onEnable();
         
         setIsEnabling(false);
         if (success) {
+            hasShownRef.current = true; // Mark as shown
             setIsOpen(false);
         }
     };
 
     const handleSkip = () => {
-        localStorage.setItem(PUSH_PROMPTED_KEY, "true");
+        // Store prompted flag per address
+        if (userAddress) {
+            const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
+            localStorage.setItem(promptedKey, "true");
+        }
+        hasShownRef.current = true; // Mark as shown
         setIsOpen(false);
         onSkip();
     };
 
     const handleLater = () => {
         // Don't set the prompted flag - we'll ask again next session
+        hasShownRef.current = true; // Mark as shown for this session
         setIsOpen(false);
     };
 
@@ -246,6 +284,17 @@ export function PushNotificationPrompt({
                                                     </svg>
                                                 </>
                                             )}
+                                        </button>
+
+                                        {/* Skip button */}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setStep("notifications");
+                                            }}
+                                            className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors text-sm font-medium"
+                                        >
+                                            Skip for now
                                         </button>
                                     </motion.div>
                                 ) : (

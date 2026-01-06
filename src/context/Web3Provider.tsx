@@ -127,6 +127,8 @@ if (typeof window !== "undefined") {
             // Optimize wallet discovery and social login performance
             enableEIP6963: true, // Use EIP-6963 for faster wallet discovery
             enableCoinbase: true,
+            // Note: Social logins are disabled via CSS due to performance issues
+            // The CSS in globals.css hides all social login elements
         });
 
         setTimeout(() => {

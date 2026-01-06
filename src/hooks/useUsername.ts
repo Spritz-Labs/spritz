@@ -211,6 +211,44 @@ export function useUsername(userAddress: string | null) {
         []
     );
 
+    // Remove username
+    const removeUsername = useCallback(
+        async (): Promise<boolean> => {
+            if (!userAddress || !isSupabaseConfigured || !supabase) {
+                setError("Not connected");
+                return false;
+            }
+
+            setIsLoading(true);
+            setError(null);
+
+            try {
+                const { error: deleteError } = await supabase
+                    .from("shout_usernames")
+                    .delete()
+                    .eq("wallet_address", normalizeAddress(userAddress));
+
+                if (deleteError) {
+                    setError(deleteError.message);
+                    return false;
+                }
+
+                setUsername(null);
+                return true;
+            } catch (err) {
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to remove username"
+                );
+                return false;
+            } finally {
+                setIsLoading(false);
+            }
+        },
+        [userAddress]
+    );
+
     const clearError = useCallback(() => setError(null), []);
 
     return {
@@ -220,6 +258,7 @@ export function useUsername(userAddress: string | null) {
         isConfigured: isSupabaseConfigured,
         checkAvailability,
         claimUsername,
+        removeUsername,
         lookupUsername,
         searchUsernames,
         clearError,
