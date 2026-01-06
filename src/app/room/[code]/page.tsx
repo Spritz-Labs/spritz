@@ -1233,10 +1233,17 @@ export default function RoomPage({
                 }
 
                 // Reattach local video stream if video is enabled
-                // Use a small delay to ensure screen share is fully stopped
+                // Use a delay to ensure screen share is fully stopped, then re-enable camera
                 setTimeout(async () => {
                     if (!isVideoOff && localVideoRef.current) {
                         try {
+                            // First, explicitly re-enable video to ensure the track is active
+                            console.log("[Room] Re-enabling video after screen share stopped");
+                            await localPeer.enableVideo();
+                            
+                            // Wait a bit for the track to be ready
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                            
                             // Method 1: Try to get video stream from local peer's getStream method
                             if (typeof localPeer.getStream === "function") {
                                 try {
@@ -1307,9 +1314,9 @@ export default function RoomPage({
                                 }
                             }
 
-                            // Method 3: Fallback - re-enable video to trigger stream-playable event
+                            // Method 3: Fallback - re-enable video again to trigger stream-playable event
                             console.log(
-                                "[Room] Re-enabling video to trigger stream-playable event"
+                                "[Room] Re-enabling video again to trigger stream-playable event"
                             );
                             await localPeer.enableVideo();
                         } catch (err) {
@@ -1328,7 +1335,7 @@ export default function RoomPage({
                             }
                         }
                     }
-                }, 100); // Small delay to ensure screen share is fully stopped
+                }, 500); // Increased delay to ensure screen share is fully stopped
             } else {
                 // Start screen share - try multiple methods
                 console.log("[Room] Attempting to start screen share...");
