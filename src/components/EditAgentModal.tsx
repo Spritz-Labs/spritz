@@ -139,32 +139,96 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
     const [showEmbedCode, setShowEmbedCode] = useState(false);
     const [embedData, setEmbedData] = useState<{ code: { sdk: string }; endpoints: { chat: string } } | null>(null);
 
-    // Load agent data when modal opens
+    // Track original values to detect changes
+    const [originalValues, setOriginalValues] = useState<{
+        name: string;
+        personality: string;
+        emoji: string;
+        visibility: "private" | "friends" | "public";
+        tags: string[];
+        webSearchEnabled: boolean;
+        useKnowledgeBase: boolean;
+        mcpEnabled: boolean;
+        apiEnabled: boolean;
+        schedulingEnabled: boolean;
+        x402Enabled: boolean;
+        x402PriceCents: number;
+        x402Network: "base" | "base-sepolia";
+        x402WalletAddress: string;
+        x402PricingMode: "global" | "per_tool";
+        mcpServers: MCPServer[];
+        apiTools: APITool[];
+    } | null>(null);
+
+    // Load agent data when modal opens or agent changes
     useEffect(() => {
         if (agent && isOpen) {
-            setName(agent.name);
-            setPersonality(agent.personality || "");
-            setEmoji(agent.avatar_emoji || "🤖");
-            setVisibility(agent.visibility);
-            setTags(agent.tags || []);
+            const agentName = agent.name;
+            const agentPersonality = agent.personality || "";
+            const agentEmoji = agent.avatar_emoji || "🤖";
+            const agentVisibility = agent.visibility;
+            const agentTags = agent.tags || [];
+            const agentWebSearch = agent.web_search_enabled !== false;
+            const agentKnowledgeBase = agent.use_knowledge_base !== false;
+            const agentMcp = agent.mcp_enabled !== false;
+            const agentApi = agent.api_enabled !== false;
+            const agentScheduling = agent.scheduling_enabled || false;
+            const agentX402 = agent.x402_enabled || false;
+            const agentX402Price = agent.x402_price_cents || 1;
+            const agentX402Network = agent.x402_network || "base";
+            const agentX402Wallet = agent.x402_wallet_address || userAddress || "";
+            const agentX402Mode = agent.x402_pricing_mode || "global";
+            const agentMcpServers = agent.mcp_servers || [];
+            const agentApiTools = agent.api_tools || [];
+
+            // Set all state values
+            setName(agentName);
+            setPersonality(agentPersonality);
+            setEmoji(agentEmoji);
+            setVisibility(agentVisibility);
+            setTags(agentTags);
             setTagInput("");
-            setWebSearchEnabled(agent.web_search_enabled !== false);
-            setUseKnowledgeBase(agent.use_knowledge_base !== false);
-            setMcpEnabled(agent.mcp_enabled !== false);
-            setApiEnabled(agent.api_enabled !== false);
-            setSchedulingEnabled(agent.scheduling_enabled || false);
-            setX402Enabled(agent.x402_enabled || false);
-            setX402PriceCents(agent.x402_price_cents || 1);
-            setX402Network(agent.x402_network || "base");
-            setX402WalletAddress(agent.x402_wallet_address || userAddress || "");
-            setX402PricingMode(agent.x402_pricing_mode || "global");
-            setMcpServers(agent.mcp_servers || []);
-            setApiTools(agent.api_tools || []);
+            setWebSearchEnabled(agentWebSearch);
+            setUseKnowledgeBase(agentKnowledgeBase);
+            setMcpEnabled(agentMcp);
+            setApiEnabled(agentApi);
+            setSchedulingEnabled(agentScheduling);
+            setX402Enabled(agentX402);
+            setX402PriceCents(agentX402Price);
+            setX402Network(agentX402Network);
+            setX402WalletAddress(agentX402Wallet);
+            setX402PricingMode(agentX402Mode);
+            setMcpServers(agentMcpServers);
+            setApiTools(agentApiTools);
             setError(null);
             setShowEmbedCode(false);
             setActiveTab("general");
+
+            // Store original values for change detection
+            setOriginalValues({
+                name: agentName,
+                personality: agentPersonality,
+                emoji: agentEmoji,
+                visibility: agentVisibility,
+                tags: agentTags,
+                webSearchEnabled: agentWebSearch,
+                useKnowledgeBase: agentKnowledgeBase,
+                mcpEnabled: agentMcp,
+                apiEnabled: agentApi,
+                schedulingEnabled: agentScheduling,
+                x402Enabled: agentX402,
+                x402PriceCents: agentX402Price,
+                x402Network: agentX402Network,
+                x402WalletAddress: agentX402Wallet,
+                x402PricingMode: agentX402Mode,
+                mcpServers: agentMcpServers,
+                apiTools: agentApiTools,
+            });
+        } else if (!isOpen) {
+            // Reset when modal closes
+            setOriginalValues(null);
         }
-    }, [agent, isOpen, userAddress]);
+    }, [agent?.id, isOpen, userAddress]); // Use agent.id to ensure reset when switching agents
 
     // Fetch embed code
     const fetchEmbedCode = async () => {
@@ -357,6 +421,38 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
         }
     };
 
+    // Check if there are unsaved changes
+    const hasUnsavedChanges = originalValues && (
+        name !== originalValues.name ||
+        personality !== originalValues.personality ||
+        emoji !== originalValues.emoji ||
+        visibility !== originalValues.visibility ||
+        JSON.stringify(tags) !== JSON.stringify(originalValues.tags) ||
+        webSearchEnabled !== originalValues.webSearchEnabled ||
+        useKnowledgeBase !== originalValues.useKnowledgeBase ||
+        mcpEnabled !== originalValues.mcpEnabled ||
+        apiEnabled !== originalValues.apiEnabled ||
+        schedulingEnabled !== originalValues.schedulingEnabled ||
+        x402Enabled !== originalValues.x402Enabled ||
+        x402PriceCents !== originalValues.x402PriceCents ||
+        x402Network !== originalValues.x402Network ||
+        x402WalletAddress !== originalValues.x402WalletAddress ||
+        x402PricingMode !== originalValues.x402PricingMode ||
+        JSON.stringify(mcpServers) !== JSON.stringify(originalValues.mcpServers) ||
+        JSON.stringify(apiTools) !== JSON.stringify(originalValues.apiTools)
+    );
+
+    // Handle close with warning if there are unsaved changes
+    const handleClose = () => {
+        if (hasUnsavedChanges) {
+            if (confirm("You have unsaved changes. Are you sure you want to close? All changes will be lost.")) {
+                onClose();
+            }
+        } else {
+            onClose();
+        }
+    };
+
     if (!agent) return null;
 
     return (
@@ -367,7 +463,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
-                    onClick={onClose}
+                    onClick={handleClose}
                 >
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -385,7 +481,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                 <h2 className="text-xl font-bold text-white">Edit Agent</h2>
                                 <p className="text-sm text-zinc-400">{agent.name}</p>
                             </div>
-                            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800">
+                            <button onClick={handleClose} className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -1197,14 +1293,14 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                                                      tool.apiType === "openapi" ? "OpenAPI" : "REST"}
                                                                                 </span>
                                                                             )}
-                                                                            {/* Detect Button */}
+                                                                            {/* Detect/Fetch Schema Button */}
                                                                             <button
                                                                                 onClick={() => detectApiType(tool.id, tool.url, tool.apiKey, tool.headers)}
                                                                                 disabled={detectingApiId === tool.id}
                                                                                 className="text-xs px-1.5 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 disabled:opacity-50"
-                                                                                title="Auto-detect API type and schema"
+                                                                                title={tool.schema ? "Refresh schema" : "Auto-detect API type and fetch schema"}
                                                                             >
-                                                                                {detectingApiId === tool.id ? "..." : "🔍"}
+                                                                                {detectingApiId === tool.id ? "..." : tool.schema ? "🔄" : "🔍"}
                                                                             </button>
                                                                             <div className="flex-1 min-w-0">
                                                                                 <input
@@ -1585,7 +1681,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                         {/* Actions */}
                         <div className="flex gap-3 mt-6">
                             <button
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors"
                             >
                                 Cancel

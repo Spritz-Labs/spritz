@@ -894,6 +894,13 @@ You can help users schedule meetings with your creator. When users ask about sch
                 if (tool.instructions) {
                     systemInstructions += `\n  Instructions: ${tool.instructions}`;
                 }
+                // Include schema information for GraphQL APIs so the agent knows what queries are available
+                if (tool.apiType === "graphql" && tool.schema) {
+                    systemInstructions += `\n  GraphQL Schema:\n${tool.schema}`;
+                } else if (tool.schema) {
+                    // For other API types, include schema as context
+                    systemInstructions += `\n  API Schema:\n${tool.schema}`;
+                }
                 systemInstructions += "\n";
             }
             
