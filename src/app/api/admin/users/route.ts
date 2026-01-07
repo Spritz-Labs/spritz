@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search");
     const sortBy = searchParams.get("sortBy") || "last_login";
     const sortOrder = searchParams.get("sortOrder") || "desc";
+    const betaAccessFilter = searchParams.get("betaAccessFilter");
 
     let query = supabase
         .from("shout_users")
@@ -73,6 +74,17 @@ export async function GET(request: NextRequest) {
 
     if (search) {
         query = query.or(`wallet_address.ilike.%${search}%,ens_name.ilike.%${search}%,username.ilike.%${search}%`);
+    }
+
+    // Apply beta access filter
+    if (betaAccessFilter === "has_access") {
+        query = query.eq("beta_access", true);
+    } else if (betaAccessFilter === "applied") {
+        query = query.eq("beta_access_applied", true).eq("beta_access", false);
+    } else if (betaAccessFilter === "neither") {
+        // Users who don't have beta access AND haven't applied
+        // Use .or() for each field, then filter results in memory for the AND condition
+        query = query.or("beta_access.is.null,beta_access.eq.false");
     }
 
     query = query
@@ -86,8 +98,16 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
     }
 
+    // Filter for "neither" case in memory (users without beta access AND without application)
+    let filteredUsers = users || [];
+    if (betaAccessFilter === "neither") {
+        filteredUsers = filteredUsers.filter(
+            (user) => !user.beta_access && !user.beta_access_applied
+        );
+    }
+
     // Fetch used invite counts for all users
-    const userAddresses = (users || []).map(u => u.wallet_address);
+    const userAddresses = filteredUsers.map(u => u.wallet_address);
     let usedInviteCounts: Record<string, number> = {};
     
     if (userAddresses.length > 0) {
@@ -110,17 +130,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Add used_invites to each user
-    const usersWithInvites = (users || []).map(user => ({
+    const usersWithInvites = filteredUsers.map(user => ({
         ...user,
         invites_used: usedInviteCounts[user.wallet_address] || 0,
     }));
 
+    // For "neither" filter, we need to recalculate total count
+    const finalCount = betaAccessFilter === "neither" 
+        ? usersWithInvites.length 
+        : (count || 0);
+
     return NextResponse.json({
         users: usersWithInvites,
-        total: count,
+        total: finalCount,
         page,
         limit,
-        totalPages: Math.ceil((count || 0) / limit),
+        totalPages: Math.ceil(finalCount / limit),
     });
 }
 

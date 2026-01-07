@@ -2848,11 +2848,11 @@ function DashboardContent({
                         </div>
                     )}
 
-                    {/* AI Agents Section - Beta Users Only, shown when Agents tab selected */}
-                    {hasBetaAccess && activeNavTab === "agents" && (
+                    {/* AI Agents Section - shown when Agents tab selected */}
+                    {activeNavTab === "agents" && (
                         <div id="agents-section" className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6">
                             <div className="p-6">
-                                <AgentsSection userAddress={userAddress} />
+                                <AgentsSection userAddress={userAddress} hasBetaAccess={hasBetaAccess} />
                             </div>
                         </div>
                     )}
@@ -3554,19 +3554,17 @@ function DashboardContent({
                     <div className="bg-zinc-900/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl shadow-black/50 px-2">
                         <div className="flex items-center gap-1 py-2">
                             {/* Agents Tab */}
-                            {hasBetaAccess && (
-                                <button
-                                    onClick={() => setActiveNavTab("agents")}
-                                    className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
-                                        activeNavTab === "agents"
-                                            ? "text-purple-400 bg-purple-500/20"
-                                            : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-                                    }`}
-                                >
-                                    <span className="text-lg">✨</span>
-                                    <span className="text-[10px] font-medium">Agents</span>
-                                </button>
-                            )}
+                            <button
+                                onClick={() => setActiveNavTab("agents")}
+                                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                    activeNavTab === "agents"
+                                        ? "text-purple-400 bg-purple-500/20"
+                                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                }`}
+                            >
+                                <span className="text-lg">✨</span>
+                                <span className="text-[10px] font-medium">Agents</span>
+                            </button>
 
                             {/* Friends Tab */}
                             <button

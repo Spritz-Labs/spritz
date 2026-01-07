@@ -11,9 +11,10 @@ import { ExploreAgentsModal } from "./ExploreAgentsModal";
 
 interface AgentsSectionProps {
     userAddress: string;
+    hasBetaAccess: boolean;
 }
 
-export function AgentsSection({ userAddress }: AgentsSectionProps) {
+export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps) {
     const { agents, isLoading, error, createAgent, updateAgent, deleteAgent } = useAgents(userAddress);
     const { favorites, removeFavorite, refresh: refreshFavorites } = useFavoriteAgents(userAddress);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -25,6 +26,8 @@ export function AgentsSection({ userAddress }: AgentsSectionProps) {
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isExpanded, setIsExpanded] = useState(true);
     const [embedTabForAgent, setEmbedTabForAgent] = useState<Record<string, "iframe" | "js" | "react" | "nextjs">>({});
+    const [isApplying, setIsApplying] = useState(false);
+    const [hasApplied, setHasApplied] = useState(false);
 
     const handleCreateAgent = async (
         name: string,
@@ -94,6 +97,32 @@ export function AgentsSection({ userAddress }: AgentsSectionProps) {
         apiTools?: APITool[];
     }) => {
         await updateAgent(agentId, updates);
+    };
+
+    const handleApplyForBetaAccess = async () => {
+        setIsApplying(true);
+        try {
+            const response = await fetch("/api/beta-access/apply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ walletAddress: userAddress }),
+            });
+            const data = await response.json();
+            if (response.ok && data.success) {
+                setHasApplied(true);
+                if (data.hasBetaAccess) {
+                    // User already had access, refresh the page to show agents
+                    window.location.reload();
+                }
+            } else {
+                alert(data.error || "Failed to submit application");
+            }
+        } catch (error) {
+            console.error("[AgentsSection] Error applying for beta access:", error);
+            alert("Failed to submit application. Please try again.");
+        } finally {
+            setIsApplying(false);
+        }
     };
 
     return (
@@ -180,6 +209,31 @@ export function AgentsSection({ userAddress }: AgentsSectionProps) {
                             <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
                                 {error}
                             </div>
+                        ) : !hasBetaAccess ? (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-center"
+                            >
+                                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                                    <span className="text-2xl">✨</span>
+                                </div>
+                                <h3 className="text-white font-medium mb-1">AI Agents (Beta)</h3>
+                                <p className="text-sm text-zinc-400 mb-4">
+                                    {hasApplied
+                                        ? "Your application has been submitted! We'll review it and grant you access soon."
+                                        : "Apply for beta access to create and interact with AI agents"}
+                                </p>
+                                {!hasApplied && (
+                                    <button
+                                        onClick={handleApplyForBetaAccess}
+                                        disabled={isApplying}
+                                        className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isApplying ? "Applying..." : "Apply for Beta Access"}
+                                    </button>
+                                )}
+                            </motion.div>
                         ) : agents.length === 0 && favorites.length === 0 ? (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}

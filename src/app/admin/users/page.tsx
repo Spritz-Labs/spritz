@@ -73,6 +73,8 @@ type User = {
     ban_reason: string | null;
     notes: string | null;
     beta_access: boolean;
+    beta_access_applied: boolean;
+    beta_access_applied_at: string | null;
     // Analytics
     friends_count: number;
     messages_sent: number;
@@ -108,6 +110,7 @@ export default function UsersPage() {
     const [search, setSearch] = useState("");
     const [sortBy, setSortBy] = useState("last_login");
     const [sortOrder, setSortOrder] = useState("desc");
+    const [betaAccessFilter, setBetaAccessFilter] = useState<"all" | "has_access" | "applied" | "neither">("all");
 
     // Edit user modal
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -286,6 +289,7 @@ export default function UsersPage() {
                 sortOrder,
             });
             if (search) params.set("search", search);
+            if (betaAccessFilter !== "all") params.set("betaAccessFilter", betaAccessFilter);
 
             const res = await fetch(`/api/admin/users?${params}`, {
                 headers: authHeaders,
@@ -302,7 +306,7 @@ export default function UsersPage() {
         } finally {
             setIsLoadingData(false);
         }
-    }, [isReady, getAuthHeaders, page, search, sortBy, sortOrder]);
+    }, [isReady, getAuthHeaders, page, search, sortBy, sortOrder, betaAccessFilter]);
 
     useEffect(() => {
         if (isReady) {
@@ -640,6 +644,19 @@ export default function UsersPage() {
                             <option value="desc">Descending</option>
                             <option value="asc">Ascending</option>
                         </select>
+                        <select
+                            value={betaAccessFilter}
+                            onChange={(e) => {
+                                setBetaAccessFilter(e.target.value as "all" | "has_access" | "applied" | "neither");
+                                setPage(1);
+                            }}
+                            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white"
+                        >
+                            <option value="all">All Users</option>
+                            <option value="has_access">Has Beta Access</option>
+                            <option value="applied">Applied for Beta</option>
+                            <option value="neither">No Access/Application</option>
+                        </select>
                         <button
                             onClick={fetchUsers}
                             className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
@@ -825,7 +842,12 @@ export default function UsersPage() {
                                                         )}
                                                         {user.beta_access && (
                                                             <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full text-xs w-fit">
-                                                                Beta
+                                                                Beta Access
+                                                            </span>
+                                                        )}
+                                                        {user.beta_access_applied && !user.beta_access && (
+                                                            <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-xs w-fit">
+                                                                Applied
                                                             </span>
                                                         )}
                                                     </div>
@@ -941,6 +963,11 @@ export default function UsersPage() {
                                 {editingUser.beta_access && (
                                     <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
                                         Beta Tester
+                                    </span>
+                                )}
+                                {editingUser.beta_access_applied && !editingUser.beta_access && (
+                                    <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">
+                                        Applied for Beta
                                     </span>
                                 )}
                             </div>
@@ -1178,26 +1205,36 @@ export default function UsersPage() {
                                 />
                             </div>
 
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="betaAccess"
-                                    checked={editBetaAccess}
-                                    onChange={(e) =>
-                                        setEditBetaAccess(e.target.checked)
-                                    }
-                                    className="rounded bg-zinc-800 border-zinc-600 text-purple-500 focus:ring-purple-500"
-                                />
-                                <label
-                                    htmlFor="betaAccess"
-                                    className="text-sm text-zinc-400"
-                                >
-                                    Beta Feature Access
-                                </label>
-                                {editBetaAccess && (
-                                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full text-xs">
-                                        Beta Tester
-                                    </span>
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="betaAccess"
+                                        checked={editBetaAccess}
+                                        onChange={(e) =>
+                                            setEditBetaAccess(e.target.checked)
+                                        }
+                                        className="rounded bg-zinc-800 border-zinc-600 text-purple-500 focus:ring-purple-500"
+                                    />
+                                    <label
+                                        htmlFor="betaAccess"
+                                        className="text-sm text-zinc-400"
+                                    >
+                                        Beta Feature Access
+                                    </label>
+                                    {editBetaAccess && (
+                                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full text-xs">
+                                            Beta Tester
+                                        </span>
+                                    )}
+                                </div>
+                                {editingUser.beta_access_applied && (
+                                    <div className="ml-7 text-xs text-zinc-500">
+                                        Applied for beta access{" "}
+                                        {editingUser.beta_access_applied_at
+                                            ? `on ${new Date(editingUser.beta_access_applied_at).toLocaleDateString()}`
+                                            : ""}
+                                    </div>
                                 )}
                             </div>
 

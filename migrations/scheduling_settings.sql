@@ -41,3 +41,4 @@ COMMENT ON COLUMN shout_user_settings.scheduling_advance_notice_hours IS 'Minimu
 
 
 
+
