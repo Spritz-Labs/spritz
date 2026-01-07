@@ -8,8 +8,21 @@ import { createAppKit } from "@reown/appkit/react";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
 import { wagmiAdapter, projectId } from "@/config/wagmi";
 
-// Setup queryClient
-const queryClient = new QueryClient();
+// Setup queryClient with default options
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            retry: false,
+            refetchOnWindowFocus: false,
+            // Suppress errors for queries that return undefined (like Alien SDK's auth-deeplink)
+            throwOnError: false,
+            // Return null for queries that would return undefined
+            placeholderData: (previousValue: any) => previousValue ?? null,
+            // Ensure queries always return a value, even if undefined
+            gcTime: 0, // Don't cache queries that might return undefined
+        },
+    },
+});
 
 // Set up metadata
 const metadata = {

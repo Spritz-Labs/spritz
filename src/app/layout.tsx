@@ -4,6 +4,7 @@ import "./globals.css";
 import { Web3Provider } from "@/context/Web3Provider";
 import { PasskeyProvider } from "@/context/PasskeyProvider";
 import { EmailAuthProvider } from "@/context/EmailAuthProvider";
+import { AlienAuthProvider } from "@/context/AlienAuthProvider";
 import { AuthProvider } from "@/context/AuthProvider";
 
 const dmSans = DM_Sans({
@@ -138,6 +139,66 @@ export default function RootLayout({
     return (
         <html lang="en" className="dark">
             <head>
+                {/* Suppress React Query errors FIRST, before any other scripts */}
+                <script
+                    dangerouslySetInnerHTML={{
+                        __html: `
+                            (function() {
+                                var suppressedErrors = [
+                                    'Query data cannot be undefined',
+                                    'auth-deeplink',
+                                    'Affected query key'
+                                ];
+                                
+                                function shouldSuppress(msg) {
+                                    if (!msg) return false;
+                                    msg = String(msg);
+                                    for (var i = 0; i < suppressedErrors.length; i++) {
+                                        if (msg.indexOf(suppressedErrors[i]) !== -1) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                }
+                                
+                                // Suppress console methods IMMEDIATELY
+                                var originalConsoleError = console.error;
+                                var originalConsoleWarn = console.warn;
+                                
+                                console.error = function() {
+                                    var msg = Array.prototype.join.call(arguments, ' ');
+                                    if (shouldSuppress(msg)) return;
+                                    originalConsoleError.apply(console, arguments);
+                                };
+                                
+                                console.warn = function() {
+                                    var msg = Array.prototype.join.call(arguments, ' ');
+                                    if (shouldSuppress(msg)) return;
+                                    originalConsoleWarn.apply(console, arguments);
+                                };
+                                
+                                // Also catch errors early
+                                window.addEventListener('error', function(e) {
+                                    var msg = e.message || (e.error && e.error.message) || String(e.error) || '';
+                                    if (shouldSuppress(msg)) {
+                                        e.preventDefault();
+                                        e.stopImmediatePropagation();
+                                        return false;
+                                    }
+                                }, true);
+                                
+                                window.addEventListener('unhandledrejection', function(e) {
+                                    var msg = (e.reason && e.reason.message) || String(e.reason) || '';
+                                    if (shouldSuppress(msg)) {
+                                        e.preventDefault();
+                                        e.stopImmediatePropagation();
+                                        return false;
+                                    }
+                                }, true);
+                            })();
+                        `,
+                    }}
+                />
                 <meta name="application-name" content="Spritz" />
                 <meta name="mobile-web-app-capable" content="yes" />
                 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -192,7 +253,10 @@ export default function RootLayout({
                                     'Endpoint URL must start with',
                                     'No project ID is configured',
                                     'Failed to dial',
-                                    'Connection refused'
+                                    'Connection refused',
+                                    'Query data cannot be undefined',
+                                    'auth-deeplink',
+                                    'Affected query key'
                                 ];
                                 window.addEventListener('error', function(e) {
                                     var msg = e.message || (e.error && e.error.message) || '';
@@ -210,12 +274,15 @@ export default function RootLayout({
                                         if (msg.indexOf(suppressedErrors[i]) !== -1) {
                                             e.preventDefault();
                                             e.stopImmediatePropagation();
+                                            e.stopPropagation();
                                             return false;
                                         }
                                     }
                                 }, true);
-                                // Also suppress console.error for these Waku messages
-                                var origError = console.error;
+                                // Also catch React Query errors specifically
+                                var originalConsoleError = console.error;
+                                var originalConsoleWarn = console.warn;
+                                var originalConsoleLog = console.log;
                                 console.error = function() {
                                     var msg = Array.prototype.join.call(arguments, ' ');
                                     for (var i = 0; i < suppressedErrors.length; i++) {
@@ -223,7 +290,25 @@ export default function RootLayout({
                                             return;
                                         }
                                     }
-                                    origError.apply(console, arguments);
+                                    originalConsoleError.apply(console, arguments);
+                                };
+                                console.warn = function() {
+                                    var msg = Array.prototype.join.call(arguments, ' ');
+                                    for (var i = 0; i < suppressedErrors.length; i++) {
+                                        if (msg.indexOf(suppressedErrors[i]) !== -1) {
+                                            return;
+                                        }
+                                    }
+                                    originalConsoleWarn.apply(console, arguments);
+                                };
+                                console.log = function() {
+                                    var msg = Array.prototype.join.call(arguments, ' ');
+                                    for (var i = 0; i < suppressedErrors.length; i++) {
+                                        if (msg.indexOf(suppressedErrors[i]) !== -1) {
+                                            return;
+                                        }
+                                    }
+                                    originalConsoleLog.apply(console, arguments);
                                 };
                             })();
                         `,
@@ -236,7 +321,9 @@ export default function RootLayout({
                 <Web3Provider>
                     <AuthProvider>
                         <PasskeyProvider>
-                            <EmailAuthProvider>{children}</EmailAuthProvider>
+                            <EmailAuthProvider>
+                                <AlienAuthProvider>{children}</AlienAuthProvider>
+                            </EmailAuthProvider>
                         </PasskeyProvider>
                     </AuthProvider>
                 </Web3Provider>

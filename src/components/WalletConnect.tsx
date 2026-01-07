@@ -9,7 +9,20 @@ import {
     useAppKitNetwork,
 } from "@reown/appkit/react";
 import { useDisconnect as useWagmiDisconnect } from "wagmi";
+import dynamic from "next/dynamic";
 import { projectId } from "@/config/wagmi";
+import { useAlienAuthContext } from "@/context/AlienAuthProvider";
+
+// Dynamically import SignInButton to avoid SSR issues
+const SignInButton = dynamic(
+    () => import("@alien_org/sso-sdk-react").then((mod) => mod.SignInButton),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="w-full h-12 bg-zinc-800 rounded-xl animate-pulse" />
+        ),
+    }
+);
 
 export function WalletConnect() {
     // Wagmi for EVM
@@ -20,6 +33,9 @@ export function WalletConnect() {
     const { disconnect: appKitDisconnect } = useAppKitDisconnect();
     const { disconnect: wagmiDisconnect } = useWagmiDisconnect();
     const { open } = useAppKit();
+    // Alien auth
+    const { isAuthenticated: isAlienAuthenticated, logout: alienLogout } =
+        useAlienAuthContext();
 
     // Disconnect handler that works for both EVM and Solana
     const handleDisconnect = async () => {
@@ -147,12 +163,58 @@ export function WalletConnect() {
         );
     }
 
+    // If Alien is authenticated, show disconnect option
+    if (isAlienAuthenticated) {
+        return (
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="w-full"
+            >
+                <div className="bg-gradient-to-br from-[#FF5500]/10 to-[#FB8D22]/10 border border-[#FF5500]/30 rounded-2xl p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
+                            <svg
+                                className="w-5 h-5 text-white"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M5 13l4 4L19 7"
+                                />
+                            </svg>
+                        </div>
+                        <div>
+                            <p className="text-[#FF5500] font-semibold">
+                                Alien Identity Connected
+                            </p>
+                            <p className="text-zinc-400 text-sm">
+                                Signed in with Alien
+                            </p>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={alienLogout}
+                        className="w-full py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors text-sm font-medium"
+                    >
+                        Disconnect Alien
+                    </button>
+                </div>
+            </motion.div>
+        );
+    }
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="w-full flex flex-col items-center justify-center"
+            className="w-full flex flex-col items-center justify-center gap-4"
         >
             <button
                 onClick={() => open()}
@@ -169,17 +231,23 @@ export function WalletConnect() {
                     <span>Connect Wallet</span>
                 </span>
             </button>
-            <p className="text-center text-zinc-500 text-xs mt-3">
+            <p className="text-center text-zinc-500 text-xs">
                 MetaMask, Coinbase, Phantom, Solflare & more
             </p>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 w-full my-2">
+                <div className="flex-1 h-px bg-zinc-800"></div>
+                <span className="text-zinc-600 text-xs">OR</span>
+                <div className="flex-1 h-px bg-zinc-800"></div>
+            </div>
+
+            {/* Alien Sign In Button */}
+            <div className="w-full flex items-center justify-center min-h-[48px] py-2">
+                <div className="w-full">
+                    <SignInButton color="dark" />
+                </div>
+            </div>
         </motion.div>
     );
 }
-
-
-
-
-
-
-
-
