@@ -1081,7 +1081,28 @@ RULES:
                         const responseText = await apiResponse.text();
                         console.log(`[Chat] API tool ${tool.name} response: status=${apiResponse.status}, length=${responseText.length}`);
                         
-                        if (apiResponse.ok) {
+                        // Parse GraphQL response (may have errors but still contain data)
+                        let responseData: any = null;
+                        try {
+                            responseData = JSON.parse(responseText);
+                        } catch {
+                            // Not JSON, use as text
+                        }
+                        
+                        // For GraphQL APIs, check if response has data even if there are errors
+                        if (tool.apiType === "graphql" && responseData) {
+                            if (responseData.data && Object.keys(responseData.data).length > 0) {
+                                // GraphQL returned data despite errors - use it
+                                const truncatedData = responseText.length > 8000 ? responseText.substring(0, 8000) + "..." : responseText;
+                                apiResults.push(`\n--- Result from ${tool.name} ---\n${truncatedData}`);
+                                console.log(`[Chat] API tool ${tool.name} returned data (with possible errors): ${responseText.length} chars`);
+                            } else if (responseData.errors) {
+                                // Only errors, no data - include error info for agent to understand
+                                const errorMessages = responseData.errors.map((e: any) => e.message).join("; ");
+                                console.error(`[Chat] API tool ${tool.name} GraphQL errors: ${errorMessages}`);
+                                apiResults.push(`\n--- Error from ${tool.name} ---\nGraphQL errors: ${errorMessages}\n\nNote: This API may require authorization. Check if an API key or authorization header is needed.`);
+                            }
+                        } else if (apiResponse.ok) {
                             const truncatedData = responseText.length > 8000 ? responseText.substring(0, 8000) + "..." : responseText;
                             apiResults.push(`\n--- Result from ${tool.name} ---\n${truncatedData}`);
                             console.log(`[Chat] API tool ${tool.name} returned ${responseText.length} chars`);
@@ -1090,7 +1111,10 @@ RULES:
                             console.error(`[Chat] API tool ${tool.name} error: ${apiResponse.status} - ${responseText.substring(0, 500)}`);
                             // Still try to use the response if it contains useful error info
                             if (responseText && responseText.length > 0) {
-                                apiResults.push(`\n--- Error from ${tool.name} (${apiResponse.status}) ---\n${responseText.substring(0, 1000)}`);
+                                const errorInfo = responseData?.errors ? 
+                                    responseData.errors.map((e: any) => e.message).join("; ") : 
+                                    responseText.substring(0, 1000);
+                                apiResults.push(`\n--- Error from ${tool.name} (${apiResponse.status}) ---\n${errorInfo}`);
                             }
                         }
                     } catch (error) {
