@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
         // Filter out failed promises and null values
         filteredStreams = verifiedStreams
             .filter((result) => result.status === "fulfilled" && result.value !== null)
-            .map((result) => (result as PromiseFulfilledResult<typeof streams[0]>).value);
+            .map((result) => (result as PromiseFulfilledResult<NonNullable<typeof streams>[number]>).value);
     }
 
     // Add playback URLs

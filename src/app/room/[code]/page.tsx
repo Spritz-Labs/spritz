@@ -112,20 +112,23 @@ export default function RoomPage({
                 const videoEl = remoteVideoRefs.current.get(peerId);
                 if (videoEl) {
                     const previousTrack = attachedVideoTracksRef.current.get(peerId);
+                    const currentStream = videoEl.srcObject as MediaStream;
                     
-                    // Only update if the track has actually changed
-                    if (previousTrack !== peer.videoTrack) {
+                    // Check if we need to update - track changed, no stream, or stream has no video tracks
+                    const needsUpdate = 
+                        previousTrack !== peer.videoTrack ||
+                        !currentStream ||
+                        currentStream.getVideoTracks().length === 0 ||
+                        currentStream.getVideoTracks()[0] !== peer.videoTrack;
+                    
+                    if (needsUpdate) {
                         const stream = new MediaStream([peer.videoTrack]);
-                        const currentStream = videoEl.srcObject as MediaStream;
-                        
-                        // Check if we need to update - only if track changed or no stream
-                        if (!currentStream || currentStream.getVideoTracks()[0] !== peer.videoTrack) {
-                            videoEl.srcObject = stream;
-                            videoEl.play().catch((e) => {
-                                console.warn(`[Room] Safari video play failed for ${peerId}:`, e);
-                            });
-                            attachedVideoTracksRef.current.set(peerId, peer.videoTrack);
-                        }
+                        videoEl.srcObject = stream;
+                        videoEl.play().catch((e) => {
+                            console.warn(`[Room] Video play failed for ${peerId}:`, e);
+                        });
+                        attachedVideoTracksRef.current.set(peerId, peer.videoTrack);
+                        console.log(`[Room] Attached/reattached video for ${peerId}`);
                     }
                 }
             } else {
@@ -133,7 +136,7 @@ export default function RoomPage({
                 attachedVideoTracksRef.current.delete(peerId);
             }
         });
-    }, [remotePeers, inCall]);
+    }, [remotePeers, inCall, isScreenSharing]); // Add isScreenSharing to trigger reattachment when screen share stops
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const clientRef = useRef<any>(null);
@@ -877,6 +880,28 @@ export default function RoomPage({
                                 remoteScreenShareRefs.current.get(peerId);
                             if (screenEl) {
                                 screenEl.srcObject = null;
+                            }
+                            
+                            // IMPORTANT: When screen share stops, reattach the remote peer's video track
+                            // This ensures the person who stopped sharing can still see the other person's camera
+                            if (peer.videoTrack) {
+                                setTimeout(() => {
+                                    const videoEl = remoteVideoRefs.current.get(peerId);
+                                    if (videoEl && peer.videoTrack) {
+                                        const videoStream = new MediaStream([peer.videoTrack]);
+                                        videoEl.srcObject = videoStream;
+                                        videoEl.play().catch((e) =>
+                                            console.warn(
+                                                "[Room] Video reattach after screen share stop failed:",
+                                                e
+                                            )
+                                        );
+                                        console.log(
+                                            "[Room] Reattached remote video after screen share stopped for peer:",
+                                            peerId
+                                        );
+                                    }
+                                }, 300); // Small delay to ensure screen share cleanup is complete
                             }
                         }
                         updated.set(peerId, { ...peer });
