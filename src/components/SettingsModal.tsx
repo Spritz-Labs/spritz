@@ -108,6 +108,10 @@ export function SettingsModal({
     const [schedulingFreeDuration, setSchedulingFreeDuration] = useState(15);
     const [schedulingPaidDuration, setSchedulingPaidDuration] = useState(30);
     const [schedulingPrice, setSchedulingPrice] = useState(0);
+    // Local string states for inputs to allow empty values during typing
+    const [freeDurationInput, setFreeDurationInput] = useState<string>("");
+    const [paidDurationInput, setPaidDurationInput] = useState<string>("");
+    const [priceInput, setPriceInput] = useState<string>("");
     const [schedulingWallet, setSchedulingWallet] = useState("");
     const [schedulingNetwork, setSchedulingNetwork] = useState("base");
     const [schedulingLoading, setSchedulingLoading] = useState(false);
@@ -133,6 +137,10 @@ export function SettingsModal({
                         setSchedulingPrice(data.scheduling_price_cents || 0);
                         setSchedulingWallet(data.scheduling_wallet_address || "");
                         setSchedulingNetwork(data.scheduling_network || "base");
+                        // Initialize input strings
+                        setFreeDurationInput((data.scheduling_free_duration_minutes || 15).toString());
+                        setPaidDurationInput((data.scheduling_paid_duration_minutes || 30).toString());
+                        setPriceInput(((data.scheduling_price_cents || 0) / 100).toString());
                     }
                 })
                 .catch((err) => console.error("[Settings] Failed to load scheduling settings:", err));
@@ -946,8 +954,25 @@ export function SettingsModal({
                                                                     min="5"
                                                                     max="60"
                                                                     step="5"
-                                                                    value={schedulingFreeDuration}
-                                                                    onChange={(e) => setSchedulingFreeDuration(parseInt(e.target.value) || 15)}
+                                                                    value={freeDurationInput || schedulingFreeDuration}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setFreeDurationInput(val);
+                                                                        const num = parseInt(val, 10);
+                                                                        if (!isNaN(num) && num >= 5 && num <= 60) {
+                                                                            setSchedulingFreeDuration(num);
+                                                                        }
+                                                                    }}
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value;
+                                                                        const num = parseInt(val, 10);
+                                                                        if (val === "" || isNaN(num) || num < 5 || num > 60) {
+                                                                            setSchedulingFreeDuration(15);
+                                                                            setFreeDurationInput("15");
+                                                                        } else {
+                                                                            setFreeDurationInput(num.toString());
+                                                                        }
+                                                                    }}
                                                                     className="w-20 px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-white text-sm focus:outline-none focus:border-orange-500"
                                                                 />
                                                                 <span className="text-zinc-500 text-xs">minutes</span>
@@ -982,8 +1007,25 @@ export function SettingsModal({
                                                                     min="5"
                                                                     max="120"
                                                                     step="5"
-                                                                    value={schedulingPaidDuration}
-                                                                    onChange={(e) => setSchedulingPaidDuration(parseInt(e.target.value) || 30)}
+                                                                    value={paidDurationInput || schedulingPaidDuration}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setPaidDurationInput(val);
+                                                                        const num = parseInt(val, 10);
+                                                                        if (!isNaN(num) && num >= 5 && num <= 120) {
+                                                                            setSchedulingPaidDuration(num);
+                                                                        }
+                                                                    }}
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value;
+                                                                        const num = parseInt(val, 10);
+                                                                        if (val === "" || isNaN(num) || num < 5 || num > 120) {
+                                                                            setSchedulingPaidDuration(30);
+                                                                            setPaidDurationInput("30");
+                                                                        } else {
+                                                                            setPaidDurationInput(num.toString());
+                                                                        }
+                                                                    }}
                                                                     className="w-20 px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-white text-sm focus:outline-none focus:border-orange-500"
                                                                 />
                                                                 <span className="text-zinc-500 text-xs">minutes</span>
@@ -994,8 +1036,26 @@ export function SettingsModal({
                                                                     type="number"
                                                                     min="1"
                                                                     step="1"
-                                                                    value={schedulingPrice / 100}
-                                                                    onChange={(e) => setSchedulingPrice(Math.round(parseFloat(e.target.value) * 100) || 0)}
+                                                                    value={priceInput || (schedulingPrice / 100)}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setPriceInput(val);
+                                                                        const num = parseFloat(val);
+                                                                        if (!isNaN(num) && num >= 0) {
+                                                                            setSchedulingPrice(Math.round(num * 100));
+                                                                        }
+                                                                    }}
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value;
+                                                                        const num = parseFloat(val);
+                                                                        if (val === "" || isNaN(num) || num < 1) {
+                                                                            const defaultPrice = schedulingPrice > 0 ? schedulingPrice / 100 : 1;
+                                                                            setSchedulingPrice(Math.round(defaultPrice * 100));
+                                                                            setPriceInput(defaultPrice.toString());
+                                                                        } else {
+                                                                            setPriceInput(num.toString());
+                                                                        }
+                                                                    }}
                                                                     placeholder="25"
                                                                     className="w-20 px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-white text-sm focus:outline-none focus:border-orange-500"
                                                                 />

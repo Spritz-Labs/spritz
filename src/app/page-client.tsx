@@ -115,6 +115,9 @@ export default function Home() {
     const [signingIn, setSigningIn] = useState(false);
     const [authTimeout, setAuthTimeout] = useState(false);
     const hasSavedSession = useRef<boolean | null>(null);
+    // Track failed sign-in attempts per wallet to prevent infinite loops
+    const failedSignInAttempts = useRef<Map<string, number>>(new Map());
+    const hasAutoSignInFailed = useRef<boolean>(false);
 
     // Handle hydration
     useEffect(() => {
@@ -168,6 +171,14 @@ export default function Home() {
         (hasSavedSession.current && !isWalletConnected && initializing) ||
         (hasSavedSession.current && !isWalletConnected && !initializing && isSiweLoading);
 
+    // Clear failed attempts when wallet disconnects or changes
+    useEffect(() => {
+        if (!isWalletConnected || !walletAddress) {
+            failedSignInAttempts.current.clear();
+            hasAutoSignInFailed.current = false;
+        }
+    }, [isWalletConnected, walletAddress]);
+
     // Auto sign-in with SIWE/SIWS when wallet connects (if not already authenticated)
     useEffect(() => {
         if (
@@ -178,12 +189,33 @@ export default function Home() {
             !isSiweAuthenticated &&
             !isSiweLoading &&
             !signingIn &&
+            !hasAutoSignInFailed.current && // Don't auto-sign if previous attempt failed
             (walletType === "evm" || walletType === "solana") // Auto-sign for both EVM and Solana
         ) {
+            // Check if this wallet has failed too many times
+            const failures = failedSignInAttempts.current.get(walletAddress.toLowerCase()) || 0;
+            if (failures >= 2) {
+                // Too many failures, don't auto-sign
+                hasAutoSignInFailed.current = true;
+                return;
+            }
+
             // Small delay to prevent race conditions
-            const timer = setTimeout(() => {
+            const timer = setTimeout(async () => {
                 setSigningIn(true);
-                siweSignIn().finally(() => setSigningIn(false));
+                const success = await siweSignIn();
+                setSigningIn(false);
+                
+                if (!success) {
+                    // Track failure
+                    const currentFailures = failedSignInAttempts.current.get(walletAddress.toLowerCase()) || 0;
+                    failedSignInAttempts.current.set(walletAddress.toLowerCase(), currentFailures + 1);
+                    hasAutoSignInFailed.current = true;
+                } else {
+                    // Success - clear failures
+                    failedSignInAttempts.current.delete(walletAddress.toLowerCase());
+                    hasAutoSignInFailed.current = false;
+                }
             }, 100);
             return () => clearTimeout(timer);
         }
@@ -385,9 +417,20 @@ export default function Home() {
                         )}
                         
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 setSigningIn(true);
-                                siweSignIn().finally(() => setSigningIn(false));
+                                const success = await siweSignIn();
+                                setSigningIn(false);
+                                
+                                if (!success && walletAddress) {
+                                    // Track failure for manual attempts too
+                                    const currentFailures = failedSignInAttempts.current.get(walletAddress.toLowerCase()) || 0;
+                                    failedSignInAttempts.current.set(walletAddress.toLowerCase(), currentFailures + 1);
+                                } else if (success && walletAddress) {
+                                    // Success - clear failures
+                                    failedSignInAttempts.current.delete(walletAddress.toLowerCase());
+                                    hasAutoSignInFailed.current = false;
+                                }
                             }}
                             disabled={signingIn}
                             className="w-full py-3 bg-gradient-to-r from-[#FF5500] to-[#FF7A33] hover:from-[#FF6611] hover:to-[#FF8844] disabled:opacity-50 text-white font-semibold rounded-xl transition-all mb-4"
