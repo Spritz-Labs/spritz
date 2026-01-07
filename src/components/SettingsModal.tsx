@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type UserSettings } from "@/hooks/useUserSettings";
 import { useCalendar } from "@/hooks/useCalendar";
@@ -109,9 +109,14 @@ export function SettingsModal({
     const [schedulingPaidDuration, setSchedulingPaidDuration] = useState(30);
     const [schedulingPrice, setSchedulingPrice] = useState(0);
     // Local string states for inputs to allow empty values during typing
-    const [freeDurationInput, setFreeDurationInput] = useState<string>("");
-    const [paidDurationInput, setPaidDurationInput] = useState<string>("");
-    const [priceInput, setPriceInput] = useState<string>("");
+    // Initialize with numeric values so they're never empty initially
+    const [freeDurationInput, setFreeDurationInput] = useState<string>("15");
+    const [paidDurationInput, setPaidDurationInput] = useState<string>("30");
+    const [priceInput, setPriceInput] = useState<string>("0");
+    // Refs to track if inputs are focused to prevent unwanted resets
+    const freeDurationInputRef = useRef<HTMLInputElement>(null);
+    const paidDurationInputRef = useRef<HTMLInputElement>(null);
+    const priceInputRef = useRef<HTMLInputElement>(null);
     const [schedulingWallet, setSchedulingWallet] = useState("");
     const [schedulingNetwork, setSchedulingNetwork] = useState("base");
     const [schedulingLoading, setSchedulingLoading] = useState(false);
@@ -137,10 +142,20 @@ export function SettingsModal({
                         setSchedulingPrice(data.scheduling_price_cents || 0);
                         setSchedulingWallet(data.scheduling_wallet_address || "");
                         setSchedulingNetwork(data.scheduling_network || "base");
-                        // Initialize input strings
-                        setFreeDurationInput((data.scheduling_free_duration_minutes || 15).toString());
-                        setPaidDurationInput((data.scheduling_paid_duration_minutes || 30).toString());
-                        setPriceInput(((data.scheduling_price_cents || 0) / 100).toString());
+                        // Initialize input strings - always set them, never leave empty
+                        // Only update if inputs are not currently focused to avoid interrupting user typing
+                        const freeDur = data.scheduling_free_duration_minutes || 15;
+                        const paidDur = data.scheduling_paid_duration_minutes || 30;
+                        const price = data.scheduling_price_cents || 0;
+                        if (document.activeElement !== freeDurationInputRef.current) {
+                            setFreeDurationInput(freeDur.toString());
+                        }
+                        if (document.activeElement !== paidDurationInputRef.current) {
+                            setPaidDurationInput(paidDur.toString());
+                        }
+                        if (document.activeElement !== priceInputRef.current) {
+                            setPriceInput((price / 100).toString());
+                        }
                     }
                 })
                 .catch((err) => console.error("[Settings] Failed to load scheduling settings:", err));
@@ -950,18 +965,25 @@ export function SettingsModal({
                                                         <div className="px-3 pb-3 pt-1">
                                                             <div className="flex items-center gap-2">
                                                                 <input
+                                                                    ref={freeDurationInputRef}
                                                                     type="number"
                                                                     min="5"
                                                                     max="60"
                                                                     step="5"
-                                                                    value={freeDurationInput || schedulingFreeDuration}
+                                                                    value={freeDurationInput}
                                                                     onChange={(e) => {
                                                                         const val = e.target.value;
+                                                                        // Always update the input string, even if empty
                                                                         setFreeDurationInput(val);
+                                                                        // Only update numeric state if valid
                                                                         const num = parseInt(val, 10);
                                                                         if (!isNaN(num) && num >= 5 && num <= 60) {
                                                                             setSchedulingFreeDuration(num);
                                                                         }
+                                                                    }}
+                                                                    onFocus={(e) => {
+                                                                        // Select all text on focus for easy editing
+                                                                        e.target.select();
                                                                     }}
                                                                     onBlur={(e) => {
                                                                         const val = e.target.value;
@@ -1003,18 +1025,25 @@ export function SettingsModal({
                                                         <div className="px-3 pb-3 pt-1 space-y-2">
                                                             <div className="flex items-center gap-2">
                                                                 <input
+                                                                    ref={paidDurationInputRef}
                                                                     type="number"
                                                                     min="5"
                                                                     max="120"
                                                                     step="5"
-                                                                    value={paidDurationInput || schedulingPaidDuration}
+                                                                    value={paidDurationInput}
                                                                     onChange={(e) => {
                                                                         const val = e.target.value;
+                                                                        // Always update the input string, even if empty
                                                                         setPaidDurationInput(val);
+                                                                        // Only update numeric state if valid
                                                                         const num = parseInt(val, 10);
                                                                         if (!isNaN(num) && num >= 5 && num <= 120) {
                                                                             setSchedulingPaidDuration(num);
                                                                         }
+                                                                    }}
+                                                                    onFocus={(e) => {
+                                                                        // Select all text on focus for easy editing
+                                                                        e.target.select();
                                                                     }}
                                                                     onBlur={(e) => {
                                                                         const val = e.target.value;
@@ -1033,17 +1062,24 @@ export function SettingsModal({
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-zinc-500 text-xs">$</span>
                                                                 <input
+                                                                    ref={priceInputRef}
                                                                     type="number"
                                                                     min="1"
                                                                     step="1"
-                                                                    value={priceInput || (schedulingPrice / 100)}
+                                                                    value={priceInput}
                                                                     onChange={(e) => {
                                                                         const val = e.target.value;
+                                                                        // Always update the input string, even if empty
                                                                         setPriceInput(val);
+                                                                        // Only update numeric state if valid
                                                                         const num = parseFloat(val);
                                                                         if (!isNaN(num) && num >= 0) {
                                                                             setSchedulingPrice(Math.round(num * 100));
                                                                         }
+                                                                    }}
+                                                                    onFocus={(e) => {
+                                                                        // Select all text on focus for easy editing
+                                                                        e.target.select();
                                                                     }}
                                                                     onBlur={(e) => {
                                                                         const val = e.target.value;
