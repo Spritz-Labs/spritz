@@ -775,14 +775,14 @@ function DashboardContent({
 
     // Show Waku success message briefly when initialized
     useEffect(() => {
-        if (isWakuInitialized && !isPasskeyUser) {
+        if (isWakuInitialized) {
             setShowWakuSuccess(true);
             const timer = setTimeout(() => {
                 setShowWakuSuccess(false);
             }, 4000); // Hide after 4 seconds
             return () => clearTimeout(timer);
         }
-    }, [isWakuInitialized, isPasskeyUser]);
+    }, [isWakuInitialized]);
 
     // Auto-hide Solana banner after 5 seconds
     useEffect(() => {
@@ -965,7 +965,7 @@ function DashboardContent({
 
     // Check which friends can receive Waku messages
     useEffect(() => {
-        if (isPasskeyUser || friends.length === 0) {
+        if (friends.length === 0) {
             return;
         }
 
@@ -976,7 +976,7 @@ function DashboardContent({
         };
 
         checkFriendsWaku();
-    }, [friends, isPasskeyUser, canMessageBatch]);
+    }, [friends, canMessageBatch]);
 
     // Sync friends count for analytics
     useEffect(() => {
@@ -987,7 +987,7 @@ function DashboardContent({
 
     // Load groups when Waku is initialized
     useEffect(() => {
-        if (!isWakuInitialized || isPasskeyUser) return;
+        if (!isWakuInitialized) return;
 
         const loadGroups = async () => {
             setIsLoadingGroups(true);
@@ -1002,7 +1002,7 @@ function DashboardContent({
         };
 
         loadGroups();
-    }, [isWakuInitialized, isPasskeyUser, getGroups]);
+    }, [isWakuInitialized, getGroups]);
 
     // Sync groups count for analytics
     useEffect(() => {
@@ -2774,8 +2774,8 @@ function DashboardContent({
                         )}
                     </AnimatePresence>
 
-                    {/* Waku Status Banner - hidden for passkey users */}
-                    {!isWakuInitialized && !isPasskeyUser && (
+                    {/* Waku Status Banner */}
+                    {!isWakuInitialized && (
                         <motion.div
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -3147,16 +3147,12 @@ function DashboardContent({
                                     userAddress={userAddress}
                                     onCall={handleCall}
                                     onVideoCall={handleVideoCall}
-                                    onChat={
-                                        isPasskeyUser ? undefined : handleChat
-                                    }
+                                    onChat={handleChat}
                                     onRemove={handleRemoveFriend}
                                     onUpdateNote={updateNickname}
                                     isCallActive={callState !== "idle"}
-                                    unreadCounts={
-                                        isPasskeyUser ? {} : unreadCounts
-                                    }
-                                    hideChat={isPasskeyUser}
+                                    unreadCounts={unreadCounts}
+                                    hideChat={false}
                                     friendsWakuStatus={friendsWakuStatus}
                                 />
                             </div>
@@ -3253,18 +3249,12 @@ function DashboardContent({
                                         userAddress={userAddress}
                                         onCall={handleCall}
                                         onVideoCall={handleVideoCall}
-                                        onChat={
-                                            isPasskeyUser
-                                                ? undefined
-                                                : handleChat
-                                        }
+                                        onChat={handleChat}
                                         onRemove={handleRemoveFriend}
                                         onUpdateNote={updateNickname}
                                         isCallActive={callState !== "idle"}
-                                        unreadCounts={
-                                            isPasskeyUser ? {} : unreadCounts
-                                        }
-                                        hideChat={isPasskeyUser}
+                                        unreadCounts={unreadCounts}
+                                        hideChat={false}
                                         friendsWakuStatus={friendsWakuStatus}
                                     />
                                 </div>
@@ -3311,8 +3301,7 @@ function DashboardContent({
                                                     Browse
                                                 </span>
                                             </button>
-                                            {isWakuInitialized &&
-                                                !isPasskeyUser && (
+                                            {isWakuInitialized && (
                                                     <button
                                                         onClick={() =>
                                                             setIsCreateGroupOpen(
@@ -3452,7 +3441,6 @@ function DashboardContent({
 
                                     {/* Private Group Chats */}
                                     {isWakuInitialized &&
-                                        !isPasskeyUser &&
                                         groups.map((group) => (
                                             <button
                                                 key={group.id}
@@ -3518,7 +3506,6 @@ function DashboardContent({
 
                             {/* Group Invitations Section */}
                             {isWakuInitialized &&
-                                !isPasskeyUser &&
                                 pendingInvitations.length > 0 && (
                                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mt-6 p-6">
                                         <GroupInvitations
