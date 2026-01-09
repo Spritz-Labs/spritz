@@ -2547,7 +2547,7 @@ export default function RoomPage({
                                                     autoPlay
                                                     playsInline
                                                     muted={false}
-                                                    className="w-full h-full min-h-0 object-cover"
+                                                    className="w-full h-full min-h-0 object-contain bg-black"
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">

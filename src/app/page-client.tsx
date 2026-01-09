@@ -229,7 +229,10 @@ export default function Home() {
 
     // Determine wallet type for dashboard
     // Use connected wallet type, or infer from SIWE user address format
-    const activeWalletType: WalletType = isPasskeyAuthenticated
+    // Email and passkey users always use EVM (derived addresses)
+    const activeWalletType: WalletType = isEmailAuthenticated
+        ? "evm" // Email users always use EVM (derived addresses)
+        : isPasskeyAuthenticated
         ? "evm" // Passkey users always use EVM (smart accounts)
         : walletType || (siweUser?.walletAddress?.startsWith("0x") ? "evm" : siweUser?.walletAddress ? "solana" : null);
 
