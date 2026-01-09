@@ -544,14 +544,14 @@ export function ChannelChatModal({
                         <div className="px-4 py-2 bg-zinc-800/50 border-t border-zinc-700 flex items-center gap-2">
                             <div className="w-1 h-8 bg-orange-500 rounded-full" />
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs text-orange-400">
+                                <p className="text-xs text-orange-400 font-medium">
                                     Replying to {replyingTo.sender_address.toLowerCase() === userAddress.toLowerCase() ? "yourself" : formatSender(replyingTo.sender_address)}
                                 </p>
                                 <p className="text-xs text-zinc-400 truncate">{replyingTo.content}</p>
                             </div>
                             <button
                                 onClick={() => setReplyingTo(null)}
-                                className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white"
+                                className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
                             >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

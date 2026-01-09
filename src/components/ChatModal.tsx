@@ -1125,14 +1125,14 @@ export function ChatModal({
                                                                 className={`mb-2 p-2 rounded-lg ${
                                                                     isOwn 
                                                                         ? "bg-white/10 border-l-2 border-white/40" 
-                                                                        : "bg-zinc-700/50 border-l-2 border-[#FB8D22]"
+                                                                        : "bg-zinc-700/50 border-l-2 border-orange-500"
                                                                 }`}
                                                             >
                                                                 <div className="flex items-center gap-1.5 text-xs font-medium">
                                                                     <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                                                     </svg>
-                                                                    <span className={isOwn ? "text-white/80" : "text-[#FB8D22]"}>
+                                                                    <span className={isOwn ? "text-white/80" : "text-orange-400"}>
                                                                         {msg.content.split(":")[0].replace("↩️ ", "")}
                                                                     </span>
                                                                 </div>
@@ -1371,9 +1371,9 @@ export function ChatModal({
                             {/* Reply Preview */}
                             {replyingTo && (
                                 <div className="px-4 py-2 bg-zinc-800/50 border-t border-zinc-700 flex items-center gap-2">
-                                    <div className="w-1 h-8 bg-[#FF5500] rounded-full" />
+                                    <div className="w-1 h-8 bg-orange-500 rounded-full" />
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs text-[#FF5500]">
+                                        <p className="text-xs text-orange-400 font-medium">
                                             Replying to{" "}
                                             {replyingTo.senderAddress.toLowerCase() ===
                                             userAddress.toLowerCase()
@@ -1386,7 +1386,7 @@ export function ChatModal({
                                     </div>
                                     <button
                                         onClick={() => setReplyingTo(null)}
-                                        className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white"
+                                        className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
                                     >
                                         <svg
                                             className="w-4 h-4"

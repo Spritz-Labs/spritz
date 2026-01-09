@@ -852,14 +852,14 @@ export function GroupChatModal({
                                                             className={`mb-2 p-2 rounded-lg ${
                                                                 isOwn 
                                                                     ? "bg-white/10 border-l-2 border-white/40" 
-                                                                    : "bg-zinc-700/50 border-l-2 border-[#FB8D22]"
+                                                                    : "bg-zinc-700/50 border-l-2 border-orange-500"
                                                             }`}
                                                         >
                                                             <div className="flex items-center gap-1.5 text-xs font-medium">
                                                                 <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                                                 </svg>
-                                                                <span className={isOwn ? "text-white/80" : "text-[#FB8D22]"}>
+                                                                <span className={isOwn ? "text-white/80" : "text-orange-400"}>
                                                                     {msg.content.split(":")[0].replace("↩️ ", "")}
                                                                 </span>
                                                             </div>
@@ -896,7 +896,7 @@ export function GroupChatModal({
                                                                         }}
                                                                         className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
                                                                             reaction.hasReacted
-                                                                                ? isOwn ? "bg-white/30" : "bg-[#FB8D22]/30"
+                                                                                ? isOwn ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
                                                                                 : isOwn ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
                                                                         }`}
                                                                     >
@@ -986,9 +986,9 @@ export function GroupChatModal({
                             {/* Reply Preview */}
                             {replyingTo && (
                                 <div className="px-4 py-2 bg-zinc-800/50 border-t border-zinc-700 flex items-center gap-2">
-                                    <div className="w-1 h-8 bg-[#FB8D22] rounded-full" />
+                                    <div className="w-1 h-8 bg-orange-500 rounded-full" />
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs text-[#FB8D22]">
+                                        <p className="text-xs text-orange-400 font-medium">
                                             Replying to {replyingTo.senderInboxId?.toLowerCase() === userAddress?.toLowerCase() 
                                                 ? "yourself" 
                                                 : formatAddress(members.find(m => m.inboxId === replyingTo.senderInboxId)?.addresses[0] || "Unknown")}
@@ -997,7 +997,7 @@ export function GroupChatModal({
                                     </div>
                                     <button
                                         onClick={() => setReplyingTo(null)}
-                                        className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white"
+                                        className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
                                     >
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1012,7 +1012,7 @@ export function GroupChatModal({
                                     <button
                                         onClick={() => setShowPixelArt(true)}
                                         disabled={!isInitialized}
-                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50"
+                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-orange-400 transition-colors disabled:opacity-50"
                                         title="Send Pixel Art"
                                     >
                                         <svg

@@ -574,11 +574,11 @@ export function InstantRoomChat({
                                                     animate={{ opacity: 1, scale: 1 }}
                                                     exit={{ opacity: 0, scale: 0.9 }}
                                                     onClick={(e) => e.stopPropagation()}
-                                                    className={`absolute ${msg.isMe ? "left-0 -translate-x-full pr-1" : "right-0 translate-x-full pl-1"} top-0 flex items-center gap-0.5 z-10`}
+                                                    className={`absolute ${msg.isMe ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 flex items-center gap-1 z-10`}
                                                 >
                                                     <button
                                                         onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                                        className="w-7 h-7 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
+                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
                                                         title="React"
                                                     >
                                                         😊
@@ -588,10 +588,10 @@ export function InstantRoomChat({
                                                             setReplyingTo(msg);
                                                             setSelectedMessage(null);
                                                         }}
-                                                        className="w-7 h-7 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
+                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
                                                         title="Reply"
                                                     >
-                                                        <svg className="w-3.5 h-3.5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <svg className="w-4 h-4 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                                         </svg>
                                                     </button>
@@ -602,15 +602,15 @@ export function InstantRoomChat({
                                         {/* Reaction Picker */}
                                         {showReactionPicker === msg.id && (
                                             <div 
-                                                className={`absolute ${msg.isMe ? "right-0" : "left-0"} -top-10 z-20 bg-zinc-800 border border-zinc-700 rounded-xl p-1 shadow-xl`}
+                                                className={`absolute ${msg.isMe ? "right-0" : "left-0"} -top-12 z-20 bg-zinc-800 border border-zinc-700 rounded-xl p-1.5 shadow-xl`}
                                                 onClick={(e) => e.stopPropagation()}
                                             >
-                                                <div className="flex gap-0.5">
+                                                <div className="flex gap-1">
                                                     {REACTION_EMOJIS.map(emoji => (
                                                         <button
                                                             key={emoji}
                                                             onClick={() => toggleReaction(msg.id, emoji)}
-                                                            className={`w-7 h-7 rounded flex items-center justify-center text-sm hover:bg-zinc-700 transition-colors ${
+                                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-base hover:bg-zinc-700 transition-colors ${
                                                                 reactions[msg.id]?.find(r => r.emoji === emoji)?.users.includes(displayName)
                                                                     ? "bg-orange-500/30"
                                                                     : ""
@@ -634,19 +634,19 @@ export function InstantRoomChat({
 
                     {/* Reply Preview */}
                     {replyingTo && (
-                        <div className="px-3 py-2 bg-zinc-800/50 border-t border-zinc-700 flex items-center gap-2">
-                            <div className="w-0.5 h-6 bg-orange-500 rounded-full" />
+                        <div className="px-4 py-2 bg-zinc-800/50 border-t border-zinc-700 flex items-center gap-2">
+                            <div className="w-1 h-8 bg-orange-500 rounded-full" />
                             <div className="flex-1 min-w-0">
-                                <p className="text-[10px] text-orange-400">
+                                <p className="text-xs text-orange-400 font-medium">
                                     Replying to {replyingTo.isMe ? "yourself" : replyingTo.sender}
                                 </p>
-                                <p className="text-[10px] text-zinc-400 truncate">{replyingTo.content}</p>
+                                <p className="text-xs text-zinc-400 truncate">{replyingTo.content}</p>
                             </div>
                             <button
                                 onClick={() => setReplyingTo(null)}
-                                className="w-5 h-5 flex items-center justify-center text-zinc-500 hover:text-white"
+                                className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
                             >
-                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
