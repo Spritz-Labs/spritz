@@ -16,6 +16,7 @@ import { SpritzLogo } from "@/components/SpritzLogo";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
 import { useEmailAuthContext } from "@/context/EmailAuthProvider";
 import { useAlienAuthContext } from "@/context/AlienAuthProvider";
+import { useWorldIdContext } from "@/context/WorldIdProvider";
 import { useWalletType, type WalletType } from "@/hooks/useWalletType";
 import { useAuth } from "@/context/AuthProvider";
 import {
@@ -107,6 +108,13 @@ export default function Home() {
         isLoading: isAlienLoading,
         logout: alienLogout,
     } = useAlienAuthContext();
+
+    const {
+        isAuthenticated: isWorldIdAuthenticated,
+        worldIdAddress,
+        isLoading: isWorldIdLoading,
+        logout: worldIdLogout,
+    } = useWorldIdContext();
 
     // SIWE Authentication
     const {
@@ -231,40 +239,44 @@ export default function Home() {
     }, [mounted, initializing, isWalletConnected, walletAddress, isSiweAuthenticated, isSiweLoading, signingIn, siweSignIn, walletType]);
 
     // Determine the active user address (supports both EVM and Solana)
-    // Can come from email auth, passkey, Alien identity, connected wallet, or authenticated SIWE user
+    // Can come from email auth, passkey, Alien identity, World ID, connected wallet, or authenticated SIWE user
     // Note: alienAddress should be consistent (user_id from Alien SDK), not session-based
     const userAddress: string | null = mounted
-        ? emailAddress || passkeyAddress || alienAddress || walletAddress || siweUser?.walletAddress || null
+        ? emailAddress || passkeyAddress || alienAddress || worldIdAddress || walletAddress || siweUser?.walletAddress || null
         : null;
 
     // Determine wallet type for dashboard
     // Use connected wallet type, or infer from SIWE user address format
-    // Email, passkey, and Alien users use EVM (derived addresses)
+    // Email, passkey, Alien, and World ID users use EVM (derived addresses)
     const activeWalletType: WalletType = isEmailAuthenticated
         ? "evm" // Email users always use EVM (derived addresses)
         : isPasskeyAuthenticated
         ? "evm" // Passkey users always use EVM (smart accounts)
         : isAlienAuthenticated
         ? "evm" // Alien users use EVM (identity addresses)
+        : isWorldIdAuthenticated
+        ? "evm" // World ID users use EVM (nullifier hash as address)
         : walletType || (siweUser?.walletAddress?.startsWith("0x") ? "evm" : siweUser?.walletAddress ? "solana" : null);
 
     // Require authentication for all users
-    // Email auth, passkey auth, Alien auth, or SIWE/SIWS authentication
+    // Email auth, passkey auth, Alien auth, World ID auth, or SIWE/SIWS authentication
     const isFullyAuthenticated = mounted && (
         isEmailAuthenticated ||
         isPasskeyAuthenticated ||
         isAlienAuthenticated ||
+        isWorldIdAuthenticated ||
         isSiweAuthenticated
     );
 
     // Show loading while checking auth state
-    // If already authenticated via email/passkey/Alien/SIWE, don't wait for wallet reconnection
+    // If already authenticated via email/passkey/Alien/World ID/SIWE, don't wait for wallet reconnection
     // Auth credentials are self-contained and can work without wallet
     const isCheckingAuth =
         !mounted || 
         isPasskeyLoading ||
         isEmailLoading ||
         (isAlienLoading && !isAlienAuthenticated) ||
+        (isWorldIdLoading && !isWorldIdAuthenticated) ||
         (isSiweLoading && !isSiweAuthenticated) ||
         (initializing && !isSiweAuthenticated) ||
         (isWalletReconnecting && !isSiweAuthenticated);
@@ -293,6 +305,12 @@ export default function Home() {
         if (isAlienAuthenticated) {
             alienLogout();
             // alienLogout already reloads, so return early
+            return;
+        }
+        // Logout World ID if authenticated
+        if (isWorldIdAuthenticated) {
+            worldIdLogout();
+            // worldIdLogout already reloads, so return early
             return;
         }
         // Clear wallet-related localStorage to ensure clean state

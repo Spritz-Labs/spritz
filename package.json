@@ -39,6 +39,7 @@
         "@waku/sdk": "^0.0.36",
         "@waku/utils": "^0.0.27",
         "@walletconnect/ethereum-provider": "^2.21.10",
+        "@worldcoin/idkit": "^2.4.2",
         "agora-rtc-react": "^2.5.0",
         "agora-rtc-sdk-ng": "^4.24.1",
         "bs58": "^6.0.0",

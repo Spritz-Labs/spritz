@@ -5,6 +5,7 @@ import { Web3Provider } from "@/context/Web3Provider";
 import { PasskeyProvider } from "@/context/PasskeyProvider";
 import { EmailAuthProvider } from "@/context/EmailAuthProvider";
 import { AlienAuthProvider } from "@/context/AlienAuthProvider";
+import { WorldIdProvider } from "@/context/WorldIdProvider";
 import { AuthProvider } from "@/context/AuthProvider";
 
 const dmSans = DM_Sans({
@@ -196,7 +197,12 @@ export default function RootLayout({
                                     'Connection refused',
                                     'Query data cannot be undefined',
                                     'auth-deeplink',
-                                    'Affected query key'
+                                    'Affected query key',
+                                    'DialogContent',
+                                    'DialogTitle',
+                                    'aria-describedby',
+                                    'VisuallyHidden',
+                                    'accessible for screen reader'
                                 ];
                                 
                                 function shouldSuppress(msg) {
@@ -253,7 +259,9 @@ export default function RootLayout({
                     <AuthProvider>
                         <PasskeyProvider>
                             <EmailAuthProvider>
-                                <AlienAuthProvider>{children}</AlienAuthProvider>
+                                <AlienAuthProvider>
+                                    <WorldIdProvider>{children}</WorldIdProvider>
+                                </AlienAuthProvider>
                             </EmailAuthProvider>
                         </PasskeyProvider>
                     </AuthProvider>

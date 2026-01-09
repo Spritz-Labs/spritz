@@ -8,17 +8,60 @@ import { createAppKit } from "@reown/appkit/react";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
 import { wagmiAdapter, projectId } from "@/config/wagmi";
 
-// Suppress the specific React Query error for auth-deeplink at the window level
-// This catches unhandled promise rejections from the Alien SDK before they reach the dev overlay
+// Suppress specific errors at the window level before they reach the Next.js dev overlay
 if (typeof window !== "undefined") {
+    const suppressedPatterns = [
+        'Query data cannot be undefined',
+        'auth-deeplink',
+        'DialogContent',
+        'DialogTitle',
+        'aria-describedby',
+        'VisuallyHidden',
+    ];
+    
+    const shouldSuppress = (message: string) => {
+        return suppressedPatterns.some(pattern => message.includes(pattern));
+    };
+    
+    // Suppress unhandled rejections
     window.addEventListener('unhandledrejection', (event) => {
         const message = event.reason?.message || String(event.reason);
-        if (message.includes('Query data cannot be undefined') && message.includes('auth-deeplink')) {
+        if (shouldSuppress(message)) {
             event.preventDefault();
             event.stopImmediatePropagation();
             return;
         }
     }, true);
+    
+    // Suppress error events
+    window.addEventListener('error', (event) => {
+        const message = event.message || event.error?.message || '';
+        if (shouldSuppress(message)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return false;
+        }
+    }, true);
+    
+    // Patch console.error to suppress these warnings
+    const originalConsoleError = console.error;
+    console.error = (...args: unknown[]) => {
+        const message = args.map(arg => String(arg)).join(' ');
+        if (shouldSuppress(message)) {
+            return;
+        }
+        originalConsoleError.apply(console, args);
+    };
+    
+    // Patch console.warn for the aria-describedby warning
+    const originalConsoleWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+        const message = args.map(arg => String(arg)).join(' ');
+        if (shouldSuppress(message)) {
+            return;
+        }
+        originalConsoleWarn.apply(console, args);
+    };
 }
 
 // Setup queryClient with default options to handle Alien SDK's React Query usage
