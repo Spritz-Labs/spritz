@@ -12,7 +12,7 @@ const supabase = supabaseUrl && supabaseAnonKey
 
 // Cache for beta access status
 const CACHE_KEY = "spritz_beta_access";
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 60 * 1000; // 1 minute (shorter to catch beta access grants faster)
 
 type CachedBetaAccess = {
     hasBetaAccess: boolean;

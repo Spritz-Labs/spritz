@@ -317,8 +317,9 @@ function DashboardContent({
     const { isAdmin, isSuperAdmin } = useAdminCheck(userAddress);
 
     // Beta access is passed from SIWE auth (or fall back to hook for non-EVM users)
-    const { hasBetaAccess: hookBetaAccess } = useBetaAccess(userAddress);
-    const hasBetaAccess = isBetaTester ?? hookBetaAccess;
+    // Use || so if EITHER source says true, access is granted (more forgiving for cache issues)
+    const { hasBetaAccess: hookBetaAccess, refresh: refreshBetaAccess } = useBetaAccess(userAddress);
+    const hasBetaAccess = isBetaTester || hookBetaAccess;
 
     // Email verification
     const {
