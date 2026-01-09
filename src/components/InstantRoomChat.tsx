@@ -99,6 +99,7 @@ export function InstantRoomChat({
     const [unreadCount, setUnreadCount] = useState(0);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+    const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nodeRef = useRef<any>(null);
@@ -294,7 +295,29 @@ export function InstantRoomChat({
             return updated;
         });
         setShowReactionPicker(null);
+        setSelectedMessage(null);
     }, [displayName]);
+
+    // Toggle message selection for mobile tap actions
+    const handleMessageTap = useCallback((messageId: string) => {
+        setSelectedMessage(prev => prev === messageId ? null : messageId);
+        setShowReactionPicker(null);
+    }, []);
+
+    // Close selected message when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-message-actions]') && !target.closest('[data-message-bubble]')) {
+                setSelectedMessage(null);
+                setShowReactionPicker(null);
+            }
+        };
+        if (selectedMessage) {
+            document.addEventListener('click', handleClickOutside);
+            return () => document.removeEventListener('click', handleClickOutside);
+        }
+    }, [selectedMessage]);
 
     // Send a message
     const sendMessage = useCallback(async () => {
@@ -461,97 +484,151 @@ export function InstantRoomChat({
                             </div>
                         )}
 
-                        {messages.map((msg) => (
-                            <div
-                                key={msg.id}
-                                className={`flex flex-col ${
-                                    msg.isMe ? "items-end" : "items-start"
-                                }`}
-                            >
+                        {messages.map((msg) => {
+                            // Parse reply from message content for incoming messages
+                            const hasInlineReply = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n");
+                            const displayContent = hasInlineReply 
+                                ? msg.content.split("\n\n").slice(1).join("\n\n")
+                                : msg.content;
+                            const inlineReplyText = hasInlineReply 
+                                ? msg.content.split("\n\n")[0].replace("↩️ ", "")
+                                : null;
+                            
+                            return (
                                 <div
-                                    className={`max-w-[85%] rounded-2xl px-3 py-2 relative group/msg ${
-                                        msg.isMe
-                                            ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
-                                            : "bg-zinc-800 text-white"
+                                    key={msg.id}
+                                    className={`flex flex-col ${
+                                        msg.isMe ? "items-end" : "items-start"
                                     }`}
                                 >
-                                    {!msg.isMe && (
-                                        <p className="text-xs font-medium text-zinc-400 mb-1">
-                                            {msg.sender}
-                                        </p>
-                                    )}
-                                    <p className="text-sm break-words whitespace-pre-wrap">
-                                        {msg.content}
-                                    </p>
-
-                                    {/* Reactions Display */}
-                                    {reactions[msg.id]?.some(r => r.users.length > 0) && (
-                                        <div className="flex flex-wrap gap-1 mt-1">
-                                            {reactions[msg.id]
-                                                ?.filter(r => r.users.length > 0)
-                                                .map(reaction => (
-                                                    <button
-                                                        key={reaction.emoji}
-                                                        onClick={() => toggleReaction(msg.id, reaction.emoji)}
-                                                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                            reaction.users.includes(displayName)
-                                                                ? msg.isMe ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
-                                                                : msg.isMe ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                        }`}
-                                                    >
-                                                        <span>{reaction.emoji}</span>
-                                                        <span className="text-[10px]">{reaction.users.length}</span>
-                                                    </button>
-                                                ))}
-                                        </div>
-                                    )}
-
-                                    {/* Hover Actions */}
-                                    <div className={`absolute ${msg.isMe ? "left-0 -translate-x-full pr-1" : "right-0 translate-x-full pl-1"} top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-0.5`}>
-                                        <button
-                                            onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                            className="w-6 h-6 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-xs"
-                                            title="React"
-                                        >
-                                            😊
-                                        </button>
-                                        <button
-                                            onClick={() => setReplyingTo(msg)}
-                                            className="w-6 h-6 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
-                                            title="Reply"
-                                        >
-                                            <svg className="w-3 h-3 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                            </svg>
-                                        </button>
-                                    </div>
-
-                                    {/* Reaction Picker */}
-                                    {showReactionPicker === msg.id && (
-                                        <div className={`absolute ${msg.isMe ? "right-0" : "left-0"} -top-9 z-10 bg-zinc-800 border border-zinc-700 rounded-xl p-1 shadow-xl`}>
-                                            <div className="flex gap-0.5">
-                                                {REACTION_EMOJIS.map(emoji => (
-                                                    <button
-                                                        key={emoji}
-                                                        onClick={() => toggleReaction(msg.id, emoji)}
-                                                        className={`w-6 h-6 rounded flex items-center justify-center text-sm hover:bg-zinc-700 transition-colors ${
-                                                            reactions[msg.id]?.find(r => r.emoji === emoji)?.users.includes(displayName)
-                                                                ? "bg-orange-500/30"
-                                                                : ""
-                                                        }`}
-                                                    >
-                                                        {emoji}
-                                                    </button>
-                                                ))}
+                                    <div
+                                        data-message-bubble
+                                        onClick={() => handleMessageTap(msg.id)}
+                                        className={`max-w-[85%] rounded-2xl px-3 py-2 relative cursor-pointer ${
+                                            msg.isMe
+                                                ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
+                                                : "bg-zinc-800 text-white"
+                                        } ${selectedMessage === msg.id ? "ring-2 ring-orange-400/50" : ""}`}
+                                    >
+                                        {!msg.isMe && (
+                                            <p className="text-xs font-medium text-zinc-400 mb-1">
+                                                {msg.sender}
+                                            </p>
+                                        )}
+                                        
+                                        {/* Reply Preview - For messages with replyTo data or inline reply */}
+                                        {(msg.replyTo || inlineReplyText) && (
+                                            <div 
+                                                className={`mb-2 p-2 rounded-lg ${
+                                                    msg.isMe 
+                                                        ? "bg-white/10 border-l-2 border-white/40" 
+                                                        : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                    <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                    </svg>
+                                                    <span className={msg.isMe ? "text-white/80" : "text-orange-400"}>
+                                                        {msg.replyTo?.sender || inlineReplyText?.split(":")[0] || ""}
+                                                    </span>
+                                                </div>
+                                                <p className={`text-xs mt-1 line-clamp-2 ${msg.isMe ? "text-white/70" : "text-zinc-400"}`}>
+                                                    {msg.replyTo?.content || inlineReplyText?.split(": \"")[1]?.replace(/\"$/, "") || ""}
+                                                </p>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                        
+                                        <p className="text-sm break-words whitespace-pre-wrap">
+                                            {displayContent}
+                                        </p>
+
+                                        {/* Reactions Display */}
+                                        {reactions[msg.id]?.some(r => r.users.length > 0) && (
+                                            <div className="flex flex-wrap gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                                                {reactions[msg.id]
+                                                    ?.filter(r => r.users.length > 0)
+                                                    .map(reaction => (
+                                                        <button
+                                                            key={reaction.emoji}
+                                                            onClick={() => toggleReaction(msg.id, reaction.emoji)}
+                                                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
+                                                                reaction.users.includes(displayName)
+                                                                    ? msg.isMe ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
+                                                                    : msg.isMe ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
+                                                            }`}
+                                                        >
+                                                            <span>{reaction.emoji}</span>
+                                                            <span className="text-[10px]">{reaction.users.length}</span>
+                                                        </button>
+                                                    ))}
+                                            </div>
+                                        )}
+
+                                        {/* Message Actions - Show on tap (mobile) or click */}
+                                        <AnimatePresence>
+                                            {selectedMessage === msg.id && (
+                                                <motion.div
+                                                    data-message-actions
+                                                    initial={{ opacity: 0, scale: 0.9 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    exit={{ opacity: 0, scale: 0.9 }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className={`absolute ${msg.isMe ? "left-0 -translate-x-full pr-1" : "right-0 translate-x-full pl-1"} top-0 flex items-center gap-0.5 z-10`}
+                                                >
+                                                    <button
+                                                        onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
+                                                        className="w-7 h-7 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
+                                                        title="React"
+                                                    >
+                                                        😊
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setReplyingTo(msg);
+                                                            setSelectedMessage(null);
+                                                        }}
+                                                        className="w-7 h-7 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
+                                                        title="Reply"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                        </svg>
+                                                    </button>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        {/* Reaction Picker */}
+                                        {showReactionPicker === msg.id && (
+                                            <div 
+                                                className={`absolute ${msg.isMe ? "right-0" : "left-0"} -top-10 z-20 bg-zinc-800 border border-zinc-700 rounded-xl p-1 shadow-xl`}
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <div className="flex gap-0.5">
+                                                    {REACTION_EMOJIS.map(emoji => (
+                                                        <button
+                                                            key={emoji}
+                                                            onClick={() => toggleReaction(msg.id, emoji)}
+                                                            className={`w-7 h-7 rounded flex items-center justify-center text-sm hover:bg-zinc-700 transition-colors ${
+                                                                reactions[msg.id]?.find(r => r.emoji === emoji)?.users.includes(displayName)
+                                                                    ? "bg-orange-500/30"
+                                                                    : ""
+                                                            }`}
+                                                        >
+                                                            {emoji}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <span className="text-xs text-zinc-500 mt-1 px-1">
+                                        {formatTime(msg.timestamp)}
+                                    </span>
                                 </div>
-                                <span className="text-xs text-zinc-500 mt-1 px-1">
-                                    {formatTime(msg.timestamp)}
-                                </span>
-                            </div>
-                        ))}
+                            );
+                        })}
                         <div ref={messagesEndRef} />
                     </div>
 

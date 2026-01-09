@@ -75,6 +75,7 @@ export function AlphaChatModal({
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [isAddingFriend, setIsAddingFriend] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+    const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const userPopupRef = useRef<HTMLDivElement>(null);
 
@@ -139,7 +140,29 @@ export function AlphaChatModal({
     const handleReaction = async (messageId: string, emoji: string) => {
         await toggleReaction(messageId, emoji);
         setShowReactionPicker(null);
+        setSelectedMessage(null);
     };
+
+    // Toggle message selection for mobile tap actions
+    const handleMessageTap = (messageId: string) => {
+        setSelectedMessage(selectedMessage === messageId ? null : messageId);
+        setShowReactionPicker(null);
+    };
+
+    // Close selected message when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-message-actions]') && !target.closest('[data-message-bubble]')) {
+                setSelectedMessage(null);
+                setShowReactionPicker(null);
+            }
+        };
+        if (selectedMessage) {
+            document.addEventListener('click', handleClickOutside);
+            return () => document.removeEventListener('click', handleClickOutside);
+        }
+    }, [selectedMessage]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -543,28 +566,43 @@ export function AlphaChatModal({
                                                         )}
 
                                                         <div
-                                                            className={`max-w-[75%] rounded-2xl px-4 py-2 relative group/msg ${
+                                                            data-message-bubble
+                                                            onClick={() => handleMessageTap(msg.id)}
+                                                            className={`max-w-[75%] rounded-2xl px-4 py-2 relative cursor-pointer ${
                                                                 isOwn
                                                                     ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-br-md"
                                                                     : "bg-zinc-800 text-white rounded-bl-md"
-                                                            }`}
+                                                            } ${selectedMessage === msg.id ? "ring-2 ring-orange-400/50" : ""}`}
                                                         >
-                                                            {/* Reply Preview */}
+                                                            {/* Reply Preview - More visible styling */}
                                                             {msg.reply_to && (
-                                                                <div className={`mb-2 pb-2 border-b ${isOwn ? "border-white/20" : "border-zinc-700"}`}>
-                                                                    <div className="flex items-center gap-1 text-xs opacity-70">
-                                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <div 
+                                                                    className={`mb-2 p-2 rounded-lg ${
+                                                                        isOwn 
+                                                                            ? "bg-white/10 border-l-2 border-white/40" 
+                                                                            : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                                        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                                                         </svg>
-                                                                        <span>{formatSender(msg.reply_to.sender_address)}</span>
+                                                                        <span className={isOwn ? "text-white/80" : "text-orange-400"}>
+                                                                            {formatSender(msg.reply_to.sender_address)}
+                                                                        </span>
                                                                     </div>
-                                                                    <p className="text-xs opacity-70 truncate">{msg.reply_to.content}</p>
+                                                                    <p className={`text-xs mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}>
+                                                                        {msg.reply_to.content}
+                                                                    </p>
                                                                 </div>
                                                             )}
 
                                                             {!isOwn && (
                                                                 <button
-                                                                    onClick={() => setSelectedUser(msg.sender_address)}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSelectedUser(msg.sender_address);
+                                                                    }}
                                                                     className="text-xs text-orange-300 mb-1 font-medium hover:text-orange-200 transition-colors"
                                                                 >
                                                                     {formatSender(msg.sender_address)}
@@ -583,7 +621,7 @@ export function AlphaChatModal({
 
                                                             {/* Reactions Display */}
                                                             {reactions[msg.id]?.some(r => r.count > 0) && (
-                                                                <div className="flex flex-wrap gap-1 mt-2">
+                                                                <div className="flex flex-wrap gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
                                                                     {reactions[msg.id]
                                                                         ?.filter(r => r.count > 0)
                                                                         .map(reaction => (
@@ -594,7 +632,7 @@ export function AlphaChatModal({
                                                                                     reaction.hasReacted
                                                                                         ? isOwn ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
                                                                                         : isOwn ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                                                }`}
+                                                                            }`}
                                                                             >
                                                                                 <span>{reaction.emoji}</span>
                                                                                 <span className="text-[10px]">{reaction.count}</span>
@@ -618,29 +656,46 @@ export function AlphaChatModal({
                                                                 })}
                                                             </p>
 
-                                                            {/* Hover Actions */}
-                                                            <div className={`absolute ${isOwn ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1`}>
-                                                                <button
-                                                                    onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                                                    className="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-sm"
-                                                                    title="React"
-                                                                >
-                                                                    😊
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setReplyingTo(msg)}
-                                                                    className="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center"
-                                                                    title="Reply"
-                                                                >
-                                                                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                    </svg>
-                                                                </button>
-                                                            </div>
+                                                            {/* Message Actions - Show on tap (mobile) or click */}
+                                                            <AnimatePresence>
+                                                                {selectedMessage === msg.id && (
+                                                                    <motion.div
+                                                                        data-message-actions
+                                                                        initial={{ opacity: 0, scale: 0.9 }}
+                                                                        animate={{ opacity: 1, scale: 1 }}
+                                                                        exit={{ opacity: 0, scale: 0.9 }}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className={`absolute ${isOwn ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 flex items-center gap-1 z-10`}
+                                                                    >
+                                                                        <button
+                                                                            onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
+                                                                            className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
+                                                                            title="React"
+                                                                        >
+                                                                            😊
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setReplyingTo(msg);
+                                                                                setSelectedMessage(null);
+                                                                            }}
+                                                                            className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
+                                                                            title="Reply"
+                                                                        >
+                                                                            <svg className="w-4 h-4 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
 
                                                             {/* Reaction Picker */}
                                                             {showReactionPicker === msg.id && (
-                                                                <div className={`absolute ${isOwn ? "right-0" : "left-0"} -top-10 z-10`}>
+                                                                <div 
+                                                                    className={`absolute ${isOwn ? "right-0" : "left-0"} -top-12 z-20`}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
                                                                     <QuickReactionPicker
                                                                         isOpen={true}
                                                                         onClose={() => setShowReactionPicker(null)}
