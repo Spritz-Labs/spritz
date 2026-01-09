@@ -462,7 +462,20 @@ export function ChatModal({
     const handleSend = useCallback(async () => {
         if (!newMessage.trim()) return;
 
-        const messageContent = newMessage.trim();
+        // Include reply context if replying
+        let messageContent = newMessage.trim();
+        if (replyingTo) {
+            const replySender = replyingTo.senderAddress;
+            const replyPreview =
+                replyingTo.content.slice(0, 50) +
+                (replyingTo.content.length > 50 ? "..." : "");
+            const senderDisplay =
+                replySender.toLowerCase() === userAddress.toLowerCase()
+                    ? "yourself"
+                    : peerName || formatAddress(replySender);
+            messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
+        }
+
         const tempId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
         // Immediately add message to UI with pending status (optimistic update)
@@ -477,6 +490,7 @@ export function ChatModal({
         
         // Clear input immediately so user can type next message
         setNewMessage("");
+        setReplyingTo(null); // Clear reply state
         setChatError(null);
         
         // Stop typing indicator
@@ -532,6 +546,8 @@ export function ChatModal({
         userAddress,
         trackMessageSent,
         stopTyping,
+        replyingTo,
+        peerName,
     ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
