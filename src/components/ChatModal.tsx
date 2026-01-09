@@ -1009,7 +1009,7 @@ export function ChatModal({
                                                 }`}
                                             >
                                                 {isPixelArt ? (
-                                                    <div className="pixel-art-message relative">
+                                                    <div className="pixel-art-message relative group">
                                                         <PixelArtImage
                                                             src={getPixelArtUrl(
                                                                 msg.content
@@ -1023,6 +1023,21 @@ export function ChatModal({
                                                             }
                                                             size="md"
                                                         />
+                                                        
+                                                        {/* Download Button - shows on hover/tap */}
+                                                        <a
+                                                            href={getPixelArtUrl(msg.content)}
+                                                            download="pixel-art.png"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            title="Download"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                            </svg>
+                                                        </a>
 
                                                         {/* Reactions Display */}
                                                         {reactions[

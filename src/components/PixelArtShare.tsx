@@ -10,52 +10,88 @@ interface PixelArtShareProps {
 
 export function PixelArtShare({ imageUrl, className = "" }: PixelArtShareProps) {
     const [showMenu, setShowMenu] = useState(false);
-    const [copied, setCopied] = useState(false);
+    const [copiedType, setCopiedType] = useState<"link" | "image" | null>(null);
 
-    const shareText = "Check out this pixel art created on Spritz! 🎨✨";
-    const shareUrl = "https://spritz.chat";
+    const spritzUrl = "https://spritz.chat";
+    const callToAction = "🎨 Create your own pixel art on Spritz!";
+    
+    // Build share text with image URL and call to action
+    const buildShareText = (includeImage: boolean = true) => {
+        if (includeImage) {
+            return `Check out my pixel art! 🎨✨\n\n${imageUrl}\n\n${callToAction}\n${spritzUrl}`;
+        }
+        return `Check out my pixel art! 🎨✨\n\n${callToAction}\n${spritzUrl}`;
+    };
 
     const shareToTwitter = () => {
-        const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
+        // Twitter shows image previews from URLs in tweets
+        const text = `Check out my pixel art! 🎨✨\n\n${callToAction}`;
+        const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(imageUrl)}`;
         window.open(url, "_blank", "noopener,noreferrer");
         setShowMenu(false);
     };
 
     const shareToFacebook = () => {
-        const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(shareText)}`;
+        // Facebook will try to scrape the image URL for preview
+        const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(imageUrl)}&quote=${encodeURIComponent(`${callToAction} ${spritzUrl}`)}`;
         window.open(url, "_blank", "noopener,noreferrer");
         setShowMenu(false);
     };
 
     const shareToLinkedIn = () => {
-        const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
+        const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(imageUrl)}`;
         window.open(url, "_blank", "noopener,noreferrer");
         setShowMenu(false);
     };
 
     const shareToReddit = () => {
-        const url = `https://reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(shareText)}`;
+        // Reddit image post
+        const title = `My pixel art created on Spritz! 🎨 Create your own at spritz.chat`;
+        const url = `https://reddit.com/submit?url=${encodeURIComponent(imageUrl)}&title=${encodeURIComponent(title)}`;
         window.open(url, "_blank", "noopener,noreferrer");
         setShowMenu(false);
     };
 
     const shareToTelegram = () => {
-        const url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+        const text = buildShareText(false);
+        const url = `https://t.me/share/url?url=${encodeURIComponent(imageUrl)}&text=${encodeURIComponent(text)}`;
         window.open(url, "_blank", "noopener,noreferrer");
         setShowMenu(false);
     };
 
     const shareToWhatsApp = () => {
-        const url = `https://wa.me/?text=${encodeURIComponent(shareText + " " + shareUrl)}`;
+        const text = buildShareText(true);
+        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
         window.open(url, "_blank", "noopener,noreferrer");
         setShowMenu(false);
     };
 
-    const copyLink = async () => {
+    const copyImageUrl = async () => {
         try {
-            await navigator.clipboard.writeText(shareUrl);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            await navigator.clipboard.writeText(imageUrl);
+            setCopiedType("image");
+            setTimeout(() => setCopiedType(null), 2000);
+        } catch (err) {
+            console.error("Failed to copy:", err);
+        }
+    };
+
+    const copySpritzLink = async () => {
+        try {
+            await navigator.clipboard.writeText(spritzUrl);
+            setCopiedType("link");
+            setTimeout(() => setCopiedType(null), 2000);
+        } catch (err) {
+            console.error("Failed to copy:", err);
+        }
+    };
+
+    const copyFullShare = async () => {
+        try {
+            const fullText = buildShareText(true);
+            await navigator.clipboard.writeText(fullText);
+            setCopiedType("link");
+            setTimeout(() => setCopiedType(null), 2000);
         } catch (err) {
             console.error("Failed to copy:", err);
         }
@@ -166,13 +202,22 @@ export function PixelArtShare({ imageUrl, className = "" }: PixelArtShareProps) 
                                     Download Image
                                 </button>
                                 <button
-                                    onClick={copyLink}
+                                    onClick={copyImageUrl}
+                                    className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-3"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                    </svg>
+                                    {copiedType === "image" ? "Copied!" : "Copy Image URL"}
+                                </button>
+                                <button
+                                    onClick={copyFullShare}
                                     className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-3"
                                 >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                                     </svg>
-                                    {copied ? "Copied!" : "Copy Spritz Link"}
+                                    {copiedType === "link" ? "Copied!" : "Copy All (Image + Spritz)"}
                                 </button>
                             </div>
                         </motion.div>

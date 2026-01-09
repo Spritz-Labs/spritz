@@ -424,7 +424,7 @@ export function ChannelChatModal({
                                                 )}
                                                 {isImage ? (
                                                     <div
-                                                        className={`rounded-2xl overflow-hidden ${
+                                                        className={`rounded-2xl overflow-hidden relative group ${
                                                             isOwn ? "rounded-br-md" : "rounded-bl-md"
                                                         }`}
                                                     >
@@ -437,6 +437,20 @@ export function ChannelChatModal({
                                                                 (e.target as HTMLImageElement).style.display = "none";
                                                             }}
                                                         />
+                                                        {/* Download Button */}
+                                                        <a
+                                                            href={msg.content}
+                                                            download="image.png"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            title="Download"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                            </svg>
+                                                        </a>
                                                     </div>
                                                 ) : (
                                                     <div
@@ -657,14 +671,29 @@ export function ChannelChatModal({
                             className="fixed inset-0 bg-black/90 z-60 flex items-center justify-center p-4"
                             onClick={() => setPreviewImage(null)}
                         >
-                            <button
-                                className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-                                onClick={() => setPreviewImage(null)}
-                            >
-                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <div className="absolute top-4 right-4 flex gap-2">
+                                <a
+                                    href={previewImage}
+                                    download="image.png"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+                                    title="Download"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                </a>
+                                <button
+                                    className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+                                    onClick={() => setPreviewImage(null)}
+                                >
+                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
                             <img
                                 src={previewImage}
                                 alt="Preview"
