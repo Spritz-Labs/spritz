@@ -505,12 +505,16 @@ export function AlphaChatModal({
                                                 </div>
                                             </div>
                                         ) : (
-                                            messages.map((msg) => {
+                                            messages.map((msg, msgIndex) => {
                                                 const isOwn =
                                                     msg.sender_address.toLowerCase() ===
                                                     userAddress.toLowerCase();
                                                 const isPixelArt = isPixelArtMessage(msg.content);
                                                 const senderAvatar = getSenderAvatar(msg.sender_address);
+                                                // Only show user popup on the FIRST message from this sender to avoid duplicates
+                                                const isFirstMessageFromSender = messages.findIndex(
+                                                    m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
+                                                ) === msgIndex;
 
                                                 return (
                                                     <motion.div
@@ -543,8 +547,8 @@ export function AlphaChatModal({
                                                                     )}
                                                                 </button>
                                                                 
-                                                                {/* User popup */}
-                                                                {selectedUser === msg.sender_address && (
+                                                                {/* User popup - only render once per sender */}
+                                                                {selectedUser === msg.sender_address && isFirstMessageFromSender && (
                                                                     <div
                                                                         ref={userPopupRef}
                                                                         className="absolute left-0 bottom-10 z-50 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3 min-w-[200px]"

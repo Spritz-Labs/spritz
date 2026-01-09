@@ -319,6 +319,10 @@ export function ChannelChatModal({
                                     const isImage = msg.message_type === "image" || isImageUrl(msg.content);
                                     const senderAvatar = getSenderAvatar(msg.sender_address);
                                     const isAlreadyFriend = isFriend?.(msg.sender_address) ?? false;
+                                    // Only show user popup on the FIRST message from this sender to avoid duplicates
+                                    const isFirstMessageFromSender = messages.findIndex(
+                                        m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
+                                    ) === index;
 
                                     return (
                                         <motion.div
@@ -356,9 +360,9 @@ export function ChannelChatModal({
                                                         )}
                                                     </button>
 
-                                                    {/* User popup */}
+                                                    {/* User popup - only render once per sender */}
                                                     <AnimatePresence>
-                                                        {selectedUser === msg.sender_address && (
+                                                        {selectedUser === msg.sender_address && isFirstMessageFromSender && (
                                                             <motion.div
                                                                 initial={{ opacity: 0, scale: 0.95 }}
                                                                 animate={{ opacity: 1, scale: 1 }}
