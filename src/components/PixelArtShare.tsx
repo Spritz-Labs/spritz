@@ -6,11 +6,13 @@ import { motion, AnimatePresence } from "motion/react";
 interface PixelArtShareProps {
     imageUrl: string;
     className?: string;
+    compact?: boolean; // For inline share button on pixel art
 }
 
-export function PixelArtShare({ imageUrl, className = "" }: PixelArtShareProps) {
+export function PixelArtShare({ imageUrl, className = "", compact = false }: PixelArtShareProps) {
     const [showMenu, setShowMenu] = useState(false);
     const [copiedType, setCopiedType] = useState<"link" | "image" | null>(null);
+    const [isSharing, setIsSharing] = useState(false);
 
     const spritzUrl = "https://spritz.chat";
     const callToAction = "🎨 Create your own pixel art on Spritz!";
@@ -21,6 +23,47 @@ export function PixelArtShare({ imageUrl, className = "" }: PixelArtShareProps) 
             return `Check out my pixel art! 🎨✨\n\n${imageUrl}\n\n${callToAction}\n${spritzUrl}`;
         }
         return `Check out my pixel art! 🎨✨\n\n${callToAction}\n${spritzUrl}`;
+    };
+
+    // Use native Web Share API with file attachment (works on mobile!)
+    const shareNative = async () => {
+        if (typeof navigator === "undefined" || !("share" in navigator)) {
+            setShowMenu(true);
+            return;
+        }
+        
+        setIsSharing(true);
+        try {
+            // Fetch the image and convert to blob
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const file = new File([blob], "pixel-art.png", { type: "image/png" });
+            
+            // Check if we can share files
+            if ("canShare" in navigator && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    title: "My Pixel Art",
+                    text: `Check out my pixel art! 🎨✨\n\n${callToAction}\n${spritzUrl}`,
+                    files: [file],
+                });
+                setShowMenu(false);
+            } else {
+                // Fallback to sharing without file
+                await navigator.share({
+                    title: "My Pixel Art",
+                    text: buildShareText(true),
+                    url: imageUrl,
+                });
+                setShowMenu(false);
+            }
+        } catch (err) {
+            // User cancelled or error - show menu as fallback
+            if ((err as Error).name !== "AbortError") {
+                setShowMenu(true);
+            }
+        } finally {
+            setIsSharing(false);
+        }
     };
 
     const shareToTwitter = () => {
@@ -108,16 +151,40 @@ export function PixelArtShare({ imageUrl, className = "" }: PixelArtShareProps) 
         setShowMenu(false);
     };
 
+    // Check if native sharing is available
+    const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
+
+    // Handle main button click - try native share first on mobile
+    const handleMainClick = async () => {
+        // On mobile/PWA, try native sharing with file attachment
+        if (canNativeShare) {
+            await shareNative();
+        } else {
+            setShowMenu(!showMenu);
+        }
+    };
+
     return (
         <div className={`relative ${className}`}>
             <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                onClick={handleMainClick}
+                disabled={isSharing}
+                className={compact 
+                    ? "p-1.5 bg-black/60 hover:bg-black/80 rounded-lg transition-colors flex items-center justify-center text-white"
+                    : "px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                }
+                title="Share"
             >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
-                Share
+                {isSharing ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                    <>
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                        {!compact && <span className="text-white">Share</span>}
+                    </>
+                )}
             </button>
 
             <AnimatePresence>
@@ -135,6 +202,18 @@ export function PixelArtShare({ imageUrl, className = "" }: PixelArtShareProps) 
                             className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-20"
                         >
                             <div className="p-2 space-y-1">
+                                {/* Native share with image attachment - show if available */}
+                                {canNativeShare && (
+                                    <button
+                                        onClick={shareNative}
+                                        className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors flex items-center gap-3 font-medium"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        Share with Image ✨
+                                    </button>
+                                )}
                                 <button
                                     onClick={shareToTwitter}
                                     className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-3"

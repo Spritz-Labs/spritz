@@ -6,6 +6,7 @@ import type { AlphaMessage, AlphaMembership, AlphaMessageReaction } from "@/hook
 import { ALPHA_REACTION_EMOJIS } from "@/hooks/useAlphaChat";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
+import { PixelArtShare } from "./PixelArtShare";
 import { QuickReactionPicker } from "./EmojiPicker";
 
 interface AlphaChatModalProps {
@@ -658,20 +659,30 @@ export function AlphaChatModal({
                                                                         src={getPixelArtUrl(msg.content)}
                                                                         size="md"
                                                                     />
-                                                                    {/* Download Button */}
-                                                                    <a
-                                                                        href={getPixelArtUrl(msg.content)}
-                                                                        download="pixel-art.png"
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                        title="Download"
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                    >
-                                                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                                                        </svg>
-                                                                    </a>
+                                                                    {/* Action Buttons */}
+                                                                    <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        {/* Share Button */}
+                                                                        <div onClick={(e) => e.stopPropagation()}>
+                                                                            <PixelArtShare
+                                                                                imageUrl={getPixelArtUrl(msg.content)}
+                                                                                compact
+                                                                            />
+                                                                        </div>
+                                                                        {/* Download Button */}
+                                                                        <a
+                                                                            href={getPixelArtUrl(msg.content)}
+                                                                            download="pixel-art.png"
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="p-1.5 bg-black/60 hover:bg-black/80 rounded-lg transition-colors"
+                                                                            title="Download"
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                        >
+                                                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                            </svg>
+                                                                        </a>
+                                                                    </div>
                                                                 </div>
                                                             ) : (
                                                                 <p className="break-words">
