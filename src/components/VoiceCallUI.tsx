@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { type Friend } from "@/components/FriendsList";
 import { type CallState, type CallType } from "@/hooks/useVoiceCall";
+import { DeviceSelector } from "./DeviceSelector";
 
 type VoiceCallUIProps = {
     friend: Friend | null;
@@ -25,6 +26,10 @@ type VoiceCallUIProps = {
     setRemoteVideoContainer: (element: HTMLDivElement | null) => void;
     setScreenShareContainer: (element: HTMLDivElement | null) => void;
     setLocalScreenShareContainer: (element: HTMLDivElement | null) => void;
+    // Device selection callbacks (optional)
+    onMicrophoneChange?: (deviceId: string) => Promise<void>;
+    onSpeakerChange?: (deviceId: string) => void;
+    onCameraChange?: (deviceId: string) => Promise<void>;
 };
 
 export function VoiceCallUI({
@@ -48,6 +53,9 @@ export function VoiceCallUI({
     setRemoteVideoContainer,
     setScreenShareContainer,
     setLocalScreenShareContainer,
+    onMicrophoneChange,
+    onSpeakerChange,
+    onCameraChange,
 }: VoiceCallUIProps) {
     if (!friend || callState === "idle") return null;
 
@@ -388,6 +396,14 @@ export function VoiceCallUI({
                                 </svg>
                             </motion.button>
 
+                            {/* Device Selector */}
+                            <DeviceSelector
+                                onMicrophoneChange={onMicrophoneChange}
+                                onSpeakerChange={onSpeakerChange}
+                                onCameraChange={onCameraChange}
+                                showCamera={isVideoCall}
+                            />
+
                             {/* End Call Button */}
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
@@ -597,6 +613,13 @@ export function VoiceCallUI({
                                     />
                                 </svg>
                             </motion.button>
+
+                            {/* Device Selector */}
+                            <DeviceSelector
+                                onMicrophoneChange={onMicrophoneChange}
+                                onSpeakerChange={onSpeakerChange}
+                                showCamera={false}
+                            />
 
                             {/* End Call Button */}
                             <motion.button

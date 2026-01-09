@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type {
     GroupCall,
     GroupCallParticipant,
 } from "@/hooks/useGroupCallSignaling";
+import { DeviceSelector } from "./DeviceSelector";
 
 interface GroupCallUIProps {
     call: GroupCall;
@@ -23,6 +24,10 @@ interface GroupCallUIProps {
     setRemoteVideoContainer: (container: HTMLDivElement | null) => void;
     setScreenShareContainer: (container: HTMLDivElement | null) => void;
     formatDuration: (seconds: number) => string;
+    // Device selection callbacks (optional)
+    onMicrophoneChange?: (deviceId: string) => Promise<void>;
+    onSpeakerChange?: (deviceId: string) => void;
+    onCameraChange?: (deviceId: string) => Promise<void>;
 }
 
 export function GroupCallUI({
@@ -41,6 +46,9 @@ export function GroupCallUI({
     setRemoteVideoContainer,
     setScreenShareContainer,
     formatDuration,
+    onMicrophoneChange,
+    onSpeakerChange,
+    onCameraChange,
 }: GroupCallUIProps) {
     const localVideoRef = useRef<HTMLDivElement>(null);
     const remoteVideoRef = useRef<HTMLDivElement>(null);
@@ -455,6 +463,14 @@ export function GroupCallUI({
                             />
                         </svg>
                     </button>
+
+                    {/* Device Selector */}
+                    <DeviceSelector
+                        onMicrophoneChange={onMicrophoneChange}
+                        onSpeakerChange={onSpeakerChange}
+                        onCameraChange={onCameraChange}
+                        showCamera={call.isVideo}
+                    />
 
                     {/* End Call */}
                     <button

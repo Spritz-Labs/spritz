@@ -6,7 +6,10 @@ import { type Address } from "viem";
 import { useXMTPContext, type XMTPGroup } from "@/context/WakuProvider";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
-import { useMessageReactions, MESSAGE_REACTION_EMOJIS } from "@/hooks/useChatFeatures";
+import {
+    useMessageReactions,
+    MESSAGE_REACTION_EMOJIS,
+} from "@/hooks/useChatFeatures";
 import { QuickReactionPicker } from "./EmojiPicker";
 
 type Friend = {
@@ -75,7 +78,9 @@ export function GroupChatModal({
     const [isLeavingGroup, setIsLeavingGroup] = useState(false);
     const [showManageMenu, setShowManageMenu] = useState(false);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
+        null
+    );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,14 +139,18 @@ export function GroupChatModal({
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
-            if (!target.closest('[data-message-actions]') && !target.closest('[data-message-bubble]')) {
+            if (
+                !target.closest("[data-message-actions]") &&
+                !target.closest("[data-message-bubble]")
+            ) {
                 setSelectedMessage(null);
                 setShowReactionPicker(null);
             }
         };
         if (selectedMessage) {
-            document.addEventListener('click', handleClickOutside);
-            return () => document.removeEventListener('click', handleClickOutside);
+            document.addEventListener("click", handleClickOutside);
+            return () =>
+                document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedMessage]);
 
@@ -242,14 +251,26 @@ export function GroupChatModal({
             // Include reply context if replying
             let messageContent = newMessage.trim();
             if (replyingTo) {
-                const replySender = members.find(m => m.inboxId === replyingTo.senderInboxId)?.addresses[0];
-                const replyPreview = replyingTo.content.slice(0, 50) + (replyingTo.content.length > 50 ? "..." : "");
+                const replySender = members.find(
+                    (m) => m.inboxId === replyingTo.senderInboxId
+                )?.addresses[0];
+                const replyPreview =
+                    replyingTo.content.slice(0, 50) +
+                    (replyingTo.content.length > 50 ? "..." : "");
                 // Format sender inline - check getUserInfo first, then fallback to address truncation
-                const senderInfo = replySender ? getUserInfo?.(replySender) : null;
-                const senderDisplay = senderInfo?.name || (replySender ? `${replySender.slice(0, 6)}...${replySender.slice(-4)}` : "Unknown");
+                const senderInfo = replySender
+                    ? getUserInfo?.(replySender)
+                    : null;
+                const senderDisplay =
+                    senderInfo?.name ||
+                    (replySender
+                        ? `${replySender.slice(0, 6)}...${replySender.slice(
+                              -4
+                          )}`
+                        : "Unknown");
                 messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
             }
-            
+
             const result = await sendGroupMessage(group.id, messageContent);
             if (result.success) {
                 setNewMessage("");
@@ -262,7 +283,15 @@ export function GroupChatModal({
         } finally {
             setIsSending(false);
         }
-    }, [newMessage, isSending, group, sendGroupMessage, replyingTo, members, getUserInfo]);
+    }, [
+        newMessage,
+        isSending,
+        group,
+        sendGroupMessage,
+        replyingTo,
+        members,
+        getUserInfo,
+    ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -482,7 +511,9 @@ export function GroupChatModal({
 
                                 <div className="flex-1 min-w-0">
                                     <h2 className="text-white font-semibold truncate flex items-center gap-2">
-                                        {group.emoji && <span>{group.emoji}</span>}
+                                        {group.emoji && (
+                                            <span>{group.emoji}</span>
+                                        )}
                                         {group.name}
                                     </h2>
                                     <button
@@ -809,13 +840,15 @@ export function GroupChatModal({
                                     messages.map((msg) => {
                                         // Compare addresses case-insensitively
                                         const isOwn = userAddress
-                                            ? msg.senderInboxId?.toLowerCase() === userAddress.toLowerCase()
+                                            ? msg.senderInboxId?.toLowerCase() ===
+                                              userAddress.toLowerCase()
                                             : false;
                                         const isPixelArt = isPixelArtMessage(
                                             msg.content
                                         );
                                         const senderAddress = members.find(
-                                            (m) => m.inboxId === msg.senderInboxId
+                                            (m) =>
+                                                m.inboxId === msg.senderInboxId
                                         )?.addresses[0];
 
                                         return (
@@ -831,79 +864,184 @@ export function GroupChatModal({
                                             >
                                                 <div
                                                     data-message-bubble
-                                                    onClick={() => handleMessageTap(msg.id)}
+                                                    onClick={() =>
+                                                        handleMessageTap(msg.id)
+                                                    }
                                                     className={`max-w-[75%] rounded-2xl px-4 py-2 relative cursor-pointer ${
                                                         isOwn
                                                             ? "bg-[#FF5500] text-white rounded-br-md"
                                                             : "bg-zinc-800 text-white rounded-bl-md"
-                                                    } ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50" : ""}`}
+                                                    } ${
+                                                        selectedMessage ===
+                                                        msg.id
+                                                            ? "ring-2 ring-[#FB8D22]/50"
+                                                            : ""
+                                                    }`}
                                                 >
                                                     {!isOwn && (
                                                         <p className="text-xs text-zinc-400 mb-1">
                                                             {senderAddress
-                                                                ? formatAddress(senderAddress)
+                                                                ? formatAddress(
+                                                                      senderAddress
+                                                                  )
                                                                 : "Unknown"}
                                                         </p>
                                                     )}
-                                                    
+
                                                     {/* Reply Preview - Check for reply pattern in message content */}
-                                                    {msg.content.startsWith("↩️ ") && msg.content.includes("\n\n") && (
-                                                        <div 
-                                                            className={`mb-2 p-2 rounded-lg ${
-                                                                isOwn 
-                                                                    ? "bg-white/10 border-l-2 border-white/40" 
-                                                                    : "bg-zinc-700/50 border-l-2 border-orange-500"
-                                                            }`}
-                                                        >
-                                                            <div className="flex items-center gap-1.5 text-xs font-medium">
-                                                                <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                </svg>
-                                                                <span className={isOwn ? "text-white/80" : "text-orange-400"}>
-                                                                    {msg.content.split(":")[0].replace("↩️ ", "")}
-                                                                </span>
+                                                    {msg.content.startsWith(
+                                                        "↩️ "
+                                                    ) &&
+                                                        msg.content.includes(
+                                                            "\n\n"
+                                                        ) && (
+                                                            <div
+                                                                className={`mb-2 p-2 rounded-lg ${
+                                                                    isOwn
+                                                                        ? "bg-white/10 border-l-2 border-white/40"
+                                                                        : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                                    <svg
+                                                                        className="w-3 h-3 flex-shrink-0"
+                                                                        fill="none"
+                                                                        viewBox="0 0 24 24"
+                                                                        stroke="currentColor"
+                                                                    >
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={
+                                                                                2
+                                                                            }
+                                                                            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                        />
+                                                                    </svg>
+                                                                    <span
+                                                                        className={
+                                                                            isOwn
+                                                                                ? "text-white/80"
+                                                                                : "text-orange-400"
+                                                                        }
+                                                                    >
+                                                                        {msg.content
+                                                                            .split(
+                                                                                ":"
+                                                                            )[0]
+                                                                            .replace(
+                                                                                "↩️ ",
+                                                                                ""
+                                                                            )}
+                                                                    </span>
+                                                                </div>
+                                                                <p
+                                                                    className={`text-xs mt-1 line-clamp-2 ${
+                                                                        isOwn
+                                                                            ? "text-white/70"
+                                                                            : "text-zinc-400"
+                                                                    }`}
+                                                                >
+                                                                    {msg.content
+                                                                        .split(
+                                                                            "\n\n"
+                                                                        )[0]
+                                                                        .split(
+                                                                            ': "'
+                                                                        )[1]
+                                                                        ?.replace(
+                                                                            /\"$/,
+                                                                            ""
+                                                                        ) || ""}
+                                                                </p>
                                                             </div>
-                                                            <p className={`text-xs mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}>
-                                                                {msg.content.split("\n\n")[0].split(": \"")[1]?.replace(/\"$/, "") || ""}
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                    
+                                                        )}
+
                                                     {isPixelArt ? (
                                                         <PixelArtImage
-                                                            src={getPixelArtUrl(msg.content)}
+                                                            src={getPixelArtUrl(
+                                                                msg.content
+                                                            )}
                                                             size="md"
                                                         />
                                                     ) : (
                                                         <p className="break-words">
-                                                            {msg.content.startsWith("↩️ ") && msg.content.includes("\n\n") 
-                                                                ? msg.content.split("\n\n").slice(1).join("\n\n")
+                                                            {msg.content.startsWith(
+                                                                "↩️ "
+                                                            ) &&
+                                                            msg.content.includes(
+                                                                "\n\n"
+                                                            )
+                                                                ? msg.content
+                                                                      .split(
+                                                                          "\n\n"
+                                                                      )
+                                                                      .slice(1)
+                                                                      .join(
+                                                                          "\n\n"
+                                                                      )
                                                                 : msg.content}
                                                         </p>
                                                     )}
 
                                                     {/* Reactions Display */}
-                                                    {msgReactions[msg.id]?.some(r => r.count > 0) && (
-                                                        <div className="flex flex-wrap gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
-                                                            {msgReactions[msg.id]
-                                                                ?.filter(r => r.count > 0)
-                                                                .map(reaction => (
-                                                                    <button
-                                                                        key={reaction.emoji}
-                                                                        onClick={() => {
-                                                                            toggleMsgReaction(msg.id, reaction.emoji);
-                                                                            setSelectedMessage(null);
-                                                                        }}
-                                                                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                            reaction.hasReacted
-                                                                                ? isOwn ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
-                                                                                : isOwn ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                                        }`}
-                                                                    >
-                                                                        <span>{reaction.emoji}</span>
-                                                                        <span className="text-[10px]">{reaction.count}</span>
-                                                                    </button>
-                                                                ))}
+                                                    {msgReactions[msg.id]?.some(
+                                                        (r) => r.count > 0
+                                                    ) && (
+                                                        <div
+                                                            className="flex flex-wrap gap-1 mt-2"
+                                                            onClick={(e) =>
+                                                                e.stopPropagation()
+                                                            }
+                                                        >
+                                                            {msgReactions[
+                                                                msg.id
+                                                            ]
+                                                                ?.filter(
+                                                                    (r) =>
+                                                                        r.count >
+                                                                        0
+                                                                )
+                                                                .map(
+                                                                    (
+                                                                        reaction
+                                                                    ) => (
+                                                                        <button
+                                                                            key={
+                                                                                reaction.emoji
+                                                                            }
+                                                                            onClick={() => {
+                                                                                toggleMsgReaction(
+                                                                                    msg.id,
+                                                                                    reaction.emoji
+                                                                                );
+                                                                                setSelectedMessage(
+                                                                                    null
+                                                                                );
+                                                                            }}
+                                                                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
+                                                                                reaction.hasReacted
+                                                                                    ? isOwn
+                                                                                        ? "bg-white/30"
+                                                                                        : "bg-orange-500/30 text-orange-300"
+                                                                                    : isOwn
+                                                                                    ? "bg-white/10 hover:bg-white/20"
+                                                                                    : "bg-zinc-700/50 hover:bg-zinc-600/50"
+                                                                            }`}
+                                                                        >
+                                                                            <span>
+                                                                                {
+                                                                                    reaction.emoji
+                                                                                }
+                                                                            </span>
+                                                                            <span className="text-[10px]">
+                                                                                {
+                                                                                    reaction.count
+                                                                                }
+                                                                            </span>
+                                                                        </button>
+                                                                    )
+                                                                )}
                                                         </div>
                                                     )}
 
@@ -925,17 +1063,40 @@ export function GroupChatModal({
 
                                                     {/* Message Actions - Show on tap (mobile) or click */}
                                                     <AnimatePresence>
-                                                        {selectedMessage === msg.id && (
+                                                        {selectedMessage ===
+                                                            msg.id && (
                                                             <motion.div
                                                                 data-message-actions
-                                                                initial={{ opacity: 0, scale: 0.9 }}
-                                                                animate={{ opacity: 1, scale: 1 }}
-                                                                exit={{ opacity: 0, scale: 0.9 }}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className={`absolute ${isOwn ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 flex items-center gap-1 z-10`}
+                                                                initial={{
+                                                                    opacity: 0,
+                                                                    scale: 0.9,
+                                                                }}
+                                                                animate={{
+                                                                    opacity: 1,
+                                                                    scale: 1,
+                                                                }}
+                                                                exit={{
+                                                                    opacity: 0,
+                                                                    scale: 0.9,
+                                                                }}
+                                                                onClick={(e) =>
+                                                                    e.stopPropagation()
+                                                                }
+                                                                className={`absolute ${
+                                                                    isOwn
+                                                                        ? "left-0 -translate-x-full pr-2"
+                                                                        : "right-0 translate-x-full pl-2"
+                                                                } top-0 flex items-center gap-1 z-10`}
                                                             >
                                                                 <button
-                                                                    onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
+                                                                    onClick={() =>
+                                                                        setShowReactionPicker(
+                                                                            showReactionPicker ===
+                                                                                msg.id
+                                                                                ? null
+                                                                                : msg.id
+                                                                        )
+                                                                    }
                                                                     className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
                                                                     title="React"
                                                                 >
@@ -943,14 +1104,30 @@ export function GroupChatModal({
                                                                 </button>
                                                                 <button
                                                                     onClick={() => {
-                                                                        setReplyingTo(msg);
-                                                                        setSelectedMessage(null);
+                                                                        setReplyingTo(
+                                                                            msg
+                                                                        );
+                                                                        setSelectedMessage(
+                                                                            null
+                                                                        );
                                                                     }}
                                                                     className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
                                                                     title="Reply"
                                                                 >
-                                                                    <svg className="w-4 h-4 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                                    <svg
+                                                                        className="w-4 h-4 text-zinc-300"
+                                                                        fill="none"
+                                                                        viewBox="0 0 24 24"
+                                                                        stroke="currentColor"
+                                                                    >
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={
+                                                                                2
+                                                                            }
+                                                                            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                        />
                                                                     </svg>
                                                                 </button>
                                                             </motion.div>
@@ -958,20 +1135,42 @@ export function GroupChatModal({
                                                     </AnimatePresence>
 
                                                     {/* Reaction Picker */}
-                                                    {showReactionPicker === msg.id && (
-                                                        <div 
-                                                            className={`absolute ${isOwn ? "right-0" : "left-0"} -top-12 z-20`}
-                                                            onClick={(e) => e.stopPropagation()}
+                                                    {showReactionPicker ===
+                                                        msg.id && (
+                                                        <div
+                                                            className={`absolute ${
+                                                                isOwn
+                                                                    ? "right-0"
+                                                                    : "left-0"
+                                                            } -top-12 z-20`}
+                                                            onClick={(e) =>
+                                                                e.stopPropagation()
+                                                            }
                                                         >
                                                             <QuickReactionPicker
                                                                 isOpen={true}
-                                                                onClose={() => setShowReactionPicker(null)}
-                                                                onSelect={async (emoji) => {
-                                                                    await toggleMsgReaction(msg.id, emoji);
-                                                                    setShowReactionPicker(null);
-                                                                    setSelectedMessage(null);
+                                                                onClose={() =>
+                                                                    setShowReactionPicker(
+                                                                        null
+                                                                    )
+                                                                }
+                                                                onSelect={async (
+                                                                    emoji
+                                                                ) => {
+                                                                    await toggleMsgReaction(
+                                                                        msg.id,
+                                                                        emoji
+                                                                    );
+                                                                    setShowReactionPicker(
+                                                                        null
+                                                                    );
+                                                                    setSelectedMessage(
+                                                                        null
+                                                                    );
                                                                 }}
-                                                                emojis={MESSAGE_REACTION_EMOJIS}
+                                                                emojis={
+                                                                    MESSAGE_REACTION_EMOJIS
+                                                                }
                                                             />
                                                         </div>
                                                     )}
@@ -989,18 +1188,39 @@ export function GroupChatModal({
                                     <div className="w-1 h-8 bg-orange-500 rounded-full" />
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs text-orange-400 font-medium">
-                                            Replying to {replyingTo.senderInboxId?.toLowerCase() === userAddress?.toLowerCase() 
-                                                ? "yourself" 
-                                                : formatAddress(members.find(m => m.inboxId === replyingTo.senderInboxId)?.addresses[0] || "Unknown")}
+                                            Replying to{" "}
+                                            {replyingTo.senderInboxId?.toLowerCase() ===
+                                            userAddress?.toLowerCase()
+                                                ? "yourself"
+                                                : formatAddress(
+                                                      members.find(
+                                                          (m) =>
+                                                              m.inboxId ===
+                                                              replyingTo.senderInboxId
+                                                      )?.addresses[0] ||
+                                                          "Unknown"
+                                                  )}
                                         </p>
-                                        <p className="text-xs text-zinc-400 truncate">{replyingTo.content}</p>
+                                        <p className="text-xs text-zinc-400 truncate">
+                                            {replyingTo.content}
+                                        </p>
                                     </div>
                                     <button
                                         onClick={() => setReplyingTo(null)}
                                         className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -1042,7 +1262,11 @@ export function GroupChatModal({
                                             setNewMessage(e.target.value)
                                         }
                                         onKeyDown={handleKeyPress}
-                                        placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
+                                        placeholder={
+                                            replyingTo
+                                                ? "Type your reply..."
+                                                : "Type a message..."
+                                        }
                                         disabled={!isInitialized}
                                         className="flex-1 py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 focus:ring-2 focus:ring-[#FB8D22]/20 transition-all disabled:opacity-50"
                                     />
