@@ -2305,14 +2305,14 @@ export default function RoomPage({
                             // Screen sharing layout: large screen share on top, small videos below
                             <div className="h-full min-h-0 max-h-full flex flex-col gap-2 sm:gap-3">
                                 {/* Screen Share - takes up most of the space */}
-                                <div className="flex-1 min-h-0 relative bg-zinc-900 rounded-2xl overflow-hidden">
+                                <div className="flex-1 min-h-0 relative bg-zinc-900 rounded-2xl overflow-hidden flex items-center justify-center">
                                     {isScreenSharing ? (
                                         <video
                                             ref={localScreenShareRef}
                                             autoPlay
                                             playsInline
                                             muted
-                                            className="w-full h-full min-h-0 object-contain bg-black"
+                                            className="max-w-full max-h-full w-auto h-auto object-contain"
                                         />
                                     ) : screenSharingPeer ? (
                                         <video
@@ -2338,7 +2338,7 @@ export default function RoomPage({
                                             }}
                                             autoPlay
                                             playsInline
-                                            className="w-full h-full min-h-0 object-contain bg-black"
+                                            className="max-w-full max-h-full w-auto h-auto object-contain"
                                         />
                                     ) : null}
                                     <div className="absolute bottom-3 left-3 flex items-center gap-2">
@@ -2492,14 +2492,14 @@ export default function RoomPage({
                                 className={`h-full min-h-0 max-h-full grid gap-2 sm:gap-3 ${getGridClass()}`}
                             >
                                 {/* Local Video / Screen Share */}
-                                <div className="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-0">
+                                <div className="relative bg-zinc-900 rounded-2xl overflow-hidden flex items-center justify-center">
                                     {isScreenSharing ? (
                                         <video
                                             ref={localScreenShareRef}
                                             autoPlay
                                             playsInline
                                             muted
-                                            className="w-full h-full min-h-0 object-contain bg-black"
+                                            className="max-w-full max-h-full w-auto h-auto object-contain"
                                         />
                                     ) : !isVideoOff ? (
                                         <video
@@ -2507,7 +2507,7 @@ export default function RoomPage({
                                             autoPlay
                                             playsInline
                                             muted
-                                            className="w-full h-full min-h-0 object-contain bg-black"
+                                            className="max-w-full max-h-full w-auto h-auto object-contain"
                                         />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
@@ -2546,7 +2546,7 @@ export default function RoomPage({
                                             initial={{ opacity: 0, scale: 0.9 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             exit={{ opacity: 0, scale: 0.9 }}
-                                            className="relative bg-zinc-900 rounded-2xl overflow-hidden min-h-0"
+                                            className="relative bg-zinc-900 rounded-2xl overflow-hidden flex items-center justify-center"
                                         >
                                             {peer.screenShareTrack ? (
                                                 <video
@@ -2575,7 +2575,7 @@ export default function RoomPage({
                                                     }}
                                                     autoPlay
                                                     playsInline
-                                                    className="w-full h-full min-h-0 object-contain bg-black"
+                                                    className="max-w-full max-h-full w-auto h-auto object-contain"
                                                 />
                                             ) : peer.videoTrack ? (
                                                 <video
@@ -2598,7 +2598,7 @@ export default function RoomPage({
                                                     autoPlay
                                                     playsInline
                                                     muted={false}
-                                                    className="w-full h-full min-h-0 object-contain bg-black"
+                                                    className="max-w-full max-h-full w-auto h-auto object-contain"
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
