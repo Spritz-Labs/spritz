@@ -88,7 +88,7 @@ export function AlienAuth() {
     // Check if either is authenticated
     const isAuthenticated = isAlienAuthenticated || isWorldIdAuthenticated;
     const currentAddress = alienAddress || worldIdAddress;
-    const authProvider = isAlienAuthenticated ? "Alien" : isWorldIdAuthenticated ? "World ID" : null;
+    const authProvider = isAlienAuthenticated ? "Alien ID" : isWorldIdAuthenticated ? "World ID" : null;
 
     const formatAddress = (addr: string) => {
         if (addr.length <= 12) return addr;
@@ -184,7 +184,7 @@ export function AlienAuth() {
             <div className="text-center mb-2">
                 <h3 className="text-white font-semibold mb-1">Sign in with Digital ID</h3>
                 <p className="text-zinc-500 text-sm">
-                    Verify your identity with World ID or Alien
+                    Verify your identity with World ID or Alien ID
                 </p>
             </div>
 
@@ -231,7 +231,7 @@ export function AlienAuth() {
                 </div>
             )}
 
-            {/* Alien Sign In Button */}
+            {/* Alien ID Sign In Button */}
             <div className="w-full flex items-center justify-center min-h-[48px]">
                 <div className="w-full">
                     <SignInButton color="dark" />
@@ -239,7 +239,7 @@ export function AlienAuth() {
             </div>
 
             <p className="text-center text-zinc-600 text-xs mt-2">
-                {worldIdAppId && worldIdAction ? "World ID • Alien SSO" : "Powered by Alien SSO"}
+                {worldIdAppId && worldIdAction ? "World ID • Alien ID" : "Powered by Alien ID"}
             </p>
         </motion.div>
     );
