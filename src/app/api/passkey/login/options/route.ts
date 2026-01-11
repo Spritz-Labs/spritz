@@ -35,10 +35,11 @@ function getRpId(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
     try {
-        const { userAddress } = await request.json();
+        const { userAddress, useDevicePasskey } = await request.json();
         const rpId = getRpId(request);
         
         console.log("[Passkey] Using RP ID:", rpId);
+        console.log("[Passkey] useDevicePasskey:", useDevicePasskey);
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -58,6 +59,26 @@ export async function POST(request: NextRequest) {
                     id: cred.credential_id,
                     type: "public-key" as const,
                     transports: (cred.transports || ["internal", "hybrid"]) as AuthenticatorTransport[],
+                }));
+            }
+        }
+
+        // If user wants to use device passkey, we get ALL credentials with internal transport
+        // This helps find passkeys that weren't registered as discoverable
+        if (useDevicePasskey && allowCredentials.length === 0) {
+            // Get all credentials that might be on this device (have internal transport)
+            const { data: allCredentials } = await supabase
+                .from("passkey_credentials")
+                .select("credential_id, transports, user_address")
+                .contains("transports", ["internal"]);
+
+            if (allCredentials && allCredentials.length > 0) {
+                console.log("[Passkey] Found", allCredentials.length, "device credentials to try");
+                allowCredentials = allCredentials.map((cred) => ({
+                    id: cred.credential_id,
+                    type: "public-key" as const,
+                    // For device passkey, prioritize internal transport
+                    transports: ["internal", "hybrid"] as AuthenticatorTransport[],
                 }));
             }
         }

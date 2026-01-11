@@ -33,9 +33,13 @@ export type PasskeyState = {
     hasStoredSession: boolean;
 };
 
+export type LoginOptions = {
+    useDevicePasskey?: boolean;
+};
+
 export type PasskeyContextType = PasskeyState & {
     register: (username: string) => Promise<void>;
-    login: () => Promise<void>;
+    login: (options?: LoginOptions) => Promise<void>;
     logout: () => void;
     clearError: () => void;
 };
@@ -304,17 +308,18 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         [generateWalletAddress]
     );
 
-    const login = useCallback(async () => {
+    const login = useCallback(async (options?: LoginOptions) => {
         setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+        const useDevicePasskey = options?.useDevicePasskey || false;
 
         try {
             // Step 1: Get authentication options from server
-            // Don't pass userAddress to allow discoverable credentials (cross-device)
-            console.log("[Passkey] Fetching auth options for discoverable credentials...");
+            console.log("[Passkey] Fetching auth options, useDevicePasskey:", useDevicePasskey);
             const optionsResponse = await fetch("/api/passkey/login/options", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({}), // Empty to allow any credential
+                body: JSON.stringify({ useDevicePasskey }),
             });
 
             if (!optionsResponse.ok) {

@@ -6,6 +6,7 @@ import { usePasskeyContext } from "@/context/PasskeyProvider";
 
 export function PasskeyAuth() {
     const [mode, setMode] = useState<"login" | "register">("login");
+    const [useDevicePasskey, setUseDevicePasskey] = useState(false);
     const {
         isLoading,
         isAuthenticated,
@@ -26,7 +27,7 @@ export function PasskeyAuth() {
             // Use a default name for the passkey credential
             await register("Spritz Account");
         } else {
-            await login();
+            await login({ useDevicePasskey });
         }
     };
 
@@ -127,13 +128,60 @@ export function PasskeyAuth() {
                     </button>
                 </div>
 
-                {/* Show hint about passkey login */}
+                {/* Show options for login mode */}
                 {mode === "login" && (
-                    <p className="text-zinc-400 text-xs text-center">
-                        {hasStoredSession 
-                            ? "Your passkey is ready to use"
-                            : "Use your device's passkey to sign in"}
-                    </p>
+                    <div className="space-y-3">
+                        <p className="text-zinc-400 text-xs text-center">
+                            {hasStoredSession 
+                                ? "Your passkey is ready to use"
+                                : "Use your device's passkey to sign in"}
+                        </p>
+                        
+                        {/* Device passkey toggle */}
+                        <button
+                            type="button"
+                            onClick={() => setUseDevicePasskey(!useDevicePasskey)}
+                            className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                useDevicePasskey
+                                    ? "border-[#FF5500]/50 bg-[#FF5500]/10"
+                                    : "border-zinc-700 bg-zinc-900/50 hover:border-zinc-600"
+                            }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                    useDevicePasskey ? "bg-[#FF5500]/20" : "bg-zinc-800"
+                                }`}>
+                                    <svg 
+                                        className={`w-4 h-4 ${useDevicePasskey ? "text-[#FF5500]" : "text-zinc-400"}`} 
+                                        fill="none" 
+                                        viewBox="0 0 24 24" 
+                                        stroke="currentColor"
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <div className="text-left">
+                                    <p className={`text-sm font-medium ${useDevicePasskey ? "text-white" : "text-zinc-300"}`}>
+                                        Use device passkey
+                                    </p>
+                                    <p className="text-xs text-zinc-500">
+                                        For passkeys saved on this device
+                                    </p>
+                                </div>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                useDevicePasskey 
+                                    ? "border-[#FF5500] bg-[#FF5500]" 
+                                    : "border-zinc-600"
+                            }`}>
+                                {useDevicePasskey && (
+                                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                )}
+                            </div>
+                        </button>
+                    </div>
                 )}
 
 
@@ -217,7 +265,9 @@ export function PasskeyAuth() {
 
                 <p className="text-center text-zinc-500 text-xs">
                     {mode === "login"
-                        ? "Use your device's biometric authentication"
+                        ? useDevicePasskey
+                            ? "Will search for passkeys stored on this device"
+                            : "Use your device's biometric authentication"
                         : "Creates a secure account linked to your device"}
                 </p>
             </form>
