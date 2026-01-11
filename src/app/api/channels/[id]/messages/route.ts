@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { sanitizeMessageContent } from "@/lib/sanitize";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -127,11 +128,20 @@ export async function POST(
             );
         }
 
+        // Sanitize and validate content
+        const sanitizedContent = sanitizeMessageContent(content, 10000);
+        if (!sanitizedContent) {
+            return NextResponse.json(
+                { error: "Message content is required" },
+                { status: 400 }
+            );
+        }
+
         // Insert message with optional reply_to
         const insertData: Record<string, unknown> = {
             channel_id: id,
             sender_address: normalizedAddress,
-            content: content.trim(),
+            content: sanitizedContent,
             message_type: messageType || "text",
         };
         

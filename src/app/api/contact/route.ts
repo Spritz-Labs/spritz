@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { escapeHtml, sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
@@ -18,9 +19,13 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { name, email, inquiry } = await request.json();
+        const body = await request.json();
+        
+        // Sanitize and validate inputs
+        const name = sanitizeInput(body.name || "", INPUT_LIMITS.SHORT_TEXT);
+        const email = sanitizeInput(body.email || "", INPUT_LIMITS.EMAIL);
+        const inquiry = sanitizeInput(body.inquiry || "", INPUT_LIMITS.LONG_TEXT);
 
-        // Validate inputs
         if (!name || !email || !inquiry) {
             return NextResponse.json(
                 { error: "Name, email, and inquiry are required" },
@@ -33,21 +38,6 @@ export async function POST(request: NextRequest) {
         if (!emailRegex.test(email)) {
             return NextResponse.json(
                 { error: "Invalid email format" },
-                { status: 400 }
-            );
-        }
-
-        // Validate lengths
-        if (name.length > 100) {
-            return NextResponse.json(
-                { error: "Name is too long (max 100 characters)" },
-                { status: 400 }
-            );
-        }
-
-        if (inquiry.length > 5000) {
-            return NextResponse.json(
-                { error: "Inquiry is too long (max 5000 characters)" },
                 { status: 400 }
             );
         }
@@ -138,14 +128,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-}
-
-// Helper to escape HTML to prevent XSS
-function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
 }

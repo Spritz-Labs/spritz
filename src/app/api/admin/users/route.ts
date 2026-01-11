@@ -9,6 +9,27 @@ const supabase = supabaseUrl && supabaseKey
     ? createClient(supabaseUrl, supabaseKey)
     : null;
 
+// Admin message expiry time (5 minutes)
+const ADMIN_MESSAGE_EXPIRY_MS = 5 * 60 * 1000;
+
+// Extract and validate timestamp from message
+function validateMessageTimestamp(message: string): boolean {
+    const match = message.match(/Issued At: ([^\n]+)/);
+    if (!match) return false;
+    
+    const issuedAt = new Date(match[1]);
+    if (isNaN(issuedAt.getTime())) return false;
+    
+    const messageAge = Date.now() - issuedAt.getTime();
+    
+    // Reject if too old or too far in the future
+    if (messageAge > ADMIN_MESSAGE_EXPIRY_MS || messageAge < -60000) {
+        return false;
+    }
+    
+    return true;
+}
+
 // Verify admin signature from headers
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; address: string | null; isSuperAdmin: boolean }> {
     const address = request.headers.get("x-admin-address");
@@ -22,6 +43,12 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; ad
     try {
         // Decode the base64 encoded message
         const message = decodeURIComponent(atob(encodedMessage));
+        
+        // Validate timestamp to prevent replay attacks
+        if (!validateMessageTimestamp(message)) {
+            console.warn("[Admin] Rejected expired or invalid message timestamp for:", address);
+            return { isAdmin: false, address: null, isSuperAdmin: false };
+        }
         
         const isValidSignature = await verifyMessage({
             address: address as `0x${string}`,
