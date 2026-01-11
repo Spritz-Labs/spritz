@@ -100,11 +100,15 @@ export function useAlphaChat(userAddress: string | null) {
             }
 
             // Get messages (last 100) with reply_to data
-            const { data: messages, error: messagesError } = await client
+            // Order descending first to get newest, then reverse for display
+            const { data: messagesDesc, error: messagesError } = await client
                 .from("shout_alpha_messages")
                 .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
-                .order("created_at", { ascending: true })
+                .order("created_at", { ascending: false })
                 .limit(100);
+            
+            // Reverse to get chronological order for display
+            const messages = messagesDesc?.reverse() || [];
 
             if (messagesError) {
                 console.error("[AlphaChat] Messages query error:", messagesError);
@@ -253,11 +257,11 @@ export function useAlphaChat(userAddress: string | null) {
         const client = supabase; // Capture for closure
         const pollInterval = setInterval(async () => {
             try {
-                // Fetch latest messages
-                const { data: messages, error } = await client
+                // Fetch latest messages (newest 100, then reverse for chronological order)
+                const { data: messagesDesc, error } = await client
                     .from("shout_alpha_messages")
                     .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
-                    .order("created_at", { ascending: true })
+                    .order("created_at", { ascending: false })
                     .limit(100);
 
                 if (error) {
@@ -265,7 +269,9 @@ export function useAlphaChat(userAddress: string | null) {
                     return;
                 }
 
-                if (messages && messages.length > 0) {
+                const messages = messagesDesc?.reverse() || [];
+
+                if (messages.length > 0) {
                     setState(prev => {
                         // Get the IDs of real messages (not temp ones)
                         const prevRealIds = new Set(prev.messages.filter(m => !m.id.startsWith('temp-')).map(m => m.id));
@@ -589,10 +595,11 @@ export function useAlphaChat(userAddress: string | null) {
         console.log("[AlphaChat] Manual refresh triggered");
 
         try {
-            const { data: messages, error } = await client
+            // Fetch newest 100, then reverse for chronological order
+            const { data: messagesDesc, error } = await client
                 .from("shout_alpha_messages")
                 .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
-                .order("created_at", { ascending: true })
+                .order("created_at", { ascending: false })
                 .limit(100);
 
             if (error) {
@@ -600,7 +607,9 @@ export function useAlphaChat(userAddress: string | null) {
                 return;
             }
 
-            if (messages) {
+            const messages = messagesDesc?.reverse() || [];
+
+            if (messages.length > 0) {
                 // Get reactions for these messages
                 const messageIds = messages.map(m => m.id);
                 let reactionsData: AlphaReaction[] = [];
