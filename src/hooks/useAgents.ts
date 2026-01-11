@@ -136,6 +136,7 @@ export function useAgents(userAddress: string | null) {
             const res = await fetch("/api/agents", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include", // Important for session cookie
                 body: JSON.stringify({
                     userAddress,
                     name,
@@ -642,6 +643,7 @@ export function useFavoriteAgents(userAddress: string | null) {
             const res = await fetch("/api/agents/favorites", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include", // Important for session cookie
                 body: JSON.stringify({ userAddress, agentId }),
             });
 

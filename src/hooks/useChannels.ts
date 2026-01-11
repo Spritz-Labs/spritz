@@ -134,6 +134,7 @@ export function useChannels(userAddress: string | null) {
                 const res = await fetch("/api/channels", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include", // Important for session cookie
                     body: JSON.stringify({
                         ...params,
                         creatorAddress: userAddress,

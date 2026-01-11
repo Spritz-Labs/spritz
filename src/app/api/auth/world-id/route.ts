@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyCloudProof, type IVerifyResponse } from "@worldcoin/idkit-core/backend";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { createClient } from "@supabase/supabase-js";
+import { createAuthResponse } from "@/lib/session";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const supabase = supabaseUrl && supabaseKey 
+    ? createClient(supabaseUrl, supabaseKey)
+    : null;
 
 export async function POST(request: NextRequest) {
     // Rate limit: 10 requests per minute for auth
@@ -31,11 +40,53 @@ export async function POST(request: NextRequest) {
         
         if (verifyRes.success) {
             console.log("[WorldId] ✓ Verification successful");
-            return NextResponse.json({
-                success: true,
-                nullifier_hash: proof.nullifier_hash,
-                verification_level: proof.verification_level,
-            });
+            
+            // Use nullifier_hash as the user's unique identifier (address)
+            const userAddress = proof.nullifier_hash;
+            
+            // Create/update user in database
+            if (supabase) {
+                const { data: existingUser } = await supabase
+                    .from("shout_users")
+                    .select("*")
+                    .eq("wallet_address", userAddress)
+                    .maybeSingle();
+                
+                if (!existingUser) {
+                    // Create new user
+                    await supabase.from("shout_users").insert({
+                        wallet_address: userAddress,
+                        auth_method: "world_id",
+                        verification_level: proof.verification_level,
+                        first_login: new Date().toISOString(),
+                        last_login: new Date().toISOString(),
+                        login_count: 1,
+                    });
+                    console.log("[WorldId] Created new user:", userAddress.slice(0, 20) + "...");
+                } else {
+                    // Update existing user
+                    await supabase
+                        .from("shout_users")
+                        .update({
+                            last_login: new Date().toISOString(),
+                            login_count: (existingUser.login_count || 0) + 1,
+                            verification_level: proof.verification_level,
+                        })
+                        .eq("wallet_address", userAddress);
+                    console.log("[WorldId] Updated user:", userAddress.slice(0, 20) + "...");
+                }
+            }
+            
+            // Create session with cookie - THIS IS CRITICAL for API access
+            return createAuthResponse(
+                userAddress,
+                "world_id",
+                {
+                    success: true,
+                    nullifier_hash: proof.nullifier_hash,
+                    verification_level: proof.verification_level,
+                }
+            );
         } else {
             console.error("[WorldId] Verification failed:", verifyRes);
             return NextResponse.json(

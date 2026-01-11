@@ -41,7 +41,7 @@ export function WorldIdProvider({ children }: { children: ReactNode }) {
 
     // Restore session on mount
     useEffect(() => {
-        const restoreSession = () => {
+        const restoreSession = async () => {
             try {
                 const storedAddress = localStorage.getItem(WORLD_ID_ADDRESS_KEY);
                 const storedSession = localStorage.getItem(WORLD_ID_SESSION_KEY);
@@ -51,6 +51,25 @@ export function WorldIdProvider({ children }: { children: ReactNode }) {
                     // Check if session is still valid (30 days)
                     if (session.exp && session.exp > Date.now()) {
                         console.log("[WorldId] Restored session for:", storedAddress.slice(0, 10) + "...");
+                        
+                        // Refresh the server session cookie
+                        try {
+                            const res = await fetch("/api/auth/session", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ 
+                                    userAddress: storedAddress,
+                                    authMethod: "world_id",
+                                }),
+                                credentials: "include",
+                            });
+                            if (res.ok) {
+                                console.log("[WorldId] Server session refreshed");
+                            }
+                        } catch (e) {
+                            console.warn("[WorldId] Failed to refresh server session:", e);
+                        }
+                        
                         setState({
                             isLoading: false,
                             isAuthenticated: true,

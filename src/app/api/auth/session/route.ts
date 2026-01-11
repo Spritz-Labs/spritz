@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/session";
+import { getAuthenticatedUser, createAuthResponse, type SessionPayload } from "@/lib/session";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -41,4 +42,76 @@ export async function GET(request: NextRequest) {
         },
         user: userData,
     });
+}
+
+// POST /api/auth/session/refresh - Refresh/recreate session from localStorage data
+// This is used when the user has a valid localStorage session but the HTTP-only cookie expired
+export async function POST(request: NextRequest) {
+    // Rate limit
+    const rateLimitResponse = await checkRateLimit(request, "auth");
+    if (rateLimitResponse) return rateLimitResponse;
+
+    try {
+        const { userAddress, authMethod } = await request.json();
+        
+        if (!userAddress || !authMethod) {
+            return NextResponse.json(
+                { error: "userAddress and authMethod required" },
+                { status: 400 }
+            );
+        }
+        
+        // Validate authMethod
+        const validMethods: SessionPayload["authMethod"][] = [
+            "wallet", "email", "passkey", "world_id", "alien_id", "solana"
+        ];
+        if (!validMethods.includes(authMethod)) {
+            return NextResponse.json(
+                { error: "Invalid auth method" },
+                { status: 400 }
+            );
+        }
+        
+        // Verify user exists in database
+        if (supabase) {
+            const { data: user, error } = await supabase
+                .from("shout_users")
+                .select("id, wallet_address")
+                .eq("wallet_address", userAddress.toLowerCase ? userAddress.toLowerCase() : userAddress)
+                .maybeSingle();
+            
+            if (error || !user) {
+                // User doesn't exist - create them
+                console.log("[Session] Creating new user for refresh:", userAddress.slice(0, 20) + "...");
+                await supabase.from("shout_users").insert({
+                    wallet_address: userAddress.toLowerCase ? userAddress.toLowerCase() : userAddress,
+                    auth_method: authMethod,
+                    first_login: new Date().toISOString(),
+                    last_login: new Date().toISOString(),
+                    login_count: 1,
+                });
+            } else {
+                // Update last login
+                await supabase
+                    .from("shout_users")
+                    .update({ last_login: new Date().toISOString() })
+                    .eq("wallet_address", user.wallet_address);
+            }
+        }
+        
+        console.log("[Session] Refreshed session for:", userAddress.slice(0, 20) + "...", "method:", authMethod);
+        
+        // Create new session
+        return createAuthResponse(
+            userAddress.toLowerCase ? userAddress.toLowerCase() : userAddress,
+            authMethod,
+            { success: true, refreshed: true }
+        );
+    } catch (error) {
+        console.error("[Session] Refresh error:", error);
+        return NextResponse.json(
+            { error: "Failed to refresh session" },
+            { status: 500 }
+        );
+    }
 }

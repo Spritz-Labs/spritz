@@ -49,6 +49,7 @@ export function useCallHistory(userAddress: string | null) {
                 const res = await fetch("/api/calls", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include", // Important for session cookie
                     body: JSON.stringify({
                         callerAddress: overrideCallerAddress || userAddress,
                         ...rest,
@@ -86,6 +87,7 @@ export function useCallHistory(userAddress: string | null) {
                 const res = await fetch("/api/calls", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include", // Important for session cookie
                     body: JSON.stringify({ callId, ...updates }),
                 });
 

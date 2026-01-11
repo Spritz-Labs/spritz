@@ -113,7 +113,7 @@ function AlienAuthInner({ children }: { children: ReactNode }) {
 
     // Restore session on mount
     useEffect(() => {
-        const restoreSession = () => {
+        const restoreSession = async () => {
             const storedAddress = localStorage.getItem(ALIEN_ADDRESS_KEY);
             const storedSession = localStorage.getItem(ALIEN_SESSION_KEY);
 
@@ -123,6 +123,25 @@ function AlienAuthInner({ children }: { children: ReactNode }) {
                     // Check if session is still valid (not expired)
                     if (session.exp && session.exp > Date.now()) {
                         console.log("[AlienAuth] Restored session for:", storedAddress);
+                        
+                        // Refresh the server session cookie
+                        try {
+                            const res = await fetch("/api/auth/session", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ 
+                                    userAddress: storedAddress,
+                                    authMethod: "alien_id",
+                                }),
+                                credentials: "include",
+                            });
+                            if (res.ok) {
+                                console.log("[AlienAuth] Server session refreshed");
+                            }
+                        } catch (e) {
+                            console.warn("[AlienAuth] Failed to refresh server session:", e);
+                        }
+                        
                         setState({
                             isLoading: false,
                             isAuthenticated: true,
@@ -173,7 +192,25 @@ function AlienAuthInner({ children }: { children: ReactNode }) {
             if (alienAddress) {
                 console.log("[AlienAuth] ✓ Authenticated with address:", alienAddress);
 
-                // Store session
+                // Create server-side session for API access (fire and forget)
+                fetch("/api/auth/alien-id", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ alienAddress, token }),
+                    credentials: "include", // Important for session cookie
+                })
+                .then((res) => {
+                    if (!res.ok) {
+                        console.warn("[AlienAuth] Failed to create server session, API calls may fail");
+                    } else {
+                        console.log("[AlienAuth] Server session created successfully");
+                    }
+                })
+                .catch((e) => {
+                    console.warn("[AlienAuth] Failed to create server session:", e);
+                });
+
+                // Store session locally as well
                 const sessionData = {
                     token,
                     exp: tokenInfo.exp ? tokenInfo.exp * 1000 : Date.now() + 30 * 24 * 60 * 60 * 1000,

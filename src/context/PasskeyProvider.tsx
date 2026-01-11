@@ -144,6 +144,24 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     console.log("[Passkey] Restored valid session, expires:", 
                         new Date(session.exp).toLocaleDateString());
                     
+                    // Refresh the server session cookie
+                    try {
+                        const res = await fetch("/api/auth/session", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ 
+                                userAddress: session.userAddress,
+                                authMethod: "passkey",
+                            }),
+                            credentials: "include",
+                        });
+                        if (res.ok) {
+                            console.log("[Passkey] Server session refreshed");
+                        }
+                    } catch (e) {
+                        console.warn("[Passkey] Failed to refresh server session:", e);
+                    }
+                    
                     setState({
                         isLoading: false,
                         isAuthenticated: true,

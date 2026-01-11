@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChannelMessages, CHANNEL_REACTION_EMOJIS } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
 import { QuickReactionPicker } from "./EmojiPicker";
+import { MentionInput, type MentionUser } from "./MentionInput";
+import { MentionText } from "./MentionText";
 
 type ChannelChatModalProps = {
     isOpen: boolean;
@@ -54,6 +56,30 @@ export function ChannelChatModal({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Build list of mentionable users from message senders
+    const mentionableUsers: MentionUser[] = useMemo(() => {
+        const userMap = new Map<string, MentionUser>();
+        
+        messages.forEach((msg) => {
+            const address = msg.sender_address.toLowerCase();
+            if (!userMap.has(address) && address !== userAddress.toLowerCase()) {
+                const info = getUserInfo?.(msg.sender_address);
+                userMap.set(address, {
+                    address: msg.sender_address,
+                    name: info?.name || null,
+                    avatar: info?.avatar || null,
+                });
+            }
+        });
+        
+        return Array.from(userMap.values());
+    }, [messages, userAddress, getUserInfo]);
+
+    // Handle mention click
+    const handleMentionClick = useCallback((address: string) => {
+        setSelectedUser(address);
+    }, []);
 
     // Scroll to bottom on new messages
     useEffect(() => {
@@ -507,7 +533,13 @@ export function ChannelChatModal({
                                                             </div>
                                                         )}
                                                         
-                                                        <p className="break-words whitespace-pre-wrap">{msg.content}</p>
+                                                        <p className="break-words whitespace-pre-wrap">
+                                                            <MentionText
+                                                                text={msg.content}
+                                                                currentUserAddress={userAddress}
+                                                                onMentionClick={handleMentionClick}
+                                                            />
+                                                        </p>
                                                         
                                                         {/* Reactions Display */}
                                                         {reactions[msg.id]?.some(r => r.count > 0) && (
@@ -642,19 +674,14 @@ export function ChannelChatModal({
                                     </svg>
                                 )}
                             </button>
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                inputMode="text"
-                                enterKeyHint="send"
-                                autoComplete="off"
-                                autoCorrect="on"
-                                autoCapitalize="sentences"
+                            <MentionInput
+                                inputRef={inputRef}
                                 value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
+                                onChange={setInputValue}
                                 onKeyDown={handleKeyDown}
-                                placeholder={`Message #${channel.name}`}
-                                className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
+                                placeholder={`Message #${channel.name} (@ to mention)`}
+                                users={mentionableUsers}
+                                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
                             />
                             <button
                                 onClick={handleSend}

@@ -67,6 +67,7 @@ export function useStreams(userAddress: string | null) {
                 const res = await fetch("/api/streams", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include", // Important for session cookie
                     body: JSON.stringify({
                         userAddress,
                         title,

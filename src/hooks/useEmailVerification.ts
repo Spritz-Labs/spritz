@@ -73,6 +73,7 @@ export function useEmailVerification(walletAddress: string | null) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ walletAddress, email }),
+                credentials: "include", // Important for session cookie
             });
 
             const data = await response.json();
@@ -118,6 +119,7 @@ export function useEmailVerification(walletAddress: string | null) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ walletAddress, code }),
+                credentials: "include", // Important for session cookie
             });
 
             const data = await response.json();

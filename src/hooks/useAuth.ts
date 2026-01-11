@@ -121,6 +121,7 @@ export function useAuthImplementation() {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(creds),
+                    credentials: "include", // Important for session cookie
                 });
 
                 const data = await response.json();
@@ -305,6 +306,7 @@ export function useAuthImplementation() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(credentials),
+                credentials: "include", // Important for session cookie
             });
 
             const data = await response.json();

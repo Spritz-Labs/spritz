@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { AlphaMessage, AlphaMembership, AlphaMessageReaction } from "@/hooks/useAlphaChat";
 import { ALPHA_REACTION_EMOJIS } from "@/hooks/useAlphaChat";
@@ -8,6 +8,8 @@ import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { PixelArtShare } from "./PixelArtShare";
 import { QuickReactionPicker } from "./EmojiPicker";
+import { MentionInput, type MentionUser } from "./MentionInput";
+import { MentionText } from "./MentionText";
 
 interface AlphaChatModalProps {
     isOpen: boolean;
@@ -84,6 +86,31 @@ export function AlphaChatModal({
     const [isFullscreen, setIsFullscreen] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const userPopupRef = useRef<HTMLDivElement>(null);
+
+    // Build list of mentionable users from message senders
+    const mentionableUsers: MentionUser[] = useMemo(() => {
+        const userMap = new Map<string, MentionUser>();
+        
+        // Add all message senders
+        messages.forEach((msg) => {
+            const address = msg.sender_address.toLowerCase();
+            if (!userMap.has(address) && address !== userAddress.toLowerCase()) {
+                const info = getUserInfo?.(msg.sender_address);
+                userMap.set(address, {
+                    address: msg.sender_address,
+                    name: info?.name || null,
+                    avatar: info?.avatar || null,
+                });
+            }
+        });
+        
+        return Array.from(userMap.values());
+    }, [messages, userAddress, getUserInfo]);
+
+    // Handle mention click - show user popup
+    const handleMentionClick = useCallback((address: string) => {
+        setSelectedUser(address);
+    }, []);
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -708,7 +735,11 @@ export function AlphaChatModal({
                                                                 </div>
                                                             ) : (
                                                                 <p className="break-words">
-                                                                    {msg.content}
+                                                                    <MentionText
+                                                                        text={msg.content}
+                                                                        currentUserAddress={userAddress}
+                                                                        onMentionClick={handleMentionClick}
+                                                                    />
                                                                 </p>
                                                             )}
 
@@ -849,17 +880,12 @@ export function AlphaChatModal({
                                                     />
                                                 </svg>
                                             </button>
-                                            <input
-                                                type="text"
-                                                inputMode="text"
-                                                enterKeyHint="send"
-                                                autoComplete="off"
-                                                autoCorrect="on"
-                                                autoCapitalize="sentences"
+                                            <MentionInput
                                                 value={newMessage}
-                                                onChange={(e) => setNewMessage(e.target.value)}
+                                                onChange={setNewMessage}
                                                 onKeyDown={handleKeyPress}
-                                                placeholder={replyingTo ? "Type your reply..." : "Message the community..."}
+                                                placeholder={replyingTo ? "Type your reply... (@ to mention)" : "Message the community... (@ to mention)"}
+                                                users={mentionableUsers}
                                                 className="flex-1 py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all"
                                             />
                                             <button

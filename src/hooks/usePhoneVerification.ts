@@ -78,6 +78,7 @@ export function usePhoneVerification(userAddress: string | null) {
                         walletAddress: userAddress,
                         phoneNumber: phone,
                     }),
+                    credentials: "include", // Important for session cookie
                 });
 
                 const data = await response.json();
@@ -121,6 +122,7 @@ export function usePhoneVerification(userAddress: string | null) {
                         walletAddress: userAddress,
                         code,
                     }),
+                    credentials: "include", // Important for session cookie
                 });
 
                 const data = await response.json();
@@ -208,6 +210,7 @@ export function usePhoneVerification(userAddress: string | null) {
                 body: JSON.stringify({
                     walletAddress: userAddress,
                 }),
+                credentials: "include", // Important for session cookie
             });
 
             const data = await response.json();

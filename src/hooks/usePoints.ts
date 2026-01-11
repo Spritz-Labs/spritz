@@ -51,7 +51,9 @@ export function usePoints(walletAddress: string | null) {
         }
 
         try {
-            const response = await fetch(`/api/points?address=${walletAddress}`);
+            const response = await fetch(`/api/points?address=${walletAddress}`, {
+                credentials: "include", // Important for session cookie
+            });
             const data = await response.json();
 
             setState({
@@ -79,6 +81,7 @@ export function usePoints(walletAddress: string | null) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ walletAddress, action }),
+                credentials: "include", // Important for session cookie
             });
 
             const data = await response.json();

@@ -56,6 +56,7 @@ export function AlienAuth() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(proof),
+                credentials: "include", // Important for session cookie
             });
             
             const data = await res.json();

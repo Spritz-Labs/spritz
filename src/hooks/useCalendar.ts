@@ -159,6 +159,7 @@ export function useCalendar(userAddress: string | null) {
             const res = await fetch("/api/calendar/disconnect", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include", // Important for session cookie
                 body: JSON.stringify({ userAddress }),
             });
 
@@ -192,6 +193,7 @@ export function useCalendar(userAddress: string | null) {
             const res = await fetch("/api/calendar/availability", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include", // Important for session cookie
                 body: JSON.stringify({
                     userAddress,
                     ...windowData,

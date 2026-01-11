@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
 import { useXMTPContext, type XMTPGroup } from "@/context/WakuProvider";
@@ -13,6 +13,8 @@ import {
 } from "@/hooks/useChatFeatures";
 import { QuickReactionPicker } from "./EmojiPicker";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
+import { MentionInput, type MentionUser } from "./MentionInput";
+import { MentionText } from "./MentionText";
 
 type Friend = {
     id: string;
@@ -113,6 +115,30 @@ export function GroupChatModal({
         removeGroupMember,
         leaveGroup,
     } = useXMTPContext();
+
+    // Build list of mentionable users from group members
+    const mentionableUsers: MentionUser[] = useMemo(() => {
+        return members
+            .filter((m) => m.inboxId !== userInboxId) // Exclude self
+            .map((member) => {
+                const address = member.addresses[0] || "";
+                const info = getUserInfo?.(address);
+                const ensData = memberENSData.get(address.toLowerCase());
+                
+                return {
+                    address,
+                    name: info?.name || ensData?.ensName || null,
+                    avatar: info?.avatar || ensData?.avatar || null,
+                };
+            })
+            .filter((u) => u.address); // Only include members with addresses
+    }, [members, userInboxId, getUserInfo, memberENSData]);
+
+    // Handle mention click
+    const handleMentionClick = useCallback((address: string) => {
+        // Could open a user profile or similar
+        console.log("[GroupChat] Mention clicked:", address);
+    }, []);
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -1129,21 +1155,16 @@ export function GroupChatModal({
                                                         </div>
                                                     ) : (
                                                         <p className="break-words">
-                                                            {msg.content.startsWith(
-                                                                "↩️ "
-                                                            ) &&
-                                                            msg.content.includes(
-                                                                "\n\n"
-                                                            )
-                                                                ? msg.content
-                                                                      .split(
-                                                                          "\n\n"
-                                                                      )
-                                                                      .slice(1)
-                                                                      .join(
-                                                                          "\n\n"
-                                                                      )
-                                                                : msg.content}
+                                                            <MentionText
+                                                                text={
+                                                                    msg.content.startsWith("↩️ ") &&
+                                                                    msg.content.includes("\n\n")
+                                                                        ? msg.content.split("\n\n").slice(1).join("\n\n")
+                                                                        : msg.content
+                                                                }
+                                                                currentUserAddress={userAddress}
+                                                                onMentionClick={handleMentionClick}
+                                                            />
                                                         </p>
                                                     )}
 
@@ -1413,24 +1434,17 @@ export function GroupChatModal({
                                             />
                                         </svg>
                                     </button>
-                                    <input
-                                        type="text"
-                                        inputMode="text"
-                                        enterKeyHint="send"
-                                        autoComplete="off"
-                                        autoCorrect="on"
-                                        autoCapitalize="sentences"
+                                    <MentionInput
                                         value={newMessage}
-                                        onChange={(e) =>
-                                            setNewMessage(e.target.value)
-                                        }
+                                        onChange={setNewMessage}
                                         onKeyDown={handleKeyPress}
                                         placeholder={
                                             replyingTo
-                                                ? "Type your reply..."
-                                                : "Type a message..."
+                                                ? "Type your reply... (@ to mention)"
+                                                : "Type a message... (@ to mention)"
                                         }
                                         disabled={!isInitialized}
+                                        users={mentionableUsers}
                                         className="flex-1 py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 focus:ring-2 focus:ring-[#FB8D22]/20 transition-all disabled:opacity-50"
                                     />
                                     <button

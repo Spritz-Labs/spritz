@@ -61,6 +61,7 @@ export function useLoginTracking({
                     username,
                     inviteCode,
                 }),
+                credentials: "include", // Important for session cookie
             });
 
             const data = await response.json();
@@ -90,7 +91,9 @@ export function useLoginTracking({
         if (!walletAddress) return;
         
         try {
-            const response = await fetch(`/api/points/daily?address=${walletAddress}`);
+            const response = await fetch(`/api/points/daily?address=${walletAddress}`, {
+                credentials: "include", // Important for session cookie
+            });
             const data = await response.json();
             setDailyBonusAvailable(data.available || false);
         } catch (error) {
@@ -108,6 +111,7 @@ export function useLoginTracking({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ walletAddress }),
+                credentials: "include", // Important for session cookie
             });
             
             const data = await response.json();

@@ -175,6 +175,7 @@ export function useSocials(userAddress: string | null) {
                                 walletAddress: userAddress,
                                 action: "social_added",
                             }),
+                            credentials: "include", // Important for session cookie
                         });
                     } catch (pointsErr) {
                         console.error("[Socials] Failed to award points:", pointsErr);
