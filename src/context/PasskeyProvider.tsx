@@ -46,6 +46,35 @@ export type PasskeyContextType = PasskeyState & {
 
 const PasskeyContext = createContext<PasskeyContextType | null>(null);
 
+// Browser-compatible base64url decode
+function base64UrlDecode(str: string): string {
+    // Convert base64url to base64
+    let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    const padding = '='.repeat((4 - base64.length % 4) % 4);
+    base64 += padding;
+    // Decode
+    try {
+        return atob(base64);
+    } catch {
+        // Fallback for Node.js environment (SSR)
+        return Buffer.from(str, "base64url").toString();
+    }
+}
+
+// Browser-compatible base64url encode
+function base64UrlEncode(str: string): string {
+    try {
+        return btoa(str)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+    } catch {
+        // Fallback for Node.js environment (SSR)
+        return Buffer.from(str).toString("base64url");
+    }
+}
+
 // Validate and decode session token (handles both JWT format and simple base64)
 function validateSession(token: string): { userAddress: string; exp: number } | null {
     try {
@@ -55,11 +84,18 @@ function validateSession(token: string): { userAddress: string; exp: number } | 
         const parts = token.split(".");
         if (parts.length === 3) {
             // JWT format: header.payload.signature - decode the payload (middle part)
-            payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+            payload = JSON.parse(base64UrlDecode(parts[1]));
         } else {
             // Simple base64url encoded JSON (legacy format)
-            payload = JSON.parse(Buffer.from(token, "base64url").toString());
+            payload = JSON.parse(base64UrlDecode(token));
         }
+        
+        console.log("[Passkey] Validating session, payload:", { 
+            hasExp: !!payload.exp, 
+            hasUserAddress: !!payload.userAddress,
+            hasSub: !!payload.sub,
+            exp: payload.exp
+        });
         
         // exp from server JWT is in seconds, Date.now() is in milliseconds
         // Handle both formats for backwards compatibility
@@ -68,7 +104,10 @@ function validateSession(token: string): { userAddress: string; exp: number } | 
         // Server JWT uses 'userAddress' in payload, legacy uses 'sub'
         const userAddress = payload.userAddress || payload.sub;
         
-        if (payload.exp && expMs > Date.now() && userAddress) {
+        const isValid = payload.exp && expMs > Date.now() && userAddress;
+        console.log("[Passkey] Session validation:", { expMs, now: Date.now(), isExpired: expMs <= Date.now(), userAddress: userAddress?.slice(0, 10), isValid });
+        
+        if (isValid) {
             return { userAddress, exp: expMs };
         }
         return null;
@@ -153,8 +192,12 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
     // Check for stored session on mount (including backwards compatibility for old system)
     useEffect(() => {
         const restoreSession = async () => {
+            console.log("[Passkey] Restoring session on mount...");
             const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
             const storedAddress = localStorage.getItem(USER_ADDRESS_KEY);
+            
+            console.log("[Passkey] Stored session exists:", !!storedSession, "length:", storedSession?.length);
+            console.log("[Passkey] Stored address:", storedAddress?.slice(0, 15) + "...");
 
             // First, check for valid new-system session
             if (storedSession && storedAddress) {
@@ -213,12 +256,12 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     const finalAddress = oldCredCheck.storedAddress || derivedAddress;
                     
                     // Create a new-style session token for the old user
-                    const newSessionToken = Buffer.from(JSON.stringify({
+                    const newSessionToken = base64UrlEncode(JSON.stringify({
                         sub: finalAddress.toLowerCase(),
                         iat: Date.now(),
                         exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
                         type: "passkey_migrated",
-                    })).toString("base64url");
+                    }));
                     
                     // Store in new format
                     localStorage.setItem(SESSION_STORAGE_KEY, newSessionToken);
@@ -500,12 +543,12 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                             const finalAddress = oldCredCheck.storedAddress || derivedAddress;
                             
                             // Create a new-style session token
-                            const newSessionToken = Buffer.from(JSON.stringify({
+                            const newSessionToken = base64UrlEncode(JSON.stringify({
                                 sub: finalAddress.toLowerCase(),
                                 iat: Date.now(),
                                 exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
                                 type: "passkey_migrated",
-                            })).toString("base64url");
+                            }));
                             
                             localStorage.setItem(SESSION_STORAGE_KEY, newSessionToken);
                             localStorage.setItem(USER_ADDRESS_KEY, finalAddress.toLowerCase());
