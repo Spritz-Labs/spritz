@@ -1,8 +1,24 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { PublicChannel } from "@/app/api/channels/route";
 import type { ChannelMessage, ChannelReaction } from "@/app/api/channels/[id]/messages/route";
+import { createClient } from "@supabase/supabase-js";
 
 export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
+
+// Initialize Supabase client for realtime
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseAnonKey 
+    ? createClient(supabaseUrl, supabaseAnonKey) 
+    : null;
+
+// Channel new message callback type
+export type ChannelMessageCallback = (data: {
+    channelId: string;
+    channelName: string;
+    senderAddress: string;
+    content: string;
+}) => void;
 
 export type ChannelMessageReaction = {
     emoji: string;
@@ -16,6 +32,25 @@ export function useChannels(userAddress: string | null) {
     const [joinedChannels, setJoinedChannels] = useState<PublicChannel[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // Track which channels have notifications enabled (stored locally)
+    const [notificationSettings, setNotificationSettings] = useState<Record<string, boolean>>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const stored = localStorage.getItem("channel_notifications");
+                return stored ? JSON.parse(stored) : {};
+            } catch {
+                return {};
+            }
+        }
+        return {};
+    });
+    
+    // Callbacks for new channel messages
+    const newMessageCallbacksRef = useRef<Set<ChannelMessageCallback>>(new Set());
+    
+    // Track the currently open channel to avoid notifications for it
+    const activeChannelRef = useRef<string | null>(null);
 
     const fetchChannels = useCallback(async () => {
         setIsLoading(true);
@@ -166,6 +201,106 @@ export function useChannels(userAddress: string | null) {
         fetchJoinedChannels();
     }, [fetchChannels, fetchJoinedChannels]);
 
+    // Toggle notification setting for a channel
+    const toggleChannelNotifications = useCallback((channelId: string) => {
+        setNotificationSettings(prev => {
+            const newSettings = {
+                ...prev,
+                [channelId]: !prev[channelId],
+            };
+            // Persist to localStorage
+            if (typeof window !== "undefined") {
+                localStorage.setItem("channel_notifications", JSON.stringify(newSettings));
+            }
+            return newSettings;
+        });
+    }, []);
+
+    // Check if notifications are enabled for a channel
+    const isNotificationsEnabled = useCallback((channelId: string) => {
+        return notificationSettings[channelId] === true;
+    }, [notificationSettings]);
+
+    // Register callback for new channel messages
+    const onNewChannelMessage = useCallback((callback: ChannelMessageCallback) => {
+        newMessageCallbacksRef.current.add(callback);
+        return () => {
+            newMessageCallbacksRef.current.delete(callback);
+        };
+    }, []);
+
+    // Set active channel (to prevent notifications for currently open channel)
+    const setActiveChannel = useCallback((channelId: string | null) => {
+        activeChannelRef.current = channelId;
+    }, []);
+
+    // Subscribe to realtime channel messages for joined channels
+    useEffect(() => {
+        if (!supabase || !userAddress || joinedChannels.length === 0) return;
+
+        console.log("[useChannels] Setting up realtime subscription for", joinedChannels.length, "channels");
+
+        const channelIds = joinedChannels.map(c => c.id);
+        
+        const subscription = supabase
+            .channel("channel-messages-global")
+            .on(
+                "postgres_changes",
+                {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "shout_channel_messages",
+                },
+                (payload) => {
+                    const newMessage = payload.new as {
+                        id: string;
+                        channel_id: string;
+                        sender_address: string;
+                        content: string;
+                        created_at: string;
+                    };
+
+                    // Only process messages for joined channels
+                    if (!channelIds.includes(newMessage.channel_id)) return;
+
+                    // Skip if message is from self
+                    if (newMessage.sender_address.toLowerCase() === userAddress.toLowerCase()) return;
+
+                    // Skip if this channel is currently active (chat is open)
+                    if (activeChannelRef.current === newMessage.channel_id) return;
+
+                    // Check if notifications are enabled for this channel
+                    if (!notificationSettings[newMessage.channel_id]) return;
+
+                    // Find channel info
+                    const channel = joinedChannels.find(c => c.id === newMessage.channel_id);
+                    if (!channel) return;
+
+                    console.log("[useChannels] New message in channel:", channel.name);
+
+                    // Trigger callbacks
+                    newMessageCallbacksRef.current.forEach(callback => {
+                        try {
+                            callback({
+                                channelId: newMessage.channel_id,
+                                channelName: channel.name,
+                                senderAddress: newMessage.sender_address,
+                                content: newMessage.content,
+                            });
+                        } catch (err) {
+                            console.error("[useChannels] Callback error:", err);
+                        }
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            console.log("[useChannels] Cleaning up realtime subscription");
+            subscription.unsubscribe();
+        };
+    }, [userAddress, joinedChannels, notificationSettings]);
+
     return {
         channels,
         joinedChannels,
@@ -176,6 +311,11 @@ export function useChannels(userAddress: string | null) {
         joinChannel,
         leaveChannel,
         createChannel,
+        // Notification methods
+        toggleChannelNotifications,
+        isNotificationsEnabled,
+        onNewChannelMessage,
+        setActiveChannel,
     };
 }
 

@@ -682,8 +682,15 @@ function DashboardContent({
     } = useStreams(userAddress);
 
     // Public channels
-    const { joinedChannels, leaveChannel, fetchJoinedChannels } =
-        useChannels(userAddress);
+    const { 
+        joinedChannels, 
+        leaveChannel, 
+        fetchJoinedChannels,
+        toggleChannelNotifications,
+        isNotificationsEnabled,
+        onNewChannelMessage,
+        setActiveChannel,
+    } = useChannels(userAddress);
     const [isBrowseChannelsOpen, setIsBrowseChannelsOpen] = useState(false);
     const [selectedChannel, setSelectedChannel] =
         useState<PublicChannel | null>(null);
@@ -1343,6 +1350,34 @@ function DashboardContent({
         notifyMessage,
         userSettings.soundEnabled,
     ]);
+
+    // Listen for new channel messages and show toast + notification
+    useEffect(() => {
+        const unsubscribe = onNewChannelMessage(({ channelName, senderAddress, content }) => {
+            // Find sender info
+            const senderInfo = getAlphaUserInfo(senderAddress);
+            const senderName = senderInfo?.name || formatAddress(senderAddress);
+
+            // Play sound and show browser notification (if sound enabled)
+            if (userSettings.soundEnabled) {
+                notifyMessage(`${senderName} in ${channelName}`, content);
+            }
+
+            // Show toast notification in-app
+            setToast({
+                sender: `${senderName} • ${channelName}`,
+                message:
+                    content.length > 50
+                        ? content.slice(0, 50) + "..."
+                        : content,
+            });
+
+            // Auto-hide after 4 seconds
+            setTimeout(() => setToast(null), 4000);
+        });
+
+        return unsubscribe;
+    }, [onNewChannelMessage, getAlphaUserInfo, notifyMessage, userSettings.soundEnabled]);
 
     const handleSendFriendRequest = async (
         addressOrENS: string
@@ -4519,6 +4554,9 @@ function DashboardContent({
                                 address.toLowerCase()
                         )
                     }
+                    notificationsEnabled={isNotificationsEnabled(selectedChannel.id)}
+                    onToggleNotifications={() => toggleChannelNotifications(selectedChannel.id)}
+                    onSetActiveChannel={setActiveChannel}
                 />
             )}
 
