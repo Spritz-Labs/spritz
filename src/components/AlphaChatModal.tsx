@@ -859,7 +859,7 @@ export function AlphaChatModal({
 
                                     {/* Input */}
                                     <div className="p-4 border-t border-zinc-800">
-                                        <div className={`flex items-center gap-2 ${isFullscreen ? "mx-auto max-w-4xl" : ""}`}
+                                        <div className={`flex items-center gap-2 ${isFullscreen ? "mx-auto max-w-4xl" : ""}`}>
                                             <button
                                                 onClick={() => setShowPixelArt(true)}
                                                 className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-orange-400 transition-colors"
