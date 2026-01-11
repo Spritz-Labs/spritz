@@ -621,11 +621,34 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         }
     }, [generateWalletAddress]);
 
-    const logout = useCallback(() => {
+    const logout = useCallback(async () => {
+        console.log("[Passkey] Logging out...");
+        
+        // Clear localStorage
         localStorage.removeItem(SESSION_STORAGE_KEY);
         localStorage.removeItem(USER_ADDRESS_KEY);
-        console.log("[Passkey] Logged out");
         
+        // Also clear old storage keys just in case
+        localStorage.removeItem(OLD_CREDENTIAL_STORAGE_KEY);
+        localStorage.removeItem(OLD_DEVICE_ID_STORAGE_KEY);
+        
+        // Clear recovery tokens if any
+        localStorage.removeItem("spritz_recovery_token");
+        localStorage.removeItem("spritz_recovery_address");
+        
+        console.log("[Passkey] Cleared localStorage");
+
+        // Call server logout to clear HTTP-only session cookie
+        try {
+            await fetch("/api/auth/logout", {
+                method: "POST",
+                credentials: "include",
+            });
+            console.log("[Passkey] Server session cleared");
+        } catch (e) {
+            console.error("[Passkey] Server logout error:", e);
+        }
+
         setState({
             isLoading: false,
             isAuthenticated: false,
@@ -633,6 +656,8 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             error: null,
             hasStoredSession: false,
         });
+        
+        console.log("[Passkey] Logout complete");
     }, []);
 
     return (

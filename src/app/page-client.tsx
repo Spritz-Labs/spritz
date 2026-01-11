@@ -283,6 +283,18 @@ export default function Home() {
 
     const handleLogout = async () => {
         console.log("[Logout] Starting logout...");
+        
+        // Call server logout FIRST to clear HTTP-only session cookie
+        try {
+            await fetch("/api/auth/logout", {
+                method: "POST",
+                credentials: "include",
+            });
+            console.log("[Logout] Server session cleared");
+        } catch (e) {
+            console.error("[Logout] Server logout error:", e);
+        }
+        
         // Sign out SIWE (this also clears auth storage)
         await siweSignOut();
         // Disconnect wallet (AppKit handles both EVM and Solana)
@@ -291,10 +303,11 @@ export default function Home() {
         } catch (e) {
             console.error("[Logout] Disconnect error:", e);
         }
-        // Logout passkey if authenticated
-        if (isPasskeyAuthenticated) {
-            passkeyLogout();
-        }
+        
+        // ALWAYS call passkeyLogout to clear any stored passkey data
+        // (even if not currently authenticated via passkey, there might be leftover data)
+        await passkeyLogout();
+        
         // Logout email if authenticated
         if (isEmailAuthenticated) {
             emailLogout();
@@ -320,6 +333,7 @@ export default function Home() {
                 k.startsWith("@reown") || 
                 k.startsWith("wc@") ||
                 k.includes("walletconnect") ||
+                k.startsWith("spritz_") || // Clear ALL spritz keys
                 k === AUTH_CREDENTIALS_KEY ||
                 k === SOLANA_AUTH_CREDENTIALS_KEY
             );
