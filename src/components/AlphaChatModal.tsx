@@ -29,6 +29,7 @@ interface AlphaChatModalProps {
         joinChannel: () => Promise<boolean>;
         setReplyingTo: (message: AlphaMessage | null) => void;
         toggleReaction: (messageId: string, emoji: string) => Promise<boolean>;
+        refreshMessages?: () => Promise<void>;
     };
     // For displaying usernames/avatars
     getUserInfo?: (address: string) => {
@@ -65,7 +66,10 @@ export function AlphaChatModal({
         joinChannel,
         setReplyingTo,
         toggleReaction,
+        refreshMessages,
     } = alphaChat;
+    
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const [newMessage, setNewMessage] = useState("");
     const [showPixelArt, setShowPixelArt] = useState(false);
@@ -302,6 +306,34 @@ export function AlphaChatModal({
                                         {memberCountDisplay}
                                     </p>
                                 </div>
+
+                                {/* Refresh Button */}
+                                {isMember && refreshMessages && (
+                                    <button
+                                        onClick={async () => {
+                                            setIsRefreshing(true);
+                                            await refreshMessages();
+                                            setIsRefreshing(false);
+                                        }}
+                                        disabled={isRefreshing}
+                                        className="p-2 rounded-lg transition-colors bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-50"
+                                        title="Refresh messages"
+                                    >
+                                        <svg
+                                            className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`}
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                            />
+                                        </svg>
+                                    </button>
+                                )}
 
                                 {/* Notification Toggle */}
                                 {isMember && membership && (

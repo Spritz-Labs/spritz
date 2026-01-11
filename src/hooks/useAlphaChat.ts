@@ -191,6 +191,41 @@ export function useAlphaChat(userAddress: string | null) {
         loadData();
     }, [loadData]);
 
+    // Poll for new messages every 10 seconds as a fallback for realtime
+    useEffect(() => {
+        if (!isSupabaseConfigured || !supabase || !userAddress || !state.isMember) {
+            return;
+        }
+
+        const client = supabase; // Capture for closure
+        const pollInterval = setInterval(async () => {
+            try {
+                // Fetch latest messages
+                const { data: messages } = await client
+                    .from("shout_alpha_messages")
+                    .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                    .order("created_at", { ascending: true })
+                    .limit(100);
+
+                if (messages && messages.length > 0) {
+                    setState(prev => {
+                        // Only update if we have new messages
+                        if (messages.length !== prev.messages.length || 
+                            messages[messages.length - 1]?.id !== prev.messages[prev.messages.length - 1]?.id) {
+                            console.log("[AlphaChat] Polling found new messages");
+                            return { ...prev, messages };
+                        }
+                        return prev;
+                    });
+                }
+            } catch (err) {
+                console.error("[AlphaChat] Poll error:", err);
+            }
+        }, 10000); // Poll every 10 seconds
+
+        return () => clearInterval(pollInterval);
+    }, [userAddress, state.isMember]);
+
     // Set replying to
     const setReplyingTo = useCallback((message: AlphaMessage | null) => {
         setState(prev => ({ ...prev, replyingTo: message }));
@@ -419,6 +454,68 @@ export function useAlphaChat(userAddress: string | null) {
         }
     }, [userAddress]);
 
+    // Force refresh messages (for manual refresh)
+    const refreshMessages = useCallback(async () => {
+        if (!isSupabaseConfigured || !supabase || !userAddress || !state.isMember) {
+            return;
+        }
+
+        const client = supabase; // Capture for closure
+
+        try {
+            const { data: messages } = await client
+                .from("shout_alpha_messages")
+                .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                .order("created_at", { ascending: true })
+                .limit(100);
+
+            if (messages) {
+                // Get reactions for these messages
+                const messageIds = messages.map(m => m.id);
+                let reactionsData: AlphaReaction[] = [];
+                if (messageIds.length > 0) {
+                    const { data } = await client
+                        .from("shout_alpha_reactions")
+                        .select("*")
+                        .in("message_id", messageIds);
+                    reactionsData = data || [];
+                }
+
+                // Process reactions
+                const processedReactions: Record<string, AlphaMessageReaction[]> = {};
+                messageIds.forEach(msgId => {
+                    processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(emoji => ({
+                        emoji,
+                        count: 0,
+                        hasReacted: false,
+                        users: [],
+                    }));
+                });
+                reactionsData.forEach(r => {
+                    if (processedReactions[r.message_id]) {
+                        const idx = processedReactions[r.message_id].findIndex(x => x.emoji === r.emoji);
+                        if (idx >= 0) {
+                            processedReactions[r.message_id][idx].count++;
+                            processedReactions[r.message_id][idx].users.push(r.user_address);
+                            if (userAddress && r.user_address.toLowerCase() === userAddress.toLowerCase()) {
+                                processedReactions[r.message_id][idx].hasReacted = true;
+                            }
+                        }
+                    }
+                });
+
+                setState(prev => ({
+                    ...prev,
+                    messages,
+                    reactions: processedReactions,
+                }));
+                console.log("[AlphaChat] Messages refreshed:", messages.length);
+            }
+        } catch (err) {
+            console.error("[AlphaChat] Refresh error:", err);
+        }
+    }, [userAddress, state.isMember]);
+
     return {
         ...state,
         isSending,
@@ -429,6 +526,7 @@ export function useAlphaChat(userAddress: string | null) {
         leaveChannel,
         refreshUnreadCount,
         refresh: loadData,
+        refreshMessages,
         setReplyingTo,
         toggleReaction,
     };
