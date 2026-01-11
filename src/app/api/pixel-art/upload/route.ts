@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const PINATA_API_KEY = process.env.PINATA_API_KEY;
 const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
@@ -6,6 +8,10 @@ const PINATA_GATEWAY =
     process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud";
 
 export async function POST(request: NextRequest) {
+    // Rate limit uploads
+    const rateLimitResponse = await checkRateLimit(request, "general");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
         // Check for Pinata credentials
         if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
@@ -16,7 +22,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { imageData, senderAddress } = await request.json();
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+
+        const { imageData, senderAddress: bodySenderAddress } = await request.json();
+        
+        // Use session address, fall back to body for backward compatibility
+        const senderAddress = session?.userAddress || bodySenderAddress;
 
         if (!imageData || !imageData.startsWith("data:image/png;base64,")) {
             return NextResponse.json(
@@ -24,9 +36,18 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-
-        // Convert base64 to buffer
+        
+        // Validate base64 data size (max 5MB decoded)
         const base64Data = imageData.replace(/^data:image\/png;base64,/, "");
+        const estimatedSize = (base64Data.length * 3) / 4;
+        if (estimatedSize > 5 * 1024 * 1024) {
+            return NextResponse.json(
+                { error: "Image too large (max 5MB)" },
+                { status: 400 }
+            );
+        }
+
+        // Convert base64 to buffer (already extracted above)
         const buffer = Buffer.from(base64Data, "base64");
 
         // Create form data for Pinata

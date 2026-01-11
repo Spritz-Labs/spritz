@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +12,10 @@ const HUDDLE01_API_KEY = process.env.HUDDLE01_API_KEY || "";
 
 // POST /api/rooms - Create an instant room
 export async function POST(request: NextRequest) {
+    // Rate limit room creation
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     if (!HUDDLE01_API_KEY) {
         return NextResponse.json(
             { error: "Video calling not configured" },
@@ -18,13 +24,19 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
-        const { hostWalletAddress, title, maxParticipants = 4 } = body;
+        const { hostWalletAddress: bodyHostAddress, title, maxParticipants = 4 } = body;
+        
+        // Use session address, fall back to body for backward compatibility
+        const hostWalletAddress = session?.userAddress || bodyHostAddress;
 
         if (!hostWalletAddress) {
             return NextResponse.json(
-                { error: "Host wallet address is required" },
-                { status: 400 }
+                { error: "Authentication required" },
+                { status: 401 }
             );
         }
 
@@ -106,13 +118,18 @@ export async function POST(request: NextRequest) {
 // GET /api/rooms - Get user's active rooms
 export async function GET(request: NextRequest) {
     try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
+        // Fall back to query param for backward compatibility
         const { searchParams } = new URL(request.url);
-        const walletAddress = searchParams.get("wallet_address");
+        const paramWalletAddress = searchParams.get("wallet_address");
+        const walletAddress = session?.userAddress || paramWalletAddress;
 
         if (!walletAddress) {
             return NextResponse.json(
-                { error: "Wallet address is required" },
-                { status: 400 }
+                { error: "Authentication required" },
+                { status: 401 }
             );
         }
 

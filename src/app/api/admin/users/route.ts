@@ -73,7 +73,9 @@ export async function GET(request: NextRequest) {
         .select("*", { count: "exact" });
 
     if (search) {
-        query = query.or(`wallet_address.ilike.%${search}%,ens_name.ilike.%${search}%,username.ilike.%${search}%`);
+        // Sanitize search to prevent SQL injection - escape special chars
+        const sanitizedSearch = search.replace(/[%_\\'"]/g, '\\$&');
+        query = query.or(`wallet_address.ilike.%${sanitizedSearch}%,ens_name.ilike.%${sanitizedSearch}%,username.ilike.%${sanitizedSearch}%`);
     }
 
     // Apply beta access filter

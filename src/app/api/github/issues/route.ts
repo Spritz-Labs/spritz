@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const GITHUB_OWNER = process.env.GITHUB_OWNER || "";
 const GITHUB_REPO = process.env.GITHUB_REPO || "";
@@ -6,6 +8,19 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 
 // POST /api/github/issues - Create a GitHub issue
 export async function POST(request: NextRequest) {
+    // Strict rate limit for GitHub issue creation
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Require authentication
+    const session = await getAuthenticatedUser(request);
+    if (!session) {
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 }
+        );
+    }
+
     if (!GITHUB_OWNER || !GITHUB_REPO || !GITHUB_TOKEN) {
         return NextResponse.json(
             { error: "GitHub integration not configured" },

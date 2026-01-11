@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -18,13 +20,19 @@ export async function GET(request: NextRequest) {
     }
 
     try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
         const { searchParams } = new URL(request.url);
-        const walletAddress = searchParams.get("address");
+        const paramAddress = searchParams.get("address");
+        
+        // Use session address, fall back to param for backward compatibility
+        const walletAddress = session?.userAddress || paramAddress;
 
         if (!walletAddress) {
             return NextResponse.json(
-                { error: "Wallet address required" },
-                { status: 400 }
+                { error: "Authentication required" },
+                { status: 401 }
             );
         }
 
@@ -78,6 +86,10 @@ export async function GET(request: NextRequest) {
 
 // POST: Redeem an invite code
 export async function POST(request: NextRequest) {
+    // Rate limit invite redemption (strict - prevent brute force)
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     if (!supabase) {
         return NextResponse.json(
             { error: "Database not configured" },
@@ -86,11 +98,17 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { code, redeemerAddress } = await request.json();
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
+        const { code, redeemerAddress: bodyRedeemerAddress } = await request.json();
+        
+        // Use session address, fall back to body for backward compatibility
+        const redeemerAddress = session?.userAddress || bodyRedeemerAddress;
 
         if (!code || !redeemerAddress) {
             return NextResponse.json(
-                { error: "Code and redeemer address required" },
+                { error: "Code and authentication required" },
                 { status: 400 }
             );
         }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { privateKeyToAccount } from "viem/accounts";
 import { createHash } from "crypto";
+import { createAuthResponse } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -145,15 +146,25 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Return the secret for key derivation
-        // In production, you might want to derive the key server-side
-        // and return a session token instead
-        return NextResponse.json({
-            success: true,
-            message: "Email verified successfully",
-            email: normalizedEmail,
-            secret: EMAIL_AUTH_SECRET, // Client will use this to derive the private key
-        });
+        // Return session with derived address (no longer exposing secret!)
+        return createAuthResponse(
+            smartAccountAddress,
+            "email",
+            {
+                success: true,
+                message: "Email verified successfully",
+                email: normalizedEmail,
+                walletAddress: smartAccountAddress,
+                user: user ? {
+                    id: user.id,
+                    wallet_address: user.wallet_address,
+                    email: user.email,
+                    email_verified: user.email_verified || false,
+                    beta_access: user.beta_access || false,
+                } : null,
+            },
+            user?.id
+        );
     } catch (error) {
         console.error("[EmailLogin] Verify error:", error);
         return NextResponse.json(

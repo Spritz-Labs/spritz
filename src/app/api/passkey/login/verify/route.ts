@@ -3,6 +3,7 @@ import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/types";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { createAuthResponse } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -154,16 +155,17 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] Successfully authenticated:", storedCredential.user_address);
         console.log("[Passkey] Credential ID:", storedCredential.credential_id.slice(0, 20) + "...");
 
-        // Generate a session token
-        const sessionToken = await generateSessionToken(storedCredential.user_address);
-
-        return NextResponse.json({
-            success: true,
-            verified: true,
-            userAddress: storedCredential.user_address,
-            credentialId: storedCredential.credential_id,
-            sessionToken,
-        });
+        // Return session with cookie
+        return createAuthResponse(
+            storedCredential.user_address,
+            "passkey",
+            {
+                success: true,
+                verified: true,
+                userAddress: storedCredential.user_address,
+                credentialId: storedCredential.credential_id,
+            }
+        );
     } catch (error) {
         console.error("[Passkey] Auth verify error:", error);
         return NextResponse.json(
@@ -171,17 +173,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-}
-
-// Generate a simple session token
-async function generateSessionToken(userAddress: string): Promise<string> {
-    const payload = {
-        sub: userAddress,
-        iat: Date.now(),
-        exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-        type: "passkey",
-    };
-    
-    // Encode as base64 (in production, sign this with a secret)
-    return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -80,17 +82,32 @@ export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    // Rate limit messaging
+    const rateLimitResponse = await checkRateLimit(request, "messaging");
+    if (rateLimitResponse) return rateLimitResponse;
+
     const { id } = await params;
 
     try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
-        const { senderAddress, content, messageType, replyToId } = body;
+        const { senderAddress: bodySenderAddress, content, messageType, replyToId } = body;
+
+        // Use session address, fall back to body for backward compatibility
+        const senderAddress = session?.userAddress || bodySenderAddress;
 
         if (!senderAddress || !content) {
             return NextResponse.json(
-                { error: "Sender address and content are required" },
+                { error: "Authentication and content are required" },
                 { status: 400 }
             );
+        }
+        
+        // Warn if using unauthenticated fallback
+        if (!session && bodySenderAddress) {
+            console.warn("[Channels] Using unauthenticated senderAddress param - migrate to session auth");
         }
 
         const normalizedAddress = senderAddress.toLowerCase();
@@ -157,12 +174,18 @@ export async function PATCH(
     const { id: channelId } = await params;
 
     try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
-        const { messageId, userAddress, emoji } = body;
+        const { messageId, userAddress: bodyUserAddress, emoji } = body;
+        
+        // Use session address, fall back to body for backward compatibility
+        const userAddress = session?.userAddress || bodyUserAddress;
 
         if (!messageId || !userAddress || !emoji) {
             return NextResponse.json(
-                { error: "Message ID, user address, and emoji are required" },
+                { error: "Message ID, authentication, and emoji are required" },
                 { status: 400 }
             );
         }

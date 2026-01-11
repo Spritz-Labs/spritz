@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -19,11 +20,17 @@ export async function GET(
 
     try {
         const { id } = await params;
+        
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
+        // Fall back to query param for backward compatibility
         const { searchParams } = new URL(request.url);
-        const userAddress = searchParams.get("userAddress");
+        const paramUserAddress = searchParams.get("userAddress");
+        const userAddress = session?.userAddress || paramUserAddress;
 
         if (!userAddress) {
-            return NextResponse.json({ error: "User address required" }, { status: 400 });
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
         const normalizedAddress = userAddress.toLowerCase();
@@ -63,9 +70,13 @@ export async function PATCH(
 
     try {
         const { id } = await params;
+        
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
         const { 
-            userAddress, 
+            userAddress: bodyUserAddress, 
             name, 
             personality, 
             avatarEmoji, 
@@ -89,8 +100,11 @@ export async function PATCH(
             apiTools,
         } = body;
 
+        // Use session address, fall back to body for backward compatibility
+        const userAddress = session?.userAddress || bodyUserAddress;
+
         if (!userAddress) {
-            return NextResponse.json({ error: "User address required" }, { status: 400 });
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
         const normalizedAddress = userAddress.toLowerCase();
@@ -182,11 +196,17 @@ export async function DELETE(
 
     try {
         const { id } = await params;
+        
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
+        // Fall back to query param for backward compatibility
         const { searchParams } = new URL(request.url);
-        const userAddress = searchParams.get("userAddress");
+        const paramUserAddress = searchParams.get("userAddress");
+        const userAddress = session?.userAddress || paramUserAddress;
 
         if (!userAddress) {
-            return NextResponse.json({ error: "User address required" }, { status: 400 });
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
         const normalizedAddress = userAddress.toLowerCase();

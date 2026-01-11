@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createLivepeerStream, getLivepeerStream, getPlaybackUrl } from "@/lib/livepeer";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -146,7 +148,14 @@ export async function GET(request: NextRequest) {
 
 // POST /api/streams - Create a new stream
 export async function POST(request: NextRequest) {
+    // Rate limit stream creation (strict - expensive resource)
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        
         let body;
         try {
             const text = await request.text();
@@ -163,12 +172,15 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-        const { userAddress, title, description } = body;
+        const { userAddress: bodyUserAddress, title, description } = body;
+        
+        // Use session address, fall back to body for backward compatibility
+        const userAddress = session?.userAddress || bodyUserAddress;
 
         if (!userAddress) {
             return NextResponse.json(
-                { error: "User address is required" },
-                { status: 400 }
+                { error: "Authentication required" },
+                { status: 401 }
             );
         }
 
