@@ -199,10 +199,34 @@ export async function POST(request: NextRequest) {
         const transports = credential.response.transports || ["internal", "hybrid"];
 
         // Determine final wallet address:
-        // - If recovery: use the recovered address (to restore access to old account)
-        // - If new registration: generate unique address from credential ID
-        const finalUserAddress = recoveredAddress || generateWalletAddressFromCredential(credentialId);
-        console.log("[Passkey] Final address:", finalUserAddress, recoveredAddress ? "(RECOVERED)" : "(NEW)");
+        // 1. If recovery: use the recovered address (to restore access to old account)
+        // 2. If user is already authenticated: use their existing address (adding passkey to account)
+        // 3. Otherwise: generate unique address from credential ID (new account)
+        let finalUserAddress: string;
+        let addressSource: string;
+        
+        if (recoveredAddress) {
+            // Recovery flow - link to recovered account
+            finalUserAddress = recoveredAddress;
+            addressSource = "RECOVERED";
+        } else {
+            // Check if user is already authenticated (adding passkey to existing account)
+            const { getAuthenticatedUser } = await import("@/lib/session");
+            const existingUser = await getAuthenticatedUser(request);
+            
+            if (existingUser?.userAddress) {
+                // User is logged in - add passkey to their existing account
+                finalUserAddress = existingUser.userAddress;
+                addressSource = "EXISTING_AUTH";
+                console.log("[Passkey] User is authenticated, linking to existing account:", finalUserAddress);
+            } else {
+                // New registration - generate unique address from credential ID
+                finalUserAddress = generateWalletAddressFromCredential(credentialId);
+                addressSource = "NEW";
+            }
+        }
+        
+        console.log("[Passkey] Final address:", finalUserAddress, `(${addressSource})`);
 
         // Store the credential in the database with the FINAL address
         const { error: insertError } = await supabase

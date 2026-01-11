@@ -29,7 +29,9 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
     const fetchCredentials = useCallback(async () => {
         try {
             setIsLoading(true);
-            const response = await fetch("/api/passkey/credentials");
+            const response = await fetch("/api/passkey/credentials", {
+                credentials: "include", // Send session cookie
+            });
             
             if (!response.ok) {
                 throw new Error("Failed to fetch passkeys");
@@ -60,6 +62,7 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
 
             const response = await fetch(`/api/passkey/credentials?id=${id}`, {
                 method: "DELETE",
+                credentials: "include", // Send session cookie
             });
 
             if (!response.ok) {
@@ -90,6 +93,7 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
                     userAddress,
                     displayName: "Spritz User",
                 }),
+                credentials: "include", // Send session cookie
             });
 
             if (!optionsResponse.ok) {
@@ -102,7 +106,8 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
             // Create credential
             const credential = await startRegistration({ optionsJSON: options });
 
-            // Verify and store
+            // Verify and store - server will check if user is authenticated
+            // and link to existing account if so
             const verifyResponse = await fetch("/api/passkey/register/verify", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -112,6 +117,7 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
                     credential,
                     challenge: options.challenge,
                 }),
+                credentials: "include", // Send session cookie - server will link to existing account
             });
 
             if (!verifyResponse.ok) {
