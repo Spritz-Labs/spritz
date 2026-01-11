@@ -244,6 +244,33 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] Successfully authenticated:", storedCredential.user_address);
         console.log("[Passkey] Credential ID:", storedCredential.credential_id.slice(0, 20) + "...");
 
+        // Create/update user in shout_users table
+        const { data: existingUser } = await supabase
+            .from("shout_users")
+            .select("*")
+            .eq("wallet_address", storedCredential.user_address)
+            .maybeSingle();
+        
+        if (!existingUser) {
+            // Create new user
+            await supabase.from("shout_users").insert({
+                wallet_address: storedCredential.user_address,
+                first_login: new Date().toISOString(),
+                last_login: new Date().toISOString(),
+                login_count: 1,
+            });
+            console.log("[Passkey] Created user record:", storedCredential.user_address);
+        } else {
+            // Update existing user
+            await supabase
+                .from("shout_users")
+                .update({
+                    last_login: new Date().toISOString(),
+                    login_count: (existingUser.login_count || 0) + 1,
+                })
+                .eq("wallet_address", storedCredential.user_address);
+        }
+
         // Generate session token for frontend localStorage (30 days)
         const sessionToken = generateSessionToken(storedCredential.user_address);
 

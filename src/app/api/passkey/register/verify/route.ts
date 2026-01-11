@@ -180,12 +180,40 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] Credential ID:", credentialId.slice(0, 20) + "...");
         console.log("[Passkey] Backed up (synced):", backedUp);
 
+        // Create/update user in shout_users table
+        const normalizedAddress = userAddress.toLowerCase();
+        const { data: existingUser } = await supabase
+            .from("shout_users")
+            .select("*")
+            .eq("wallet_address", normalizedAddress)
+            .maybeSingle();
+        
+        if (!existingUser) {
+            // Create new user
+            await supabase.from("shout_users").insert({
+                wallet_address: normalizedAddress,
+                first_login: new Date().toISOString(),
+                last_login: new Date().toISOString(),
+                login_count: 1,
+            });
+            console.log("[Passkey] Created user record:", normalizedAddress);
+        } else {
+            // Update existing user
+            await supabase
+                .from("shout_users")
+                .update({
+                    last_login: new Date().toISOString(),
+                    login_count: (existingUser.login_count || 0) + 1,
+                })
+                .eq("wallet_address", normalizedAddress);
+        }
+
         // Generate a session token for frontend localStorage (30 days)
-        const sessionToken = await generateSessionToken(userAddress.toLowerCase());
+        const sessionToken = await generateSessionToken(normalizedAddress);
 
         // Return session with HttpOnly cookie AND sessionToken for frontend
         return createAuthResponse(
-            userAddress.toLowerCase(),
+            normalizedAddress,
             "passkey",
             {
                 success: true,
@@ -193,7 +221,7 @@ export async function POST(request: NextRequest) {
                 credentialId,
                 backedUp,
                 sessionToken, // For frontend localStorage
-                userAddress: userAddress.toLowerCase(),
+                userAddress: normalizedAddress,
             }
         );
     } catch (error) {
