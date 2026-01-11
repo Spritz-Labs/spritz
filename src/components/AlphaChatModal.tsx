@@ -127,11 +127,23 @@ export function AlphaChatModal({
         }
     }, [isOpen, messages.length]);
 
-    // Mark as read when opening
+    // Mark as read when opening and when new messages arrive while open
     useEffect(() => {
         if (isOpen && isMember) {
             markAsRead();
         }
+    }, [isOpen, isMember, markAsRead]);
+
+    // Keep marking as read while modal is open (catches new messages)
+    useEffect(() => {
+        if (!isOpen || !isMember) return;
+        
+        // Mark as read periodically to catch any messages that come in while modal is open
+        const interval = setInterval(() => {
+            markAsRead();
+        }, 2000);
+        
+        return () => clearInterval(interval);
     }, [isOpen, isMember, markAsRead]);
 
     // Close user popup when clicking outside

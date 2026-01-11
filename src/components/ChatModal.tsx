@@ -380,6 +380,10 @@ export function ChatModal({
                                     from: m.senderAddress?.slice(0, 10),
                                 }))
                             );
+                            
+                            // Mark new messages as read immediately since chat is open
+                            markMessagesRead(newOnes.map((m) => m.id));
+                            
                             return [...prev, ...newOnes].sort(
                                 (a, b) =>
                                     a.sentAt.getTime() - b.sentAt.getTime()
@@ -395,6 +399,16 @@ export function ChatModal({
                     if (myMsgIds.length > 0) {
                         fetchReadReceipts(myMsgIds);
                     }
+                    
+                    // Mark ALL messages from peer as read (in case any were missed)
+                    const peerMsgIds = formattedMessages
+                        .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
+                        .map((m) => m.id);
+                    if (peerMsgIds.length > 0) {
+                        markMessagesRead(peerMsgIds);
+                        // Also clear unread count in Waku provider
+                        markAsRead(peerAddress);
+                    }
                 }
             } catch (err) {
                 console.log("[Chat] Polling error:", err);
@@ -402,18 +416,25 @@ export function ChatModal({
         }, 3000); // Poll every 3 seconds
 
         return () => clearInterval(pollInterval);
-    }, [isOpen, isInitialized, chatState, peerAddress, getMessages, userAddress, fetchReadReceipts]);
+    }, [isOpen, isInitialized, chatState, peerAddress, getMessages, userAddress, fetchReadReceipts, markMessagesRead, markAsRead]);
 
     // Reference to track sent message IDs for read receipt checking
     const sentMessageIdsRef = useRef<string[]>([]);
+    // Reference to track peer message IDs for marking as read
+    const peerMessageIdsRef = useRef<string[]>([]);
     
-    // Update sent message IDs ref when messages change
+    // Update message ID refs when messages change
     useEffect(() => {
         const myMsgIds = messages
             .filter((m) => m.senderAddress.toLowerCase() === userAddress.toLowerCase())
             .filter((m) => m.status !== "pending" && m.status !== "failed")
             .map((m) => m.id);
         sentMessageIdsRef.current = myMsgIds;
+        
+        const peerMsgIds = messages
+            .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
+            .map((m) => m.id);
+        peerMessageIdsRef.current = peerMsgIds;
     }, [messages, userAddress]);
 
     // Periodically check read receipts for all sent messages while chat is open
@@ -439,6 +460,33 @@ export function ChatModal({
             clearInterval(interval);
         };
     }, [isOpen, fetchReadReceipts]);
+
+    // Aggressively mark ALL peer messages as read while chat is open
+    // This ensures messages are marked as read even if they came in via different paths
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const markAllAsRead = () => {
+            const peerMsgIds = peerMessageIdsRef.current;
+            if (peerMsgIds.length > 0) {
+                console.log("[Chat] Marking", peerMsgIds.length, "peer messages as read");
+                markMessagesRead(peerMsgIds);
+                // Also clear unread count in Waku provider
+                markAsRead(peerAddress);
+            }
+        };
+
+        // Mark as read immediately when chat opens
+        const initialTimeout = setTimeout(markAllAsRead, 100);
+
+        // Then periodically ensure they stay marked as read
+        const interval = setInterval(markAllAsRead, 5000);
+
+        return () => {
+            clearTimeout(initialTimeout);
+            clearInterval(interval);
+        };
+    }, [isOpen, markMessagesRead, markAsRead, peerAddress]);
 
     // Toggle message selection for mobile tap actions
     const handleMessageTap = useCallback((messageId: string) => {

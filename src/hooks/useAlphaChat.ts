@@ -220,10 +220,12 @@ export function useAlphaChat(userAddress: string | null) {
                         }
                         
                         console.log("[AlphaChat] Adding new message to state");
+                        // Only increment unread if message is from someone else
+                        const isMine = newMessage.sender_address.toLowerCase() === userAddress?.toLowerCase();
                         return {
                             ...prev,
                             messages: [...prev.messages, newMessage],
-                            unreadCount: prev.unreadCount + 1,
+                            unreadCount: isMine ? prev.unreadCount : prev.unreadCount + 1,
                         };
                     });
                 }
