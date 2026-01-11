@@ -3,14 +3,52 @@ import { NextRequest } from "next/server";
 
 export const runtime = "edge";
 
+// Try multiple IPFS gateways for reliability
+const IPFS_GATEWAYS = [
+    process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud",
+    "cloudflare-ipfs.com",
+    "ipfs.io",
+    "dweb.link",
+];
+
+async function fetchImageAsBase64(hash: string): Promise<string | null> {
+    for (const gateway of IPFS_GATEWAYS) {
+        try {
+            const url = `https://${gateway}/ipfs/${hash}`;
+            const response = await fetch(url, {
+                headers: {
+                    "Accept": "image/*",
+                },
+                // 5 second timeout per gateway
+                signal: AbortSignal.timeout(5000),
+            });
+            
+            if (response.ok) {
+                const contentType = response.headers.get("content-type") || "image/png";
+                const arrayBuffer = await response.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString("base64");
+                return `data:${contentType};base64,${base64}`;
+            }
+        } catch (e) {
+            console.log(`[OG] Gateway ${gateway} failed for ${hash}:`, e);
+            continue;
+        }
+    }
+    return null;
+}
+
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ hash: string }> }
 ) {
     const { hash } = await params;
     
+    // Fetch the actual image data and convert to base64
+    const imageData = await fetchImageAsBase64(hash);
+    
+    // Fallback URL if base64 fails
     const pinataGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud";
-    const imageUrl = `https://${pinataGateway}/ipfs/${hash}`;
+    const imageUrl = imageData || `https://${pinataGateway}/ipfs/${hash}`;
     
     try {
         return new ImageResponse(
@@ -66,8 +104,9 @@ export async function GET(
                                 width={400}
                                 height={400}
                                 style={{
-                                    imageRendering: "pixelated",
+                                    imageRendering: "pixelated" as const,
                                     borderRadius: "12px",
+                                    objectFit: "contain",
                                 }}
                             />
                         </div>
@@ -131,7 +170,7 @@ export async function GET(
             }
         );
     } catch (error) {
-        console.error("Error generating OG image:", error);
+        console.error("[OG] Error generating OG image for", hash, ":", error);
         
         // Fallback to a simple card without the image
         return new ImageResponse(
