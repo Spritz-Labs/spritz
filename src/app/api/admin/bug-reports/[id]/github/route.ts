@@ -9,6 +9,11 @@ const supabase = supabaseUrl && supabaseKey
     ? createClient(supabaseUrl, supabaseKey)
     : null;
 
+// GitHub config
+const GITHUB_OWNER = process.env.GITHUB_OWNER || "";
+const GITHUB_REPO = process.env.GITHUB_REPO || "";
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
+
 // Verify admin signature from headers
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; address: string | null; isSuperAdmin: boolean }> {
     const address = request.headers.get("x-admin-address");
@@ -85,6 +90,14 @@ export async function POST(
             );
         }
 
+        // Check GitHub config
+        if (!GITHUB_OWNER || !GITHUB_REPO || !GITHUB_TOKEN) {
+            return NextResponse.json(
+                { error: "GitHub integration not configured" },
+                { status: 500 }
+            );
+        }
+
         // Create GitHub issue
         const issueTitle = `[${bugReport.category}] ${bugReport.description.slice(0, 100)}${bugReport.description.length > 100 ? "..." : ""}`;
         
@@ -100,16 +113,23 @@ export async function POST(
         issueBody += `---\n`;
         issueBody += `*Bug Report ID: ${bugReport.id}*`;
 
-        const githubUrl = new URL("/api/github/issues", request.nextUrl.origin);
-        const githubResponse = await fetch(githubUrl.toString(), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                title: issueTitle,
-                body: issueBody,
-                labels: ["bug", bugReport.category.toLowerCase()],
-            }),
-        });
+        // Call GitHub API directly (admin is already verified)
+        const githubResponse = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `token ${GITHUB_TOKEN}`,
+                    Accept: "application/vnd.github.v3+json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    title: issueTitle,
+                    body: issueBody,
+                    labels: ["bug", bugReport.category.toLowerCase()],
+                }),
+            }
+        );
 
         if (!githubResponse.ok) {
             const errorText = await githubResponse.text();
@@ -126,8 +146,8 @@ export async function POST(
         const { data: updatedReport, error: updateError } = await supabase
             .from("shout_bug_reports")
             .update({
-                github_issue_url: githubData.issue.url,
-                github_issue_number: githubData.issue.number,
+                github_issue_url: githubData.html_url,
+                github_issue_number: githubData.number,
             })
             .eq("id", id)
             .select()
@@ -144,7 +164,11 @@ export async function POST(
         return NextResponse.json({
             success: true,
             bugReport: updatedReport,
-            githubIssue: githubData.issue,
+            githubIssue: {
+                url: githubData.html_url,
+                number: githubData.number,
+                id: githubData.id,
+            },
         });
     } catch (error) {
         console.error("[Bug Reports] Error:", error);
