@@ -46,18 +46,34 @@ export type PasskeyContextType = PasskeyState & {
 
 const PasskeyContext = createContext<PasskeyContextType | null>(null);
 
-// Validate and decode session token
+// Validate and decode session token (handles both JWT format and simple base64)
 function validateSession(token: string): { userAddress: string; exp: number } | null {
     try {
-        const payload = JSON.parse(Buffer.from(token, "base64url").toString());
+        let payload;
+        
+        // Check if it's a JWT (has 3 parts separated by dots)
+        const parts = token.split(".");
+        if (parts.length === 3) {
+            // JWT format: header.payload.signature - decode the payload (middle part)
+            payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+        } else {
+            // Simple base64url encoded JSON (legacy format)
+            payload = JSON.parse(Buffer.from(token, "base64url").toString());
+        }
+        
         // exp from server JWT is in seconds, Date.now() is in milliseconds
         // Handle both formats for backwards compatibility
         const expMs = payload.exp > 1e12 ? payload.exp : payload.exp * 1000;
-        if (payload.exp && expMs > Date.now() && payload.sub) {
-            return { userAddress: payload.sub, exp: expMs };
+        
+        // Server JWT uses 'userAddress' in payload, legacy uses 'sub'
+        const userAddress = payload.userAddress || payload.sub;
+        
+        if (payload.exp && expMs > Date.now() && userAddress) {
+            return { userAddress, exp: expMs };
         }
         return null;
-    } catch {
+    } catch (e) {
+        console.error("[Passkey] Session validation error:", e);
         return null;
     }
 }
