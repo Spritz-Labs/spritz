@@ -886,7 +886,7 @@ export function AlphaChatModal({
                                                 onKeyDown={handleKeyPress}
                                                 placeholder={replyingTo ? "Type your reply... (@ to mention)" : "Message the community... (@ to mention)"}
                                                 users={mentionableUsers}
-                                                className={`flex-1 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all ${
+                                                className={`w-full bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all ${
                                                     isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"
                                                 }`}
                                             />
