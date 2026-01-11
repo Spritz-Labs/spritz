@@ -83,13 +83,15 @@ export async function POST(request: NextRequest) {
             if (error || !user) {
                 // User doesn't exist - create them
                 console.log("[Session] Creating new user for refresh:", userAddress.slice(0, 20) + "...");
-                await supabase.from("shout_users").insert({
+                const { error: insertError } = await supabase.from("shout_users").insert({
                     wallet_address: userAddress.toLowerCase ? userAddress.toLowerCase() : userAddress,
-                    auth_method: authMethod,
                     first_login: new Date().toISOString(),
                     last_login: new Date().toISOString(),
                     login_count: 1,
                 });
+                if (insertError) {
+                    console.error("[Session] Error creating user:", insertError);
+                }
             } else {
                 // Update last login
                 await supabase

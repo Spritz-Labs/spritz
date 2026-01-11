@@ -22,7 +22,9 @@ export function useUsername(userAddress: string | null) {
 
         const fetchUsername = async () => {
             try {
-                const response = await fetch(`/api/username?address=${encodeURIComponent(userAddress)}`);
+                const response = await fetch(`/api/username?address=${encodeURIComponent(userAddress)}`, {
+                    credentials: "include", // Important for PWA cookie handling
+                });
                 if (response.ok) {
                     const data = await response.json();
                     if (data.username) {
