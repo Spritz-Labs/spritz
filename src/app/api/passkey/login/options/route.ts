@@ -63,26 +63,48 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // For device passkey mode without a specific user, get ALL credentials with platform transport
+        // This allows the browser to match against any credential that might be on this device
+        if (useDevicePasskey && allowCredentials.length === 0) {
+            console.log("[Passkey] Device passkey mode - fetching all platform credentials...");
+            const { data: allCredentials } = await supabase
+                .from("passkey_credentials")
+                .select("credential_id, transports")
+                .limit(100); // Limit to prevent huge lists
+
+            if (allCredentials && allCredentials.length > 0) {
+                // Filter to only include credentials with internal/platform transport
+                const platformCredentials = allCredentials.filter(cred => {
+                    const transports = cred.transports || [];
+                    return transports.includes("internal") || transports.includes("hybrid") || transports.length === 0;
+                });
+                
+                console.log("[Passkey] Found", platformCredentials.length, "potential device credentials");
+                
+                allowCredentials = platformCredentials.map((cred) => ({
+                    id: cred.credential_id,
+                    type: "public-key" as const,
+                    transports: ["internal", "hybrid"] as AuthenticatorTransport[],
+                }));
+            }
+        }
+
         // Generate authentication options
-        // For device passkey mode, we use empty allowCredentials to let the browser
-        // show discoverable credentials, but we'll hint to prefer platform authenticators
         const options = await generateAuthenticationOptions({
             rpID: rpId,
             userVerification: "preferred",
-            // If we have specific credentials for a known user, use them
-            // Otherwise, allow any discoverable credential
+            // Include credentials if we have them (helps with non-discoverable credentials)
+            // If empty, browser will only show discoverable credentials
             allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
             timeout: 120000, // 2 minutes
         });
         
-        // Add hints for device passkey mode (WebAuthn Level 3)
-        // This tells browsers to prioritize platform authenticators
-        const optionsWithHints = {
+        // For device passkey, include the allowCredentials in the response
+        // so the client can use them directly with native WebAuthn API
+        const optionsWithCredentials = {
             ...options,
-            // Add hints when useDevicePasskey is enabled
-            ...(useDevicePasskey && {
-                hints: ["client-device"], // Hint to use device-bound credentials
-            }),
+            // Include credentials for client-side use
+            allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
         };
 
         // Store the challenge temporarily (expires in 5 minutes)
@@ -127,7 +149,7 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] useDevicePasskey mode:", useDevicePasskey);
 
         return NextResponse.json({
-            options: optionsWithHints,
+            options: optionsWithCredentials,
             rpId,
             useDevicePasskey,
         });

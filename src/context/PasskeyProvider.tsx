@@ -266,6 +266,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         credential,
                         challenge: options.challenge,
                     }),
+                    credentials: "include", // Important for PWA to receive/store cookies
                 });
 
                 if (!verifyResponse.ok) {
@@ -334,21 +335,9 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             let credential;
             
             if (serverUseDevice) {
-                // For device passkey mode, use native WebAuthn API with platform authenticator hint
-                // This gives us more control than the library for forcing platform authenticators
-                console.log("[Passkey] Using native WebAuthn with platform hint...");
-                
-                const publicKeyOptions: PublicKeyCredentialRequestOptions = {
-                    challenge: Uint8Array.from(
-                        atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
-                        c => c.charCodeAt(0)
-                    ),
-                    rpId: options.rpId,
-                    timeout: options.timeout || 120000,
-                    userVerification: options.userVerification || "preferred",
-                    // Empty allowCredentials lets browser show all discoverable credentials
-                    allowCredentials: [],
-                };
+                // For device passkey mode, we need to trigger the platform authenticator
+                // The challenge is that non-discoverable credentials won't show up with empty allowCredentials
+                console.log("[Passkey] Using device passkey mode...");
                 
                 // Helper to convert ArrayBuffer to base64url
                 const toBase64url = (buffer: ArrayBuffer): string => {
@@ -362,17 +351,55 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         .replace(/\//g, '_')
                         .replace(/=+$/, '');
                 };
+
+                // Helper to decode base64url to ArrayBuffer
+                const fromBase64url = (str: string): ArrayBuffer => {
+                    const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                    const padding = '='.repeat((4 - base64.length % 4) % 4);
+                    const binary = atob(base64 + padding);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    return bytes.buffer;
+                };
+                
+                // Build allowCredentials from server response if available
+                // This allows non-discoverable credentials to be used
+                const allowCredentials: PublicKeyCredentialDescriptor[] = 
+                    options.allowCredentials?.map((cred: { id: string; type: string; transports?: string[] }) => ({
+                        id: fromBase64url(cred.id),
+                        type: cred.type as PublicKeyCredentialType,
+                        transports: (cred.transports || ["internal"]) as AuthenticatorTransport[],
+                    })) || [];
+
+                const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+                    challenge: fromBase64url(options.challenge),
+                    rpId: options.rpId,
+                    timeout: options.timeout || 120000,
+                    userVerification: options.userVerification || "preferred",
+                    // Use server-provided credentials (or empty for discoverable-only)
+                    allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
+                };
+                
+                console.log("[Passkey] allowCredentials count:", allowCredentials.length);
                 
                 try {
+                    // Try with signal to allow cancellation
+                    const abortController = new AbortController();
+                    
                     const nativeCredential = await navigator.credentials.get({
                         publicKey: publicKeyOptions,
-                        // @ts-expect-error - hints is WebAuthn Level 3, not in all TypeScript definitions yet
-                        hints: ["client-device"], // Hint browser to show device-bound credentials
+                        signal: abortController.signal,
+                        // Try mediation: "optional" which should show platform authenticator UI
+                        mediation: "optional",
                     }) as PublicKeyCredential;
                     
                     if (!nativeCredential) {
                         throw new Error("No credential selected");
                     }
+                    
+                    console.log("[Passkey] Got credential from device");
                     
                     // Convert to the format expected by the verify endpoint (base64url encoded)
                     const response = nativeCredential.response as AuthenticatorAssertionResponse;
@@ -391,8 +418,9 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         clientExtensionResults: nativeCredential.getClientExtensionResults(),
                     };
                 } catch (nativeError) {
-                    console.log("[Passkey] Native WebAuthn failed, falling back to library:", nativeError);
+                    console.log("[Passkey] Native WebAuthn error:", nativeError);
                     // Fallback to library method
+                    console.log("[Passkey] Falling back to library method...");
                     credential = await startAuthentication({ optionsJSON: options });
                 }
             } else {
@@ -410,6 +438,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     credential,
                     challenge: options.challenge,
                 }),
+                credentials: "include", // Important for PWA to receive/store cookies
             });
 
             if (!verifyResponse.ok) {

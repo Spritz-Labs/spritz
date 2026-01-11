@@ -93,6 +93,7 @@ export function useUsername(userAddress: string | null) {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username: normalizedName }),
+                    credentials: "include", // Important for PWA cookie handling
                 });
 
                 const data = await response.json();
@@ -112,6 +113,7 @@ export function useUsername(userAddress: string | null) {
                                 walletAddress: userAddress,
                                 action: "username_claimed",
                             }),
+                            credentials: "include",
                         });
                     } catch (pointsErr) {
                         console.error("[Username] Failed to award points:", pointsErr);
@@ -196,6 +198,7 @@ export function useUsername(userAddress: string | null) {
             try {
                 const response = await fetch("/api/username", {
                     method: "DELETE",
+                    credentials: "include", // Important for PWA cookie handling
                 });
 
                 if (!response.ok) {
