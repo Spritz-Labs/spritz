@@ -18,18 +18,19 @@ export function useUsername(userAddress: string | null) {
 
     // Fetch current user's username on mount
     useEffect(() => {
-        if (!userAddress || !isSupabaseConfigured || !supabase) return;
+        if (!userAddress) return;
 
         const fetchUsername = async () => {
-            if (!supabase) return;
-            const { data } = await supabase
-                .from("shout_usernames")
-                .select("username")
-                .eq("wallet_address", normalizeAddress(userAddress))
-                .maybeSingle();
-
-            if (data) {
-                setUsername(data.username);
+            try {
+                const response = await fetch(`/api/username?address=${encodeURIComponent(userAddress)}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.username) {
+                        setUsername(data.username);
+                    }
+                }
+            } catch (err) {
+                console.error("[useUsername] Fetch error:", err);
             }
         };
 
@@ -59,14 +60,14 @@ export function useUsername(userAddress: string | null) {
     // Claim a username
     const claimUsername = useCallback(
         async (name: string): Promise<boolean> => {
-            if (!userAddress || !isSupabaseConfigured || !supabase) {
+            if (!userAddress) {
                 setError("Not connected");
                 return false;
             }
 
             const normalizedName = name.toLowerCase().trim();
 
-            // Validate username
+            // Basic client-side validation
             if (normalizedName.length < 3) {
                 setError("Username must be at least 3 characters");
                 return false;
@@ -88,50 +89,21 @@ export function useUsername(userAddress: string | null) {
             setError(null);
 
             try {
-                // Check if user already has a username
-                const { data: existing } = await supabase
-                    .from("shout_usernames")
-                    .select("id")
-                    .eq("wallet_address", normalizeAddress(userAddress))
-                    .maybeSingle();
+                const response = await fetch("/api/username", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: normalizedName }),
+                });
 
-                if (existing) {
-                    // Update existing username
-                    const { error: updateError } = await supabase
-                        .from("shout_usernames")
-                        .update({
-                            username: normalizedName,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("wallet_address", normalizeAddress(userAddress));
+                const data = await response.json();
 
-                    if (updateError) {
-                        if (updateError.message.includes("unique")) {
-                            setError("Username already taken");
-                        } else {
-                            setError(updateError.message);
-                        }
-                        return false;
-                    }
-                } else {
-                    // Create new username
-                    const { error: insertError } = await supabase
-                        .from("shout_usernames")
-                        .insert({
-                            username: normalizedName,
-                            wallet_address: normalizeAddress(userAddress),
-                        });
+                if (!response.ok) {
+                    setError(data.error || "Failed to claim username");
+                    return false;
+                }
 
-                    if (insertError) {
-                        if (insertError.message.includes("unique")) {
-                            setError("Username already taken");
-                        } else {
-                            setError(insertError.message);
-                        }
-                        return false;
-                    }
-
-                    // Award points for claiming username (first time only)
+                // Award points for claiming username (first time only)
+                if (data.isNew) {
                     try {
                         await fetch("/api/points", {
                             method: "POST",
@@ -143,11 +115,10 @@ export function useUsername(userAddress: string | null) {
                         });
                     } catch (pointsErr) {
                         console.error("[Username] Failed to award points:", pointsErr);
-                        // Don't fail the username claim if points fail
                     }
                 }
 
-                setUsername(normalizedName);
+                setUsername(data.username);
                 return true;
             } catch (err) {
                 setError(
@@ -214,7 +185,7 @@ export function useUsername(userAddress: string | null) {
     // Remove username
     const removeUsername = useCallback(
         async (): Promise<boolean> => {
-            if (!userAddress || !isSupabaseConfigured || !supabase) {
+            if (!userAddress) {
                 setError("Not connected");
                 return false;
             }
@@ -223,13 +194,13 @@ export function useUsername(userAddress: string | null) {
             setError(null);
 
             try {
-                const { error: deleteError } = await supabase
-                    .from("shout_usernames")
-                    .delete()
-                    .eq("wallet_address", normalizeAddress(userAddress));
+                const response = await fetch("/api/username", {
+                    method: "DELETE",
+                });
 
-                if (deleteError) {
-                    setError(deleteError.message);
+                if (!response.ok) {
+                    const data = await response.json();
+                    setError(data.error || "Failed to remove username");
                     return false;
                 }
 
