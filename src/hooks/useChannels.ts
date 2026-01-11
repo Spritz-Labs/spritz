@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import type { PublicChannel } from "@/app/api/channels/route";
 import type { ChannelMessage, ChannelReaction } from "@/app/api/channels/[id]/messages/route";
 
-export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
 
 export type ChannelMessageReaction = {
     emoji: string;

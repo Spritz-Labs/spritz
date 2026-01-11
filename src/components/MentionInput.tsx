@@ -3,6 +3,48 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
+// Common emoji shortcodes (name -> emoji)
+const EMOJI_SHORTCODES: Record<string, string> = {
+    // Smileys
+    smile: "😊", grin: "😀", joy: "😂", rofl: "🤣", wink: "😉",
+    heart_eyes: "😍", kiss: "😘", yum: "😋", stuck_out_tongue: "😛",
+    thinking: "🤔", shush: "🤫", raised_eyebrow: "🤨", neutral: "😐",
+    expressionless: "😑", unamused: "😒", rolling_eyes: "🙄", grimacing: "😬",
+    relieved: "😌", pensive: "😔", sleepy: "😪", drooling: "🤤", sleeping: "😴",
+    mask: "😷", nerd: "🤓", sunglasses: "😎", cowboy: "🤠", party: "🥳",
+    smirk: "😏", relaxed: "☺️", blush: "😊", innocent: "😇",
+    // Gestures
+    wave: "👋", ok: "👌", pinched: "🤌", peace: "✌️", crossed_fingers: "🤞",
+    love_you: "🤟", rock: "🤤", call_me: "🤙", shaka: "🤙🏼", point_up: "☝️",
+    thumbsup: "👍", thumbs_up: "👍", "+1": "👍", thumbsdown: "👎", thumbs_down: "👎", "-1": "👎",
+    fist: "✊", punch: "👊", clap: "👏", raised_hands: "🙌", pray: "🙏",
+    handshake: "🤝", muscle: "💪", flex: "💪",
+    // Hearts
+    heart: "❤️", red_heart: "❤️", orange_heart: "🧡", yellow_heart: "💛",
+    green_heart: "💚", blue_heart: "💙", purple_heart: "💜", black_heart: "🖤",
+    white_heart: "🤍", broken_heart: "💔", sparkling_heart: "💖",
+    // Symbols
+    fire: "🔥", lit: "🔥", star: "⭐", sparkles: "✨", zap: "⚡", boom: "💥",
+    100: "💯", check: "✅", x: "❌", question: "❓", exclamation: "❗",
+    eyes: "👀", eye: "👁️", brain: "🧠", skull: "💀", ghost: "👻",
+    // Objects
+    rocket: "🚀", moon: "🌙", sun: "☀️", rainbow: "🌈", cloud: "☁️",
+    money: "💰", gem: "💎", crown: "👑", trophy: "🏆", medal: "🏅",
+    gift: "🎁", balloon: "🎈", tada: "🎉", confetti: "🎊",
+    // Food & Drink
+    pizza: "🍕", burger: "🍔", fries: "🍟", taco: "🌮", sushi: "🍣",
+    coffee: "☕", beer: "🍺", wine: "🍷", cocktail: "🍸", cake: "🎂",
+    // Animals
+    dog: "🐶", cat: "🐱", unicorn: "🦄", bear: "🐻", panda: "🐼",
+    monkey: "🐵", chicken: "🐔", penguin: "🐧", butterfly: "🦋", bee: "🐝",
+    // Misc
+    poop: "💩", angry: "😠", rage: "🤬", cry: "😢", sob: "😭",
+    scream: "😱", cold_sweat: "😰", triumph: "😤", disappointed: "😞",
+    worried: "😟", confused: "😕", upside_down: "🙃", money_mouth: "🤑",
+    zipper_mouth: "🤐", nauseated: "🤢", sneezing: "🤧", hot: "🥵", cold: "🥶",
+    woozy: "🥴", dizzy: "😵", exploding_head: "🤯", pleading: "🥺",
+};
+
 export type MentionUser = {
     address: string;
     name: string | null;
@@ -34,6 +76,7 @@ export function MentionInput({
     const [suggestionFilter, setSuggestionFilter] = useState("");
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
+    const [suggestionType, setSuggestionType] = useState<"mention" | "emoji">("mention");
     const internalInputRef = useRef<HTMLInputElement>(null);
     const inputRef = externalInputRef || internalInputRef;
     const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -45,6 +88,11 @@ export function MentionInput({
         const address = user.address.toLowerCase();
         return name.includes(searchTerm) || address.includes(searchTerm);
     }).slice(0, 6); // Limit to 6 suggestions
+
+    // Filter emojis based on input
+    const filteredEmojis = Object.entries(EMOJI_SHORTCODES)
+        .filter(([name]) => name.toLowerCase().includes(suggestionFilter.toLowerCase()))
+        .slice(0, 8); // Limit to 8 suggestions
 
     // Format address for display
     const formatAddress = (address: string) => {
@@ -64,20 +112,36 @@ export function MentionInput({
         
         onChange(newValue);
 
-        // Check if we should show mention suggestions
-        // Look backward from cursor to find @
         const textBeforeCursor = newValue.slice(0, cursorPosition);
+
+        // Check for emoji shortcode trigger (:)
+        const lastColonIndex = textBeforeCursor.lastIndexOf(":");
+        if (lastColonIndex !== -1) {
+            const charBeforeColon = lastColonIndex > 0 ? textBeforeCursor[lastColonIndex - 1] : " ";
+            if (charBeforeColon === " " || lastColonIndex === 0) {
+                const textAfterColon = textBeforeCursor.slice(lastColonIndex + 1);
+                // Only show if user has typed at least 1 character and no space
+                if (textAfterColon.length >= 1 && !textAfterColon.includes(" ")) {
+                    setMentionStartIndex(lastColonIndex);
+                    setSuggestionFilter(textAfterColon);
+                    setSuggestionType("emoji");
+                    setShowSuggestions(true);
+                    setSelectedIndex(0);
+                    return;
+                }
+            }
+        }
+
+        // Check for mention trigger (@)
         const lastAtIndex = textBeforeCursor.lastIndexOf("@");
-        
         if (lastAtIndex !== -1) {
-            // Check if @ is at start or preceded by space
             const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : " ";
             if (charBeforeAt === " " || lastAtIndex === 0) {
-                // Check if there's no space after @ (user is still typing)
                 const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
                 if (!textAfterAt.includes(" ")) {
                     setMentionStartIndex(lastAtIndex);
                     setSuggestionFilter(textAfterAt);
+                    setSuggestionType("mention");
                     setShowSuggestions(true);
                     setSelectedIndex(0);
                     return;
@@ -118,26 +182,61 @@ export function MentionInput({
         }, 0);
     }, [mentionStartIndex, value, onChange, inputRef]);
 
+    // Handle selecting an emoji
+    const selectEmoji = useCallback((emoji: string) => {
+        if (mentionStartIndex === null) return;
+
+        const input = inputRef.current;
+        const cursorPosition = input?.selectionStart || value.length;
+        
+        // Replace :filter with emoji
+        const beforeEmoji = value.slice(0, mentionStartIndex);
+        const afterCursor = value.slice(cursorPosition);
+        const emojiText = emoji + " ";
+        
+        const newValue = beforeEmoji + emojiText + afterCursor;
+        onChange(newValue);
+        
+        setShowSuggestions(false);
+        setMentionStartIndex(null);
+        setSuggestionFilter("");
+        
+        // Focus and set cursor position
+        setTimeout(() => {
+            if (input) {
+                const newCursorPos = beforeEmoji.length + emojiText.length;
+                input.focus();
+                input.setSelectionRange(newCursorPos, newCursorPos);
+            }
+        }, 0);
+    }, [mentionStartIndex, value, onChange, inputRef]);
+
     // Handle keyboard navigation in suggestions
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (showSuggestions && filteredUsers.length > 0) {
+        const items = suggestionType === "emoji" ? filteredEmojis : filteredUsers;
+        
+        if (showSuggestions && items.length > 0) {
             if (e.key === "ArrowDown") {
                 e.preventDefault();
                 setSelectedIndex((prev) => 
-                    prev < filteredUsers.length - 1 ? prev + 1 : 0
+                    prev < items.length - 1 ? prev + 1 : 0
                 );
                 return;
             }
             if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setSelectedIndex((prev) => 
-                    prev > 0 ? prev - 1 : filteredUsers.length - 1
+                    prev > 0 ? prev - 1 : items.length - 1
                 );
                 return;
             }
             if (e.key === "Enter" || e.key === "Tab") {
                 e.preventDefault();
-                selectMention(filteredUsers[selectedIndex]);
+                if (suggestionType === "emoji") {
+                    selectEmoji(filteredEmojis[selectedIndex][1]);
+                } else {
+                    selectMention(filteredUsers[selectedIndex]);
+                }
                 return;
             }
             if (e.key === "Escape") {
@@ -188,9 +287,12 @@ export function MentionInput({
                 className={className}
             />
             
-            {/* Mention Suggestions Popup */}
+            {/* Suggestions Popup (Mentions or Emojis) */}
             <AnimatePresence>
-                {showSuggestions && filteredUsers.length > 0 && (
+                {showSuggestions && (
+                    (suggestionType === "emoji" && filteredEmojis.length > 0) ||
+                    (suggestionType === "mention" && filteredUsers.length > 0)
+                ) && (
                     <motion.div
                         ref={suggestionsRef}
                         initial={{ opacity: 0, y: 10 }}
@@ -199,40 +301,64 @@ export function MentionInput({
                         className="absolute bottom-full left-0 right-0 mb-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
                     >
                         <div className="p-2">
-                            <p className="text-xs text-zinc-500 px-2 mb-1">
-                                Mention someone
-                            </p>
-                            {filteredUsers.map((user, index) => (
-                                <button
-                                    key={user.address}
-                                    onClick={() => selectMention(user)}
-                                    className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg transition-colors ${
-                                        index === selectedIndex
-                                            ? "bg-orange-500/20 text-white"
-                                            : "hover:bg-zinc-700 text-zinc-300"
-                                    }`}
-                                >
-                                    {user.avatar ? (
-                                        <img
-                                            src={user.avatar}
-                                            alt=""
-                                            className="w-8 h-8 rounded-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold">
-                                            {getDisplayName(user).slice(0, 2).toUpperCase()}
-                                        </div>
-                                    )}
-                                    <div className="flex-1 text-left min-w-0">
-                                        <p className="font-medium truncate">
-                                            {getDisplayName(user)}
-                                        </p>
-                                        <p className="text-xs text-zinc-500 truncate">
-                                            {formatAddress(user.address)}
-                                        </p>
-                                    </div>
-                                </button>
-                            ))}
+                            {suggestionType === "emoji" ? (
+                                <>
+                                    <p className="text-xs text-zinc-500 px-2 mb-1">
+                                        Emojis — type <code className="bg-zinc-700 px-1 rounded">:{suggestionFilter}</code>
+                                    </p>
+                                    {filteredEmojis.map(([name, emoji], index) => (
+                                        <button
+                                            key={name}
+                                            onClick={() => selectEmoji(emoji)}
+                                            className={`w-full flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors ${
+                                                index === selectedIndex
+                                                    ? "bg-orange-500/20 text-white"
+                                                    : "hover:bg-zinc-700 text-zinc-300"
+                                            }`}
+                                        >
+                                            <span className="text-2xl">{emoji}</span>
+                                            <span className="text-sm text-zinc-400">:{name}:</span>
+                                        </button>
+                                    ))}
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-xs text-zinc-500 px-2 mb-1">
+                                        Mention someone
+                                    </p>
+                                    {filteredUsers.map((user, index) => (
+                                        <button
+                                            key={user.address}
+                                            onClick={() => selectMention(user)}
+                                            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg transition-colors ${
+                                                index === selectedIndex
+                                                    ? "bg-orange-500/20 text-white"
+                                                    : "hover:bg-zinc-700 text-zinc-300"
+                                            }`}
+                                        >
+                                            {user.avatar ? (
+                                                <img
+                                                    src={user.avatar}
+                                                    alt=""
+                                                    className="w-8 h-8 rounded-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold">
+                                                    {getDisplayName(user).slice(0, 2).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className="font-medium truncate">
+                                                    {getDisplayName(user)}
+                                                </p>
+                                                <p className="text-xs text-zinc-500 truncate">
+                                                    {formatAddress(user.address)}
+                                                </p>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </>
+                            )}
                         </div>
                     </motion.div>
                 )}

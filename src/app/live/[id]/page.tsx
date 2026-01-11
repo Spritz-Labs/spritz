@@ -38,7 +38,7 @@ type ChatMessage = {
 };
 
 // Emoji reactions
-const REACTIONS = ["❤️", "🔥", "👏", "😂", "😮", "🎉"];
+const REACTIONS = ["❤️", "🔥", "🤙🏼", "👏", "😂", "😮", "🎉"];
 
 export default function PublicLivePage() {
     const params = useParams();

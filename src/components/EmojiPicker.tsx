@@ -346,7 +346,7 @@ export function QuickReactionPicker({
     isOpen,
     onClose,
     onSelect,
-    emojis = ["👍", "❤️", "😂", "😮", "😢", "🔥"],
+    emojis = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"],
 }: QuickReactionPickerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState<{
