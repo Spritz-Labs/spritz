@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 
-export default function RecoverPage() {
+function RecoverContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const codeFromUrl = searchParams.get("code");
@@ -221,5 +221,17 @@ export default function RecoverPage() {
                 </div>
             </motion.div>
         </div>
+    );
+}
+
+export default function RecoverPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <RecoverContent />
+        </Suspense>
     );
 }
