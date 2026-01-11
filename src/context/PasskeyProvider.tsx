@@ -327,11 +327,79 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 throw new Error(error.error || "Failed to get authentication options");
             }
 
-            const { options } = await optionsResponse.json();
-            console.log("[Passkey] Got auth options, starting WebAuthn authentication...");
+            const { options, useDevicePasskey: serverUseDevice } = await optionsResponse.json();
+            console.log("[Passkey] Got auth options, useDevicePasskey:", serverUseDevice);
 
             // Step 2: Authenticate using WebAuthn
-            const credential = await startAuthentication({ optionsJSON: options });
+            let credential;
+            
+            if (serverUseDevice) {
+                // For device passkey mode, use native WebAuthn API with platform authenticator hint
+                // This gives us more control than the library for forcing platform authenticators
+                console.log("[Passkey] Using native WebAuthn with platform hint...");
+                
+                const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+                    challenge: Uint8Array.from(
+                        atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
+                        c => c.charCodeAt(0)
+                    ),
+                    rpId: options.rpId,
+                    timeout: options.timeout || 120000,
+                    userVerification: options.userVerification || "preferred",
+                    // Empty allowCredentials lets browser show all discoverable credentials
+                    allowCredentials: [],
+                };
+                
+                // Helper to convert ArrayBuffer to base64url
+                const toBase64url = (buffer: ArrayBuffer): string => {
+                    const bytes = new Uint8Array(buffer);
+                    let binary = '';
+                    for (let i = 0; i < bytes.length; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                    }
+                    return btoa(binary)
+                        .replace(/\+/g, '-')
+                        .replace(/\//g, '_')
+                        .replace(/=+$/, '');
+                };
+                
+                try {
+                    const nativeCredential = await navigator.credentials.get({
+                        publicKey: publicKeyOptions,
+                        // @ts-expect-error - hints is WebAuthn Level 3, not in all TypeScript definitions yet
+                        hints: ["client-device"], // Hint browser to show device-bound credentials
+                    }) as PublicKeyCredential;
+                    
+                    if (!nativeCredential) {
+                        throw new Error("No credential selected");
+                    }
+                    
+                    // Convert to the format expected by the verify endpoint (base64url encoded)
+                    const response = nativeCredential.response as AuthenticatorAssertionResponse;
+                    credential = {
+                        id: nativeCredential.id,
+                        rawId: toBase64url(nativeCredential.rawId),
+                        type: nativeCredential.type,
+                        response: {
+                            authenticatorData: toBase64url(response.authenticatorData),
+                            clientDataJSON: toBase64url(response.clientDataJSON),
+                            signature: toBase64url(response.signature),
+                            userHandle: response.userHandle 
+                                ? toBase64url(response.userHandle)
+                                : null,
+                        },
+                        clientExtensionResults: nativeCredential.getClientExtensionResults(),
+                    };
+                } catch (nativeError) {
+                    console.log("[Passkey] Native WebAuthn failed, falling back to library:", nativeError);
+                    // Fallback to library method
+                    credential = await startAuthentication({ optionsJSON: options });
+                }
+            } else {
+                // Standard authentication using the library
+                credential = await startAuthentication({ optionsJSON: options });
+            }
+            
             console.log("[Passkey] WebAuthn authentication complete, verifying with server...");
 
             // Step 3: Verify with server
