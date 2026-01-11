@@ -65,44 +65,64 @@ export function useAlphaChat(userAddress: string | null) {
     // Load membership and messages
     const loadData = useCallback(async () => {
         if (!isSupabaseConfigured || !supabase || !userAddress) {
+            console.log("[AlphaChat] Not configured or no user address");
             setState(prev => ({ ...prev, isLoading: false }));
             return;
         }
 
+        const client = supabase;
+        console.log("[AlphaChat] Loading data for:", userAddress.toLowerCase());
+
         try {
-            // Get membership
-            const { data: membership } = await supabase
+            // Get membership - use maybeSingle() instead of single() to avoid errors
+            const { data: membershipData, error: membershipError } = await client
                 .from("shout_alpha_membership")
                 .select("*")
                 .eq("user_address", userAddress.toLowerCase())
                 .is("left_at", null)
-                .single();
+                .maybeSingle();
 
-            if (!membership) {
+            if (membershipError) {
+                console.error("[AlphaChat] Membership query error:", membershipError);
+            }
+
+            console.log("[AlphaChat] Membership result:", membershipData ? "Found" : "Not found");
+
+            if (!membershipData) {
                 setState(prev => ({
                     ...prev,
                     isLoading: false,
                     isMember: false,
                     membership: null,
+                    messages: [],
                 }));
                 return;
             }
 
             // Get messages (last 100) with reply_to data
-            const { data: messages } = await supabase
+            const { data: messages, error: messagesError } = await client
                 .from("shout_alpha_messages")
                 .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
                 .order("created_at", { ascending: true })
                 .limit(100);
 
+            if (messagesError) {
+                console.error("[AlphaChat] Messages query error:", messagesError);
+            }
+
+            console.log("[AlphaChat] Loaded", messages?.length || 0, "messages");
+
             // Get reactions for these messages
             const messageIds = messages?.map(m => m.id) || [];
             let reactionsData: AlphaReaction[] = [];
             if (messageIds.length > 0) {
-                const { data } = await supabase
+                const { data, error: reactionsError } = await client
                     .from("shout_alpha_reactions")
                     .select("*")
                     .in("message_id", messageIds);
+                if (reactionsError) {
+                    console.error("[AlphaChat] Reactions query error:", reactionsError);
+                }
                 reactionsData = data || [];
             }
 
@@ -131,13 +151,13 @@ export function useAlphaChat(userAddress: string | null) {
 
             // Calculate unread count
             const unreadCount = messages?.filter(
-                msg => new Date(msg.created_at) > new Date(membership.last_read_at)
+                msg => new Date(msg.created_at) > new Date(membershipData.last_read_at)
             ).length || 0;
 
             setState({
                 messages: messages || [],
                 reactions: processedReactions,
-                membership,
+                membership: membershipData,
                 unreadCount,
                 isLoading: false,
                 isMember: true,
@@ -155,8 +175,11 @@ export function useAlphaChat(userAddress: string | null) {
             return;
         }
 
+        const client = supabase;
+        console.log("[AlphaChat] Setting up realtime subscription");
+
         // Subscribe to new messages
-        const channel = supabase
+        const channel = client
             .channel("alpha-messages")
             .on(
                 "postgres_changes",
@@ -167,20 +190,50 @@ export function useAlphaChat(userAddress: string | null) {
                 },
                 (payload) => {
                     const newMessage = payload.new as AlphaMessage;
-                    setState(prev => ({
-                        ...prev,
-                        messages: [...prev.messages, newMessage],
-                        unreadCount: prev.unreadCount + 1,
-                    }));
+                    console.log("[AlphaChat] Realtime message received:", newMessage.id);
+                    
+                    setState(prev => {
+                        // Check if message already exists (from optimistic update or duplicate)
+                        const exists = prev.messages.some(m => 
+                            m.id === newMessage.id || 
+                            (m.id.startsWith('temp-') && 
+                             m.sender_address === newMessage.sender_address &&
+                             m.content === newMessage.content)
+                        );
+                        
+                        if (exists) {
+                            console.log("[AlphaChat] Message already exists, replacing temp if needed");
+                            // Replace temp message with real one
+                            return {
+                                ...prev,
+                                messages: prev.messages.map(m => 
+                                    (m.id.startsWith('temp-') && 
+                                     m.sender_address === newMessage.sender_address &&
+                                     m.content === newMessage.content) 
+                                        ? newMessage : m
+                                ),
+                            };
+                        }
+                        
+                        console.log("[AlphaChat] Adding new message to state");
+                        return {
+                            ...prev,
+                            messages: [...prev.messages, newMessage],
+                            unreadCount: prev.unreadCount + 1,
+                        };
+                    });
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                console.log("[AlphaChat] Realtime subscription status:", status);
+            });
 
         channelRef.current = channel;
 
         return () => {
-            if (channelRef.current && supabase) {
-                supabase.removeChannel(channelRef.current);
+            console.log("[AlphaChat] Cleaning up realtime subscription");
+            if (channelRef.current && client) {
+                client.removeChannel(channelRef.current);
                 channelRef.current = null;
             }
         };
@@ -201,21 +254,45 @@ export function useAlphaChat(userAddress: string | null) {
         const pollInterval = setInterval(async () => {
             try {
                 // Fetch latest messages
-                const { data: messages } = await client
+                const { data: messages, error } = await client
                     .from("shout_alpha_messages")
                     .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
                     .order("created_at", { ascending: true })
                     .limit(100);
 
+                if (error) {
+                    console.error("[AlphaChat] Poll query error:", error);
+                    return;
+                }
+
                 if (messages && messages.length > 0) {
                     setState(prev => {
-                        // Only update if we have new messages
-                        if (messages.length !== prev.messages.length || 
-                            messages[messages.length - 1]?.id !== prev.messages[prev.messages.length - 1]?.id) {
-                            console.log("[AlphaChat] Polling found new messages");
-                            return { ...prev, messages };
+                        // Get the IDs of real messages (not temp ones)
+                        const prevRealIds = new Set(prev.messages.filter(m => !m.id.startsWith('temp-')).map(m => m.id));
+                        const newIds = new Set(messages.map(m => m.id));
+                        
+                        // Check if there are any new messages we don't have
+                        const hasNewMessages = messages.some(m => !prevRealIds.has(m.id));
+                        
+                        if (!hasNewMessages && prevRealIds.size === newIds.size) {
+                            return prev; // No changes
                         }
-                        return prev;
+                        
+                        console.log("[AlphaChat] Polling found updates, syncing messages");
+                        
+                        // Keep any temp messages that aren't in the server response yet
+                        const tempMessages = prev.messages.filter(m => 
+                            m.id.startsWith('temp-') && 
+                            !messages.some(serverMsg => 
+                                serverMsg.sender_address === m.sender_address && 
+                                serverMsg.content === m.content
+                            )
+                        );
+                        
+                        return { 
+                            ...prev, 
+                            messages: [...messages, ...tempMessages]
+                        };
                     });
                 }
             } catch (err) {
@@ -237,7 +314,30 @@ export function useAlphaChat(userAddress: string | null) {
             return false;
         }
 
+        const client = supabase;
         setIsSending(true);
+        
+        // Generate temporary ID for optimistic update
+        const tempId = `temp-${Date.now()}`;
+        const finalReplyToId = replyToId || state.replyingTo?.id;
+        
+        // Optimistically add message to state
+        const optimisticMessage: AlphaMessage = {
+            id: tempId,
+            sender_address: userAddress.toLowerCase(),
+            content: content.trim(),
+            message_type: messageType,
+            created_at: new Date().toISOString(),
+            reply_to_id: finalReplyToId || null,
+            reply_to: state.replyingTo || null,
+        };
+        
+        setState(prev => ({
+            ...prev,
+            messages: [...prev.messages, optimisticMessage],
+            replyingTo: null,
+        }));
+        
         try {
             const insertData: Record<string, unknown> = {
                 sender_address: userAddress.toLowerCase(),
@@ -245,22 +345,47 @@ export function useAlphaChat(userAddress: string | null) {
                 message_type: messageType,
             };
             
-            // Add reply_to_id if replying or from state
-            const finalReplyToId = replyToId || state.replyingTo?.id;
+            // Add reply_to_id if replying
             if (finalReplyToId) {
                 insertData.reply_to_id = finalReplyToId;
             }
 
-            const { error } = await supabase.from("shout_alpha_messages").insert(insertData);
+            const { data, error } = await client
+                .from("shout_alpha_messages")
+                .insert(insertData)
+                .select()
+                .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error("[AlphaChat] Send error:", error);
+                // Remove optimistic message on error
+                setState(prev => ({
+                    ...prev,
+                    messages: prev.messages.filter(m => m.id !== tempId),
+                }));
+                return false;
+            }
             
-            // Clear reply state
-            setState(prev => ({ ...prev, replyingTo: null }));
+            console.log("[AlphaChat] Message sent:", data?.id);
+            
+            // Replace optimistic message with real one
+            if (data) {
+                setState(prev => ({
+                    ...prev,
+                    messages: prev.messages.map(m => 
+                        m.id === tempId ? { ...data, reply_to: optimisticMessage.reply_to } : m
+                    ),
+                }));
+            }
             
             return true;
         } catch (err) {
             console.error("[AlphaChat] Send error:", err);
+            // Remove optimistic message on error
+            setState(prev => ({
+                ...prev,
+                messages: prev.messages.filter(m => m.id !== tempId),
+            }));
             return false;
         } finally {
             setIsSending(false);
@@ -461,13 +586,19 @@ export function useAlphaChat(userAddress: string | null) {
         }
 
         const client = supabase; // Capture for closure
+        console.log("[AlphaChat] Manual refresh triggered");
 
         try {
-            const { data: messages } = await client
+            const { data: messages, error } = await client
                 .from("shout_alpha_messages")
                 .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
                 .order("created_at", { ascending: true })
                 .limit(100);
+
+            if (error) {
+                console.error("[AlphaChat] Refresh query error:", error);
+                return;
+            }
 
             if (messages) {
                 // Get reactions for these messages
