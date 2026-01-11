@@ -143,9 +143,19 @@ export function PasskeyAuth() {
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
-                            className="bg-red-500/10 border border-red-500/30 rounded-xl p-3"
+                            className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 space-y-2"
                         >
                             <p className="text-red-400 text-sm">{error}</p>
+                            {(error.includes("RP ID") || error.includes("invalid") || error.includes("expired")) && (
+                                <div className="text-zinc-400 text-xs space-y-1 pt-1 border-t border-red-500/20">
+                                    <p className="font-medium text-zinc-300">Lost your passkey?</p>
+                                    <p>If you previously registered a passkey that no longer works, you can:</p>
+                                    <ol className="list-decimal list-inside space-y-0.5 pl-1">
+                                        <li>Login with your wallet instead</li>
+                                        <li>Register a new passkey after logging in</li>
+                                    </ol>
+                                </div>
+                            )}
                         </motion.div>
                     )}
                 </AnimatePresence>
