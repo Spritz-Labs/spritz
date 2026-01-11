@@ -3,9 +3,18 @@ import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
 import { createAuthResponse } from "@/lib/session";
+import crypto from "crypto";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Generate a deterministic wallet address from credential ID
+// This MUST match the client-side implementation exactly
+function generateWalletAddressFromCredential(credentialId: string): string {
+    const data = `spritz-passkey-wallet:${credentialId}`;
+    const hash = crypto.createHash("sha256").update(data).digest("hex");
+    return `0x${hash.slice(0, 40)}`;
+}
 
 // Get RP ID based on request hostname
 function getRpId(request: NextRequest): string {
@@ -150,14 +159,19 @@ export async function POST(request: NextRequest) {
         // Get transports from the response if available
         const transports = credential.response.transports || ["internal", "hybrid"];
 
-        // Store the credential in the database
+        // CRITICAL: Generate the final wallet address from credential ID
+        // This ensures each passkey gets a UNIQUE address
+        const finalUserAddress = generateWalletAddressFromCredential(credentialId);
+        console.log("[Passkey] Generated final address from credential:", finalUserAddress);
+
+        // Store the credential in the database with the FINAL address
         const { error: insertError } = await supabase
             .from("passkey_credentials")
             .insert({
                 credential_id: credentialId,
                 public_key: publicKey,
                 counter,
-                user_address: userAddress.toLowerCase(),
+                user_address: finalUserAddress, // Use derived address, NOT the temp address
                 display_name: displayName || "Spritz Passkey",
                 aaguid,
                 transports,
@@ -176,27 +190,26 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log("[Passkey] Successfully registered credential for:", userAddress);
+        console.log("[Passkey] Successfully registered credential for:", finalUserAddress);
         console.log("[Passkey] Credential ID:", credentialId.slice(0, 20) + "...");
         console.log("[Passkey] Backed up (synced):", backedUp);
 
-        // Create/update user in shout_users table
-        const normalizedAddress = userAddress.toLowerCase();
+        // Create/update user in shout_users table with the FINAL address
         const { data: existingUser } = await supabase
             .from("shout_users")
             .select("*")
-            .eq("wallet_address", normalizedAddress)
+            .eq("wallet_address", finalUserAddress)
             .maybeSingle();
         
         if (!existingUser) {
             // Create new user
             await supabase.from("shout_users").insert({
-                wallet_address: normalizedAddress,
+                wallet_address: finalUserAddress,
                 first_login: new Date().toISOString(),
                 last_login: new Date().toISOString(),
                 login_count: 1,
             });
-            console.log("[Passkey] Created user record:", normalizedAddress);
+            console.log("[Passkey] Created user record:", finalUserAddress);
         } else {
             // Update existing user
             await supabase
@@ -205,15 +218,16 @@ export async function POST(request: NextRequest) {
                     last_login: new Date().toISOString(),
                     login_count: (existingUser.login_count || 0) + 1,
                 })
-                .eq("wallet_address", normalizedAddress);
+                .eq("wallet_address", finalUserAddress);
         }
 
         // Generate a session token for frontend localStorage (30 days)
-        const sessionToken = await generateSessionToken(normalizedAddress);
+        const sessionToken = await generateSessionToken(finalUserAddress);
 
         // Return session with HttpOnly cookie AND sessionToken for frontend
+        // IMPORTANT: Return the finalUserAddress so client uses the correct address
         return createAuthResponse(
-            normalizedAddress,
+            finalUserAddress,
             "passkey",
             {
                 success: true,
@@ -221,7 +235,7 @@ export async function POST(request: NextRequest) {
                 credentialId,
                 backedUp,
                 sessionToken, // For frontend localStorage
-                userAddress: normalizedAddress,
+                userAddress: finalUserAddress, // This is the REAL address to use
             }
         );
     } catch (error) {

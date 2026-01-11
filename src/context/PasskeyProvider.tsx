@@ -354,11 +354,13 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     throw new Error(error.error || "Failed to verify registration");
                 }
 
-                const { sessionToken, userAddress, credentialId } = await verifyResponse.json();
+                const { sessionToken, userAddress: serverUserAddress, credentialId } = await verifyResponse.json();
                 console.log("[Passkey] Registration verified! Credential ID:", credentialId?.slice(0, 20) + "...");
+                console.log("[Passkey] Server returned address:", serverUserAddress);
 
-                // Generate the final wallet address from credential ID
-                const walletAddress = await generateWalletAddress(credentialId);
+                // Use the address returned by the server (derived from credential ID on server)
+                // This ensures consistency between client and server
+                const walletAddress = serverUserAddress as Address;
 
                 // Store session
                 localStorage.setItem(SESSION_STORAGE_KEY, sessionToken);
@@ -571,11 +573,13 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 throw new Error(errorMsg);
             }
 
-            const { sessionToken, credentialId } = await verifyResponse.json();
+            const { sessionToken, credentialId, userAddress: serverUserAddress } = await verifyResponse.json();
             console.log("[Passkey] Authentication verified! Credential ID:", credentialId?.slice(0, 20) + "...");
+            console.log("[Passkey] Server returned address:", serverUserAddress);
 
-            // Generate wallet address from credential ID
-            const walletAddress = await generateWalletAddress(credentialId);
+            // Use the address returned by the server (from the stored credential)
+            // This ensures we use the correct address associated with this passkey
+            const walletAddress = serverUserAddress as Address;
 
             // Store session
             localStorage.setItem(SESSION_STORAGE_KEY, sessionToken);
