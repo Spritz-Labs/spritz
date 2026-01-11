@@ -68,12 +68,14 @@ export async function POST(request: NextRequest) {
             userAddress, 
             displayName,
             credential,
-            challenge 
+            challenge,
+            recoveryToken, // Optional: if provided, link to recovered account
         }: {
             userAddress: string;
             displayName?: string;
             credential: RegistrationResponseJSON;
             challenge: string;
+            recoveryToken?: string;
         } = await request.json();
 
         if (!userAddress || !credential || !challenge) {
@@ -84,6 +86,43 @@ export async function POST(request: NextRequest) {
         }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        
+        // Check if this is a recovery registration
+        let recoveredAddress: string | null = null;
+        if (recoveryToken) {
+            console.log("[Passkey] Recovery token provided, checking validity...");
+            const { data: recoveryData, error: recoveryError } = await supabase
+                .from("passkey_recovery_codes")
+                .select("*")
+                .eq("recovery_code", recoveryToken.toUpperCase().trim())
+                .eq("used", false)
+                .single();
+            
+            if (recoveryError || !recoveryData) {
+                console.error("[Passkey] Invalid or used recovery token");
+                return NextResponse.json(
+                    { error: "Invalid or already used recovery token" },
+                    { status: 400 }
+                );
+            }
+            
+            if (new Date(recoveryData.expires_at) < new Date()) {
+                console.error("[Passkey] Recovery token expired");
+                return NextResponse.json(
+                    { error: "Recovery token has expired" },
+                    { status: 400 }
+                );
+            }
+            
+            recoveredAddress = recoveryData.user_address;
+            console.log("[Passkey] Valid recovery for address:", recoveredAddress);
+            
+            // Mark recovery code as used
+            await supabase
+                .from("passkey_recovery_codes")
+                .update({ used: true, used_at: new Date().toISOString() })
+                .eq("id", recoveryData.id);
+        }
 
         // Verify the challenge exists and hasn't expired
         const { data: challengeData, error: challengeError } = await supabase
@@ -159,10 +198,11 @@ export async function POST(request: NextRequest) {
         // Get transports from the response if available
         const transports = credential.response.transports || ["internal", "hybrid"];
 
-        // CRITICAL: Generate the final wallet address from credential ID
-        // This ensures each passkey gets a UNIQUE address
-        const finalUserAddress = generateWalletAddressFromCredential(credentialId);
-        console.log("[Passkey] Generated final address from credential:", finalUserAddress);
+        // Determine final wallet address:
+        // - If recovery: use the recovered address (to restore access to old account)
+        // - If new registration: generate unique address from credential ID
+        const finalUserAddress = recoveredAddress || generateWalletAddressFromCredential(credentialId);
+        console.log("[Passkey] Final address:", finalUserAddress, recoveredAddress ? "(RECOVERED)" : "(NEW)");
 
         // Store the credential in the database with the FINAL address
         const { error: insertError } = await supabase

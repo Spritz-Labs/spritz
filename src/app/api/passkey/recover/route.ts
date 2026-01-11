@@ -121,6 +121,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             valid: true,
             maskedAddress,
+            userAddress: data.user_address, // Include full address for recovery flow
             expiresAt: data.expires_at,
         });
     } catch (error) {

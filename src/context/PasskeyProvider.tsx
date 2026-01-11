@@ -337,6 +337,14 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 console.log("[Passkey] WebAuthn registration complete, verifying with server...");
 
                 // Step 3: Verify with server and store credential
+                // Check if this is a recovery registration
+                const recoveryToken = localStorage.getItem("spritz_recovery_token");
+                const recoveryAddress = localStorage.getItem("spritz_recovery_address");
+                
+                if (recoveryToken) {
+                    console.log("[Passkey] Found recovery token, will restore account:", recoveryAddress?.slice(0, 15) + "...");
+                }
+                
                 const verifyResponse = await fetch("/api/passkey/register/verify", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -345,6 +353,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         displayName: username || "Spritz User",
                         credential,
                         challenge: options.challenge,
+                        recoveryToken: recoveryToken || undefined, // Include recovery token if present
                     }),
                     credentials: "include", // Important for PWA to receive/store cookies
                 });
@@ -359,8 +368,12 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 console.log("[Passkey] Server returned address:", serverUserAddress);
 
                 // Use the address returned by the server (derived from credential ID on server)
-                // This ensures consistency between client and server
+                // Or the recovered address if this was a recovery registration
                 const walletAddress = serverUserAddress as Address;
+                
+                // Clear recovery tokens after successful registration
+                localStorage.removeItem("spritz_recovery_token");
+                localStorage.removeItem("spritz_recovery_address");
 
                 // Store session
                 localStorage.setItem(SESSION_STORAGE_KEY, sessionToken);

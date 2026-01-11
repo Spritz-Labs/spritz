@@ -55,27 +55,36 @@ function RecoverContent() {
     };
 
     const handleRedeem = async () => {
-        if (!recoveryCode) return;
+        if (!recoveryCode || !codeInfo?.valid) {
+            // First check the code if not already validated
+            await checkCode(recoveryCode);
+            return;
+        }
         
         setIsRedeeming(true);
         setError(null);
         
         try {
-            const res = await fetch("/api/passkey/recover", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ recoveryCode }),
-            });
+            // Don't call POST - just store the code for registration to validate and use
+            // This avoids marking the code as used before registration completes
+            const normalizedCode = recoveryCode.toUpperCase().trim();
             
+            // Get the user address from the validation response
+            const res = await fetch(`/api/passkey/recover?code=${encodeURIComponent(normalizedCode)}`);
             const data = await res.json();
             
-            if (res.ok && data.success) {
-                setSuccess(data);
-                // Store recovery token for registration flow
-                localStorage.setItem("spritz_recovery_token", data.recoveryToken);
+            if (data.valid && data.userAddress) {
+                // Store recovery code for registration flow
+                localStorage.setItem("spritz_recovery_token", normalizedCode);
                 localStorage.setItem("spritz_recovery_address", data.userAddress);
+                
+                setSuccess({
+                    userAddress: data.userAddress,
+                    recoveryToken: normalizedCode,
+                    message: "Recovery code validated! You can now register a new passkey.",
+                });
             } else {
-                setError(data.error || "Failed to redeem recovery code");
+                setError(data.error || "Invalid recovery code");
             }
         } catch (err) {
             setError("Failed to redeem recovery code");
