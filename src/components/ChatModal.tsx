@@ -802,7 +802,7 @@ export function ChatModal({
                         className={`fixed z-50 ${
                             isFullscreen
                                 ? "top-4 left-0 right-0 bottom-0"
-                                : "inset-4 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
+                                : "left-4 right-4 top-16 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
                     >
                         <div className={`bg-zinc-900 flex flex-col h-full overflow-hidden ${

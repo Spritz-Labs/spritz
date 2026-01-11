@@ -858,7 +858,7 @@ export function AlphaChatModal({
                                     )}
 
                                     {/* Input */}
-                                    <div className="p-4 border-t border-zinc-800">
+                                    <div className={`p-4 border-t border-zinc-800 ${isFullscreen ? "pb-8" : ""}`}>
                                         <div className={`flex items-center gap-2 ${isFullscreen ? "mx-auto max-w-4xl" : ""}`}>
                                             <button
                                                 onClick={() => setShowPixelArt(true)}

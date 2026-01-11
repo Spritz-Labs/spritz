@@ -51,9 +51,10 @@ export function MentionInput({
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 
-    // Get display name
+    // Get display name (strip leading @ if present to avoid @@username)
     const getDisplayName = (user: MentionUser) => {
-        return user.name || formatAddress(user.address);
+        const name = user.name || formatAddress(user.address);
+        return name.startsWith("@") ? name.slice(1) : name;
     };
 
     // Handle input change

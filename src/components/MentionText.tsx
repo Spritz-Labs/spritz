@@ -24,6 +24,11 @@ export function MentionText({
                     const isSelf = currentUserAddress && 
                         part.address.toLowerCase() === currentUserAddress.toLowerCase();
                     
+                    // Strip leading @ from content if present (to avoid @@username)
+                    const displayName = part.content.startsWith("@") 
+                        ? part.content.slice(1) 
+                        : part.content;
+                    
                     return (
                         <button
                             key={index}
@@ -37,7 +42,7 @@ export function MentionText({
                                     : "text-blue-400 bg-blue-500/20 hover:bg-blue-500/30"
                             }`}
                         >
-                            @{part.content}
+                            @{displayName}
                         </button>
                     );
                 }
@@ -50,5 +55,9 @@ export function MentionText({
 
 // Simple text version for notifications or previews
 export function getMentionDisplayText(text: string): string {
-    return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "@$1");
+    return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, (_, name) => {
+        // Strip leading @ from name if present (to avoid @@username)
+        const displayName = name.startsWith("@") ? name.slice(1) : name;
+        return `@${displayName}`;
+    });
 }

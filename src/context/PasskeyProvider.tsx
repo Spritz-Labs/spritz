@@ -50,8 +50,11 @@ const PasskeyContext = createContext<PasskeyContextType | null>(null);
 function validateSession(token: string): { userAddress: string; exp: number } | null {
     try {
         const payload = JSON.parse(Buffer.from(token, "base64url").toString());
-        if (payload.exp && payload.exp > Date.now() && payload.sub) {
-            return { userAddress: payload.sub, exp: payload.exp };
+        // exp from server JWT is in seconds, Date.now() is in milliseconds
+        // Handle both formats for backwards compatibility
+        const expMs = payload.exp > 1e12 ? payload.exp : payload.exp * 1000;
+        if (payload.exp && expMs > Date.now() && payload.sub) {
+            return { userAddress: payload.sub, exp: expMs };
         }
         return null;
     } catch {
