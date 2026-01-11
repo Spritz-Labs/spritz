@@ -1017,7 +1017,7 @@ export function ChatModal({
                                             }`}
                                         >
                                             <div
-                                                className={`max-w-[75%] rounded-2xl px-4 py-2 ${
+                                                className={`${isFullscreen ? "max-w-[90%]" : "max-w-[75%]"} rounded-2xl px-4 py-2 ${
                                                     isOwn
                                                         ? msg.status === "failed"
                                                             ? "bg-red-500/80 text-white rounded-br-md"
@@ -1474,13 +1474,13 @@ export function ChatModal({
                             )}
 
                             {/* Input */}
-                            <div className="p-4 border-t border-zinc-800">
-                                <div className="flex items-center gap-2">
+                            <div className={`border-t border-zinc-800 ${isFullscreen ? "p-6 pb-8" : "p-4"}`}>
+                                <div className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}>
                                     {/* Pixel Art Button */}
                                     <button
                                         onClick={() => setShowPixelArt(true)}
                                         disabled={!isInitialized || !!chatError}
-                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className={`rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "p-4" : "p-3"}`}
                                         title="Send Pixel Art"
                                     >
                                         <svg
@@ -1489,7 +1489,7 @@ export function ChatModal({
                                             viewBox="0 0 24 24"
                                             strokeWidth={2}
                                             stroke="currentColor"
-                                            className="w-5 h-5"
+                                            className={isFullscreen ? "w-6 h-6" : "w-5 h-5"}
                                         >
                                             <path
                                                 strokeLinecap="round"
@@ -1521,7 +1521,9 @@ export function ChatModal({
                                             disabled={
                                                 !isInitialized || !!chatError
                                             }
-                                            className="w-full py-3 px-4 pr-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50"
+                                            className={`w-full pr-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50 ${
+                                                isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"
+                                            }`}
                                         />
                                         {/* Emoji Picker Button */}
                                         <button
@@ -1557,11 +1559,11 @@ export function ChatModal({
                                             !isInitialized ||
                                             !!chatError
                                         }
-                                        className="p-3 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className={`rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "p-4" : "p-3"}`}
                                     >
                                         {isSending ? (
                                             <svg
-                                                className="w-5 h-5 animate-spin"
+                                                className={`${isFullscreen ? "w-6 h-6" : "w-5 h-5"} animate-spin`}
                                                 viewBox="0 0 24 24"
                                                 fill="none"
                                             >
@@ -1581,7 +1583,7 @@ export function ChatModal({
                                             </svg>
                                         ) : (
                                             <svg
-                                                className="w-5 h-5"
+                                                className={isFullscreen ? "w-6 h-6" : "w-5 h-5"}
                                                 fill="none"
                                                 viewBox="0 0 24 24"
                                                 stroke="currentColor"
