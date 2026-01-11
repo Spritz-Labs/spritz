@@ -544,7 +544,7 @@ export function AlphaChatModal({
                             {/* Messages */}
                             {isMember && (
                                 <>
-                                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                                    <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${isFullscreen ? "mx-auto w-full max-w-4xl" : ""}`}>
                                         {isLoading ? (
                                             <div className="flex items-center justify-center h-full">
                                                 <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -676,7 +676,7 @@ export function AlphaChatModal({
                                                         <div
                                                             data-message-bubble
                                                             onClick={() => handleMessageTap(msg.id)}
-                                                            className={`max-w-[75%] rounded-2xl px-4 py-2 relative cursor-pointer ${
+                                                            className={`${isFullscreen ? "max-w-[85%]" : "max-w-[75%]"} rounded-2xl px-4 py-2 relative cursor-pointer ${
                                                                 isOwn
                                                                     ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-br-md"
                                                                     : "bg-zinc-800 text-white rounded-bl-md"
@@ -859,7 +859,7 @@ export function AlphaChatModal({
 
                                     {/* Input */}
                                     <div className="p-4 border-t border-zinc-800">
-                                        <div className="flex items-center gap-2">
+                                        <div className={`flex items-center gap-2 ${isFullscreen ? "mx-auto max-w-4xl" : ""}`}
                                             <button
                                                 onClick={() => setShowPixelArt(true)}
                                                 className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-orange-400 transition-colors"
