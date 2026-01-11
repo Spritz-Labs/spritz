@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,14 +23,24 @@ export type CallHistoryEntry = {
 
 // GET /api/calls - Get call history for a user
 export async function GET(request: NextRequest) {
-    const userAddress = request.nextUrl.searchParams.get("userAddress");
+    // Get authenticated user
+    const session = await getAuthenticatedUser(request);
+    const paramUserAddress = request.nextUrl.searchParams.get("userAddress");
     const limit = parseInt(request.nextUrl.searchParams.get("limit") || "50");
+
+    // Use session address, fall back to param for backward compatibility
+    const userAddress = session?.userAddress || paramUserAddress;
 
     if (!userAddress) {
         return NextResponse.json(
-            { error: "User address is required" },
-            { status: 400 }
+            { error: "Authentication required" },
+            { status: 401 }
         );
+    }
+    
+    // Warn if using unauthenticated fallback
+    if (!session && paramUserAddress) {
+        console.warn("[Calls] Using unauthenticated userAddress - migrate to session auth");
     }
 
     const normalizedAddress = userAddress.toLowerCase();
@@ -54,10 +66,17 @@ export async function GET(request: NextRequest) {
 
 // POST /api/calls - Log a new call
 export async function POST(request: NextRequest) {
+    // Rate limit
+    const rateLimitResponse = await checkRateLimit(request, "general");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
+        // Get authenticated user
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
         const {
-            callerAddress,
+            callerAddress: bodyCallerAddress,
             calleeAddress,
             callType,
             status,
@@ -66,12 +85,20 @@ export async function POST(request: NextRequest) {
             endedAt,
             durationSeconds,
         } = body;
+        
+        // Use session address as caller, fall back to body for backward compatibility
+        const callerAddress = session?.userAddress || bodyCallerAddress;
 
         if (!callerAddress || !calleeAddress || !callType || !status) {
             return NextResponse.json(
                 { error: "Missing required fields" },
                 { status: 400 }
             );
+        }
+        
+        // Warn if using unauthenticated fallback
+        if (!session && bodyCallerAddress) {
+            console.warn("[Calls] Using unauthenticated callerAddress - migrate to session auth");
         }
 
         const { data: call, error } = await supabase
@@ -110,6 +137,9 @@ export async function POST(request: NextRequest) {
 // PATCH /api/calls - Update a call (e.g., when it ends)
 export async function PATCH(request: NextRequest) {
     try {
+        // Get authenticated user
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
         const { callId, endedAt, durationSeconds, status } = body;
 
@@ -118,6 +148,26 @@ export async function PATCH(request: NextRequest) {
                 { error: "Call ID is required" },
                 { status: 400 }
             );
+        }
+        
+        // Verify the user is part of this call before allowing updates
+        if (session) {
+            const { data: existingCall } = await supabase
+                .from("shout_call_history")
+                .select("caller_address, callee_address")
+                .eq("id", callId)
+                .single();
+            
+            if (existingCall) {
+                const normalizedSession = session.userAddress.toLowerCase();
+                if (existingCall.caller_address !== normalizedSession && 
+                    existingCall.callee_address !== normalizedSession) {
+                    return NextResponse.json(
+                        { error: "Not authorized to update this call" },
+                        { status: 403 }
+                    );
+                }
+            }
         }
 
         const updates: Record<string, unknown> = {};

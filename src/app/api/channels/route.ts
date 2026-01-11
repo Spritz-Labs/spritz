@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
+import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -78,22 +81,41 @@ export async function GET(request: NextRequest) {
 
 // POST /api/channels - Create a new channel
 export async function POST(request: NextRequest) {
+    // Rate limit - strict for channel creation
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
+        // Get authenticated user
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
-        const { name, description, emoji, category, creatorAddress } = body;
+        const { name, description, emoji, category, creatorAddress: bodyCreatorAddress } = body;
+        
+        // Use session address, fall back to body for backward compatibility
+        const creatorAddress = session?.userAddress || bodyCreatorAddress;
 
         if (!name || !creatorAddress) {
             return NextResponse.json(
-                { error: "Name and creator address are required" },
+                { error: "Name and authentication are required" },
                 { status: 400 }
             );
         }
+        
+        // Warn if using unauthenticated fallback
+        if (!session && bodyCreatorAddress) {
+            console.warn("[Channels] Using unauthenticated creatorAddress - migrate to session auth");
+        }
+
+        // Sanitize inputs
+        const sanitizedName = sanitizeInput(name, INPUT_LIMITS.SHORT_TEXT);
+        const sanitizedDescription = description ? sanitizeInput(description, INPUT_LIMITS.MEDIUM_TEXT) : null;
 
         // Check if channel name already exists
         const { data: existing } = await supabase
             .from("shout_public_channels")
             .select("id")
-            .eq("name", name)
+            .eq("name", sanitizedName)
             .single();
 
         if (existing) {
@@ -106,8 +128,8 @@ export async function POST(request: NextRequest) {
         const { data: channel, error } = await supabase
             .from("shout_public_channels")
             .insert({
-                name: name.trim(),
-                description: description?.trim() || null,
+                name: sanitizedName.trim(),
+                description: sanitizedDescription?.trim() || null,
                 emoji: emoji || "💬",
                 category: category || "community",
                 creator_address: creatorAddress.toLowerCase(),

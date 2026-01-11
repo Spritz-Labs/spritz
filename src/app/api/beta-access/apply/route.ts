@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -16,14 +18,29 @@ function isSolanaAddress(address: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
+    // Rate limit - strict to prevent spam applications
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
-        const { walletAddress } = await request.json();
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+        const body = await request.json();
+        const bodyWalletAddress = body.walletAddress;
+        
+        // Use session address if available, fall back to body for backward compatibility
+        const walletAddress = session?.userAddress || bodyWalletAddress;
 
         if (!walletAddress) {
             return NextResponse.json(
-                { error: "Wallet address is required" },
-                { status: 400 }
+                { error: "Authentication required" },
+                { status: 401 }
             );
+        }
+        
+        // Warn if using unauthenticated fallback
+        if (!session && bodyWalletAddress) {
+            console.warn("[Beta Access Apply] Using unauthenticated address - migrate to session auth");
         }
 
         // Normalize address (Solana addresses are case-sensitive, EVM addresses should be lowercased)

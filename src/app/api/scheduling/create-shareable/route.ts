@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "crypto";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
+import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,21 +17,36 @@ function generateInviteToken(): string {
 
 // POST /api/scheduling/create-shareable - Create a shareable scheduled call
 export async function POST(request: NextRequest) {
+    // Rate limit - strict for creating scheduled calls
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
+        // Get authenticated user
+        const session = await getAuthenticatedUser(request);
+        
         const body = await request.json();
         const {
-            schedulerAddress,
+            schedulerAddress: bodySchedulerAddress,
             scheduledAt, // ISO date string
             durationMinutes = 30,
             title,
             timezone,
         } = body;
+        
+        // Use session address, fall back to body for backward compatibility
+        const schedulerAddress = session?.userAddress || bodySchedulerAddress;
 
         if (!schedulerAddress || !scheduledAt) {
             return NextResponse.json(
-                { error: "Scheduler address and scheduled time are required" },
+                { error: "Authentication and scheduled time are required" },
                 { status: 400 }
             );
+        }
+        
+        // Warn if using unauthenticated fallback
+        if (!session && bodySchedulerAddress) {
+            console.warn("[CreateShareable] Using unauthenticated address - migrate to session auth");
         }
 
         // Validate scheduled time is in the future
@@ -43,6 +61,9 @@ export async function POST(request: NextRequest) {
         // Generate unique invite token
         const inviteToken = generateInviteToken();
 
+        // Sanitize title input
+        const sanitizedTitle = title ? sanitizeInput(title, INPUT_LIMITS.SHORT_TEXT) : "Scheduled Call";
+
         // Create the scheduled call entry
         // Note: recipient_wallet_address is set to schedulerAddress since they're hosting
         // scheduler_wallet_address can be null for anonymous bookings
@@ -53,7 +74,7 @@ export async function POST(request: NextRequest) {
                 scheduler_wallet_address: schedulerAddress.toLowerCase(),
                 scheduled_at: scheduledTime.toISOString(),
                 duration_minutes: durationMinutes,
-                title: title || "Scheduled Call",
+                title: sanitizedTitle,
                 timezone: timezone || "UTC",
                 status: "pending",
                 invite_token: inviteToken,

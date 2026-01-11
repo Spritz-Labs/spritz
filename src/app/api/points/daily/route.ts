@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -10,16 +12,29 @@ const supabase = supabaseUrl && supabaseKey
 
 // GET: Check if daily bonus is available
 export async function GET(request: NextRequest) {
+    // Rate limit
+    const rateLimitResponse = await checkRateLimit(request, "general");
+    if (rateLimitResponse) return rateLimitResponse;
     if (!supabase) {
         return NextResponse.json({ error: "Database not configured" }, { status: 500 });
     }
 
     try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
         const { searchParams } = new URL(request.url);
-        const walletAddress = searchParams.get("address");
+        const paramAddress = searchParams.get("address");
+        
+        // Use session address, fall back to param for backward compatibility
+        const walletAddress = session?.userAddress || paramAddress;
 
         if (!walletAddress) {
-            return NextResponse.json({ error: "Address required" }, { status: 400 });
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        }
+        
+        // Warn if using unauthenticated fallback
+        if (!session && paramAddress) {
+            console.warn("[DailyPoints] Using unauthenticated address param - migrate to session auth");
         }
 
         const normalizedAddress = walletAddress.toLowerCase();
@@ -63,18 +78,23 @@ export async function GET(request: NextRequest) {
 
 // POST: Claim daily bonus
 export async function POST(request: NextRequest) {
+    // Rate limit - strict for claiming points
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     if (!supabase) {
         return NextResponse.json({ error: "Database not configured" }, { status: 500 });
     }
 
     try {
-        const { walletAddress } = await request.json();
-
-        if (!walletAddress) {
-            return NextResponse.json({ error: "Address required" }, { status: 400 });
+        // REQUIRE authentication for claiming points
+        const session = await getAuthenticatedUser(request);
+        if (!session) {
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
-        const normalizedAddress = walletAddress.toLowerCase();
+        // Use ONLY the authenticated address - don't trust client input
+        const normalizedAddress = session.userAddress.toLowerCase();
 
         // Call the claim function
         const { data: result, error } = await supabase.rpc("claim_daily_points", {
