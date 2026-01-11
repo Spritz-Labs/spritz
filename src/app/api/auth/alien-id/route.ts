@@ -42,14 +42,17 @@ export async function POST(request: NextRequest) {
             
             if (!existingUser) {
                 // Create new user
-                await supabase.from("shout_users").insert({
+                const { error: insertError } = await supabase.from("shout_users").insert({
                     wallet_address: alienAddress,
-                    auth_method: "alien_id",
                     first_login: new Date().toISOString(),
                     last_login: new Date().toISOString(),
                     login_count: 1,
                 });
-                console.log("[AlienId] Created new user:", alienAddress.slice(0, 20) + "...");
+                if (insertError) {
+                    console.error("[AlienId] Error creating user:", insertError);
+                } else {
+                    console.log("[AlienId] Created new user:", alienAddress.slice(0, 20) + "...");
+                }
             } else {
                 // Update existing user
                 await supabase

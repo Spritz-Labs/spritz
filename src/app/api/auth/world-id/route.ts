@@ -54,15 +54,17 @@ export async function POST(request: NextRequest) {
                 
                 if (!existingUser) {
                     // Create new user
-                    await supabase.from("shout_users").insert({
+                    const { error: insertError } = await supabase.from("shout_users").insert({
                         wallet_address: userAddress,
-                        auth_method: "world_id",
-                        verification_level: proof.verification_level,
                         first_login: new Date().toISOString(),
                         last_login: new Date().toISOString(),
                         login_count: 1,
                     });
-                    console.log("[WorldId] Created new user:", userAddress.slice(0, 20) + "...");
+                    if (insertError) {
+                        console.error("[WorldId] Error creating user:", insertError);
+                    } else {
+                        console.log("[WorldId] Created new user:", userAddress.slice(0, 20) + "...");
+                    }
                 } else {
                     // Update existing user
                     await supabase
@@ -70,7 +72,6 @@ export async function POST(request: NextRequest) {
                         .update({
                             last_login: new Date().toISOString(),
                             login_count: (existingUser.login_count || 0) + 1,
-                            verification_level: proof.verification_level,
                         })
                         .eq("wallet_address", userAddress);
                     console.log("[WorldId] Updated user:", userAddress.slice(0, 20) + "...");
