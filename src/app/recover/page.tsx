@@ -137,6 +137,38 @@ function RecoverContent() {
                                 </p>
                             </div>
                             
+                            {/* Important: Cloud Sync Guidance */}
+                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-blue-400 font-semibold text-sm mb-2">Important: Save to Cloud</p>
+                                        <p className="text-zinc-300 text-xs mb-2">
+                                            When the passkey prompt appears, choose a <strong>cloud-synced</strong> option so you can access your account from any device:
+                                        </p>
+                                        <ul className="text-zinc-400 text-xs space-y-1.5">
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-green-400">✓</span>
+                                                <span><strong>iPhone/Mac:</strong> Choose &quot;iCloud Keychain&quot;</span>
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-green-400">✓</span>
+                                                <span><strong>Android:</strong> Choose &quot;Google Password Manager&quot;</span>
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-green-400">✓</span>
+                                                <span><strong>Any device:</strong> 1Password, Bitwarden, or other password managers</span>
+                                            </li>
+                                        </ul>
+                                        <p className="text-zinc-500 text-xs mt-2">
+                                            ⚠️ Avoid &quot;This device only&quot; or &quot;Security key&quot; unless you know what you&apos;re doing.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <button
                                 onClick={handleRegisterNewPasskey}
                                 className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold hover:opacity-90 transition-opacity"

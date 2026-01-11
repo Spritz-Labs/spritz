@@ -184,6 +184,23 @@ export function PasskeyAuth() {
                     </div>
                 )}
 
+                {/* Cloud sync tip for registration */}
+                {mode === "register" && (
+                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
+                        <div className="flex items-start gap-2">
+                            <svg className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div className="text-xs">
+                                <p className="text-blue-400 font-medium mb-1">Tip: Save to Cloud</p>
+                                <p className="text-zinc-400">
+                                    When prompted, choose <strong className="text-zinc-300">iCloud Keychain</strong> (Apple) or <strong className="text-zinc-300">Google Password Manager</strong> (Android) to access your account from any device.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
 
                 <AnimatePresence>
                     {error && (
