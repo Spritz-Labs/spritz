@@ -2,12 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
+import { createAuthResponse } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// RP configuration - must match the options
-const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "spritz.chat";
+// Get RP ID based on request hostname
+function getRpId(request: NextRequest): string {
+    if (process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID) {
+        return process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID;
+    }
+    
+    const host = request.headers.get("host") || "";
+    
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1")) {
+        return "localhost";
+    }
+    
+    if (host.includes("vercel.app")) {
+        return host.split(":")[0];
+    }
+    
+    if (host.includes("spritz.chat")) {
+        return "spritz.chat";
+    }
+    
+    return host.split(":")[0];
+}
 
 // Get allowed origins - support multiple origins for different environments
 function getAllowedOrigins(): string[] {
@@ -89,8 +110,9 @@ export async function POST(request: NextRequest) {
 
         // Verify the registration response
         const allowedOrigins = getAllowedOrigins();
+        const rpId = getRpId(request);
         console.log("[Passkey] Verifying registration against origins:", allowedOrigins);
-        console.log("[Passkey] Expected RP_ID:", RP_ID);
+        console.log("[Passkey] Expected RP_ID:", rpId);
         
         let verification;
         try {
@@ -98,7 +120,7 @@ export async function POST(request: NextRequest) {
                 response: credential,
                 expectedChallenge: challenge,
                 expectedOrigin: allowedOrigins,
-                expectedRPID: RP_ID,
+                expectedRPID: rpId,
                 requireUserVerification: false, // Allow both UV and non-UV
             });
         } catch (verifyError) {
@@ -158,18 +180,22 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] Credential ID:", credentialId.slice(0, 20) + "...");
         console.log("[Passkey] Backed up (synced):", backedUp);
 
-        // Generate a session token (simple JWT-like approach)
-        // In production, you'd want to use proper JWT with expiration
+        // Generate a session token for frontend localStorage (30 days)
         const sessionToken = await generateSessionToken(userAddress.toLowerCase());
 
-        return NextResponse.json({
-            success: true,
-            verified: true,
-            credentialId,
-            backedUp,
-            sessionToken,
-            userAddress: userAddress.toLowerCase(),
-        });
+        // Return session with HttpOnly cookie AND sessionToken for frontend
+        return createAuthResponse(
+            userAddress.toLowerCase(),
+            "passkey",
+            {
+                success: true,
+                verified: true,
+                credentialId,
+                backedUp,
+                sessionToken, // For frontend localStorage
+                userAddress: userAddress.toLowerCase(),
+            }
+        );
     } catch (error) {
         console.error("[Passkey] Registration verify error:", error);
         return NextResponse.json(

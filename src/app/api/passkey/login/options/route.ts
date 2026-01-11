@@ -5,12 +5,40 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// RP configuration
-const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "spritz.chat";
+// Get RP ID based on request hostname
+function getRpId(request: NextRequest): string {
+    // Check env var first
+    if (process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID) {
+        return process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID;
+    }
+    
+    const host = request.headers.get("host") || "";
+    
+    // For localhost/development
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1")) {
+        return "localhost";
+    }
+    
+    // For Vercel preview deployments
+    if (host.includes("vercel.app")) {
+        return host.split(":")[0]; // Remove port if any
+    }
+    
+    // For production - use base domain for both spritz.chat and app.spritz.chat
+    if (host.includes("spritz.chat")) {
+        return "spritz.chat";
+    }
+    
+    // Fallback to host without port
+    return host.split(":")[0];
+}
 
 export async function POST(request: NextRequest) {
     try {
         const { userAddress } = await request.json();
+        const rpId = getRpId(request);
+        
+        console.log("[Passkey] Using RP ID:", rpId);
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -36,7 +64,7 @@ export async function POST(request: NextRequest) {
 
         // Generate authentication options
         const options = await generateAuthenticationOptions({
-            rpID: RP_ID,
+            rpID: rpId,
             userVerification: "preferred",
             // If we have specific credentials, use them
             // Otherwise, allow any discoverable credential (empty array)
@@ -86,7 +114,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             options,
-            rpId: RP_ID,
+            rpId,
         });
     } catch (error) {
         console.error("[Passkey] Auth options error:", error);

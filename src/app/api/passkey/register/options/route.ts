@@ -7,11 +7,36 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // RP (Relying Party) configuration
 const RP_NAME = "Spritz";
-const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "spritz.chat";
+
+// Get RP ID based on request hostname
+function getRpId(request: NextRequest): string {
+    if (process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID) {
+        return process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID;
+    }
+    
+    const host = request.headers.get("host") || "";
+    
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1")) {
+        return "localhost";
+    }
+    
+    if (host.includes("vercel.app")) {
+        return host.split(":")[0];
+    }
+    
+    if (host.includes("spritz.chat")) {
+        return "spritz.chat";
+    }
+    
+    return host.split(":")[0];
+}
 
 export async function POST(request: NextRequest) {
     try {
         const { userAddress, displayName } = await request.json();
+        const rpId = getRpId(request);
+        
+        console.log("[Passkey] Registration using RP ID:", rpId);
 
         if (!userAddress) {
             return NextResponse.json(
@@ -39,7 +64,7 @@ export async function POST(request: NextRequest) {
         // Generate registration options
         const options = await generateRegistrationOptions({
             rpName: RP_NAME,
-            rpID: RP_ID,
+            rpID: rpId,
             userID: userId,
             userName: userAddress.toLowerCase(),
             userDisplayName: displayName || `Spritz User`,
@@ -80,7 +105,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             options,
-            rpId: RP_ID,
+            rpId,
         });
     } catch (error) {
         console.error("[Passkey] Registration options error:", error);

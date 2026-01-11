@@ -8,8 +8,39 @@ import { createAuthResponse } from "@/lib/session";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// RP configuration
-const RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || "spritz.chat";
+// Get RP ID based on request hostname
+function getRpId(request: NextRequest): string {
+    if (process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID) {
+        return process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID;
+    }
+    
+    const host = request.headers.get("host") || "";
+    
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1")) {
+        return "localhost";
+    }
+    
+    if (host.includes("vercel.app")) {
+        return host.split(":")[0];
+    }
+    
+    if (host.includes("spritz.chat")) {
+        return "spritz.chat";
+    }
+    
+    return host.split(":")[0];
+}
+
+// Generate a session token for frontend localStorage (matches register flow)
+function generateSessionToken(userAddress: string): string {
+    const payload = {
+        sub: userAddress.toLowerCase(),
+        iat: Date.now(),
+        exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+        type: "passkey",
+    };
+    return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
 
 // Get allowed origins - support multiple origins for different environments
 function getAllowedOrigins(): string[] {
@@ -165,8 +196,9 @@ export async function POST(request: NextRequest) {
 
         // Verify the authentication response
         const allowedOrigins = getAllowedOrigins();
+        const rpId = getRpId(request);
         console.log("[Passkey] Verifying against origins:", allowedOrigins);
-        console.log("[Passkey] Expected RP_ID:", RP_ID);
+        console.log("[Passkey] Expected RP_ID:", rpId);
         
         let verification;
         try {
@@ -174,7 +206,7 @@ export async function POST(request: NextRequest) {
                 response: credential,
                 expectedChallenge: challenge,
                 expectedOrigin: allowedOrigins,
-                expectedRPID: RP_ID,
+                expectedRPID: rpId,
                 credential: {
                     id: storedCredential.credential_id,
                     publicKey: publicKeyBytes,
@@ -212,7 +244,10 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] Successfully authenticated:", storedCredential.user_address);
         console.log("[Passkey] Credential ID:", storedCredential.credential_id.slice(0, 20) + "...");
 
-        // Return session with cookie
+        // Generate session token for frontend localStorage (30 days)
+        const sessionToken = generateSessionToken(storedCredential.user_address);
+
+        // Return session with cookie AND sessionToken for frontend
         return createAuthResponse(
             storedCredential.user_address,
             "passkey",
@@ -221,6 +256,7 @@ export async function POST(request: NextRequest) {
                 verified: true,
                 userAddress: storedCredential.user_address,
                 credentialId: storedCredential.credential_id,
+                sessionToken, // For frontend localStorage
             }
         );
     } catch (error) {
