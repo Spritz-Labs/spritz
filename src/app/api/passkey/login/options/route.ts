@@ -47,14 +47,29 @@ export async function POST(request: NextRequest) {
         // Store the challenge temporarily (expires in 5 minutes)
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
         
-        await supabase.from("passkey_challenges").insert({
+        // Delete any existing unused challenges for this user first to avoid conflicts
+        if (userAddress) {
+            await supabase
+                .from("passkey_challenges")
+                .delete()
+                .eq("user_address", userAddress.toLowerCase())
+                .eq("ceremony_type", "authentication")
+                .eq("used", false);
+        }
+        
+        const { error: insertError } = await supabase.from("passkey_challenges").insert({
             challenge: options.challenge,
             ceremony_type: "authentication",
             user_address: userAddress?.toLowerCase() || null,
             expires_at: expiresAt,
         });
+        
+        if (insertError) {
+            console.error("[Passkey] Failed to store challenge:", insertError);
+            // Try to continue anyway - maybe it's a duplicate
+        }
 
-        console.log("[Passkey] Generated auth options, allowCredentials count:", allowCredentials.length);
+        console.log("[Passkey] Generated auth options, challenge stored, allowCredentials count:", allowCredentials.length);
 
         return NextResponse.json({
             options,

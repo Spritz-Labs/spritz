@@ -127,10 +127,12 @@ export function PasskeyAuth() {
                     </button>
                 </div>
 
-                {/* Show hint if no credential stored */}
-                {mode === "login" && !hasStoredSession && (
-                    <p className="text-amber-400/80 text-xs text-center">
-                        No passkey found. Switch to Register to create one.
+                {/* Show hint about passkey login */}
+                {mode === "login" && (
+                    <p className="text-zinc-400 text-xs text-center">
+                        {hasStoredSession 
+                            ? "Your passkey is ready to use"
+                            : "Use your device's passkey to sign in"}
                     </p>
                 )}
 
@@ -150,9 +152,7 @@ export function PasskeyAuth() {
 
                 <button
                     type="submit"
-                    disabled={
-                        isLoading || (mode === "login" && !hasStoredSession)
-                    }
+                    disabled={isLoading}
                     className="w-full relative overflow-hidden group py-4 px-6 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF5500] text-white font-semibold transition-all hover:shadow-xl hover:shadow-[#FB8D22]/25 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <span className="relative z-10 flex items-center justify-center gap-2">

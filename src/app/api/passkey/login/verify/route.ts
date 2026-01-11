@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Verify the challenge exists and hasn't expired
-        const { data: challengeData, error: challengeError } = await supabase
+        // First try to find unused challenge
+        let { data: challengeData, error: challengeError } = await supabase
             .from("passkey_challenges")
             .select("*")
             .eq("challenge", challenge)
@@ -66,27 +67,58 @@ export async function POST(request: NextRequest) {
             .eq("used", false)
             .single();
 
+        // If not found, check if it exists but was already used (race condition)
         if (challengeError || !challengeData) {
-            console.error("[Passkey] Challenge not found:", challengeError);
+            const { data: anyChallenge } = await supabase
+                .from("passkey_challenges")
+                .select("*")
+                .eq("challenge", challenge)
+                .eq("ceremony_type", "authentication")
+                .single();
+            
+            if (anyChallenge) {
+                if (anyChallenge.used) {
+                    console.error("[Passkey] Challenge already used (possible replay attack)");
+                    return NextResponse.json(
+                        { error: "Challenge already used. Please try again." },
+                        { status: 400 }
+                    );
+                }
+                if (new Date(anyChallenge.expires_at) < new Date()) {
+                    console.error("[Passkey] Challenge expired at:", anyChallenge.expires_at);
+                    return NextResponse.json(
+                        { error: "Challenge has expired. Please try again." },
+                        { status: 400 }
+                    );
+                }
+            }
+            
+            console.error("[Passkey] Challenge not found in database:", challenge.slice(0, 20) + "...");
+            console.error("[Passkey] Query error:", challengeError);
             return NextResponse.json(
-                { error: "Invalid or expired challenge" },
+                { error: "Invalid or expired challenge. Please try again." },
                 { status: 400 }
             );
         }
 
         // Check if challenge has expired
         if (new Date(challengeData.expires_at) < new Date()) {
+            console.error("[Passkey] Challenge expired at:", challengeData.expires_at);
             return NextResponse.json(
-                { error: "Challenge has expired" },
+                { error: "Challenge has expired. Please try again." },
                 { status: 400 }
             );
         }
 
         // Mark challenge as used immediately to prevent replay
-        await supabase
+        const { error: updateError } = await supabase
             .from("passkey_challenges")
             .update({ used: true })
             .eq("id", challengeData.id);
+        
+        if (updateError) {
+            console.error("[Passkey] Failed to mark challenge as used:", updateError);
+        }
 
         // Look up the credential by ID
         const { data: storedCredential, error: credError } = await supabase
