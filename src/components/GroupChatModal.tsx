@@ -16,6 +16,16 @@ import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 
+// Helper to detect if a message is emoji-only (for larger display)
+const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
+const isEmojiOnly = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    if (!EMOJI_REGEX.test(trimmed)) return false;
+    const emojiCount = [...trimmed].filter(char => /\p{Emoji}/u.test(char) && !/\d/u.test(char)).length;
+    return emojiCount >= 1 && emojiCount <= 3;
+};
+
 type Friend = {
     id: string;
     address: Address;
@@ -1154,18 +1164,20 @@ export function GroupChatModal({
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <p className="break-words">
-                                                            <MentionText
-                                                                text={
-                                                                    msg.content.startsWith("↩️ ") &&
-                                                                    msg.content.includes("\n\n")
-                                                                        ? msg.content.split("\n\n").slice(1).join("\n\n")
-                                                                        : msg.content
-                                                                }
-                                                                currentUserAddress={userAddress}
-                                                                onMentionClick={handleMentionClick}
-                                                            />
-                                                        </p>
+                                                        (() => {
+                                                            const displayContent = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n")
+                                                                ? msg.content.split("\n\n").slice(1).join("\n\n")
+                                                                : msg.content;
+                                                            return (
+                                                                <p className={`break-words ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : ""}`}>
+                                                                    <MentionText
+                                                                        text={displayContent}
+                                                                        currentUserAddress={userAddress}
+                                                                        onMentionClick={handleMentionClick}
+                                                                    />
+                                                                </p>
+                                                            );
+                                                        })()
                                                     )}
 
                                                     {/* Reactions Display */}

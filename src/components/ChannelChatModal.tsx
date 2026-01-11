@@ -8,6 +8,16 @@ import { QuickReactionPicker } from "./EmojiPicker";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 
+// Helper to detect if a message is emoji-only (for larger display)
+const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
+const isEmojiOnly = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    if (!EMOJI_REGEX.test(trimmed)) return false;
+    const emojiCount = [...trimmed].filter(char => /\p{Emoji}/u.test(char) && !/\d/u.test(char)).length;
+    return emojiCount >= 1 && emojiCount <= 3;
+};
+
 type ChannelChatModalProps = {
     isOpen: boolean;
     onClose: () => void;
@@ -533,7 +543,7 @@ export function ChannelChatModal({
                                                             </div>
                                                         )}
                                                         
-                                                        <p className="break-words whitespace-pre-wrap">
+                                                        <p className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}>
                                                             <MentionText
                                                                 text={msg.content}
                                                                 currentUserAddress={userAddress}

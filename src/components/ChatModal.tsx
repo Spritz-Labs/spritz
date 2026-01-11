@@ -45,6 +45,19 @@ type Message = {
 
 type ChatState = "checking" | "ready" | "error" | "loading";
 
+// Helper to detect if a message is emoji-only (for larger display)
+const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
+const isEmojiOnly = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    // Check if the message matches emoji-only pattern
+    if (!EMOJI_REGEX.test(trimmed)) return false;
+    // Count actual emoji characters (excluding spaces and modifiers)
+    const emojiCount = [...trimmed].filter(char => /\p{Emoji}/u.test(char) && !/\d/u.test(char)).length;
+    // Only enlarge if 1-3 emojis
+    return emojiCount >= 1 && emojiCount <= 3;
+};
+
 export function ChatModal({
     isOpen,
     onClose,
@@ -1259,11 +1272,17 @@ export function ChatModal({
                                                         )}
                                                         
                                                         {/* Message Text */}
-                                                        <p className="break-words whitespace-pre-wrap">
-                                                            {msg.content.startsWith("↩️ ") && msg.content.includes("\n\n") 
+                                                        {(() => {
+                                                            const displayContent = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n") 
                                                                 ? msg.content.split("\n\n").slice(1).join("\n\n")
-                                                                : msg.content}
-                                                        </p>
+                                                                : msg.content;
+                                                            const emojiOnly = isEmojiOnly(displayContent);
+                                                            return (
+                                                                <p className={`break-words whitespace-pre-wrap ${emojiOnly ? "text-4xl leading-tight" : ""}`}>
+                                                                    {displayContent}
+                                                                </p>
+                                                            );
+                                                        })()}
 
                                                         {/* Link Previews */}
                                                         {detectUrls(msg.content)
