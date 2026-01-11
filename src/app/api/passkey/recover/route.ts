@@ -68,10 +68,16 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const recoveryCode = searchParams.get("code");
+    
+    // If accessed from browser without code, redirect to the UI page
+    const acceptHeader = request.headers.get("accept") || "";
+    if (!recoveryCode && acceptHeader.includes("text/html")) {
+        return NextResponse.redirect(new URL("/recover", request.url));
+    }
 
     if (!recoveryCode) {
         return NextResponse.json(
-            { error: "Recovery code required" },
+            { error: "Recovery code required. Visit /recover to enter your code." },
             { status: 400 }
         );
     }
