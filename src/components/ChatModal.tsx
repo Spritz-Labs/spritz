@@ -802,9 +802,8 @@ export function ChatModal({
                         className={`fixed z-50 ${
                             isFullscreen
                                 ? "top-4 left-0 right-0 bottom-0"
-                                : "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg max-h-[65vh] h-[500px]"
+                                : "inset-4 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
-                        style={isFullscreen ? {} : { marginBottom: '60px' }}
                     >
                         <div className={`bg-zinc-900 flex flex-col h-full overflow-hidden ${
                             isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"
