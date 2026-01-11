@@ -3,10 +3,22 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
+import { useRouter } from "next/navigation";
 
 export function PasskeyAuth() {
+    const router = useRouter();
     const [mode, setMode] = useState<"login" | "register">("login");
     const [useDevicePasskey, setUseDevicePasskey] = useState(false);
+    const [showEmailRecovery, setShowEmailRecovery] = useState(false);
+    const [recoveryStep, setRecoveryStep] = useState<"email" | "code">("email");
+    const [recoveryEmail, setRecoveryEmail] = useState("");
+    const [recoveryCode, setRecoveryCode] = useState("");
+    const [recoveryLoading, setRecoveryLoading] = useState(false);
+    const [recoveryError, setRecoveryError] = useState<string | null>(null);
+    const [recoverySuccess, setRecoverySuccess] = useState<{
+        userAddress: string;
+        recoveryToken: string;
+    } | null>(null);
     const {
         isLoading,
         isAuthenticated,
@@ -18,6 +30,83 @@ export function PasskeyAuth() {
         logout,
         clearError,
     } = usePasskeyContext();
+
+    const handleSendRecoveryCode = async () => {
+        if (!recoveryEmail) return;
+        
+        setRecoveryLoading(true);
+        setRecoveryError(null);
+        
+        try {
+            const res = await fetch("/api/passkey/recover/email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: recoveryEmail }),
+            });
+            
+            const data = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to send recovery code");
+            }
+            
+            // Move to code entry step
+            setRecoveryStep("code");
+        } catch (err) {
+            setRecoveryError(err instanceof Error ? err.message : "Failed to send code");
+        } finally {
+            setRecoveryLoading(false);
+        }
+    };
+
+    const handleVerifyRecoveryCode = async () => {
+        if (!recoveryEmail || !recoveryCode) return;
+        
+        setRecoveryLoading(true);
+        setRecoveryError(null);
+        
+        try {
+            const res = await fetch("/api/passkey/recover/email/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: recoveryEmail, code: recoveryCode }),
+            });
+            
+            const data = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(data.error || "Invalid recovery code");
+            }
+            
+            // Store recovery token for registration
+            localStorage.setItem("spritz_recovery_token", data.recoveryToken);
+            localStorage.setItem("spritz_recovery_address", data.userAddress);
+            
+            setRecoverySuccess({
+                userAddress: data.userAddress,
+                recoveryToken: data.recoveryToken,
+            });
+        } catch (err) {
+            setRecoveryError(err instanceof Error ? err.message : "Failed to verify code");
+        } finally {
+            setRecoveryLoading(false);
+        }
+    };
+
+    const handleRegisterAfterRecovery = () => {
+        // Navigate to recover page which has better UX for this flow
+        router.push("/?recover=true");
+        setShowEmailRecovery(false);
+    };
+
+    const resetRecoveryState = () => {
+        setShowEmailRecovery(false);
+        setRecoveryStep("email");
+        setRecoveryEmail("");
+        setRecoveryCode("");
+        setRecoveryError(null);
+        setRecoverySuccess(null);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -287,7 +376,188 @@ export function PasskeyAuth() {
                             : "Use your device's biometric authentication"
                         : "Creates a secure account linked to your device"}
                 </p>
+
+                {/* Recover by Email link - only show in login mode */}
+                {mode === "login" && (
+                    <button
+                        type="button"
+                        onClick={() => setShowEmailRecovery(true)}
+                        className="w-full text-center text-zinc-500 hover:text-zinc-300 text-xs mt-2 transition-colors"
+                    >
+                        Lost your passkey? <span className="underline">Recover by Email</span>
+                    </button>
+                )}
             </form>
+
+            {/* Email Recovery Modal */}
+            <AnimatePresence>
+                {showEmailRecovery && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={(e) => e.target === e.currentTarget && resetRecoveryState()}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full"
+                        >
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-white">
+                                    {recoverySuccess ? "Recovery Successful!" : "Recover by Email"}
+                                </h3>
+                                <button
+                                    onClick={resetRecoveryState}
+                                    className="text-zinc-400 hover:text-white transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {recoverySuccess ? (
+                                /* Success State */
+                                <div className="space-y-4">
+                                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            <span className="text-emerald-400 font-medium">Email Verified!</span>
+                                        </div>
+                                        <p className="text-zinc-300 text-sm">You can now register a new passkey.</p>
+                                        <p className="text-zinc-500 text-xs mt-2 font-mono">
+                                            Account: {recoverySuccess.userAddress.slice(0, 10)}...{recoverySuccess.userAddress.slice(-6)}
+                                        </p>
+                                    </div>
+                                    
+                                    {/* Cloud sync reminder */}
+                                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
+                                        <p className="text-blue-400 text-xs font-medium mb-1">💡 Remember to save to cloud!</p>
+                                        <p className="text-zinc-400 text-xs">
+                                            Choose iCloud Keychain or Google Password Manager when registering.
+                                        </p>
+                                    </div>
+                                    
+                                    <button
+                                        onClick={handleRegisterAfterRecovery}
+                                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-semibold hover:opacity-90 transition-opacity"
+                                    >
+                                        Register New Passkey
+                                    </button>
+                                </div>
+                            ) : recoveryStep === "email" ? (
+                                /* Email Input Step */
+                                <div className="space-y-4">
+                                    <p className="text-zinc-400 text-sm">
+                                        Enter the email address associated with your passkey account. We&apos;ll send you a recovery code.
+                                    </p>
+                                    
+                                    {recoveryError && (
+                                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                                            <p className="text-red-400 text-sm">{recoveryError}</p>
+                                        </div>
+                                    )}
+                                    
+                                    <input
+                                        type="email"
+                                        value={recoveryEmail}
+                                        onChange={(e) => setRecoveryEmail(e.target.value)}
+                                        placeholder="your@email.com"
+                                        className="w-full py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20"
+                                        autoFocus
+                                    />
+                                    
+                                    <button
+                                        onClick={handleSendRecoveryCode}
+                                        disabled={!recoveryEmail || recoveryLoading}
+                                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {recoveryLoading ? (
+                                            <>
+                                                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                </svg>
+                                                <span>Sending...</span>
+                                            </>
+                                        ) : (
+                                            "Send Recovery Code"
+                                        )}
+                                    </button>
+                                    
+                                    <p className="text-zinc-500 text-xs text-center">
+                                        Code expires in 10 minutes. Max 3 codes per hour.
+                                    </p>
+                                </div>
+                            ) : (
+                                /* Code Input Step */
+                                <div className="space-y-4">
+                                    <p className="text-zinc-400 text-sm">
+                                        Enter the 6-digit code sent to <strong className="text-white">{recoveryEmail}</strong>
+                                    </p>
+                                    
+                                    {recoveryError && (
+                                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                                            <p className="text-red-400 text-sm">{recoveryError}</p>
+                                        </div>
+                                    )}
+                                    
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={recoveryCode}
+                                        onChange={(e) => setRecoveryCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                        placeholder="000000"
+                                        className="w-full py-4 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-center font-mono text-2xl tracking-[0.5em] placeholder:text-zinc-600 placeholder:tracking-[0.5em] focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20"
+                                        autoFocus
+                                        maxLength={6}
+                                    />
+                                    
+                                    <button
+                                        onClick={handleVerifyRecoveryCode}
+                                        disabled={recoveryCode.length !== 6 || recoveryLoading}
+                                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {recoveryLoading ? (
+                                            <>
+                                                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                </svg>
+                                                <span>Verifying...</span>
+                                            </>
+                                        ) : (
+                                            "Verify Code"
+                                        )}
+                                    </button>
+                                    
+                                    <div className="flex items-center justify-between text-xs">
+                                        <button
+                                            onClick={() => setRecoveryStep("email")}
+                                            className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                        >
+                                            ← Change email
+                                        </button>
+                                        <button
+                                            onClick={handleSendRecoveryCode}
+                                            disabled={recoveryLoading}
+                                            className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                        >
+                                            Resend code
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 }
