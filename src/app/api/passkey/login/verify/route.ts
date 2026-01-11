@@ -55,10 +55,26 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        console.log("[Passkey] Verifying login, challenge:", challenge.slice(0, 30) + "...");
+
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Verify the challenge exists and hasn't expired
-        // First try to find unused challenge
+        // First, let's see what's in the database for debugging
+        const { data: recentChallenges } = await supabase
+            .from("passkey_challenges")
+            .select("challenge, ceremony_type, used, expires_at, created_at")
+            .eq("ceremony_type", "authentication")
+            .order("created_at", { ascending: false })
+            .limit(5);
+        
+        console.log("[Passkey] Recent auth challenges in DB:", recentChallenges?.map(c => ({
+            challenge: c.challenge.slice(0, 20) + "...",
+            used: c.used,
+            expires_at: c.expires_at,
+        })));
+
+        // Try to find unused challenge
         let { data: challengeData, error: challengeError } = await supabase
             .from("passkey_challenges")
             .select("*")
@@ -66,6 +82,12 @@ export async function POST(request: NextRequest) {
             .eq("ceremony_type", "authentication")
             .eq("used", false)
             .single();
+
+        console.log("[Passkey] Challenge lookup result:", { 
+            found: !!challengeData, 
+            error: challengeError?.message,
+            challengeInDb: challengeData?.challenge?.slice(0, 20) + "..."
+        });
 
         // If not found, check if it exists but was already used (race condition)
         if (challengeError || !challengeData) {
@@ -75,6 +97,8 @@ export async function POST(request: NextRequest) {
                 .eq("challenge", challenge)
                 .eq("ceremony_type", "authentication")
                 .single();
+            
+            console.log("[Passkey] Any challenge lookup:", { found: !!anyChallenge, used: anyChallenge?.used });
             
             if (anyChallenge) {
                 if (anyChallenge.used) {
@@ -93,7 +117,8 @@ export async function POST(request: NextRequest) {
                 }
             }
             
-            console.error("[Passkey] Challenge not found in database:", challenge.slice(0, 20) + "...");
+            console.error("[Passkey] Challenge not found in database");
+            console.error("[Passkey] Looking for:", challenge.slice(0, 30) + "...");
             console.error("[Passkey] Query error:", challengeError);
             return NextResponse.json(
                 { error: "Invalid or expired challenge. Please try again." },
