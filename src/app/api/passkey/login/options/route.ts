@@ -47,17 +47,20 @@ export async function POST(request: NextRequest) {
         // Store the challenge temporarily (expires in 5 minutes)
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
         
-        // Clean up old expired/used challenges to prevent database bloat
-        await supabase
-            .from("passkey_challenges")
-            .delete()
-            .or("used.eq.true,expires_at.lt." + new Date().toISOString());
-        
-        // Delete any existing unused challenges for this specific challenge (in case of collision)
-        await supabase
-            .from("passkey_challenges")
-            .delete()
-            .eq("challenge", options.challenge);
+        // Clean up old expired challenges to prevent database bloat (ignore errors)
+        try {
+            await supabase
+                .from("passkey_challenges")
+                .delete()
+                .eq("used", true);
+            
+            await supabase
+                .from("passkey_challenges")
+                .delete()
+                .lt("expires_at", new Date().toISOString());
+        } catch (cleanupError) {
+            console.warn("[Passkey] Challenge cleanup warning:", cleanupError);
+        }
         
         const { error: insertError } = await supabase.from("passkey_challenges").insert({
             challenge: options.challenge,
@@ -69,15 +72,16 @@ export async function POST(request: NextRequest) {
         if (insertError) {
             console.error("[Passkey] Failed to store challenge:", insertError);
             console.error("[Passkey] Challenge value:", options.challenge.slice(0, 30) + "...");
-            return NextResponse.json(
-                { error: "Failed to generate authentication options" },
-                { status: 500 }
-            );
+            // Don't fail if it's just a duplicate - try to continue
+            if (!insertError.message?.includes("duplicate")) {
+                return NextResponse.json(
+                    { error: "Failed to generate authentication options" },
+                    { status: 500 }
+                );
+            }
         }
 
-        console.log("[Passkey] Generated auth options, challenge stored successfully");
-        console.log("[Passkey] Challenge:", options.challenge.slice(0, 30) + "...");
-        console.log("[Passkey] Expires at:", expiresAt);
+        console.log("[Passkey] Generated auth options, challenge stored");
         console.log("[Passkey] allowCredentials count:", allowCredentials.length);
 
         return NextResponse.json({
