@@ -67,6 +67,20 @@ export function ChannelChatModal({
     const inputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Local cache for user info fetched from API
+    const [localUserInfoCache, setLocalUserInfoCache] = useState<
+        Map<string, { name: string | null; avatar: string | null }>
+    >(new Map());
+
+    // Combined getUserInfo that checks local cache first, then falls back to prop
+    const getEffectiveUserInfo = useCallback((address: string) => {
+        // Check prop first
+        const propInfo = getUserInfo?.(address);
+        if (propInfo) return propInfo;
+        // Check local cache
+        return localUserInfoCache.get(address.toLowerCase()) || null;
+    }, [getUserInfo, localUserInfoCache]);
+
     // Build list of mentionable users from message senders
     const mentionableUsers: MentionUser[] = useMemo(() => {
         const userMap = new Map<string, MentionUser>();
@@ -74,7 +88,7 @@ export function ChannelChatModal({
         messages.forEach((msg) => {
             const address = msg.sender_address.toLowerCase();
             if (!userMap.has(address) && address !== userAddress.toLowerCase()) {
-                const info = getUserInfo?.(msg.sender_address);
+                const info = getEffectiveUserInfo(msg.sender_address);
                 userMap.set(address, {
                     address: msg.sender_address,
                     name: info?.name || null,
@@ -84,7 +98,7 @@ export function ChannelChatModal({
         });
         
         return Array.from(userMap.values());
-    }, [messages, userAddress, getUserInfo]);
+    }, [messages, userAddress, getEffectiveUserInfo]);
 
     // Handle mention click
     const handleMentionClick = useCallback((address: string) => {
@@ -95,6 +109,53 @@ export function ChannelChatModal({
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
+
+    // Fetch user info for message senders not in cache
+    useEffect(() => {
+        if (!messages || messages.length === 0) return;
+
+        const uniqueSenders = new Set<string>();
+        messages.forEach((msg) => {
+            const sender = msg.sender_address.toLowerCase();
+            // Skip current user
+            if (sender !== userAddress.toLowerCase()) {
+                uniqueSenders.add(sender);
+            }
+        });
+
+        // Only fetch for senders not in cache (check both getUserInfo and local cache)
+        const sendersToFetch = Array.from(uniqueSenders).filter(
+            (address) => !getUserInfo?.(address) && !localUserInfoCache.has(address)
+        );
+
+        // Fetch user info for all unique senders not in cache
+        sendersToFetch.forEach((address) => {
+            fetch(`/api/public/user?address=${encodeURIComponent(address)}`)
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data.user) {
+                        const name = data.user.username
+                            ? `@${data.user.username}`
+                            : data.user.display_name ||
+                              data.user.ens_name ||
+                              null;
+                        const userInfo = {
+                            name,
+                            avatar: data.user.avatar_url || null,
+                        };
+                        setLocalUserInfoCache((prev) => {
+                            if (prev.has(address.toLowerCase())) {
+                                return prev;
+                            }
+                            return new Map(prev).set(address.toLowerCase(), userInfo);
+                        });
+                    }
+                })
+                .catch((err) => {
+                    console.error("[ChannelChat] Error fetching user info for", address, err);
+                });
+        });
+    }, [messages, userAddress, getUserInfo, localUserInfoCache]);
 
     // Focus input when opened
     useEffect(() => {
@@ -227,12 +288,12 @@ export function ChannelChatModal({
     };
 
     const formatSender = (address: string) => {
-        const userInfo = getUserInfo?.(address);
+        const userInfo = getEffectiveUserInfo(address);
         return userInfo?.name || formatAddress(address);
     };
 
     const getSenderAvatar = (address: string) => {
-        return getUserInfo?.(address)?.avatar || null;
+        return getEffectiveUserInfo(address)?.avatar || null;
     };
 
     const isImageUrl = (content: string) => {
