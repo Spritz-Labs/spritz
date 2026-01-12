@@ -270,8 +270,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified }: Wal
         reset: resetSafe,
     } = useSafeWallet();
 
-    // Use Safe for sending (preferred) or fallback to EOA
-    const [useSafeForSend, setUseSafeForSend] = useState(true);
+    // Use Safe for sending or EOA (default to EOA as it's more reliable)
+    const [useSafeForSend, setUseSafeForSend] = useState(false);
     const effectiveTxHash = useSafeForSend ? safeTxHash : txHash;
     const effectiveError = useSafeForSend ? safeError : sendError;
     const effectiveIsSending = useSafeForSend ? isSafeSending : isSending;
@@ -992,8 +992,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified }: Wal
 
                                         {/* Note about send method */}
                                         <p className="text-xs text-zinc-600 text-center mt-2">
-                                            {useSafeForSend 
-                                                ? "Sends via Safe Smart Wallet (gasless)" 
+                                            {useSafeForSend
+                                                ? "⚡ Safe Wallet (experimental, gasless)"
                                                 : "Sends from your connected wallet"}
                                         </p>
                                     </div>

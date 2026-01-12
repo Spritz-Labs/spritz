@@ -54,7 +54,8 @@ export const SAFE_SUPPORTED_CHAINS: Record<number, Chain> = {
 function getPimlicoBundlerUrl(chainId: number): string {
     const apiKey = process.env.NEXT_PUBLIC_PIMLICO_API_KEY;
     if (!apiKey) {
-        throw new Error("NEXT_PUBLIC_PIMLICO_API_KEY is not set");
+        console.error("[SafeWallet] NEXT_PUBLIC_PIMLICO_API_KEY is not set");
+        throw new Error("Pimlico API key not configured. Please set NEXT_PUBLIC_PIMLICO_API_KEY.");
     }
     
     const chainNames: Record<number, string> = {
@@ -67,10 +68,12 @@ function getPimlicoBundlerUrl(chainId: number): string {
     
     const chainName = chainNames[chainId];
     if (!chainName) {
-        throw new Error(`Unsupported chain: ${chainId}`);
+        throw new Error(`Chain ${chainId} not supported for Safe transactions`);
     }
     
-    return `https://api.pimlico.io/v2/${chainName}/rpc?apikey=${apiKey}`;
+    const url = `https://api.pimlico.io/v2/${chainName}/rpc?apikey=${apiKey}`;
+    console.log(`[SafeWallet] Using Pimlico for ${chainName} (chain ${chainId})`);
+    return url;
 }
 
 // Create a public client for a chain
@@ -166,55 +169,66 @@ export async function createSafeAccountClient(
     ownerAddress: Address,
     chainId: number,
     signMessage: (message: string) => Promise<`0x${string}`>,
-    signTypedData: (data: any) => Promise<`0x${string}`>,
+    signTypedData: (data: unknown) => Promise<`0x${string}`>,
 ): Promise<SmartAccountClient> {
     const chain = SAFE_SUPPORTED_CHAINS[chainId];
     if (!chain) {
         throw new Error(`Unsupported chain: ${chainId}`);
     }
 
+    console.log(`[SafeWallet] Creating Safe account for owner ${ownerAddress.slice(0, 10)}... on chain ${chainId}`);
+
     const publicClient = getPublicClient(chainId);
     const pimlicoClient = getPimlicoClient(chainId);
 
-    // Create Safe account with the owner's signing capability
-    const safeAccount = await toSafeSmartAccount({
-        client: publicClient,
-        owners: [{
-            address: ownerAddress,
-            type: "local",
-            signMessage: async ({ message }: { message: string | { raw: string | Uint8Array } }) => {
-                if (typeof message === "string") {
-                    return signMessage(message);
-                }
-                return signMessage(message.raw as string);
+    try {
+        // Create Safe account with the owner's signing capability
+        const safeAccount = await toSafeSmartAccount({
+            client: publicClient,
+            owners: [{
+                address: ownerAddress,
+                type: "local",
+                signMessage: async ({ message }: { message: string | { raw: string | Uint8Array } }) => {
+                    if (typeof message === "string") {
+                        return signMessage(message);
+                    }
+                    return signMessage(message.raw as string);
+                },
+                signTypedData: async (typedData: Record<string, unknown>) => {
+                    return signTypedData(typedData);
+                },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any],
+            version: "1.4.1",
+            entryPoint: {
+                address: entryPoint07Address,
+                version: "0.7",
             },
-            signTypedData: async (typedData: Record<string, unknown>) => {
-                return signTypedData(typedData);
-            },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any],
-        version: "1.4.1",
-        entryPoint: {
-            address: entryPoint07Address,
-            version: "0.7",
-        },
-        saltNonce: BigInt(0),
-    });
+            saltNonce: BigInt(0),
+        });
 
-    // Create smart account client with Pimlico as bundler and paymaster
-    const smartAccountClient = createSmartAccountClient({
-        account: safeAccount,
-        chain,
-        bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-        paymaster: pimlicoClient,
-        userOperation: {
-            estimateFeesPerGas: async () => {
-                return (await pimlicoClient.getUserOperationGasPrice()).fast;
-            },
-        },
-    });
+        console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
 
-    return smartAccountClient as SmartAccountClient;
+        // Create smart account client with Pimlico as bundler and paymaster
+        const smartAccountClient = createSmartAccountClient({
+            account: safeAccount,
+            chain,
+            bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
+            paymaster: pimlicoClient,
+            userOperation: {
+                estimateFeesPerGas: async () => {
+                    const prices = await pimlicoClient.getUserOperationGasPrice();
+                    console.log(`[SafeWallet] Gas prices:`, prices.fast);
+                    return prices.fast;
+                },
+            },
+        });
+
+        return smartAccountClient as SmartAccountClient;
+    } catch (err) {
+        console.error(`[SafeWallet] Failed to create Safe account:`, err);
+        throw err;
+    }
 }
 
 export interface SendTransactionParams {

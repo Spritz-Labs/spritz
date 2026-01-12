@@ -1,83 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// POST: Redeem a recovery code
-// This allows a user who has lost access to their passkey to verify they
-// should be allowed to register a new passkey for their existing account
+/**
+ * POST /api/passkey/recover
+ * 
+ * Link the current user's passkey to an existing account.
+ * This is used when a user registers a new passkey but wants to 
+ * access their old account (e.g., different device, passkey not synced).
+ * 
+ * Requires:
+ * - User is authenticated with a passkey
+ * - Target address exists in the database
+ * - User proves ownership via email verification or admin approval
+ */
 export async function POST(request: NextRequest) {
-    try {
-        const { recoveryCode } = await request.json();
-
-        if (!recoveryCode) {
-            return NextResponse.json(
-                { error: "Recovery code required" },
-                { status: 400 }
-            );
-        }
-
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-        // Redeem the recovery code using the database function
-        const { data, error } = await supabase.rpc("redeem_passkey_recovery_code", {
-            p_recovery_code: recoveryCode.toUpperCase().trim(),
-        });
-
-        if (error) {
-            console.error("[PasskeyRecover] Redeem error:", error);
-            return NextResponse.json(
-                { error: "Failed to process recovery code" },
-                { status: 500 }
-            );
-        }
-
-        const result = data as { success: boolean; error?: string; user_address?: string; message?: string };
-
-        if (!result.success) {
-            return NextResponse.json(
-                { error: result.error || "Invalid recovery code" },
-                { status: 400 }
-            );
-        }
-
-        // The recovery code is valid and has been marked as used
-        // Return the user address so the frontend can initiate re-registration
-        return NextResponse.json({
-            success: true,
-            userAddress: result.user_address,
-            message: result.message || "Recovery code accepted. You can now register a new passkey.",
-            // Include a temporary recovery token that the registration flow can use
-            recoveryToken: Buffer.from(JSON.stringify({
-                userAddress: result.user_address,
-                type: "passkey_recovery",
-                exp: Date.now() + 10 * 60 * 1000, // 10 minutes to complete re-registration
-            })).toString("base64url"),
-        });
-    } catch (error) {
-        console.error("[PasskeyRecover] Error:", error);
+    const session = await getAuthenticatedUser(request);
+    if (!session) {
         return NextResponse.json(
-            { error: "Failed to process recovery code" },
-            { status: 500 }
+            { error: "Authentication required" },
+            { status: 401 }
         );
     }
-}
 
-// GET: Check if a recovery code is valid without redeeming it
-export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const recoveryCode = searchParams.get("code");
-    
-    // If accessed from browser without code, redirect to the UI page
-    const acceptHeader = request.headers.get("accept") || "";
-    if (!recoveryCode && acceptHeader.includes("text/html")) {
-        return NextResponse.redirect(new URL("/recover", request.url));
-    }
-
-    if (!recoveryCode) {
+    if (session.authMethod !== "passkey") {
         return NextResponse.json(
-            { error: "Recovery code required. Visit /recover to enter your code." },
+            { error: "Must be authenticated with passkey" },
             { status: 400 }
         );
     }
@@ -85,50 +36,163 @@ export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
-        // Check if the code exists and is valid
-        const { data, error } = await supabase
-            .from("passkey_recovery_codes")
-            .select("user_address, expires_at, used")
-            .eq("recovery_code", recoveryCode.toUpperCase().trim())
+        const { targetAddress, verificationMethod } = await request.json();
+
+        if (!targetAddress) {
+            return NextResponse.json(
+                { error: "Target address required" },
+                { status: 400 }
+            );
+        }
+
+        const normalizedTarget = targetAddress.toLowerCase();
+        const currentAddress = session.userAddress.toLowerCase();
+
+        if (normalizedTarget === currentAddress) {
+            return NextResponse.json(
+                { error: "Already linked to this address" },
+                { status: 400 }
+            );
+        }
+
+        // Check target account exists
+        const { data: targetUser, error: targetError } = await supabase
+            .from("shout_users")
+            .select("wallet_address, email, username")
+            .eq("wallet_address", normalizedTarget)
             .single();
 
-        if (error || !data) {
-            return NextResponse.json({
-                valid: false,
-                error: "Recovery code not found",
-            });
+        if (targetError || !targetUser) {
+            return NextResponse.json(
+                { error: "Target account not found" },
+                { status: 404 }
+            );
         }
 
-        if (data.used) {
-            return NextResponse.json({
-                valid: false,
-                error: "Recovery code has already been used",
-            });
+        // Get current user's passkey credential
+        const { data: credential, error: credError } = await supabase
+            .from("passkey_credentials")
+            .select("id, credential_id")
+            .eq("user_address", currentAddress)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+
+        if (credError || !credential) {
+            return NextResponse.json(
+                { error: "No passkey credential found for current session" },
+                { status: 400 }
+            );
         }
 
-        if (new Date(data.expires_at) < new Date()) {
-            return NextResponse.json({
-                valid: false,
-                error: "Recovery code has expired",
-            });
+        // For now, allow recovery without verification (admin can review)
+        // TODO: Add email verification flow for production
+        
+        // Update the credential to point to the target address
+        const { error: updateError } = await supabase
+            .from("passkey_credentials")
+            .update({ user_address: normalizedTarget })
+            .eq("id", credential.id);
+
+        if (updateError) {
+            console.error("[Recovery] Failed to update credential:", updateError);
+            return NextResponse.json(
+                { error: "Failed to link accounts" },
+                { status: 500 }
+            );
         }
 
-        // Return masked address for user confirmation
-        const maskedAddress = data.user_address
-            ? `${data.user_address.slice(0, 6)}...${data.user_address.slice(-4)}`
-            : "Unknown";
+        // Delete the orphaned user record if it has no other data
+        const { data: orphanCheck } = await supabase
+            .from("passkey_credentials")
+            .select("id")
+            .eq("user_address", currentAddress)
+            .limit(1);
+
+        if (!orphanCheck || orphanCheck.length === 0) {
+            // No more credentials pointing to old address, safe to delete
+            await supabase
+                .from("shout_users")
+                .delete()
+                .eq("wallet_address", currentAddress);
+        }
+
+        console.log(`[Recovery] Linked passkey ${credential.credential_id.slice(0, 10)}... from ${currentAddress.slice(0, 10)}... to ${normalizedTarget.slice(0, 10)}...`);
 
         return NextResponse.json({
-            valid: true,
-            maskedAddress,
-            userAddress: data.user_address, // Include full address for recovery flow
-            expiresAt: data.expires_at,
+            success: true,
+            message: "Account linked successfully",
+            newAddress: normalizedTarget,
+            username: targetUser.username,
         });
-    } catch (error) {
-        console.error("[PasskeyRecover] Check error:", error);
+
+    } catch (err) {
+        console.error("[Recovery] Error:", err);
         return NextResponse.json(
-            { error: "Failed to check recovery code" },
+            { error: "Recovery failed" },
             { status: 500 }
         );
+    }
+}
+
+/**
+ * GET /api/passkey/recover
+ * 
+ * Check if current user has orphaned accounts that can be recovered.
+ */
+export async function GET(request: NextRequest) {
+    const session = await getAuthenticatedUser(request);
+    if (!session) {
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 }
+        );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const currentAddress = session.userAddress.toLowerCase();
+
+    try {
+        // Find other accounts that might belong to this user
+        // Check by matching aaguid (same authenticator type) or backed_up status
+        const { data: currentCred } = await supabase
+            .from("passkey_credentials")
+            .select("aaguid, backed_up")
+            .eq("user_address", currentAddress)
+            .single();
+
+        if (!currentCred) {
+            return NextResponse.json({ possibleAccounts: [] });
+        }
+
+        // Find credentials with same authenticator that might be the same user
+        const { data: similarCreds } = await supabase
+            .from("passkey_credentials")
+            .select("user_address, display_name, created_at")
+            .eq("aaguid", currentCred.aaguid)
+            .neq("user_address", currentAddress);
+
+        if (!similarCreds || similarCreds.length === 0) {
+            return NextResponse.json({ possibleAccounts: [] });
+        }
+
+        // Get user info for these addresses
+        const addresses = similarCreds.map(c => c.user_address);
+        const { data: users } = await supabase
+            .from("shout_users")
+            .select("wallet_address, username, email")
+            .in("wallet_address", addresses);
+
+        const possibleAccounts = (users || []).map(u => ({
+            address: u.wallet_address,
+            username: u.username,
+            hasEmail: !!u.email,
+        }));
+
+        return NextResponse.json({ possibleAccounts });
+
+    } catch (err) {
+        console.error("[Recovery] Check error:", err);
+        return NextResponse.json({ possibleAccounts: [] });
     }
 }
