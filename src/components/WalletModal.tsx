@@ -13,7 +13,7 @@ import { useSendTransaction, isValidAddress } from "@/hooks/useSendTransaction";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
-import { CHAIN_LIST, SEND_ENABLED_CHAIN_IDS } from "@/config/chains";
+import { SEND_ENABLED_CHAIN_IDS } from "@/config/chains";
 
 type WalletModalProps = {
     isOpen: boolean;
@@ -245,7 +245,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>("balances");
-    const [selectedChain, setSelectedChain] = useState<string>("all");
 
     // Send form state
     const [sendToken, setSendToken] = useState<TokenBalance | null>(null);
@@ -414,17 +413,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         return tokens.sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0));
     }, [balances]);
 
-    // Filter balances by selected chain
-    const filteredBalances = selectedChain === "all" 
-        ? balances 
-        : balances.filter(b => b.chain.network === selectedChain);
+    // Filter balances to only show send-enabled chains (Base only for now)
+    const filteredBalances = balances.filter(b => SEND_ENABLED_CHAIN_IDS.includes(b.chain.id));
 
     // Reset to balances tab when modal opens/closes
     useEffect(() => {
         if (isOpen) {
             setActiveTab("balances");
             setCopied(false);
-            setSelectedChain("all");
         } else {
             // Reset send form when modal closes
             resetSendForm();
@@ -554,7 +550,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     <p className="text-3xl font-bold text-white">{formatUsd(totalUsd)}</p>
                                 )}
                                 <p className="text-xs text-zinc-600 mt-1">
-                                    Across {CHAIN_LIST.length} chains
+                                    Base Network
                                 </p>
                             </div>
                         </div>
@@ -611,20 +607,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 <>
                                     {/* Filter and Refresh bar */}
                                     <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
-                                        {/* Chain filter */}
-                                        <select
-                                            value={selectedChain}
-                                            onChange={(e) => setSelectedChain(e.target.value)}
-                                            className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600"
-                                        >
-                                            <option value="all">All Chains</option>
-                                            {CHAIN_LIST.map((chain) => (
-                                                <option key={chain.network} value={chain.network}>
-                                                    {chain.icon} {chain.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        
+                                        {/* Chain indicator - Base only for now */}
+                                        <div className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
+                                            <span className="text-xs">🔵</span>
+                                            <span className="text-xs text-zinc-300">Base</span>
+                                        </div>
+
                                         <div className="flex items-center gap-2">
                                         <span className="text-xs text-zinc-500">
                                             {lastUpdated 
@@ -745,20 +733,17 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </>
                                     )}
 
-                                    {/* Supported chains */}
+                                    {/* Supported chain info */}
                                     <div className="mt-6">
-                                        <p className="text-xs text-zinc-500 text-center mb-3">Supported Chains</p>
-                                        <div className="flex flex-wrap justify-center gap-2">
-                                            {CHAIN_LIST.map((chain) => (
-                                                <div
-                                                    key={chain.id}
-                                                    className="px-2 py-1 bg-zinc-800 rounded-lg text-xs text-zinc-400 flex items-center gap-1"
-                                                >
-                                                    <span>{chain.icon}</span>
-                                                    {chain.name}
-                                                </div>
-                                            ))}
+                                        <div className="flex justify-center">
+                                            <div className="px-3 py-2 bg-zinc-800 rounded-lg text-sm text-zinc-300 flex items-center gap-2">
+                                                <span>🔵</span>
+                                                <span>Base Network</span>
+                                            </div>
                                         </div>
+                                        <p className="text-xs text-zinc-600 text-center mt-2">
+                                            Send & receive on Base
+                                        </p>
                                     </div>
                                 </div>
                             )}
