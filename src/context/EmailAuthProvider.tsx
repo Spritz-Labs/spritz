@@ -150,6 +150,7 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email }),
+                credentials: "include", // Required for session cookies
             });
 
             console.log("[EmailAuthProvider] Response status:", response.status);
@@ -199,6 +200,7 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email, code }),
+                    credentials: "include", // Required for session cookies
                 });
 
                 const data = await response.json();
