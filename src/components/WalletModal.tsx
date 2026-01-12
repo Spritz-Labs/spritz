@@ -10,6 +10,7 @@ import { useWalletBalances, formatUsd, formatTokenBalance } from "@/hooks/useWal
 import { useSmartWallet } from "@/hooks/useSmartWallet";
 import { useTransactionHistory, formatRelativeTime, truncateAddress as truncateTxAddress, formatTxUsd, type Transaction } from "@/hooks/useTransactionHistory";
 import { useSendTransaction, isValidAddress } from "@/hooks/useSendTransaction";
+import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
@@ -248,8 +249,19 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     // Send form state
     const [sendToken, setSendToken] = useState<TokenBalance | null>(null);
-    const [sendRecipient, setSendRecipient] = useState("");
     const [sendAmount, setSendAmount] = useState("");
+    
+    // ENS resolver for recipient
+    const {
+        input: recipientInput,
+        resolvedAddress: resolvedRecipient,
+        ensName: recipientEnsName,
+        isResolving: isResolvingEns,
+        error: ensError,
+        isValid: isRecipientValid,
+        setInput: setRecipientInput,
+        clear: clearRecipient,
+    } = useEnsResolver();
     const [showTokenSelector, setShowTokenSelector] = useState(false);
     const [showSendConfirm, setShowSendConfirm] = useState(false);
 
@@ -312,23 +324,21 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     // Estimate gas when recipient and amount are valid
     const handleEstimateGas = useCallback(async () => {
-        if (!sendToken || !sendRecipient || !sendAmount) return;
-        if (!isValidAddress(sendRecipient)) return;
-        
+        if (!sendToken || !resolvedRecipient || !sendAmount) return;
+
         if (useSafeForSend && safeAddress) {
-            await estimateSafeGas(sendRecipient as Address, sendAmount);
+            await estimateSafeGas(resolvedRecipient, sendAmount);
         } else {
             await estimateGas({
-                to: sendRecipient as Address,
+                to: resolvedRecipient,
                 value: sendAmount,
             });
         }
-    }, [sendToken, sendRecipient, sendAmount, estimateGas, estimateSafeGas, useSafeForSend, safeAddress]);
+    }, [sendToken, resolvedRecipient, sendAmount, estimateGas, estimateSafeGas, useSafeForSend, safeAddress]);
 
     // Handle send confirmation
     const handleSend = useCallback(async () => {
-        if (!sendToken || !sendRecipient || !sendAmount) return;
-        if (!isValidAddress(sendRecipient)) return;
+        if (!sendToken || !resolvedRecipient || !sendAmount) return;
 
         let hash: string | null = null;
         
@@ -339,9 +349,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
         if (isPasskeyUser) {
             // Send via passkey-signed Safe transaction
-            console.log("[WalletModal] Sending via passkey Safe...");
+            console.log("[WalletModal] Sending via passkey Safe to:", resolvedRecipient);
             hash = await sendPasskeyTransaction(
-                sendRecipient as Address,
+                resolvedRecipient,
                 sendAmount,
                 tokenAddress,
                 tokenDecimals
@@ -349,7 +359,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         } else if (useSafeForSend && safeAddress) {
             // Send via Safe smart wallet (EOA signer)
             hash = await sendSafeTransaction(
-                sendRecipient as Address, 
+                resolvedRecipient, 
                 sendAmount,
                 tokenAddress,
                 tokenDecimals
@@ -361,7 +371,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 // TODO: Implement EOA ERC20 transfers
             }
             hash = await send({
-                to: sendRecipient as Address,
+                to: resolvedRecipient,
                 value: sendAmount,
             });
         }
@@ -373,18 +383,18 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 refreshTx();
             }, 2000);
         }
-    }, [sendToken, sendRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, isPasskeyUser, refresh, refreshTx]);
+    }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, isPasskeyUser, refresh, refreshTx]);
 
     // Reset send form
     const resetSendForm = useCallback(() => {
         setSendToken(null);
-        setSendRecipient("");
+        clearRecipient();
         setSendAmount("");
         setShowSendConfirm(false);
         resetSend();
         resetSafe();
         resetPasskey();
-    }, [resetSend, resetSafe, resetPasskey]);
+    }, [clearRecipient, resetSend, resetSafe, resetPasskey]);
 
     // Get all tokens flat for send selector (only from send-enabled chains)
     const allTokens = useMemo(() => {
@@ -429,10 +439,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     // Auto-estimate gas when send form is complete
     useEffect(() => {
-        if (sendToken && sendRecipient && isValidAddress(sendRecipient) && sendAmount && parseFloat(sendAmount) > 0) {
+        if (sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0) {
             handleEstimateGas();
         }
-    }, [sendToken, sendRecipient, sendAmount, handleEstimateGas]);
+    }, [sendToken, resolvedRecipient, sendAmount, handleEstimateGas]);
 
     // Copy wallet address
     const handleCopy = () => {
@@ -907,23 +917,60 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </button>
                                         </div>
 
-                                        {/* Recipient Address */}
+                                        {/* Recipient Address with ENS support */}
                                         <div>
                                             <label className="block text-xs font-medium text-zinc-400 mb-2">
                                                 Recipient
                                             </label>
-                                            <input
-                                                type="text"
-                                                value={sendRecipient}
-                                                onChange={(e) => setSendRecipient(e.target.value)}
-                                                placeholder="0x..."
-                                                className={`w-full bg-zinc-800/50 border rounded-xl p-3 text-white text-sm placeholder-zinc-500 focus:outline-none ${
-                                                    sendRecipient && !isValidAddress(sendRecipient)
-                                                        ? "border-red-500/50 focus:border-red-500"
-                                                        : "border-zinc-700/50 focus:border-purple-500/50"
-                                                }`}
-                                            />
-                                            {sendRecipient && !isValidAddress(sendRecipient) && (
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={recipientInput}
+                                                    onChange={(e) => setRecipientInput(e.target.value)}
+                                                    placeholder="0x... or ENS name"
+                                                    className={`w-full bg-zinc-800/50 border rounded-xl p-3 pr-10 text-white text-sm placeholder-zinc-500 focus:outline-none ${
+                                                        recipientInput && !isRecipientValid && !isResolvingEns
+                                                            ? "border-red-500/50 focus:border-red-500"
+                                                            : isRecipientValid
+                                                            ? "border-emerald-500/50 focus:border-emerald-500"
+                                                            : "border-zinc-700/50 focus:border-purple-500/50"
+                                                    }`}
+                                                />
+                                                {/* Status indicator */}
+                                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                    {isResolvingEns ? (
+                                                        <div className="w-4 h-4 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                                                    ) : isRecipientValid ? (
+                                                        <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    ) : recipientInput ? (
+                                                        <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                            {/* Show resolved address for ENS names */}
+                                            {recipientEnsName && resolvedRecipient && recipientInput.includes(".") && (
+                                                <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+                                                    <span>✓</span>
+                                                    <span className="text-zinc-500">{resolvedRecipient.slice(0, 6)}...{resolvedRecipient.slice(-4)}</span>
+                                                </p>
+                                            )}
+                                            {/* Show ENS name for addresses */}
+                                            {recipientEnsName && resolvedRecipient && !recipientInput.includes(".") && (
+                                                <p className="text-xs text-purple-400 mt-1 flex items-center gap-1">
+                                                    <span>🏷️</span>
+                                                    <span>{recipientEnsName}</span>
+                                                </p>
+                                            )}
+                                            {/* Show error */}
+                                            {ensError && (
+                                                <p className="text-xs text-red-400 mt-1">{ensError}</p>
+                                            )}
+                                            {/* Show invalid format error only if not resolving and not an ENS attempt */}
+                                            {recipientInput && !isRecipientValid && !isResolvingEns && !ensError && !recipientInput.includes(".") && (
                                                 <p className="text-xs text-red-400 mt-1">Invalid address format</p>
                                             )}
                                         </div>
@@ -965,7 +1012,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </div>
 
                                         {/* Gas Estimation & Summary */}
-                                        {sendToken && sendRecipient && isValidAddress(sendRecipient) && sendAmount && parseFloat(sendAmount) > 0 && (
+                                        {sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0 && (
                                             <div className="bg-zinc-800/30 rounded-xl p-3 space-y-2">
                                                 <div className="flex justify-between text-xs">
                                                     <span className="text-zinc-500">Network Fee</span>
@@ -1055,14 +1102,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 onClick={handleSend}
                                                 disabled={
                                                     !sendToken ||
-                                                    !sendRecipient ||
-                                                    !isValidAddress(sendRecipient) ||
+                                                    !resolvedRecipient ||
                                                     !sendAmount ||
                                                     parseFloat(sendAmount) <= 0 ||
-                                                    effectiveIsSending
+                                                    effectiveIsSending ||
+                                                    isResolvingEns
                                                 }
                                                 className={`w-full py-3 rounded-xl font-medium transition-colors ${
-                                                    sendToken && sendRecipient && isValidAddress(sendRecipient) && sendAmount && parseFloat(sendAmount) > 0 && !effectiveIsSending
+                                                    sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0 && !effectiveIsSending && !isResolvingEns
                                                         ? useSafeForSend ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-purple-500 text-white hover:bg-purple-600"
                                                         : "bg-purple-500/20 text-purple-400 opacity-50 cursor-not-allowed"
                                                 }`}
@@ -1076,9 +1123,11 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     </span>
                                                 ) : !sendToken ? (
                                                     "Select Token"
-                                                ) : !sendRecipient ? (
+                                                ) : !recipientInput ? (
                                                     "Enter Recipient"
-                                                ) : !isValidAddress(sendRecipient) ? (
+                                                ) : isResolvingEns ? (
+                                                    "Resolving ENS..."
+                                                ) : !resolvedRecipient ? (
                                                     "Invalid Address"
                                                 ) : !sendAmount || parseFloat(sendAmount) <= 0 ? (
                                                     "Enter Amount"
