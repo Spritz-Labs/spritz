@@ -714,8 +714,24 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "send" && (
                                 <div className="flex flex-col h-full relative">
-                                    {/* Wallet Not Connected - Show Connect Prompt (only for non-passkey users) */}
-                                    {!isConnected && !isPasskeyUser ? (
+                                    {/* Passkey users - Show coming soon */}
+                                    {isPasskeyUser ? (
+                                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                                            <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
+                                                <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-white mb-2">Passkey Sending Coming Soon</h3>
+                                            <p className="text-sm text-zinc-400 mb-4 max-w-xs">
+                                                We're upgrading passkey signing for Safe Smart Accounts. For now, you can receive funds to your wallet address.
+                                            </p>
+                                            <div className="text-xs text-zinc-500 space-y-1">
+                                                <p>✓ Receive tokens to your address</p>
+                                                <p>⏳ Send with passkey (coming soon)</p>
+                                            </div>
+                                        </div>
+                                    ) : !isConnected ? (
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
                                                 <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
