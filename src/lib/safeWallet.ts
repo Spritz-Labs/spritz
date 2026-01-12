@@ -89,6 +89,11 @@ export function getPublicClient(chainId: number) {
     });
 }
 
+// Get sponsorship policy ID from env (optional - for gasless transactions)
+function getSponsorshipPolicyId(): string | undefined {
+    return process.env.NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID;
+}
+
 // Create Pimlico bundler client
 export function getPimlicoClient(chainId: number) {
     const chain = SAFE_SUPPORTED_CHAINS[chainId];
@@ -103,6 +108,17 @@ export function getPimlicoClient(chainId: number) {
             version: "0.7",
         },
     });
+}
+
+// Get paymaster context with sponsorship policy
+export function getPaymasterContext() {
+    const policyId = getSponsorshipPolicyId();
+    if (policyId) {
+        console.log(`[SafeWallet] Using sponsorship policy: ${policyId}`);
+        return { sponsorshipPolicyId: policyId };
+    }
+    console.log("[SafeWallet] No sponsorship policy configured - user pays gas");
+    return undefined;
 }
 
 export interface SafeWalletConfig {
@@ -209,12 +225,16 @@ export async function createSafeAccountClient(
 
         console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
 
+        // Get sponsorship context if configured
+        const paymasterContext = getPaymasterContext();
+
         // Create smart account client with Pimlico as bundler and paymaster
         const smartAccountClient = createSmartAccountClient({
             account: safeAccount,
             chain,
             bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
             paymaster: pimlicoClient,
+            paymasterContext, // Include sponsorship policy if set
             userOperation: {
                 estimateFeesPerGas: async () => {
                     const prices = await pimlicoClient.getUserOperationGasPrice();
@@ -355,12 +375,16 @@ export async function createPasskeySafeAccountClient(
         saltNonce: BigInt(0),
     });
 
+    // Get sponsorship context if configured
+    const paymasterContext = getPaymasterContext();
+
     // Create smart account client with Pimlico
     const smartAccountClient = createSmartAccountClient({
         account: safeAccount,
         chain,
         bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
         paymaster: pimlicoClient,
+        paymasterContext, // Include sponsorship policy if set
         userOperation: {
             estimateFeesPerGas: async () => {
                 return (await pimlicoClient.getUserOperationGasPrice()).fast;
