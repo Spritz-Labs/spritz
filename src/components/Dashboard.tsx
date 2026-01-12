@@ -4785,6 +4785,7 @@ function DashboardContent({
                 onClose={() => setIsWalletModalOpen(false)}
                 userAddress={userAddress}
                 emailVerified={siweUser?.emailVerified}
+                authMethod={isPasskeyUser ? "passkey" : walletType === "solana" ? "solana" : "wallet"}
             />
 
             {/* Live Stream Player removed - now using /live/[id] page */}

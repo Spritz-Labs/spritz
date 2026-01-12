@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { QRCodeSVG } from "qrcode.react";
 import { type Address } from "viem";
+import { useAccount } from "wagmi";
+import { useAppKit } from "@reown/appkit/react";
 import { useWalletBalances, formatUsd, formatTokenBalance } from "@/hooks/useWalletBalances";
 import { useSmartWallet } from "@/hooks/useSmartWallet";
 import { useTransactionHistory, formatRelativeTime, truncateAddress as truncateTxAddress, formatTxUsd, type Transaction } from "@/hooks/useTransactionHistory";
@@ -17,6 +19,7 @@ type WalletModalProps = {
     onClose: () => void;
     userAddress: string; // Spritz ID (identity)
     emailVerified?: boolean;
+    authMethod?: "wallet" | "email" | "passkey" | "world_id" | "alien_id" | "solana";
 };
 
 // Copy to clipboard helper
@@ -207,7 +210,14 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
 
 type TabType = "balances" | "send" | "history" | "receive";
 
-export function WalletModal({ isOpen, onClose, userAddress, emailVerified }: WalletModalProps) {
+export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authMethod }: WalletModalProps) {
+    // Check if wallet is connected (for sending)
+    const { isConnected } = useAccount();
+    const { open: openConnectModal } = useAppKit();
+    
+    // Determine if user authenticated via passkey (needs Safe signing)
+    const isPasskeyUser = authMethod === "passkey";
+
     // Get Smart Wallet (Safe) address
     const { smartWallet, isLoading: isSmartWalletLoading } = useSmartWallet(
         isOpen ? userAddress : null
@@ -270,8 +280,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified }: Wal
         reset: resetSafe,
     } = useSafeWallet();
 
-    // Use Safe for sending or EOA (default to EOA as it's more reliable)
-    const [useSafeForSend, setUseSafeForSend] = useState(false);
+    // Use Safe for sending or EOA
+    // Passkey users MUST use Safe (they have no EOA)
+    // Wallet users can choose (default to EOA as it's more reliable)
+    const [useSafeForSend, setUseSafeForSend] = useState(isPasskeyUser);
     const effectiveTxHash = useSafeForSend ? safeTxHash : txHash;
     const effectiveError = useSafeForSend ? safeError : sendError;
     const effectiveIsSending = useSafeForSend ? isSafeSending : isSending;
@@ -702,6 +714,30 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified }: Wal
 
                             {activeTab === "send" && (
                                 <div className="flex flex-col h-full relative">
+                                    {/* Wallet Not Connected - Show Connect Prompt (only for non-passkey users) */}
+                                    {!isConnected && !isPasskeyUser ? (
+                                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                                            <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+                                                <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-white mb-2">Connect Wallet to Send</h3>
+                                            <p className="text-sm text-zinc-400 mb-6 max-w-xs">
+                                                To send tokens, you need to connect an Ethereum wallet to sign transactions.
+                                            </p>
+                                            <button
+                                                onClick={() => openConnectModal?.()}
+                                                className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
+                                            >
+                                                Connect Wallet
+                                            </button>
+                                            <p className="text-xs text-zinc-600 mt-4">
+                                                Your Spritz wallet address will stay the same
+                                            </p>
+                                        </div>
+                                    ) : (
+                                    <>
                                     {/* Token Selector Modal */}
                                     <AnimatePresence>
                                         {showTokenSelector && (
@@ -997,6 +1033,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified }: Wal
                                                 : "Sends from your connected wallet"}
                                         </p>
                                     </div>
+                                </>
+                                )}
                                 </div>
                             )}
 
