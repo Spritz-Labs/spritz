@@ -237,6 +237,13 @@ export function ChannelChatModal({
         }
     }, [selectedUser]);
 
+    // Auto-focus input when replying to a message
+    useEffect(() => {
+        if (replyingTo) {
+            setTimeout(() => inputRef.current?.focus(), 50);
+        }
+    }, [replyingTo]);
+
     const handleSend = async () => {
         if (!inputValue.trim() || isSending) return;
 

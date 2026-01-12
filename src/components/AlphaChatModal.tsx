@@ -104,6 +104,7 @@ export function AlphaChatModal({
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const userPopupRef = useRef<HTMLDivElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     // Build list of mentionable users from message senders
     const mentionableUsers: MentionUser[] = useMemo(() => {
@@ -216,6 +217,13 @@ export function AlphaChatModal({
             return () => document.removeEventListener("mousedown", handleClickOutside);
         }
     }, [selectedUser]);
+
+    // Auto-focus input when replying to a message
+    useEffect(() => {
+        if (replyingTo) {
+            setTimeout(() => inputRef.current?.focus(), 50);
+        }
+    }, [replyingTo]);
 
     // Handle add friend
     const handleAddFriend = async (address: string) => {
@@ -809,9 +817,13 @@ export function AlphaChatModal({
                                                                         src={getPixelArtUrl(msg.content)}
                                                                         size="md"
                                                                     />
-                                                                    {/* Quick Share Actions */}
+                                                                    {/* Quick Share Actions - visible on hover (desktop) or tap (mobile) */}
                                                                     <div 
-                                                                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                        className={`absolute top-1 right-1 transition-opacity ${
+                                                                            selectedMessage === msg.id 
+                                                                                ? "opacity-100" 
+                                                                                : "opacity-0 group-hover:opacity-100"
+                                                                        }`}
                                                                         onClick={(e) => e.stopPropagation()}
                                                                     >
                                                                         <PixelArtShare
@@ -969,6 +981,7 @@ export function AlphaChatModal({
                                                 </svg>
                                             </button>
                                             <MentionInput
+                                                inputRef={inputRef}
                                                 value={newMessage}
                                                 onChange={setNewMessage}
                                                 onKeyDown={handleKeyPress}
