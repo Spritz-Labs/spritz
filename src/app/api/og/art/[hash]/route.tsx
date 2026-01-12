@@ -3,9 +3,12 @@ import { NextRequest } from "next/server";
 
 export const runtime = "edge";
 
+// Pinata dedicated gateway should be fastest - put it first
+const PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud";
+
 // Try multiple IPFS gateways for reliability
 const IPFS_GATEWAYS = [
-    process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud",
+    PINATA_GATEWAY,
     "cloudflare-ipfs.com",
     "ipfs.io",
     "dweb.link",
@@ -15,22 +18,28 @@ async function fetchImageAsBase64(hash: string): Promise<string | null> {
     for (const gateway of IPFS_GATEWAYS) {
         try {
             const url = `https://${gateway}/ipfs/${hash}`;
+            console.log(`[OG] Trying gateway: ${gateway} for hash: ${hash}`);
+            
             const response = await fetch(url, {
                 headers: {
                     "Accept": "image/*",
+                    "User-Agent": "Spritz-OG-Generator/1.0",
                 },
-                // 5 second timeout per gateway
-                signal: AbortSignal.timeout(5000),
+                // Increased timeout - Pinata should be fast but give others more time
+                signal: AbortSignal.timeout(gateway === PINATA_GATEWAY ? 8000 : 5000),
             });
             
             if (response.ok) {
                 const contentType = response.headers.get("content-type") || "image/png";
                 const arrayBuffer = await response.arrayBuffer();
                 const base64 = Buffer.from(arrayBuffer).toString("base64");
+                console.log(`[OG] Successfully fetched from ${gateway}, size: ${arrayBuffer.byteLength} bytes`);
                 return `data:${contentType};base64,${base64}`;
+            } else {
+                console.log(`[OG] Gateway ${gateway} returned status: ${response.status}`);
             }
         } catch (e) {
-            console.log(`[OG] Gateway ${gateway} failed for ${hash}:`, e);
+            console.log(`[OG] Gateway ${gateway} failed for ${hash}:`, e instanceof Error ? e.message : e);
             continue;
         }
     }
@@ -43,15 +52,20 @@ export async function GET(
 ) {
     const { hash } = await params;
     
+    console.log(`[OG] Generating OG image for hash: ${hash}`);
+    
     // Fetch the actual image data and convert to base64
     const imageData = await fetchImageAsBase64(hash);
     
-    // Fallback URL if base64 fails
-    const pinataGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud";
-    const imageUrl = imageData || `https://${pinataGateway}/ipfs/${hash}`;
+    // If we couldn't fetch the image, use the direct URL (may not work in all cases)
+    const imageUrl = imageData || `https://${PINATA_GATEWAY}/ipfs/${hash}`;
+    
+    if (!imageData) {
+        console.log(`[OG] Warning: Could not fetch image as base64, using direct URL`);
+    }
     
     try {
-        return new ImageResponse(
+        const response = new ImageResponse(
             (
                 <div
                     style={{
@@ -169,11 +183,16 @@ export async function GET(
                 height: 630,
             }
         );
+        
+        // Add cache headers - cache for 1 hour, stale for 1 day
+        response.headers.set("Cache-Control", "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400");
+        
+        return response;
     } catch (error) {
         console.error("[OG] Error generating OG image for", hash, ":", error);
         
         // Fallback to a simple card without the image
-        return new ImageResponse(
+        const fallbackResponse = new ImageResponse(
             (
                 <div
                     style={{
@@ -226,5 +245,10 @@ export async function GET(
                 height: 630,
             }
         );
+        
+        // Short cache for fallback - so it refreshes quickly if image becomes available
+        fallbackResponse.headers.set("Cache-Control", "public, max-age=60, s-maxage=60");
+        
+        return fallbackResponse;
     }
 }
