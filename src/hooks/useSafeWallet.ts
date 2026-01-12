@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useAccount, useSignMessage, useSignTypedData, useWalletClient } from "wagmi";
-import { type Address, type Hex, parseEther, formatEther } from "viem";
+import { type Address, type Hex, parseEther, parseUnits, formatEther } from "viem";
 import {
     getSafeAddress,
     isSafeDeployed,
@@ -49,7 +49,7 @@ export interface UseSafeWalletReturn {
     // Actions
     initialize: (chainId?: number) => Promise<void>;
     initializeWithPasskey: (credential: PasskeyCredentialInput, chainId?: number) => Promise<void>;
-    sendTransaction: (to: Address, amountEth: string) => Promise<string | null>;
+    sendTransaction: (to: Address, amountEth: string, tokenAddress?: Address, tokenDecimals?: number) => Promise<string | null>;
     estimateGas: (to: Address, amountEth: string) => Promise<void>;
     reset: () => void;
 }
@@ -246,9 +246,12 @@ export function useSafeWallet(): UseSafeWalletReturn {
     }, [ownerAddress, chainId]);
 
     // Send transaction through Safe
+    // Supports both native ETH and ERC20 token transfers
     const sendTransaction = useCallback(async (
         to: Address,
-        amountEth: string
+        amount: string,
+        tokenAddress?: Address,
+        tokenDecimals?: number
     ): Promise<string | null> => {
         // Validate based on signer type
         if (signerType === "eoa") {
@@ -296,11 +299,27 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 );
             }
 
-            // Send the transaction
-            const hash = await sendSafeTransaction(safeClient, {
-                to,
-                value: parseEther(amountEth),
-            });
+            // Send the transaction - handle both native ETH and ERC20 tokens
+            let hash;
+            if (tokenAddress && tokenDecimals !== undefined) {
+                // ERC20 token transfer
+                const tokenAmount = parseUnits(amount, tokenDecimals);
+                console.log(`[SafeWallet] Sending ERC20: ${amount} (${tokenAmount} raw) to ${to}`);
+                hash = await sendSafeTransaction(safeClient, {
+                    to,
+                    value: BigInt(0),
+                    tokenAddress,
+                    tokenAmount,
+                    tokenDecimals,
+                });
+            } else {
+                // Native ETH transfer
+                console.log(`[SafeWallet] Sending ETH: ${amount} to ${to}`);
+                hash = await sendSafeTransaction(safeClient, {
+                    to,
+                    value: parseEther(amount),
+                });
+            }
 
             setTxHash(hash);
             setStatus("success");

@@ -257,25 +257,69 @@ export interface SendTransactionParams {
     to: Address;
     value: bigint;
     data?: `0x${string}`;
+    // For ERC20 token transfers
+    tokenAddress?: Address;
+    tokenAmount?: bigint;
+    tokenDecimals?: number;
+}
+
+// ERC20 transfer function signature
+const ERC20_TRANSFER_ABI = [{
+    name: "transfer",
+    type: "function",
+    inputs: [
+        { name: "to", type: "address" },
+        { name: "amount", type: "uint256" }
+    ],
+    outputs: [{ name: "", type: "bool" }]
+}] as const;
+
+/**
+ * Encode an ERC20 transfer call
+ */
+export function encodeERC20Transfer(to: Address, amount: bigint): `0x${string}` {
+    return encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: "transfer",
+        args: [to, amount],
+    });
 }
 
 /**
  * Send a transaction through a Safe Smart Account
+ * Supports both native ETH transfers and ERC20 token transfers
  */
 export async function sendSafeTransaction(
     client: SmartAccountClient,
     params: SendTransactionParams
 ): Promise<`0x${string}`> {
-    const { to, value, data } = params;
+    const { to, value, data, tokenAddress, tokenAmount } = params;
+    
+    // Determine if this is a token transfer or native ETH transfer
+    let calls;
+    
+    if (tokenAddress && tokenAmount !== undefined) {
+        // ERC20 token transfer
+        console.log(`[SafeWallet] Sending ERC20 token transfer: ${tokenAmount} to ${to}`);
+        calls = [{
+            to: tokenAddress,
+            value: BigInt(0),
+            data: encodeERC20Transfer(to, tokenAmount),
+        }];
+    } else {
+        // Native ETH transfer
+        console.log(`[SafeWallet] Sending native ETH transfer: ${value} wei to ${to}`);
+        calls = [{
+            to,
+            value,
+            data: data || "0x",
+        }];
+    }
     
     // Use sendUserOperation for ERC-4337 transactions
     // The SmartAccountClient handles wrapping this in a UserOperation
     const txHash = await client.sendTransaction({
-        calls: [{
-            to,
-            value,
-            data: data || "0x",
-        }],
+        calls,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     

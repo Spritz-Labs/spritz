@@ -309,12 +309,26 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         if (!isValidAddress(sendRecipient)) return;
 
         let hash: string | null = null;
+        
+        // Determine if this is a native ETH transfer or ERC20 token transfer
+        const isNativeTransfer = sendToken.tokenType === "native";
+        const tokenAddress = isNativeTransfer ? undefined : sendToken.contractAddress as Address;
+        const tokenDecimals = isNativeTransfer ? undefined : sendToken.decimals;
 
         if (useSafeForSend && safeAddress) {
-            // Send via Safe smart wallet
-            hash = await sendSafeTransaction(sendRecipient as Address, sendAmount);
+            // Send via Safe smart wallet (supports both ETH and ERC20)
+            hash = await sendSafeTransaction(
+                sendRecipient as Address, 
+                sendAmount,
+                tokenAddress,
+                tokenDecimals
+            );
         } else {
-            // Send via connected EOA
+            // Send via connected EOA (only supports native ETH for now)
+            if (!isNativeTransfer) {
+                console.warn("[WalletModal] EOA ERC20 transfers not yet implemented");
+                // TODO: Implement EOA ERC20 transfers
+            }
             hash = await send({
                 to: sendRecipient as Address,
                 value: sendAmount,

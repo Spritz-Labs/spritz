@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useUsername } from "@/hooks/useUsername";
 
 const PUSH_PROMPTED_KEY = "spritz_push_prompted";
+const PUSH_NEVER_ASK_KEY = "spritz_push_never_ask"; // User clicked "Don't Ask Again"
 
 type PushNotificationPromptProps = {
     userAddress: string | null;
@@ -58,6 +59,14 @@ export function PushNotificationPrompt({
 
         if (!isSupported) {
             console.log("[PushNotificationPrompt] Push notifications not supported");
+            return;
+        }
+
+        // Check if user clicked "Don't Ask Again" - this is permanent
+        const neverAskKey = `${PUSH_NEVER_ASK_KEY}_${userAddress.toLowerCase()}`;
+        const neverAsk = localStorage.getItem(neverAskKey);
+        if (neverAsk) {
+            console.log("[PushNotificationPrompt] User clicked 'Don't Ask Again' - respecting their choice");
             return;
         }
 
@@ -187,8 +196,11 @@ export function PushNotificationPrompt({
     };
 
     const handleSkip = () => {
-        // Store prompted flag per address
+        // Store PERMANENT "never ask again" flag - user explicitly doesn't want this
         if (userAddress) {
+            const neverAskKey = `${PUSH_NEVER_ASK_KEY}_${userAddress.toLowerCase()}`;
+            localStorage.setItem(neverAskKey, "true");
+            // Also set prompted flag for consistency
             const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
             localStorage.setItem(promptedKey, "true");
         }
