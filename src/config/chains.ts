@@ -95,6 +95,15 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
 
 export const CHAIN_LIST = Object.values(SUPPORTED_CHAINS);
 
+// Chains enabled for sending (Safe wallet support)
+// Base only during testing phase
+export const SEND_ENABLED_CHAIN_IDS = [8453]; // Base
+
+// Check if a chain supports sending
+export function isSendEnabledChain(chainId: number): boolean {
+    return SEND_ENABLED_CHAIN_IDS.includes(chainId);
+}
+
 // Get chain by ID
 export function getChainById(id: number): SupportedChain | undefined {
     return CHAIN_LIST.find((chain) => chain.id === id);

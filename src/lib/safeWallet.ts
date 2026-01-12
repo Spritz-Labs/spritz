@@ -41,13 +41,14 @@ import {
     SAFE_WEBAUTHN_SIGNER_SINGLETON,
 } from "./passkeySigner";
 
-// Supported chains for Safe deployment
+// Supported chains for Safe deployment (Base only for now during testing)
 export const SAFE_SUPPORTED_CHAINS: Record<number, Chain> = {
-    1: mainnet,
     8453: base,
-    42161: arbitrum,
-    10: optimism,
-    137: polygon,
+    // TODO: Re-enable after testing
+    // 1: mainnet,
+    // 42161: arbitrum,
+    // 10: optimism,
+    // 137: polygon,
 };
 
 // Get Pimlico bundler URL for a chain
@@ -59,11 +60,12 @@ function getPimlicoBundlerUrl(chainId: number): string {
     }
     
     const chainNames: Record<number, string> = {
-        1: "ethereum",
         8453: "base",
-        42161: "arbitrum",
-        10: "optimism",
-        137: "polygon",
+        // TODO: Re-enable after testing
+        // 1: "ethereum",
+        // 42161: "arbitrum",
+        // 10: "optimism",
+        // 137: "polygon",
     };
     
     const chainName = chainNames[chainId];

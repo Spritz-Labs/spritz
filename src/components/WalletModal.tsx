@@ -12,7 +12,7 @@ import { useTransactionHistory, formatRelativeTime, truncateAddress as truncateT
 import { useSendTransaction, isValidAddress } from "@/hooks/useSendTransaction";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
-import { CHAIN_LIST } from "@/config/chains";
+import { CHAIN_LIST, SEND_ENABLED_CHAIN_IDS } from "@/config/chains";
 
 type WalletModalProps = {
     isOpen: boolean;
@@ -340,10 +340,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         resetSafe();
     }, [resetSend, resetSafe]);
 
-    // Get all tokens flat for send selector
+    // Get all tokens flat for send selector (only from send-enabled chains)
     const allTokens = useMemo(() => {
         const tokens: (TokenBalance & { chainIcon: string; chainName: string })[] = [];
         for (const chainBalance of balances) {
+            // Only include tokens from send-enabled chains (Base only for now)
+            if (!SEND_ENABLED_CHAIN_IDS.includes(chainBalance.chain.id)) {
+                continue;
+            }
             if (chainBalance.nativeBalance) {
                 tokens.push({
                     ...chainBalance.nativeBalance,
