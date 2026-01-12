@@ -20,7 +20,7 @@ Real-time messaging, video calls, livestreaming, and AI agents for Web3. Connect
 ### 📹 Communication
 
 - **HD Video Calls** - Real-time video and voice calls powered by Huddle01
-- **Decentralized Messaging** - End-to-end encrypted chat via Waku protocol
+- **Decentralized Messaging** - End-to-end encrypted chat via [Logos Messaging](https://logos.co/tech-stack) (prev. Waku) protocols
 - **Group Calls** - Multi-party video calls with friends
 - **Voice Messages** - Record and send voice notes
 - **Push Notifications** - Get notified of incoming calls and messages
@@ -91,7 +91,7 @@ Real-time messaging, video calls, livestreaming, and AI agents for Web3. Connect
 | **Wallet Connection** | Reown AppKit (WalletConnect) |
 | **Video Calls** | Huddle01 SDK |
 | **Livestreaming** | Livepeer (WebRTC/WHIP + HLS) |
-| **Messaging** | Waku Protocol |
+| **Messaging** | [Logos Messaging](https://logos.co/tech-stack) Protocols |
 | **AI/LLM** | Google Gemini API |
 | **Vector Search** | Supabase pgvector |
 | **Database** | Supabase (Postgres + Realtime) |
@@ -492,7 +492,7 @@ src/
 │   └── ...
 ├── context/
 │   ├── AuthProvider.tsx    # SIWE/SIWS auth
-│   ├── WakuProvider.tsx    # Messaging
+│   ├── WakuProvider.tsx    # Messaging (Logos Messaging)
 │   └── Web3Provider.tsx    # Wallet connection
 ├── hooks/
 │   ├── useAgents.ts        # Agent management
@@ -594,4 +594,4 @@ Commercial use requires a separate license. Contact connect@spritz.chat for comm
 
 Built with 🍊 by the Spritz team
 
-Powered by [Google Gemini](https://ai.google.dev/), [Huddle01](https://huddle01.com), [Livepeer](https://livepeer.org), [Waku](https://waku.org), [Supabase](https://supabase.com), [Pimlico](https://pimlico.io), [Reown](https://reown.com), and [x402](https://x402.org)
+Powered by [Google Gemini](https://ai.google.dev/), [Huddle01](https://huddle01.com), [Livepeer](https://livepeer.org), [Logos Messaging](https://logos.co/tech-stack), [Supabase](https://supabase.com), [Pimlico](https://pimlico.io), [Reown](https://reown.com), and [x402](https://x402.org)
