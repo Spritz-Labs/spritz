@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -29,21 +31,23 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const { searchParams } = new URL(request.url);
-        const walletAddress = searchParams.get("address");
-
-        if (!walletAddress) {
+        // Require authentication
+        const session = await getAuthenticatedUser(request);
+        if (!session) {
             return NextResponse.json(
-                { error: "Wallet address required" },
-                { status: 400 }
+                { error: "Authentication required" },
+                { status: 401 }
             );
         }
+
+        // Use authenticated user's address only
+        const walletAddress = session.userAddress.toLowerCase();
 
         // Get user's points
         const { data: user, error: userError } = await supabase
             .from("shout_users")
             .select("points, points_claimed")
-            .eq("wallet_address", walletAddress.toLowerCase())
+            .eq("wallet_address", walletAddress)
             .single();
 
         if (userError) {
@@ -58,7 +62,7 @@ export async function GET(request: NextRequest) {
         const { data: history } = await supabase
             .from("shout_points_history")
             .select("*")
-            .eq("wallet_address", walletAddress.toLowerCase())
+            .eq("wallet_address", walletAddress)
             .order("created_at", { ascending: false })
             .limit(50);
 
@@ -78,6 +82,10 @@ export async function GET(request: NextRequest) {
 
 // POST: Award points for an action
 export async function POST(request: NextRequest) {
+    // Rate limit points claims to prevent abuse
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     if (!supabase) {
         return NextResponse.json(
             { error: "Database not configured" },
@@ -86,6 +94,15 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Require authentication - user must have a valid session
+        const session = await getAuthenticatedUser(request);
+        if (!session) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 }
+            );
+        }
+
         // Check if request has a body
         const contentType = request.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
@@ -114,11 +131,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { walletAddress, action, metadata } = body;
+        const { action } = body;
+        
+        // Security: Use ONLY the authenticated user's address - ignore any client-provided address
+        const walletAddress = session.userAddress.toLowerCase();
 
-        if (!walletAddress || !action) {
+        if (!action) {
             return NextResponse.json(
-                { error: "Wallet address and action required" },
+                { error: "Action required" },
                 { status: 400 }
             );
         }
