@@ -67,7 +67,7 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, step }));
     }, []);
 
-    // Check for stored email on mount
+    // Check for stored email on mount and restore server session if needed
     useEffect(() => {
         // Check if user just logged out (don't restore if logout flag is set)
         const logoutFlag = sessionStorage.getItem(EMAIL_LOGOUT_FLAG);
@@ -113,6 +113,29 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
                         isAuthenticated: true,
                         step: "email",
                     }));
+                    
+                    // Restore server session (in case cookie expired or was never set)
+                    // This ensures the user has a valid session cookie for API calls
+                    fetch("/api/email/restore-session", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ 
+                            email: parsed.email, 
+                            address: parsed.address 
+                        }),
+                        credentials: "include",
+                    })
+                        .then((res) => res.json())
+                        .then((data) => {
+                            if (data.success) {
+                                console.log("[EmailAuthProvider] Server session restored");
+                            } else {
+                                console.warn("[EmailAuthProvider] Failed to restore server session:", data.error);
+                            }
+                        })
+                        .catch((err) => {
+                            console.error("[EmailAuthProvider] Error restoring server session:", err);
+                        });
                 }
             } catch (e) {
                 console.error("[EmailAuth] Error parsing stored email:", e);
