@@ -220,6 +220,7 @@ export default function PublicLivePage() {
                         walletAddress: userAddress,
                         event: { type: "stream_viewed" },
                     }),
+                    credentials: "include", // Required for session authentication
                 }).catch(() => {});
             }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -15,6 +16,12 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Require authentication - user must have a valid session
+        const session = await getAuthenticatedUser(request);
+        if (!session) {
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        }
+
         const { 
             walletAddress, 
             walletType, 
@@ -29,6 +36,15 @@ export async function POST(request: NextRequest) {
         }
 
         const normalizedAddress = walletAddress.toLowerCase();
+
+        // Security: Only allow users to track login for their own address
+        if (normalizedAddress !== session.userAddress.toLowerCase()) {
+            console.warn("[Login] Attempted to track login for different address:", {
+                sessionAddress: session.userAddress,
+                requestedAddress: normalizedAddress,
+            });
+            return NextResponse.json({ error: "Cannot track login for other users" }, { status: 403 });
+        }
 
         // Check if user exists
         const { data: existingUser } = await supabase

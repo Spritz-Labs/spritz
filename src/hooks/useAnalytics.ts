@@ -50,6 +50,7 @@ export function useAnalytics(walletAddress: string | null) {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ walletAddress, event: evt }),
+                            credentials: "include", // Required for session authentication
                         });
 
                         // Check if response is ok, but don't throw on errors

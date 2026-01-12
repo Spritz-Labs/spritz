@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -36,6 +37,13 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Require authentication - user must have a valid session
+        const session = await getAuthenticatedUser(request);
+        if (!session) {
+            // Return silently for unauthenticated requests (don't expose auth errors for analytics)
+            return NextResponse.json({ success: true, skipped: true });
+        }
+
         // Safely parse JSON body
         let body: { walletAddress?: string; event?: AnalyticsEvent };
         try {
@@ -53,6 +61,16 @@ export async function POST(request: NextRequest) {
         }
 
         const normalizedAddress = walletAddress.toLowerCase();
+
+        // Security: Only allow users to track events for their own address
+        if (normalizedAddress !== session.userAddress.toLowerCase()) {
+            console.warn("[Analytics] Attempted to track event for different address:", {
+                sessionAddress: session.userAddress,
+                requestedAddress: normalizedAddress,
+                eventType: event.type,
+            });
+            return NextResponse.json({ success: true, skipped: true }); // Silent fail for security
+        }
 
         // First ensure user exists
         const { data: existingUser } = await supabase
