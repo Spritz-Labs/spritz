@@ -12,6 +12,7 @@ export type SocialLinks = {
     youtube?: string;
     linkedin?: string;
     github?: string;
+    discord?: string;
 };
 
 export type SocialPlatform = keyof SocialLinks;
@@ -80,6 +81,14 @@ export const SOCIAL_PLATFORMS: {
         icon: "🐙",
         color: "bg-gray-900 text-white",
     },
+    {
+        key: "discord",
+        name: "Discord",
+        placeholder: "username",
+        urlPrefix: "", // Discord usernames don't have a direct profile URL
+        icon: "🎮",
+        color: "bg-[#5865F2] text-white",
+    },
 ];
 
 export function useSocials(userAddress: string | null) {
@@ -117,6 +126,7 @@ export function useSocials(userAddress: string | null) {
                     youtube: data.youtube_handle || undefined,
                     linkedin: data.linkedin_username || undefined,
                     github: data.github_username || undefined,
+                    discord: data.discord_username || undefined,
                 });
             }
         } catch (err) {
@@ -154,6 +164,7 @@ export function useSocials(userAddress: string | null) {
                             youtube_handle: newSocials.youtube || null,
                             linkedin_username: newSocials.linkedin || null,
                             github_username: newSocials.github || null,
+                            discord_username: newSocials.discord || null,
                             updated_at: new Date().toISOString(),
                         },
                         { onConflict: "wallet_address" }
@@ -225,6 +236,7 @@ export function useSocials(userAddress: string | null) {
                         youtube: data.youtube_handle || undefined,
                         linkedin: data.linkedin_username || undefined,
                         github: data.github_username || undefined,
+                        discord: data.discord_username || undefined,
                     };
                 }
 
