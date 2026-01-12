@@ -323,8 +323,12 @@ export function useChannelMessages(channelId: string | null, userAddress: string
     const [messages, setMessages] = useState<ChannelMessage[]>([]);
     const [reactions, setReactions] = useState<Record<string, ChannelMessageReaction[]>>({});
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [replyingTo, setReplyingTo] = useState<ChannelMessage | null>(null);
+    
+    const PAGE_SIZE = 50;
 
     // Process raw reactions into grouped format
     const processReactions = useCallback((rawReactions: ChannelReaction[]) => {
@@ -360,14 +364,16 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         setError(null);
 
         try {
-            const res = await fetch(`/api/channels/${channelId}/messages?limit=100`);
+            const res = await fetch(`/api/channels/${channelId}/messages?limit=${PAGE_SIZE}`);
             const data = await res.json();
 
             if (!res.ok) {
                 throw new Error(data.error || "Failed to fetch messages");
             }
 
-            setMessages(data.messages || []);
+            const fetchedMessages = data.messages || [];
+            setMessages(fetchedMessages);
+            setHasMore(fetchedMessages.length >= PAGE_SIZE);
             
             // Process reactions
             if (data.reactions) {
@@ -380,6 +386,49 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             setIsLoading(false);
         }
     }, [channelId, processReactions]);
+
+    // Load older messages (for infinite scroll)
+    const loadMoreMessages = useCallback(async () => {
+        if (!channelId || isLoadingMore || !hasMore || messages.length === 0) return;
+
+        setIsLoadingMore(true);
+
+        try {
+            // Get the oldest message's timestamp
+            const oldestMessage = messages[0];
+            const before = oldestMessage.created_at;
+
+            const res = await fetch(
+                `/api/channels/${channelId}/messages?limit=${PAGE_SIZE}&before=${encodeURIComponent(before)}`
+            );
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to fetch older messages");
+            }
+
+            const olderMessages = data.messages || [];
+            
+            if (olderMessages.length > 0) {
+                // Prepend older messages
+                setMessages(prev => [...olderMessages, ...prev]);
+                
+                // Process and merge reactions
+                if (data.reactions) {
+                    setReactions(prev => ({
+                        ...prev,
+                        ...processReactions(data.reactions),
+                    }));
+                }
+            }
+            
+            setHasMore(olderMessages.length >= PAGE_SIZE);
+        } catch (e) {
+            console.error("[useChannelMessages] Error loading more:", e);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    }, [channelId, isLoadingMore, hasMore, messages, processReactions]);
 
     const sendMessage = useCallback(
         async (content: string, messageType: "text" | "image" = "text", replyToId?: string) => {
@@ -495,8 +544,11 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         messages,
         reactions,
         isLoading,
+        isLoadingMore,
+        hasMore,
         error,
         fetchMessages,
+        loadMoreMessages,
         sendMessage,
         toggleReaction,
         replyingTo,

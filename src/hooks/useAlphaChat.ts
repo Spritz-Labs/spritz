@@ -45,9 +45,13 @@ type AlphaChatState = {
     membership: AlphaMembership | null;
     unreadCount: number;
     isLoading: boolean;
+    isLoadingMore: boolean;
+    hasMore: boolean;
     isMember: boolean;
     replyingTo: AlphaMessage | null;
 };
+
+const PAGE_SIZE = 50;
 
 export function useAlphaChat(userAddress: string | null) {
     const [state, setState] = useState<AlphaChatState>({
@@ -56,6 +60,8 @@ export function useAlphaChat(userAddress: string | null) {
         membership: null,
         unreadCount: 0,
         isLoading: true,
+        isLoadingMore: false,
+        hasMore: true,
         isMember: false,
         replyingTo: null,
     });
@@ -99,16 +105,17 @@ export function useAlphaChat(userAddress: string | null) {
                 return;
             }
 
-            // Get messages (last 100) with reply_to data
+            // Get messages with reply_to data
             // Order descending first to get newest, then reverse for display
             const { data: messagesDesc, error: messagesError } = await client
                 .from("shout_alpha_messages")
                 .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
                 .order("created_at", { ascending: false })
-                .limit(100);
+                .limit(PAGE_SIZE);
             
             // Reverse to get chronological order for display
             const messages = messagesDesc?.reverse() || [];
+            const hasMore = (messagesDesc?.length || 0) >= PAGE_SIZE;
 
             if (messagesError) {
                 console.error("[AlphaChat] Messages query error:", messagesError);
@@ -164,6 +171,8 @@ export function useAlphaChat(userAddress: string | null) {
                 membership: membershipData,
                 unreadCount,
                 isLoading: false,
+                isLoadingMore: false,
+                hasMore,
                 isMember: true,
                 replyingTo: null,
             });
@@ -172,6 +181,88 @@ export function useAlphaChat(userAddress: string | null) {
             setState(prev => ({ ...prev, isLoading: false }));
         }
     }, [userAddress]);
+
+    // Load older messages (for infinite scroll)
+    const loadMoreMessages = useCallback(async () => {
+        if (!isSupabaseConfigured || !supabase || !userAddress || state.isLoadingMore || !state.hasMore || state.messages.length === 0) {
+            return;
+        }
+
+        const client = supabase;
+        setState(prev => ({ ...prev, isLoadingMore: true }));
+
+        try {
+            // Get the oldest message's timestamp
+            const oldestMessage = state.messages[0];
+            const before = oldestMessage.created_at;
+
+            const { data: messagesDesc, error } = await client
+                .from("shout_alpha_messages")
+                .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                .lt("created_at", before)
+                .order("created_at", { ascending: false })
+                .limit(PAGE_SIZE);
+
+            if (error) {
+                console.error("[AlphaChat] Load more error:", error);
+                setState(prev => ({ ...prev, isLoadingMore: false }));
+                return;
+            }
+
+            const olderMessages = messagesDesc?.reverse() || [];
+
+            if (olderMessages.length > 0) {
+                // Get reactions for these messages
+                const messageIds = olderMessages.map(m => m.id);
+                let reactionsData: AlphaReaction[] = [];
+                if (messageIds.length > 0) {
+                    const { data } = await client
+                        .from("shout_alpha_reactions")
+                        .select("*")
+                        .in("message_id", messageIds);
+                    reactionsData = data || [];
+                }
+
+                // Process reactions
+                const processedReactions: Record<string, AlphaMessageReaction[]> = {};
+                messageIds.forEach(msgId => {
+                    processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(emoji => ({
+                        emoji,
+                        count: 0,
+                        hasReacted: false,
+                        users: [],
+                    }));
+                });
+                reactionsData.forEach(r => {
+                    if (processedReactions[r.message_id]) {
+                        const idx = processedReactions[r.message_id].findIndex(x => x.emoji === r.emoji);
+                        if (idx >= 0) {
+                            processedReactions[r.message_id][idx].count++;
+                            processedReactions[r.message_id][idx].users.push(r.user_address);
+                            if (userAddress && r.user_address.toLowerCase() === userAddress.toLowerCase()) {
+                                processedReactions[r.message_id][idx].hasReacted = true;
+                            }
+                        }
+                    }
+                });
+
+                setState(prev => ({
+                    ...prev,
+                    messages: [...olderMessages, ...prev.messages],
+                    reactions: { ...processedReactions, ...prev.reactions },
+                    isLoadingMore: false,
+                    hasMore: olderMessages.length >= PAGE_SIZE,
+                }));
+
+                console.log("[AlphaChat] Loaded", olderMessages.length, "older messages");
+            } else {
+                setState(prev => ({ ...prev, isLoadingMore: false, hasMore: false }));
+            }
+        } catch (err) {
+            console.error("[AlphaChat] Load more error:", err);
+            setState(prev => ({ ...prev, isLoadingMore: false }));
+        }
+    }, [userAddress, state.isLoadingMore, state.hasMore, state.messages]);
 
     // Subscribe to realtime updates
     useEffect(() => {
@@ -669,6 +760,7 @@ export function useAlphaChat(userAddress: string | null) {
         refreshUnreadCount,
         refresh: loadData,
         refreshMessages,
+        loadMoreMessages,
         setReplyingTo,
         toggleReaction,
     };

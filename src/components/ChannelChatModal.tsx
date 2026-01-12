@@ -55,9 +55,12 @@ export function ChannelChatModal({
     const { 
         messages, 
         reactions,
-        isLoading, 
+        isLoading,
+        isLoadingMore,
+        hasMore,
         sendMessage, 
         toggleReaction,
+        loadMoreMessages,
         replyingTo,
         setReplyingTo 
     } = useChannelMessages(channel.id, userAddress);
@@ -71,8 +74,10 @@ export function ChannelChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const previousScrollHeightRef = useRef<number>(0);
 
     // Local cache for user info fetched from API
     const [localUserInfoCache, setLocalUserInfoCache] = useState<
@@ -112,10 +117,50 @@ export function ChannelChatModal({
         setSelectedUser(address);
     }, []);
 
-    // Scroll to bottom on new messages
+    // Scroll to bottom only for new messages (not when loading older ones)
+    const lastMessageIdRef = useRef<string | null>(null);
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            // Only scroll to bottom if there's a new message at the end
+            if (lastMessage.id !== lastMessageIdRef.current) {
+                lastMessageIdRef.current = lastMessage.id;
+                // Only auto-scroll if we're near the bottom already
+                const container = messagesContainerRef.current;
+                if (container) {
+                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                    if (isNearBottom) {
+                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    }
+                }
+            }
+        }
     }, [messages]);
+
+    // Preserve scroll position when loading older messages
+    useEffect(() => {
+        const container = messagesContainerRef.current;
+        if (container && previousScrollHeightRef.current > 0) {
+            const newScrollHeight = container.scrollHeight;
+            const scrollDiff = newScrollHeight - previousScrollHeightRef.current;
+            if (scrollDiff > 0) {
+                container.scrollTop = scrollDiff;
+            }
+            previousScrollHeightRef.current = 0;
+        }
+    }, [messages]);
+
+    // Handle scroll to load more messages
+    const handleScroll = useCallback(() => {
+        const container = messagesContainerRef.current;
+        if (!container || isLoadingMore || !hasMore) return;
+
+        // Load more when scrolled near the top (within 100px)
+        if (container.scrollTop < 100) {
+            previousScrollHeightRef.current = container.scrollHeight;
+            loadMoreMessages();
+        }
+    }, [isLoadingMore, hasMore, loadMoreMessages]);
 
     // Fetch user info for message senders not in cache
     useEffect(() => {
@@ -478,7 +523,11 @@ export function ChannelChatModal({
                     </div>
 
                     {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    <div 
+                        ref={messagesContainerRef}
+                        onScroll={handleScroll}
+                        className="flex-1 overflow-y-auto p-4 space-y-3"
+                    >
                         {isLoading && messages.length === 0 ? (
                             <div className="flex items-center justify-center h-full">
                                 <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
@@ -495,6 +544,18 @@ export function ChannelChatModal({
                             </div>
                         ) : (
                             <>
+                                {/* Loading indicator for older messages */}
+                                {isLoadingMore && (
+                                    <div className="flex justify-center py-4">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-orange-500" />
+                                    </div>
+                                )}
+                                {/* "Load more" indicator when there's more history */}
+                                {!isLoadingMore && hasMore && messages.length > 0 && (
+                                    <div className="flex justify-center py-2">
+                                        <span className="text-xs text-zinc-500">Scroll up to load more</span>
+                                    </div>
+                                )}
                                 {messages.map((msg, index) => {
                                     const isOwn =
                                         msg.sender_address.toLowerCase() ===
