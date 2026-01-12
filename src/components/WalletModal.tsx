@@ -11,6 +11,7 @@ import { useSmartWallet } from "@/hooks/useSmartWallet";
 import { useTransactionHistory, formatRelativeTime, truncateAddress as truncateTxAddress, formatTxUsd, type Transaction } from "@/hooks/useTransactionHistory";
 import { useSendTransaction, isValidAddress } from "@/hooks/useSendTransaction";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
+import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { CHAIN_LIST, SEND_ENABLED_CHAIN_IDS } from "@/config/chains";
 
@@ -280,13 +281,35 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         reset: resetSafe,
     } = useSafeWallet();
 
+    // Passkey Safe hook (for passkey users)
+    const {
+        status: passkeyStatus,
+        error: passkeyError,
+        txHash: passkeyTxHash,
+        isSending: isPasskeySending,
+        isReady: isPasskeyReady,
+        initialize: initializePasskey,
+        sendTransaction: sendPasskeyTransaction,
+        reset: resetPasskey,
+    } = useSafePasskeySend();
+
+    // Initialize passkey Safe when modal opens for passkey users
+    useEffect(() => {
+        if (isOpen && isPasskeyUser && userAddress && !isPasskeyReady && passkeyStatus === "idle") {
+            console.log("[WalletModal] Initializing passkey Safe for user:", userAddress.slice(0, 10));
+            initializePasskey(userAddress as Address);
+        }
+    }, [isOpen, isPasskeyUser, userAddress, isPasskeyReady, passkeyStatus, initializePasskey]);
+
     // Use Safe for sending or EOA
     // Passkey users MUST use Safe (they have no EOA)
     // Wallet users can choose (default to EOA as it's more reliable)
     const [useSafeForSend, setUseSafeForSend] = useState(isPasskeyUser);
-    const effectiveTxHash = useSafeForSend ? safeTxHash : txHash;
-    const effectiveError = useSafeForSend ? safeError : sendError;
-    const effectiveIsSending = useSafeForSend ? isSafeSending : isSending;
+    
+    // Determine effective state based on auth method
+    const effectiveTxHash = isPasskeyUser ? passkeyTxHash : (useSafeForSend ? safeTxHash : txHash);
+    const effectiveError = isPasskeyUser ? passkeyError : (useSafeForSend ? safeError : sendError);
+    const effectiveIsSending = isPasskeyUser ? isPasskeySending : (useSafeForSend ? isSafeSending : isSending);
 
     // Estimate gas when recipient and amount are valid
     const handleEstimateGas = useCallback(async () => {
@@ -315,8 +338,17 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         const tokenAddress = isNativeTransfer ? undefined : sendToken.contractAddress as Address;
         const tokenDecimals = isNativeTransfer ? undefined : sendToken.decimals;
 
-        if (useSafeForSend && safeAddress) {
-            // Send via Safe smart wallet (supports both ETH and ERC20)
+        if (isPasskeyUser) {
+            // Send via passkey-signed Safe transaction
+            console.log("[WalletModal] Sending via passkey Safe...");
+            hash = await sendPasskeyTransaction(
+                sendRecipient as Address,
+                sendAmount,
+                tokenAddress,
+                tokenDecimals
+            );
+        } else if (useSafeForSend && safeAddress) {
+            // Send via Safe smart wallet (EOA signer)
             hash = await sendSafeTransaction(
                 sendRecipient as Address, 
                 sendAmount,
@@ -342,7 +374,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 refreshTx();
             }, 2000);
         }
-    }, [sendToken, sendRecipient, sendAmount, send, sendSafeTransaction, useSafeForSend, safeAddress, refresh, refreshTx]);
+    }, [sendToken, sendRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, isPasskeyUser, refresh, refreshTx]);
 
     // Reset send form
     const resetSendForm = useCallback(() => {
@@ -352,7 +384,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         setShowSendConfirm(false);
         resetSend();
         resetSafe();
-    }, [resetSend, resetSafe]);
+        resetPasskey();
+    }, [resetSend, resetSafe, resetPasskey]);
 
     // Get all tokens flat for send selector (only from send-enabled chains)
     const allTokens = useMemo(() => {
@@ -732,24 +765,34 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "send" && (
                                 <div className="flex flex-col h-full relative">
-                                    {/* Passkey users - Show coming soon */}
-                                    {isPasskeyUser ? (
+                                    {/* Passkey users - Show loading or error state */}
+                                    {isPasskeyUser && passkeyStatus === "loading" ? (
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
-                                                <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
+                                            <p className="text-sm text-zinc-400">Initializing passkey wallet...</p>
+                                        </div>
+                                    ) : isPasskeyUser && passkeyStatus === "error" ? (
+                                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                                            <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
+                                                <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                                 </svg>
                                             </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Passkey Sending Coming Soon</h3>
+                                            <h3 className="text-lg font-semibold text-white mb-2">Setup Required</h3>
                                             <p className="text-sm text-zinc-400 mb-4 max-w-xs">
-                                                We're upgrading passkey signing for Safe Smart Accounts. For now, you can receive funds to your wallet address.
+                                                {passkeyError || "Failed to initialize passkey wallet"}
                                             </p>
-                                            <div className="text-xs text-zinc-500 space-y-1">
-                                                <p>✓ Receive tokens to your address</p>
-                                                <p>⏳ Send with passkey (coming soon)</p>
-                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    resetPasskey();
+                                                    if (userAddress) initializePasskey(userAddress as Address);
+                                                }}
+                                                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm"
+                                            >
+                                                Try Again
+                                            </button>
                                         </div>
-                                    ) : !isConnected ? (
+                                    ) : !isConnected && !isPasskeyUser ? (
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
                                                 <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
