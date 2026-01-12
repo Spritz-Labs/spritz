@@ -16,6 +16,17 @@ const supabase =
 const EMAIL_AUTH_SECRET =
     process.env.EMAIL_AUTH_SECRET || "spritz-email-auth-secret-v1";
 
+// Generate a session token for frontend localStorage (matches passkey flow)
+function generateSessionToken(userAddress: string): string {
+    const payload = {
+        sub: userAddress.toLowerCase(),
+        iat: Date.now(),
+        exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+        type: "email",
+    };
+    return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
 // Derive a deterministic private key from email + secret (server-side version)
 function derivePrivateKeyFromEmail(
     email: string,
@@ -146,7 +157,10 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Return session with derived address (no longer exposing secret!)
+        // Generate session token for frontend localStorage (matches passkey flow)
+        const sessionToken = generateSessionToken(smartAccountAddress);
+
+        // Return session with cookie AND sessionToken for frontend
         return createAuthResponse(
             smartAccountAddress,
             "email",
@@ -155,6 +169,7 @@ export async function POST(request: NextRequest) {
                 message: "Email verified successfully",
                 email: normalizedEmail,
                 walletAddress: smartAccountAddress,
+                sessionToken, // For frontend localStorage
                 user: user ? {
                     id: user.id,
                     wallet_address: user.wallet_address,
