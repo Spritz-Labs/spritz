@@ -106,7 +106,7 @@ export function useAdmin() {
         loadCredentials();
     }, []);
 
-    // Verify credentials when they change
+    // Verify credentials when they change or wallet address changes
     useEffect(() => {
         if (!credentials) {
             setState(prev => ({ 
@@ -121,6 +121,23 @@ export function useAdmin() {
 
         // Don't verify if wallet is reconnecting
         if (isReconnecting) {
+            return;
+        }
+
+        // If wallet is connected and credentials are from a different address,
+        // don't use them - user needs to sign in with the connected wallet
+        if (address && credentials.address.toLowerCase() !== address.toLowerCase()) {
+            console.log("[Admin] Credentials address doesn't match connected wallet, clearing");
+            // Clear credentials so user can sign in with correct wallet
+            setCredentials(null);
+            setState(prev => ({ 
+                ...prev, 
+                isAdmin: false, 
+                isSuperAdmin: false, 
+                isAuthenticated: false,
+                isLoading: false,
+                error: "Please sign in with your connected wallet"
+            }));
             return;
         }
 
@@ -174,7 +191,7 @@ export function useAdmin() {
         };
 
         verifyCredentials();
-    }, [credentials, isReconnecting, state.isAuthenticated, credentialsSource]);
+    }, [credentials, isReconnecting, state.isAuthenticated, credentialsSource, address]);
 
     // Sign in as admin
     const signIn = useCallback(async () => {
