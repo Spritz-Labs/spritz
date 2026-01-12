@@ -3952,8 +3952,8 @@ function DashboardContent({
                 <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 safe-area-pb">
                     <div className="bg-zinc-900/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl shadow-black/50 px-2">
                         <div className="flex items-center gap-1 py-2">
-                            {/* Wallet Tab - Beta only */}
-                            {hasBetaAccess && (
+                            {/* Wallet Tab - Admin only (experimental) */}
+                            {isAdmin && (
                                 <button
                                     onClick={() => setIsWalletModalOpen(true)}
                                     className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
