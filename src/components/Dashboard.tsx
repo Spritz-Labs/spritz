@@ -71,6 +71,7 @@ import { PasskeyManager } from "./PasskeyManager";
 import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
+import { WalletModal } from "./WalletModal";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -135,8 +136,9 @@ function DashboardContent({
     // watchingStream state removed - now using /live/[id] page instead
 
     // Bottom navigation tab state - default to chats
-    type NavTab = "agents" | "friends" | "chats" | "calls" | "leaderboard";
+    type NavTab = "wallet" | "agents" | "friends" | "chats" | "calls" | "leaderboard";
     const [activeNavTab, setActiveNavTab] = useState<NavTab>("chats");
+    const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
     const [currentCallFriend, setCurrentCallFriend] =
         useState<FriendsListFriend | null>(null);
     const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(
@@ -3950,6 +3952,23 @@ function DashboardContent({
                 <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 safe-area-pb">
                     <div className="bg-zinc-900/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl shadow-black/50 px-2">
                         <div className="flex items-center gap-1 py-2">
+                            {/* Wallet Tab - Beta only */}
+                            {hasBetaAccess && (
+                                <button
+                                    onClick={() => setIsWalletModalOpen(true)}
+                                    className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                        isWalletModalOpen
+                                            ? "text-emerald-400 bg-emerald-500/20"
+                                            : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                    }`}
+                                >
+                                    <span className="text-lg">💳</span>
+                                    <span className="text-[10px] font-medium">
+                                        Wallet
+                                    </span>
+                                </button>
+                            )}
+
                             {/* Agents Tab */}
                             <button
                                 onClick={() => setActiveNavTab("agents")}
@@ -4758,6 +4777,14 @@ function DashboardContent({
                 isOpen={isBugReportModalOpen}
                 onClose={() => setIsBugReportModalOpen(false)}
                 userAddress={userAddress}
+            />
+
+            {/* Wallet Modal */}
+            <WalletModal
+                isOpen={isWalletModalOpen}
+                onClose={() => setIsWalletModalOpen(false)}
+                userAddress={userAddress}
+                emailVerified={siweUser?.emailVerified}
             />
 
             {/* Live Stream Player removed - now using /live/[id] page */}

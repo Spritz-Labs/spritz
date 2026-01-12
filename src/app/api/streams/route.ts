@@ -61,13 +61,15 @@ export async function GET(request: NextRequest) {
 
     let streams, error;
     try {
-        // Add timeout wrapper for the query
-        const queryPromise = query;
-        const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Query timeout after 10 seconds")), 10000)
-        );
+        // Execute the query with timeout wrapper
+        const queryPromise = Promise.resolve(query);
+        let timeoutId: ReturnType<typeof setTimeout>;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error("Query timeout after 10 seconds")), 10000);
+        });
         
         const result = await Promise.race([queryPromise, timeoutPromise]);
+        clearTimeout(timeoutId!);
         streams = result.data;
         error = result.error;
     } catch (timeoutError) {

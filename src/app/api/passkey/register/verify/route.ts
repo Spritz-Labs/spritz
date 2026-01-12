@@ -4,6 +4,11 @@ import { createClient } from "@supabase/supabase-js";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
 import { createAuthResponse } from "@/lib/session";
 import crypto from "crypto";
+import { 
+    parseCosePublicKey, 
+    calculateWebAuthnSignerAddress,
+    type P256PublicKey,
+} from "@/lib/passkeySigner";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -228,6 +233,19 @@ export async function POST(request: NextRequest) {
         
         console.log("[Passkey] Final address:", finalUserAddress, `(${addressSource})`);
 
+        // Extract P256 public key coordinates for Safe passkey signer
+        let p256PublicKey: P256PublicKey | null = null;
+        let safeSignerAddress: string | null = null;
+        
+        try {
+            p256PublicKey = parseCosePublicKey(publicKey);
+            safeSignerAddress = calculateWebAuthnSignerAddress(p256PublicKey);
+            console.log("[Passkey] Extracted P256 coordinates, Safe signer:", safeSignerAddress.slice(0, 10) + "...");
+        } catch (parseError) {
+            console.warn("[Passkey] Could not parse P256 coordinates:", parseError);
+            // Continue without Safe signer support - passkey will still work for auth
+        }
+
         // Store the credential in the database with the FINAL address
         const { error: insertError } = await supabase
             .from("passkey_credentials")
@@ -240,6 +258,10 @@ export async function POST(request: NextRequest) {
                 aaguid,
                 transports,
                 backed_up: backedUp,
+                // P256 coordinates for Safe passkey signer
+                public_key_x: p256PublicKey?.x || null,
+                public_key_y: p256PublicKey?.y || null,
+                safe_signer_address: safeSignerAddress,
                 device_info: {
                     userAgent: request.headers.get("user-agent"),
                     registeredAt: new Date().toISOString(),
@@ -257,6 +279,9 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] Successfully registered credential for:", finalUserAddress);
         console.log("[Passkey] Credential ID:", credentialId.slice(0, 20) + "...");
         console.log("[Passkey] Backed up (synced):", backedUp);
+        if (safeSignerAddress) {
+            console.log("[Passkey] Safe signer ready:", safeSignerAddress.slice(0, 10) + "...");
+        }
 
         // Create/update user in shout_users table with the FINAL address
         const { data: existingUser } = await supabase

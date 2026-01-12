@@ -52,7 +52,25 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     try {
-        const { userAddress, authMethod } = await request.json();
+        // Safely parse JSON body
+        let body;
+        try {
+            const text = await request.text();
+            if (!text || text.trim() === "") {
+                return NextResponse.json(
+                    { error: "Request body is required" },
+                    { status: 400 }
+                );
+            }
+            body = JSON.parse(text);
+        } catch {
+            return NextResponse.json(
+                { error: "Invalid JSON in request body" },
+                { status: 400 }
+            );
+        }
+        
+        const { userAddress, authMethod } = body;
         
         if (!userAddress || !authMethod) {
             return NextResponse.json(
