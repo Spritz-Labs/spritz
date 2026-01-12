@@ -3,12 +3,18 @@
 /**
  * Safe Passkey Send Hook
  * 
- * Uses Safe Protocol Kit for passkey-based transaction signing.
+ * Uses permissionless + Pimlico for passkey-based Safe transaction signing.
  * This enables users who registered with passkeys to send transactions.
  */
 
 import { useState, useCallback, useEffect } from "react";
-import { type Address, parseEther, parseUnits } from "viem";
+import { type Address, type Hex, parseEther, parseUnits } from "viem";
+import {
+    createPasskeySafeAccountClient,
+    sendSafeTransaction,
+    type PasskeyCredential,
+} from "@/lib/safeWallet";
+import { type P256PublicKey } from "@/lib/passkeySigner";
 
 export type SafePasskeyStatus = "idle" | "loading" | "ready" | "signing" | "sending" | "success" | "error";
 
@@ -38,11 +44,6 @@ export interface UseSafePasskeySendReturn {
     ) => Promise<string | null>;
     reset: () => void;
 }
-
-// RPC URLs for supported chains
-const CHAIN_RPC_URLS: Record<number, string> = {
-    8453: "https://mainnet.base.org", // Base
-};
 
 export function useSafePasskeySend(): UseSafePasskeySendReturn {
     const [status, setStatus] = useState<SafePasskeyStatus>("idle");
@@ -101,7 +102,7 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
     }, []);
 
     /**
-     * Send a transaction using passkey signing
+     * Send a transaction using passkey signing via permissionless + Pimlico
      */
     const sendTransaction = useCallback(async (
         to: Address,
@@ -119,87 +120,95 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
         setTxHash(null);
 
         try {
-            // Dynamic import to avoid SSR issues
-            const Safe = (await import("@safe-global/protocol-kit")).default;
+            console.log("[SafePasskeySend] Creating passkey credential for signing");
+            console.log("[SafePasskeySend] Credential ID:", credential.credentialId.slice(0, 20) + "...");
 
-            const rpcUrl = CHAIN_RPC_URLS[chainId];
-            if (!rpcUrl) {
-                throw new Error(`Chain ${chainId} not supported`);
-            }
-
-            console.log("[SafePasskeySend] Creating passkey signer with coordinates");
-
-            // Create the passkey signer object for Safe SDK
-            // Coordinates should be hex strings (without 0x prefix based on SDK expectations)
-            const passkeySigner = {
-                rawId: credential.credentialId,
-                coordinates: { 
-                    x: credential.publicKeyX.startsWith("0x") ? credential.publicKeyX.slice(2) : credential.publicKeyX,
-                    y: credential.publicKeyY.startsWith("0x") ? credential.publicKeyY.slice(2) : credential.publicKeyY,
-                },
+            // Create the passkey credential object with signing function
+            const publicKey: P256PublicKey = {
+                x: credential.publicKeyX as Hex,
+                y: credential.publicKeyY as Hex,
             };
 
-            // For first-time users, we need to predict the Safe address
-            // The Safe will be deployed on the first transaction
-            const predictedSafe = await Safe.init({
-                provider: rpcUrl,
-                signer: passkeySigner,
-                predictedSafe: {
-                    safeAccountConfig: {
-                        owners: [credential.safeSignerAddress as Address],
-                        threshold: 1,
-                    },
-                    safeDeploymentConfig: {
-                        saltNonce: "0", // Deterministic address
-                    },
-                },
-            });
-
-            const safeTxAddress = await predictedSafe.getAddress();
-            console.log("[SafePasskeySend] Safe address:", safeTxAddress);
-            setSafeAddress(safeTxAddress as Address);
-
-            // Create the transaction
-            let txData;
-            if (tokenAddress && tokenDecimals !== undefined) {
-                // ERC20 transfer
-                const tokenAmount = parseUnits(amount, tokenDecimals);
-                const transferData = encodeERC20Transfer(to, tokenAmount);
-                txData = {
-                    to: tokenAddress,
-                    value: "0",
-                    data: transferData,
+            // Create a signing function that prompts for passkey
+            const signWithPasskey = async (challenge: Hex): Promise<{
+                authenticatorData: Uint8Array;
+                clientDataJSON: string;
+                signature: Uint8Array;
+            } | null> => {
+                const rpId = window.location.hostname;
+                const challengeBytes = hexToBytes(challenge);
+                
+                const options: PublicKeyCredentialRequestOptions = {
+                    challenge: challengeBytes.buffer.slice(
+                        challengeBytes.byteOffset,
+                        challengeBytes.byteOffset + challengeBytes.byteLength
+                    ) as ArrayBuffer,
+                    rpId,
+                    allowCredentials: [{
+                        id: base64UrlToArrayBuffer(credential.credentialId),
+                        type: "public-key",
+                        transports: ["internal", "hybrid"] as AuthenticatorTransport[],
+                    }],
+                    userVerification: "required",
+                    timeout: 60000,
                 };
-                console.log("[SafePasskeySend] Creating ERC20 transfer:", { to, amount, tokenAddress });
-            } else {
-                // Native ETH transfer
-                const valueWei = parseEther(amount);
-                txData = {
-                    to,
-                    value: valueWei.toString(),
-                    data: "0x",
-                };
-                console.log("[SafePasskeySend] Creating ETH transfer:", { to, amount });
-            }
+
+                try {
+                    const assertion = await navigator.credentials.get({
+                        publicKey: options,
+                    }) as PublicKeyCredential;
+
+                    if (!assertion) return null;
+
+                    const response = assertion.response as AuthenticatorAssertionResponse;
+                    
+                    return {
+                        authenticatorData: new Uint8Array(response.authenticatorData),
+                        clientDataJSON: new TextDecoder().decode(response.clientDataJSON),
+                        signature: new Uint8Array(response.signature),
+                    };
+                } catch {
+                    return null;
+                }
+            };
+
+            const passkeyCredential: PasskeyCredential = {
+                publicKey,
+                credentialId: credential.credentialId,
+                sign: signWithPasskey,
+            };
+
+            // Create Safe account client with passkey signer
+            console.log("[SafePasskeySend] Creating Safe account client...");
+            const safeClient = await createPasskeySafeAccountClient(
+                passkeyCredential,
+                chainId
+            );
 
             setStatus("sending");
 
-            // Create Safe transaction
-            const safeTransaction = await predictedSafe.createTransaction({
-                transactions: [txData],
-            });
+            // Send the transaction
+            let hash;
+            if (tokenAddress && tokenDecimals !== undefined) {
+                // ERC20 token transfer
+                const tokenAmount = parseUnits(amount, tokenDecimals);
+                console.log(`[SafePasskeySend] Sending ERC20: ${amount} to ${to}`);
+                hash = await sendSafeTransaction(safeClient, {
+                    to,
+                    value: BigInt(0),
+                    tokenAddress,
+                    tokenAmount,
+                    tokenDecimals,
+                });
+            } else {
+                // Native ETH transfer
+                console.log(`[SafePasskeySend] Sending ETH: ${amount} to ${to}`);
+                hash = await sendSafeTransaction(safeClient, {
+                    to,
+                    value: parseEther(amount),
+                });
+            }
 
-            console.log("[SafePasskeySend] Signing transaction with passkey...");
-
-            // Sign with passkey (this will prompt the user)
-            const signedTransaction = await predictedSafe.signTransaction(safeTransaction);
-
-            console.log("[SafePasskeySend] Executing transaction...");
-
-            // Execute the transaction
-            const result = await predictedSafe.executeTransaction(signedTransaction);
-            
-            const hash = result.hash as `0x${string}`;
             console.log("[SafePasskeySend] Transaction sent:", hash);
 
             setTxHash(hash);
@@ -243,11 +252,23 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
     };
 }
 
-// Helper to encode ERC20 transfer
-function encodeERC20Transfer(to: Address, amount: bigint): `0x${string}` {
-    // transfer(address,uint256) selector = 0xa9059cbb
-    const selector = "0xa9059cbb";
-    const toParam = to.slice(2).padStart(64, "0");
-    const amountParam = amount.toString(16).padStart(64, "0");
-    return `${selector}${toParam}${amountParam}` as `0x${string}`;
+// Helper to convert hex string to bytes
+function hexToBytes(hex: Hex): Uint8Array {
+    const bytes = new Uint8Array((hex.length - 2) / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.slice(2 + i * 2, 4 + i * 2), 16);
+    }
+    return bytes;
+}
+
+// Convert base64url string to ArrayBuffer
+function base64UrlToArrayBuffer(base64url: string): ArrayBuffer {
+    const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, "=");
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
