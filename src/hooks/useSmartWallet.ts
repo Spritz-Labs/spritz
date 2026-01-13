@@ -19,7 +19,7 @@ export type SmartWalletInfo = {
     walletType: "passkey" | "email" | "wallet" | "digitalid";
     canSign: boolean;
     signerType: "eoa" | "passkey" | "none";
-    supportedChains: { chainId: number; name: string }[];
+    supportedChains: { chainId: number; name: string; sponsorship?: "free" | "usdc" }[];
 };
 
 type UseSmartWalletReturn = {
@@ -130,11 +130,13 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
                 canSign: true, // Assume wallet users can sign
                 signerType: "eoa",
                 supportedChains: [
-                    { chainId: 1, name: "Ethereum" },
-                    { chainId: 8453, name: "Base" },
-                    { chainId: 42161, name: "Arbitrum" },
-                    { chainId: 10, name: "Optimism" },
-                    { chainId: 137, name: "Polygon" },
+                    { chainId: 1, name: "Ethereum", sponsorship: "usdc" },
+                    { chainId: 8453, name: "Base", sponsorship: "free" },
+                    { chainId: 42161, name: "Arbitrum", sponsorship: "free" },
+                    { chainId: 10, name: "Optimism", sponsorship: "free" },
+                    { chainId: 137, name: "Polygon", sponsorship: "free" },
+                    { chainId: 56, name: "BNB Chain", sponsorship: "free" },
+                    { chainId: 130, name: "Unichain", sponsorship: "free" },
                 ],
             };
         } catch {

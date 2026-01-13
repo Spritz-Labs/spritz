@@ -22,7 +22,20 @@ import {
     custom,
     bytesToHex,
 } from "viem";
-import { mainnet, base, arbitrum, optimism, polygon } from "viem/chains";
+import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
+
+// Unichain mainnet (not in viem yet, define manually)
+const unichain: Chain = {
+    id: 130,
+    name: "Unichain",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: {
+        default: { http: ["https://mainnet.unichain.org"] },
+    },
+    blockExplorers: {
+        default: { name: "Uniscan", url: "https://uniscan.xyz" },
+    },
+};
 import { 
     createSmartAccountClient,
     type SmartAccountClient,
@@ -43,14 +56,42 @@ import {
     type P256PublicKey,
 } from "./passkeySigner";
 
-// Supported chains for Safe deployment (Base only for now during testing)
+// Supported chains for Safe deployment
 export const SAFE_SUPPORTED_CHAINS: Record<number, Chain> = {
-    8453: base,
-    // TODO: Re-enable after testing
-    // 1: mainnet,
-    // 42161: arbitrum,
-    // 10: optimism,
-    // 137: polygon,
+    1: mainnet,        // Ethereum Mainnet
+    8453: base,        // Base
+    42161: arbitrum,   // Arbitrum One
+    10: optimism,      // Optimism
+    137: polygon,      // Polygon
+    56: bsc,           // BSC (BNB Chain)
+    130: unichain,     // Unichain
+};
+
+// Chain sponsorship configuration
+// - "sponsor": Full gas sponsorship (you pay)
+// - "erc20": User pays gas in USDC (they pay)
+// - "none": User pays in native token (they pay ETH/BNB)
+export type SponsorshipType = "sponsor" | "erc20" | "none";
+
+export const CHAIN_SPONSORSHIP_CONFIG: Record<number, { type: SponsorshipType; reason: string }> = {
+    1: { type: "erc20", reason: "Mainnet gas is expensive - user pays in USDC" },
+    8453: { type: "sponsor", reason: "Base L2 - cheap, sponsor freely" },
+    42161: { type: "sponsor", reason: "Arbitrum L2 - cheap, sponsor freely" },
+    10: { type: "sponsor", reason: "Optimism L2 - cheap, sponsor freely" },
+    137: { type: "sponsor", reason: "Polygon - cheap, sponsor freely" },
+    56: { type: "sponsor", reason: "BSC - cheap, sponsor freely" },
+    130: { type: "sponsor", reason: "Unichain L2 - cheap, sponsor freely" },
+};
+
+// USDC addresses for ERC-20 paymaster
+export const USDC_ADDRESSES: Record<number, Address> = {
+    1: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",    // Ethereum USDC
+    8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",  // Base USDC
+    42161: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", // Arbitrum USDC
+    10: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",   // Optimism USDC
+    137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",  // Polygon USDC
+    56: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",   // BSC USDC
+    // Unichain USDC - TBD
 };
 
 // Get Pimlico bundler URL for a chain
@@ -61,13 +102,16 @@ function getPimlicoBundlerUrl(chainId: number): string {
         throw new Error("Pimlico API key not configured. Please set NEXT_PUBLIC_PIMLICO_API_KEY.");
     }
     
+    // Pimlico chain name mapping
+    // See: https://docs.pimlico.io/infra/bundler/endpoints
     const chainNames: Record<number, string> = {
+        1: "ethereum",
         8453: "base",
-        // TODO: Re-enable after testing
-        // 1: "ethereum",
-        // 42161: "arbitrum",
-        // 10: "optimism",
-        // 137: "polygon",
+        42161: "arbitrum",
+        10: "optimism",
+        137: "polygon",
+        56: "binance",
+        130: "unichain",
     };
     
     const chainName = chainNames[chainId];
@@ -114,14 +158,37 @@ export function getPimlicoClient(chainId: number) {
     });
 }
 
-// Get paymaster context with sponsorship policy
-export function getPaymasterContext() {
+// Get paymaster context with sponsorship policy (chain-aware)
+export function getPaymasterContext(chainId: number = 8453) {
+    const config = CHAIN_SPONSORSHIP_CONFIG[chainId];
     const policyId = getSponsorshipPolicyId();
-    if (policyId) {
-        console.log(`[SafeWallet] Using sponsorship policy: ${policyId}`);
+    
+    if (!config) {
+        console.log(`[SafeWallet] No sponsorship config for chain ${chainId}`);
+        return undefined;
+    }
+    
+    // For sponsored chains, use the policy
+    if (config.type === "sponsor" && policyId) {
+        console.log(`[SafeWallet] Using sponsorship for chain ${chainId}: ${config.reason}`);
         return { sponsorshipPolicyId: policyId };
     }
-    console.log("[SafeWallet] No sponsorship policy configured");
+    
+    // For ERC-20 paymaster chains (like mainnet), return ERC-20 config
+    if (config.type === "erc20") {
+        const usdcAddress = USDC_ADDRESSES[chainId];
+        if (usdcAddress) {
+            console.log(`[SafeWallet] Using ERC-20 paymaster for chain ${chainId}: ${config.reason}`);
+            // Pimlico ERC-20 paymaster uses token address in context
+            return { 
+                token: usdcAddress,
+                // Note: User must have approved the paymaster to spend their USDC
+            };
+        }
+        console.log(`[SafeWallet] No USDC address for chain ${chainId}, falling back to no sponsorship`);
+    }
+    
+    console.log(`[SafeWallet] No sponsorship for chain ${chainId}: ${config.reason}`);
     return undefined;
 }
 
@@ -229,8 +296,8 @@ export async function createSafeAccountClient(
 
         console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
 
-        // Get sponsorship context if configured
-        const paymasterContext = getPaymasterContext();
+        // Get sponsorship context if configured (chain-aware)
+        const paymasterContext = getPaymasterContext(chainId);
 
         // Create smart account client with Pimlico as bundler and paymaster
         const smartAccountClient = createSmartAccountClient({
@@ -238,7 +305,7 @@ export async function createSafeAccountClient(
             chain,
             bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
             paymaster: pimlicoClient,
-            paymasterContext, // Include sponsorship policy if set
+            paymasterContext, // Include sponsorship policy if set (or ERC-20 for mainnet)
             userOperation: {
                 estimateFeesPerGas: async () => {
                     const prices = await pimlicoClient.getUserOperationGasPrice();
@@ -554,8 +621,8 @@ export async function createPasskeySafeAccountClient(
 
     console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
 
-    // Get sponsorship context if configured
-    const paymasterContext = getPaymasterContext();
+    // Get sponsorship context if configured (chain-aware)
+    const paymasterContext = getPaymasterContext(chainId);
 
     console.log(`[SafeWallet] Creating smart account client...`);
     console.log(`[SafeWallet] Paymaster context:`, paymasterContext);

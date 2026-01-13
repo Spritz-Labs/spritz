@@ -26,7 +26,20 @@ import {
     toHex,
     type Hex,
 } from "viem";
-import { base, mainnet, arbitrum, optimism, polygon } from "viem/chains";
+import { base, mainnet, arbitrum, optimism, polygon, bsc, type Chain } from "viem/chains";
+
+// Unichain mainnet (not in viem yet)
+const unichain: Chain = {
+    id: 130,
+    name: "Unichain",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: {
+        default: { http: ["https://mainnet.unichain.org"] },
+    },
+    blockExplorers: {
+        default: { name: "Uniscan", url: "https://uniscan.xyz" },
+    },
+};
 
 // Safe deployment constants (Safe v1.4.1)
 // These are the canonical addresses used by Safe for deterministic deployment
@@ -44,6 +57,8 @@ export const SAFE_CHAINS = {
     42161: arbitrum,
     10: optimism,
     137: polygon,
+    56: bsc,
+    130: unichain,
 } as const;
 
 /**
@@ -263,13 +278,15 @@ export async function getSmartWalletAddress(
 /**
  * Get supported chains for Smart Wallets
  */
-export function getSupportedChains(): { chainId: number; name: string }[] {
+export function getSupportedChains(): { chainId: number; name: string; sponsorship: "free" | "usdc" }[] {
     return [
-        { chainId: 1, name: "Ethereum" },
-        { chainId: 8453, name: "Base" },
-        { chainId: 42161, name: "Arbitrum" },
-        { chainId: 10, name: "Optimism" },
-        { chainId: 137, name: "Polygon" },
+        { chainId: 1, name: "Ethereum", sponsorship: "usdc" },      // User pays in USDC
+        { chainId: 8453, name: "Base", sponsorship: "free" },       // Sponsored
+        { chainId: 42161, name: "Arbitrum", sponsorship: "free" },  // Sponsored
+        { chainId: 10, name: "Optimism", sponsorship: "free" },     // Sponsored
+        { chainId: 137, name: "Polygon", sponsorship: "free" },     // Sponsored
+        { chainId: 56, name: "BNB Chain", sponsorship: "free" },    // Sponsored
+        { chainId: 130, name: "Unichain", sponsorship: "free" },    // Sponsored
     ];
 }
 
