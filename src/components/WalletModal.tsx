@@ -1312,15 +1312,15 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Mainnet warning for Safe wallet */}
+                                        {/* Mainnet info for Safe wallet */}
                                         {useSafeForSend && selectedChainId === 1 && (
-                                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3">
+                                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
                                                 <div className="flex gap-2">
-                                                    <span className="text-yellow-400">⚠️</span>
+                                                    <span className="text-blue-400">ℹ️</span>
                                                     <div>
-                                                        <p className="text-xs text-yellow-300 font-medium">Ethereum mainnet requires USDC for gas</p>
+                                                        <p className="text-xs text-blue-300 font-medium">Ethereum mainnet gas fees</p>
                                                         <p className="text-xs text-zinc-400 mt-1">
-                                                            Your Spritz Wallet needs USDC deposited for mainnet transactions. 
+                                                            Gas will be paid from your wallet&apos;s ETH balance.
                                                             For <strong className="text-emerald-400">free</strong> transactions, try Base or other L2 chains.
                                                         </p>
                                                     </div>

@@ -348,14 +348,14 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 return null;
             }
 
-            // Handle mainnet USDC paymaster errors
+            // Handle mainnet transaction errors with helpful message
             const errString = err instanceof Error ? err.message : String(err);
             if (chainId === 1 && (
                 errString.includes("UserOperation reverted") ||
-                errString.includes("paymaster") ||
-                errString.includes("0x")
+                errString.includes("insufficient") ||
+                errString.includes("paymaster")
             )) {
-                setError("Ethereum mainnet requires USDC for gas. Try sending on Base or another L2 chain for free transactions.");
+                setError("Transaction failed. Ensure you have enough ETH for gas. For free transactions, try Base or another L2 chain.");
                 setStatus("error");
                 return null;
             }
