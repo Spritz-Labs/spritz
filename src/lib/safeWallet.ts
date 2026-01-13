@@ -119,15 +119,12 @@ export function getPaymasterContext() {
     const policyId = getSponsorshipPolicyId();
     if (policyId) {
         console.log(`[SafeWallet] Using sponsorship policy: ${policyId}`);
-        return { sponsorshipPolicyId: policyId };
+        // Try without policy first to debug
+        console.log(`[SafeWallet] DEBUG: Temporarily NOT using sponsorship policy to debug`);
+        return undefined; // TODO: Re-enable after debugging
+        // return { sponsorshipPolicyId: policyId };
     }
-    console.log("[SafeWallet] No sponsorship policy configured - user pays gas");
-    return undefined;
-}
-
-// For debugging: get paymaster context without sponsorship policy
-export function getPaymasterContextNoSponsorship() {
-    console.log("[SafeWallet] Using Pimlico paymaster WITHOUT sponsorship policy");
+    console.log("[SafeWallet] No sponsorship policy configured");
     return undefined;
 }
 
