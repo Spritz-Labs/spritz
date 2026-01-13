@@ -381,7 +381,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 sendAmount,
                 tokenAddress,
                 tokenDecimals,
-                selectedChainId
+                selectedChainId,
+                smartWalletAddress as Address // Pass Safe address for USDC balance check
             );
         } else if (useSafeForSend && safeAddress) {
             // Send via Safe smart wallet (EOA signer)

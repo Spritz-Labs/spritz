@@ -10,10 +10,13 @@
  */
 
 import { useState, useCallback } from "react";
-import { type Address, type Hex, parseEther, parseUnits } from "viem";
+import { type Address, type Hex, parseEther, parseUnits, formatUnits } from "viem";
 import {
     createPasskeySafeAccountClient,
     sendSafeTransaction,
+    chainRequiresErc20Payment,
+    getChainUsdcAddress,
+    getPublicClient,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
 
@@ -43,7 +46,8 @@ export interface UseSafePasskeySendReturn {
         amount: string, 
         tokenAddress?: Address, 
         tokenDecimals?: number,
-        chainId?: number
+        chainId?: number,
+        safeAddress?: Address // For USDC balance check on mainnet
     ) => Promise<string | null>;
     setChainId: (chainId: number) => void;
     reset: () => void;
@@ -116,7 +120,8 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
         amount: string,
         tokenAddress?: Address,
         tokenDecimals?: number,
-        txChainId?: number
+        txChainId?: number,
+        safeAddress?: Address // Optional: pass the Safe address to check USDC balance
     ): Promise<string | null> => {
         if (!credential) {
             setError("Passkey not initialized");
@@ -144,12 +149,50 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
                 },
             };
 
+            // Check if this chain requires ERC-20 payment (mainnet)
+            // If user has no USDC, fall back to native ETH payment
+            let forceNativeGas = false;
+            if (chainRequiresErc20Payment(effectiveChainId) && safeAddress) {
+                const usdcAddress = getChainUsdcAddress(effectiveChainId);
+                if (usdcAddress) {
+                    try {
+                        const publicClient = getPublicClient(effectiveChainId);
+                        const erc20Abi = [{ 
+                            name: 'balanceOf', 
+                            type: 'function', 
+                            inputs: [{ name: 'account', type: 'address' }], 
+                            outputs: [{ name: '', type: 'uint256' }] 
+                        }] as const;
+                        
+                        const usdcBalance = await publicClient.readContract({
+                            address: usdcAddress,
+                            abi: erc20Abi,
+                            functionName: 'balanceOf',
+                            args: [safeAddress],
+                        }) as bigint;
+                        
+                        // Need at least 0.50 USDC for gas (rough estimate)
+                        const minUsdcForGas = BigInt(500000); // 0.50 USDC (6 decimals)
+                        if (usdcBalance < minUsdcForGas) {
+                            console.log(`[SafePasskeySend] Insufficient USDC for gas (${formatUnits(usdcBalance, 6)} USDC), falling back to ETH payment`);
+                            forceNativeGas = true;
+                        } else {
+                            console.log(`[SafePasskeySend] Using USDC for gas payment (${formatUnits(usdcBalance, 6)} USDC available)`);
+                        }
+                    } catch (err) {
+                        console.log("[SafePasskeySend] Could not check USDC balance, falling back to ETH payment");
+                        forceNativeGas = true;
+                    }
+                }
+            }
+
             // Create Safe account client with passkey signer
             // This uses SafeWebAuthnSharedSigner for ERC-4337 compatibility
             console.log("[SafePasskeySend] Creating Safe account client for chain:", effectiveChainId);
             const safeClient = await createPasskeySafeAccountClient(
                 passkeyCredential,
-                effectiveChainId
+                effectiveChainId,
+                { forceNativeGas }
             );
 
             console.log("[SafePasskeySend] Safe client created, sending transaction...");

@@ -182,19 +182,31 @@ export function getPimlicoClient(chainId: number) {
     });
 }
 
-// Get paymaster context with sponsorship policy (chain-aware)
-export function getPaymasterContext(chainId: number = 8453) {
+/**
+ * Get paymaster context with sponsorship policy (chain-aware)
+ * 
+ * @param chainId - The chain ID
+ * @param forceNativeGas - If true, skip paymaster and use native gas (user pays in ETH)
+ * @returns Paymaster context or undefined for native gas payment
+ */
+export function getPaymasterContext(chainId: number = 8453, forceNativeGas: boolean = false) {
+    // If explicitly forcing native gas payment, return undefined (no paymaster)
+    if (forceNativeGas) {
+        log(`[SafeWallet] Using native gas payment for chain ${chainId} (user pays in ETH)`);
+        return undefined;
+    }
+
     const config = CHAIN_SPONSORSHIP_CONFIG[chainId];
     const policyId = getSponsorshipPolicyId();
     
     if (!config) {
-        console.log(`[SafeWallet] No sponsorship config for chain ${chainId}`);
+        log(`[SafeWallet] No sponsorship config for chain ${chainId}`);
         return undefined;
     }
     
     // For sponsored chains, use the policy
     if (config.type === "sponsor" && policyId) {
-        console.log(`[SafeWallet] Using sponsorship for chain ${chainId}: ${config.reason}`);
+        log(`[SafeWallet] Using sponsorship for chain ${chainId}: ${config.reason}`);
         return { sponsorshipPolicyId: policyId };
     }
     
@@ -202,18 +214,33 @@ export function getPaymasterContext(chainId: number = 8453) {
     if (config.type === "erc20") {
         const usdcAddress = USDC_ADDRESSES[chainId];
         if (usdcAddress) {
-            console.log(`[SafeWallet] Using ERC-20 paymaster for chain ${chainId}: ${config.reason}`);
+            log(`[SafeWallet] Using ERC-20 paymaster for chain ${chainId}: ${config.reason}`);
             // Pimlico ERC-20 paymaster uses token address in context
             return { 
                 token: usdcAddress,
                 // Note: User must have approved the paymaster to spend their USDC
             };
         }
-        console.log(`[SafeWallet] No USDC address for chain ${chainId}, falling back to no sponsorship`);
+        log(`[SafeWallet] No USDC address for chain ${chainId}, falling back to native gas`);
     }
     
-    console.log(`[SafeWallet] No sponsorship for chain ${chainId}: ${config.reason}`);
+    log(`[SafeWallet] No sponsorship for chain ${chainId}: ${config.reason}`);
     return undefined;
+}
+
+/**
+ * Check if a chain requires ERC-20 payment (like mainnet)
+ */
+export function chainRequiresErc20Payment(chainId: number): boolean {
+    const config = CHAIN_SPONSORSHIP_CONFIG[chainId];
+    return config?.type === "erc20";
+}
+
+/**
+ * Get the USDC address for a chain (if any)
+ */
+export function getChainUsdcAddress(chainId: number): Address | undefined {
+    return USDC_ADDRESSES[chainId];
 }
 
 export interface SafeWalletConfig {
@@ -461,9 +488,18 @@ export interface PasskeyCredential {
  * Uses viem's toWebAuthnAccount and permissionless.js's Safe + WebAuthn integration.
  * This properly uses SafeWebAuthnSharedSigner for ERC-4337 compatibility.
  */
+/**
+ * Create a Safe Smart Account Client with a passkey owner
+ * 
+ * @param passkeyCredential - The passkey credential with public key
+ * @param chainId - The chain ID
+ * @param options - Optional configuration
+ * @param options.forceNativeGas - If true, user pays gas in native token (ETH) instead of USDC
+ */
 export async function createPasskeySafeAccountClient(
     passkeyCredential: PasskeyCredential,
     chainId: number,
+    options?: { forceNativeGas?: boolean }
 ): Promise<SmartAccountClient> {
     const chain = SAFE_SUPPORTED_CHAINS[chainId];
     if (!chain) {
@@ -646,9 +682,10 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
 
     // Get sponsorship context if configured (chain-aware)
-    const paymasterContext = getPaymasterContext(chainId);
+    // If forceNativeGas is true, user pays in ETH instead of USDC (for mainnet when user has no USDC)
+    const paymasterContext = getPaymasterContext(chainId, options?.forceNativeGas);
 
-    console.log(`[SafeWallet] Creating smart account client...`);
+    log(`[SafeWallet] Creating smart account client...`);
     console.log(`[SafeWallet] Paymaster context:`, paymasterContext);
 
     // Use Pimlico client directly as paymaster - it handles sponsorship
