@@ -78,6 +78,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Log request info for debugging
+        const host = request.headers.get("host") || "";
+        const rpId = getRpId(request);
+        console.log("[Passkey] Login verify request from host:", host);
+        console.log("[Passkey] Using RP ID:", rpId);
+        console.log("[Passkey] Credential ID from browser:", credential.id);
+
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Try to find unused challenge
@@ -144,6 +151,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Look up the credential by ID
+        console.log("[Passkey] Looking up credential ID:", credential.id);
         const { data: storedCredential, error: credError } = await supabase
             .from("passkey_credentials")
             .select("*")
@@ -151,7 +159,25 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (credError || !storedCredential) {
-            console.error("[Passkey] Credential not found:", credential.id);
+            console.error("[Passkey] Credential not found. Sent ID:", credential.id);
+            console.error("[Passkey] DB error:", credError?.message);
+            
+            // Try to find similar credentials for debugging
+            const { data: allCreds } = await supabase
+                .from("passkey_credentials")
+                .select("credential_id, user_address, created_at")
+                .order("created_at", { ascending: false })
+                .limit(5);
+            
+            if (allCreds) {
+                console.log("[Passkey] Recent credentials in DB:", 
+                    allCreds.map(c => ({ 
+                        id: c.credential_id.slice(0, 20) + "...", 
+                        addr: c.user_address.slice(0, 10) + "..." 
+                    }))
+                );
+            }
+            
             return NextResponse.json(
                 { error: "Credential not found. Please register first." },
                 { status: 400 }
