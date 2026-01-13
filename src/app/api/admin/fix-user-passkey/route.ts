@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { parseCosePublicKey, calculateWebAuthnSignerAddress } from "@/lib/passkeySigner";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { timingSafeEqual as cryptoTimingSafeEqual } from "crypto";
+import { isAddress } from "viem";
 
 // Constant-time string comparison to prevent timing attacks
 function timingSafeEqual(a: string, b: string): boolean {
@@ -62,6 +63,14 @@ export async function POST(request: NextRequest) {
         if (!userAddress) {
             return NextResponse.json(
                 { error: "userAddress required" },
+                { status: 400 }
+            );
+        }
+
+        // SECURITY: Validate address format to prevent injection
+        if (!isAddress(userAddress)) {
+            return NextResponse.json(
+                { error: "Invalid address format" },
                 { status: 400 }
             );
         }

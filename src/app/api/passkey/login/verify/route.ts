@@ -78,24 +78,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log("[Passkey] Verifying login, challenge:", challenge.slice(0, 30) + "...");
-
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-        // Verify the challenge exists and hasn't expired
-        // First, let's see what's in the database for debugging
-        const { data: recentChallenges } = await supabase
-            .from("passkey_challenges")
-            .select("challenge, ceremony_type, used, expires_at, created_at")
-            .eq("ceremony_type", "authentication")
-            .order("created_at", { ascending: false })
-            .limit(5);
-        
-        console.log("[Passkey] Recent auth challenges in DB:", recentChallenges?.map(c => ({
-            challenge: c.challenge.slice(0, 20) + "...",
-            used: c.used,
-            expires_at: c.expires_at,
-        })));
 
         // Try to find unused challenge
         let { data: challengeData, error: challengeError } = await supabase
@@ -106,12 +89,6 @@ export async function POST(request: NextRequest) {
             .eq("used", false)
             .single();
 
-        console.log("[Passkey] Challenge lookup result:", { 
-            found: !!challengeData, 
-            error: challengeError?.message,
-            challengeInDb: challengeData?.challenge?.slice(0, 20) + "..."
-        });
-
         // If not found, check if it exists but was already used (race condition)
         if (challengeError || !challengeData) {
             const { data: anyChallenge } = await supabase
@@ -120,8 +97,6 @@ export async function POST(request: NextRequest) {
                 .eq("challenge", challenge)
                 .eq("ceremony_type", "authentication")
                 .single();
-            
-            console.log("[Passkey] Any challenge lookup:", { found: !!anyChallenge, used: anyChallenge?.used });
             
             if (anyChallenge) {
                 if (anyChallenge.used) {
@@ -189,8 +164,6 @@ export async function POST(request: NextRequest) {
         // Verify the authentication response
         const allowedOrigins = getAllowedOrigins();
         const rpId = getRpId(request);
-        console.log("[Passkey] Verifying against origins:", allowedOrigins);
-        console.log("[Passkey] Expected RP_ID:", rpId);
         
         let verification;
         try {
@@ -234,8 +207,7 @@ export async function POST(request: NextRequest) {
             })
             .eq("credential_id", storedCredential.credential_id);
 
-        console.log("[Passkey] Successfully authenticated:", storedCredential.user_address);
-        console.log("[Passkey] Credential ID:", storedCredential.credential_id.slice(0, 20) + "...");
+        console.log("[Passkey] Authentication successful for:", storedCredential.user_address.slice(0, 10) + "...");
 
         // Create/update user in shout_users table
         const { data: existingUser } = await supabase
@@ -252,7 +224,7 @@ export async function POST(request: NextRequest) {
                 last_login: new Date().toISOString(),
                 login_count: 1,
             });
-            console.log("[Passkey] Created user record:", storedCredential.user_address);
+            console.log("[Passkey] Created user record");
         } else {
             // Update existing user
             await supabase

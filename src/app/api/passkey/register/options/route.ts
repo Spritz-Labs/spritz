@@ -3,6 +3,7 @@ import { generateRegistrationOptions } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { verifyRecoveryToken } from "@/lib/session";
+import { isAddress } from "viem";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -69,6 +70,14 @@ export async function POST(request: NextRequest) {
         if (!actualUserAddress) {
             return NextResponse.json(
                 { error: "User address is required" },
+                { status: 400 }
+            );
+        }
+
+        // SECURITY: Validate address format to prevent injection
+        if (!isAddress(actualUserAddress)) {
+            return NextResponse.json(
+                { error: "Invalid address format" },
                 { status: 400 }
             );
         }

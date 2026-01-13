@@ -9,6 +9,15 @@
  * - Passkey: WebAuthn signing (passkey users)
  */
 
+// SECURITY: Only log sensitive details in development
+const isDev = process.env.NODE_ENV === "development";
+const log = (message: string, ...args: unknown[]) => {
+    console.log(message, ...args);
+};
+const debugLog = (message: string, ...args: unknown[]) => {
+    if (isDev) console.log(message, ...args);
+};
+
 import { 
     createPublicClient, 
     createWalletClient,
@@ -94,7 +103,22 @@ export const USDC_ADDRESSES: Record<number, Address> = {
     // Unichain USDC - TBD
 };
 
-// Get Pimlico bundler URL for a chain
+/**
+ * Get Pimlico bundler URL for a chain
+ * 
+ * SECURITY NOTE: The Pimlico API key is exposed client-side (NEXT_PUBLIC_*) because
+ * account abstraction operations must happen in the browser for WebAuthn signing.
+ * 
+ * Mitigations in place:
+ * 1. Sponsorship Policy: Limits gas spending per user/time period (configured in Pimlico dashboard)
+ * 2. Domain Restrictions: API key can be restricted to specific domains in Pimlico settings
+ * 3. Rate Limiting: Pimlico has built-in rate limiting per API key
+ * 
+ * For additional security, consider:
+ * - Setting up domain restrictions in Pimlico dashboard
+ * - Monitoring usage in Pimlico analytics
+ * - Using separate API keys for development/production
+ */
 function getPimlicoBundlerUrl(chainId: number): string {
     const apiKey = process.env.NEXT_PUBLIC_PIMLICO_API_KEY;
     if (!apiKey) {
@@ -479,11 +503,11 @@ export async function createPasskeySafeAccountClient(
         throw new Error(`Invalid public key length: ${formattedPublicKey.length}, expected 130`);
     }
 
-    console.log(`[SafeWallet] Creating WebAuthn account with credential: ${passkeyCredential.credentialId.slice(0, 20)}...`);
-    console.log(`[SafeWallet] Public key X: ${passkeyCredential.publicKey.x} (${xHex.length} chars without 0x)`);
-    console.log(`[SafeWallet] Public key Y: ${passkeyCredential.publicKey.y} (${yHex.length} chars without 0x)`);
-    console.log(`[SafeWallet] Formatted public key (full): ${formattedPublicKey}`);
-    console.log(`[SafeWallet] Formatted public key length: ${formattedPublicKey.length} (should be 130 for 64 bytes + 0x)`);
+    log(`[SafeWallet] Creating WebAuthn account with credential: ${passkeyCredential.credentialId.slice(0, 20)}...`);
+    // SECURITY: Only log full key details in development
+    debugLog(`[SafeWallet] Public key X: ${passkeyCredential.publicKey.x.slice(0, 10)}...`);
+    debugLog(`[SafeWallet] Public key Y: ${passkeyCredential.publicKey.y.slice(0, 10)}...`);
+    debugLog(`[SafeWallet] Formatted public key length: ${formattedPublicKey.length}`);
 
     // Get the rpId - must match the domain where the passkey was created
     // IMPORTANT: Registration uses "spritz.chat" (parent domain) for all *.spritz.chat subdomains
@@ -542,28 +566,28 @@ export async function createPasskeySafeAccountClient(
             }],
         };
 
-        console.log(`[SafeWallet] Using rpId: ${rpId}`);
-        console.log(`[SafeWallet] Credential ID (first 20 chars): ${passkeyCredential.credentialId.slice(0, 20)}...`);
+        debugLog(`[SafeWallet] Using rpId: ${rpId}`);
+        debugLog(`[SafeWallet] Credential ID: ${passkeyCredential.credentialId.slice(0, 20)}...`);
 
         try {
             // Try with specific credential first
-            console.log(`[SafeWallet] Trying with specific credential ID...`);
+            debugLog(`[SafeWallet] Trying with specific credential ID...`);
             const credential = await navigator.credentials.get({
                 publicKey: publicKeyOptionsWithCred,
                 mediation: "optional",
             } as CredentialRequestOptions);
             
             if (credential) {
-                console.log(`[SafeWallet] Got credential successfully with specific ID`);
+                debugLog(`[SafeWallet] Got credential successfully`);
                 return credential;
             }
         } catch (error) {
-            console.log(`[SafeWallet] Specific credential failed, trying discoverable...`, error);
+            debugLog(`[SafeWallet] Specific credential failed, trying discoverable...`);
         }
 
         // Fallback: Try discoverable credential (no allowCredentials)
         // This lets the browser find any passkey for this rpId
-        console.log(`[SafeWallet] Trying discoverable credential lookup...`);
+        debugLog(`[SafeWallet] Trying discoverable credential lookup...`);
         const publicKeyOptionsDiscoverable: PublicKeyCredentialRequestOptions = {
             challenge: options.publicKey.challenge,
             rpId: rpId,
@@ -582,7 +606,7 @@ export async function createPasskeySafeAccountClient(
                 throw new Error('No credential returned');
             }
             
-            console.log(`[SafeWallet] Got credential via discoverable lookup`);
+            debugLog(`[SafeWallet] Got credential via discoverable lookup`);
             return credential;
         } catch (error) {
             console.error(`[SafeWallet] All credential methods failed:`, error);

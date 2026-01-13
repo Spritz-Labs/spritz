@@ -43,8 +43,10 @@ export async function POST(request: NextRequest) {
         const { userAddress, useDevicePasskey } = await request.json();
         const rpId = getRpId(request);
         
-        console.log("[Passkey] Using RP ID:", rpId);
-        console.log("[Passkey] useDevicePasskey:", useDevicePasskey);
+        // Log auth flow type (not sensitive)
+        if (process.env.NODE_ENV === "development") {
+            console.log("[Passkey] Auth options:", { rpId, useDevicePasskey });
+        }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -68,30 +70,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // For device passkey mode without a specific user, get ALL credentials with platform transport
-        // This allows the browser to match against any credential that might be on this device
+        // SECURITY: For device passkey mode without a specific user, use discoverable credentials
+        // Do NOT fetch all credential IDs from the database - this would expose user information
+        // Instead, let the browser discover passkeys based on rpId (resident key / discoverable credential flow)
         if (useDevicePasskey && allowCredentials.length === 0) {
-            console.log("[Passkey] Device passkey mode - fetching all platform credentials...");
-            const { data: allCredentials } = await supabase
-                .from("passkey_credentials")
-                .select("credential_id, transports")
-                .limit(100); // Limit to prevent huge lists
-
-            if (allCredentials && allCredentials.length > 0) {
-                // Filter to only include credentials with internal/platform transport
-                const platformCredentials = allCredentials.filter(cred => {
-                    const transports = cred.transports || [];
-                    return transports.includes("internal") || transports.includes("hybrid") || transports.length === 0;
-                });
-                
-                console.log("[Passkey] Found", platformCredentials.length, "potential device credentials");
-                
-                allowCredentials = platformCredentials.map((cred) => ({
-                    id: cred.credential_id,
-                    type: "public-key" as const,
-                    transports: ["internal", "hybrid"] as AuthenticatorTransport[],
-                }));
-            }
+            console.log("[Passkey] Device passkey mode - using discoverable credential flow (no allowCredentials)");
+            // Leave allowCredentials empty - browser will show all passkeys for this rpId
+            // This is the secure and proper way to handle "sign in with any passkey on this device"
         }
 
         // Generate authentication options
@@ -149,9 +134,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        console.log("[Passkey] Generated auth options, challenge stored");
-        console.log("[Passkey] allowCredentials count:", allowCredentials.length);
-        console.log("[Passkey] useDevicePasskey mode:", useDevicePasskey);
+        console.log("[Passkey] Generated auth options for", useDevicePasskey ? "discoverable" : "specific user", "flow");
 
         return NextResponse.json({
             options: optionsWithCredentials,

@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
 import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { isAddress } from "viem";
 import crypto from "crypto";
 import { 
     parseCosePublicKey, 
@@ -91,6 +92,14 @@ export async function POST(request: NextRequest) {
         if (!userAddress || !credential || !challenge) {
             return NextResponse.json(
                 { error: "Missing required fields" },
+                { status: 400 }
+            );
+        }
+
+        // SECURITY: Validate address format to prevent injection
+        if (!isAddress(userAddress)) {
+            return NextResponse.json(
+                { error: "Invalid address format" },
                 { status: 400 }
             );
         }
