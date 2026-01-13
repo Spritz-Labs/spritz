@@ -57,61 +57,61 @@ export function PushNotificationPrompt({
             return;
         }
 
+        // PRIORITY CHECK: If user clicked "Don't Ask Again" - NEVER show again
+        // This check must happen first and be absolute
+        const neverAskKey = `${PUSH_NEVER_ASK_KEY}_${userAddress.toLowerCase()}`;
+        const neverAsk = localStorage.getItem(neverAskKey);
+        if (neverAsk === "true") {
+            console.log("[PushNotificationPrompt] User clicked 'Don't Ask Again' - never showing");
+            hasShownRef.current = true; // Prevent any future attempts this session
+            return;
+        }
+
         if (!isSupported) {
             console.log("[PushNotificationPrompt] Push notifications not supported");
             return;
         }
 
-        // Check if user clicked "Don't Ask Again" - this is permanent
-        const neverAskKey = `${PUSH_NEVER_ASK_KEY}_${userAddress.toLowerCase()}`;
-        const neverAsk = localStorage.getItem(neverAskKey);
-        if (neverAsk) {
-            console.log("[PushNotificationPrompt] User clicked 'Don't Ask Again' - respecting their choice");
-            return;
-        }
-
         // Check if already prompted for this specific address
-        // BUT: Always show if user doesn't have a username (they need to claim one)
         const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
         const hasPrompted = localStorage.getItem(promptedKey);
         
-        // If user doesn't have a username, always show the prompt (even if prompted before)
-        // This ensures they can claim a username
+        // If user has both username AND has been prompted, don't show again
         if (hasPrompted && currentUsername) {
             console.log("[PushNotificationPrompt] Already prompted for this address and has username");
             return;
         }
-        
-        // If prompted before but no username, log and continue to show
-        if (hasPrompted && !currentUsername) {
-            console.log("[PushNotificationPrompt] Already prompted but no username - showing again to claim username");
-        }
 
-        // Don't show if permission already denied (but still show if default/prompt)
+        // Don't show if permission already denied
         if (permission === "denied") {
             console.log("[PushNotificationPrompt] Permission already denied");
             return;
         }
 
-        // Show even if subscribed - we still want to show username claim if they don't have one
-        // Only skip if they have both username AND are subscribed
+        // Skip if they have both username AND are subscribed
         if (isSubscribed && currentUsername) {
             console.log("[PushNotificationPrompt] Already subscribed and has username");
             return;
         }
 
         console.log("[PushNotificationPrompt] Will show prompt in 2 seconds", {
-            userAddress,
+            userAddress: userAddress.slice(0, 10),
             isSupported,
             isSubscribed,
             permission,
-            currentUsername,
+            hasUsername: !!currentUsername,
         });
 
         // Show prompt after a short delay (let the app settle first)
         timerRef.current = setTimeout(() => {
-            // Double-check we haven't shown it already
+            // Double-check we haven't shown it already and neverAsk hasn't been set
             if (hasShownRef.current) {
+                return;
+            }
+            // Re-check neverAsk in case it was set during the timeout
+            const neverAskRecheck = localStorage.getItem(neverAskKey);
+            if (neverAskRecheck === "true") {
+                console.log("[PushNotificationPrompt] neverAsk was set during timeout - not showing");
                 return;
             }
             hasShownRef.current = true;
@@ -200,6 +200,7 @@ export function PushNotificationPrompt({
         if (userAddress) {
             const neverAskKey = `${PUSH_NEVER_ASK_KEY}_${userAddress.toLowerCase()}`;
             localStorage.setItem(neverAskKey, "true");
+            console.log("[PushNotificationPrompt] Set neverAsk flag for:", userAddress.slice(0, 10));
             // Also set prompted flag for consistency
             const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
             localStorage.setItem(promptedKey, "true");
@@ -331,16 +332,25 @@ export function PushNotificationPrompt({
                                             )}
                                         </button>
 
-                                        {/* Skip button */}
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setStep("notifications");
-                                            }}
-                                            className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors text-sm font-medium"
-                                        >
-                                            Skip for now
-                                        </button>
+                                        {/* Skip buttons */}
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setStep("notifications");
+                                                }}
+                                                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors text-sm font-medium"
+                                            >
+                                                Skip
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleSkip}
+                                                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 text-zinc-500 transition-colors text-sm font-medium"
+                                            >
+                                                Don&apos;t Ask Again
+                                            </button>
+                                        </div>
                                     </motion.div>
                                 ) : (
                                     <motion.div
