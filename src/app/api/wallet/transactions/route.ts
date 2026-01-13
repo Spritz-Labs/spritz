@@ -44,6 +44,9 @@ interface GraphTransfer {
     network: string;
 }
 
+// Native token contract address (used by The Graph to identify native transfers)
+const NATIVE_TOKEN_CONTRACT = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
 async function fetchChainTransfers(
     address: string,
     chain: SupportedChain
@@ -57,9 +60,14 @@ async function fetchChainTransfers(
 
     try {
         // Fetch transfers where user is sender OR receiver
-        // We need two calls since the API doesn't support OR queries
-        // Note: Free tier limit is 10 items max
-        const [sentResponse, receivedResponse] = await Promise.all([
+        // We need separate calls for:
+        // 1. Sent ERC-20 tokens
+        // 2. Received ERC-20 tokens  
+        // 3. Sent native tokens (ETH/BNB/MATIC)
+        // 4. Received native tokens
+        // Note: Free tier limit is 10 items max per request
+        const [sentResponse, receivedResponse, nativeSentResponse, nativeReceivedResponse] = await Promise.all([
+            // ERC-20 sent
             fetch(`${GRAPH_TRANSFERS_URL}?network=${chain.network}&from_address=${address}&limit=10`, {
                 headers: {
                     "Authorization": `Bearer ${GRAPH_TOKEN_API_KEY}`,
@@ -67,7 +75,24 @@ async function fetchChainTransfers(
                 },
                 next: { revalidate: 30 },
             }),
+            // ERC-20 received
             fetch(`${GRAPH_TRANSFERS_URL}?network=${chain.network}&to_address=${address}&limit=10`, {
+                headers: {
+                    "Authorization": `Bearer ${GRAPH_TOKEN_API_KEY}`,
+                    "Accept": "application/json",
+                },
+                next: { revalidate: 30 },
+            }),
+            // Native token sent (ETH, BNB, MATIC, etc.)
+            fetch(`${GRAPH_TRANSFERS_URL}?network=${chain.network}&from_address=${address}&contract=${NATIVE_TOKEN_CONTRACT}&limit=10`, {
+                headers: {
+                    "Authorization": `Bearer ${GRAPH_TOKEN_API_KEY}`,
+                    "Accept": "application/json",
+                },
+                next: { revalidate: 30 },
+            }),
+            // Native token received
+            fetch(`${GRAPH_TRANSFERS_URL}?network=${chain.network}&to_address=${address}&contract=${NATIVE_TOKEN_CONTRACT}&limit=10`, {
                 headers: {
                     "Authorization": `Bearer ${GRAPH_TOKEN_API_KEY}`,
                     "Accept": "application/json",
@@ -119,6 +144,8 @@ async function fetchChainTransfers(
         await Promise.all([
             processResponse(sentResponse, "send"),
             processResponse(receivedResponse, "receive"),
+            processResponse(nativeSentResponse, "send"),
+            processResponse(nativeReceivedResponse, "receive"),
         ]);
 
         return transactions;
