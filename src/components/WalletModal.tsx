@@ -1284,7 +1284,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         )}
 
                                         {/* Safe wallet indicator */}
-                                        {safeAddress && (
+                                        {safeAddress && !canUsePasskeySigning && (
                                             <div className="flex items-center justify-between text-xs">
                                                 <span className="text-zinc-500">Send via</span>
                                                 <div className="flex items-center gap-2">
@@ -1308,6 +1308,22 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     >
                                                         EOA
                                                     </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Mainnet warning for Safe wallet */}
+                                        {useSafeForSend && sendToken?.chainId === 1 && (
+                                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3">
+                                                <div className="flex gap-2">
+                                                    <span className="text-yellow-400">⚠️</span>
+                                                    <div>
+                                                        <p className="text-xs text-yellow-300 font-medium">Ethereum mainnet requires USDC for gas</p>
+                                                        <p className="text-xs text-zinc-400 mt-1">
+                                                            Your Spritz Wallet needs USDC deposited for mainnet transactions. 
+                                                            For <strong className="text-emerald-400">free</strong> transactions, try Base or other L2 chains.
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
