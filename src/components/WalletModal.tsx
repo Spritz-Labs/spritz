@@ -1313,7 +1313,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         )}
 
                                         {/* Mainnet warning for Safe wallet */}
-                                        {useSafeForSend && sendToken?.chainId === 1 && (
+                                        {useSafeForSend && selectedChainId === 1 && (
                                             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3">
                                                 <div className="flex gap-2">
                                                     <span className="text-yellow-400">⚠️</span>
