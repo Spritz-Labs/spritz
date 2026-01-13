@@ -596,13 +596,14 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, isLoading: true, error: null, warning: null }));
         
         try {
-            // Step 1: Get registration options
+            // Step 1: Get registration options (with isRescue flag to generate unique user ID)
             const optionsResponse = await fetch("/api/passkey/register/options", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     userAddress: rescueAddress,
                     displayName: "Rescued Passkey",
+                    isRescue: true, // Tells server to generate unique user ID
                 }),
             });
 

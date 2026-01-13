@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     try {
-        const { userAddress, displayName, recoveryToken } = await request.json();
+        const { userAddress, displayName, recoveryToken, isRescue } = await request.json();
         const rpId = getRpId(request);
         
         console.log("[Passkey] Registration using RP ID:", rpId);
@@ -51,9 +51,10 @@ export async function POST(request: NextRequest) {
         // Check if this is a recovery flow
         let actualUserAddress = userAddress;
         let isRecoveryFlow = false;
+        let isRescueFlow = isRescue === true;
 
-        if (recoveryToken) {
-            // SECURITY: Recovery tokens are now signed JWTs
+        if (recoveryToken && !isRescueFlow) {
+            // SECURITY: Recovery tokens are now signed JWTs (for email recovery)
             const recoveryResult = await verifyRecoveryToken(recoveryToken, "passkey_recovery");
             if (!recoveryResult?.userAddress) {
                 return NextResponse.json(
@@ -65,6 +66,11 @@ export async function POST(request: NextRequest) {
             actualUserAddress = recoveryResult.userAddress;
             isRecoveryFlow = true;
             console.log("[Passkey] Recovery flow for:", actualUserAddress);
+        }
+        
+        if (isRescueFlow) {
+            console.log("[Passkey] RESCUE flow - will generate unique user ID");
+            isRecoveryFlow = true; // Treat rescue as recovery for excludeCredentials
         }
 
         if (!actualUserAddress) {
@@ -90,13 +96,22 @@ export async function POST(request: NextRequest) {
             .select("credential_id")
             .eq("user_address", actualUserAddress.toLowerCase());
 
-        // Generate a unique user ID (using the wallet address hash)
+        // Generate a unique user ID
+        // For rescue flows, add a random component so authenticator creates a NEW credential
+        // (WebAuthn won't allow registering the same user ID twice on same authenticator)
         const encoder = new TextEncoder();
+        const userIdSource = isRescueFlow 
+            ? `${actualUserAddress.toLowerCase()}:rescue:${Date.now()}:${crypto.randomUUID()}`
+            : actualUserAddress.toLowerCase();
         const userIdBuffer = await crypto.subtle.digest(
             "SHA-256",
-            encoder.encode(actualUserAddress.toLowerCase())
+            encoder.encode(userIdSource)
         );
         const userId = new Uint8Array(userIdBuffer);
+        
+        if (isRescueFlow) {
+            console.log("[Passkey] RESCUE: Generated unique user ID to avoid duplicate credential error");
+        }
 
         // For recovery flow, we allow registering new credentials even if others exist
         // For normal flow, exclude existing credentials to prevent duplicates
