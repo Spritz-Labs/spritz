@@ -449,11 +449,12 @@ export async function createPasskeySafeAccountClient(
         // Build options exactly like the working login flow
         const credentialIdBuffer = base64urlToArrayBuffer(passkeyCredential.credentialId);
         
-        const publicKeyOptions: PublicKeyCredentialRequestOptions = {
-            challenge: options.publicKey.challenge, // Keep the challenge from viem/ox
-            rpId: rpId, // Use our explicit rpId
+        // First try with specific credential ID (faster if it works)
+        const publicKeyOptionsWithCred: PublicKeyCredentialRequestOptions = {
+            challenge: options.publicKey.challenge,
+            rpId: rpId,
             timeout: 120000,
-            userVerification: 'preferred', // Match login flow (ox uses 'required')
+            userVerification: 'preferred',
             allowCredentials: [{
                 id: credentialIdBuffer,
                 type: 'public-key',
@@ -461,23 +462,50 @@ export async function createPasskeySafeAccountClient(
             }],
         };
 
-        console.log(`[SafeWallet] Using login-style options with rpId: ${rpId}`);
+        console.log(`[SafeWallet] Using rpId: ${rpId}`);
         console.log(`[SafeWallet] Credential ID (first 20 chars): ${passkeyCredential.credentialId.slice(0, 20)}...`);
-        console.log(`[SafeWallet] Challenge length: ${options.publicKey.challenge?.byteLength || 0} bytes`);
+
+        try {
+            // Try with specific credential first
+            console.log(`[SafeWallet] Trying with specific credential ID...`);
+            const credential = await navigator.credentials.get({
+                publicKey: publicKeyOptionsWithCred,
+                mediation: "optional",
+            } as CredentialRequestOptions);
+            
+            if (credential) {
+                console.log(`[SafeWallet] Got credential successfully with specific ID`);
+                return credential;
+            }
+        } catch (error) {
+            console.log(`[SafeWallet] Specific credential failed, trying discoverable...`, error);
+        }
+
+        // Fallback: Try discoverable credential (no allowCredentials)
+        // This lets the browser find any passkey for this rpId
+        console.log(`[SafeWallet] Trying discoverable credential lookup...`);
+        const publicKeyOptionsDiscoverable: PublicKeyCredentialRequestOptions = {
+            challenge: options.publicKey.challenge,
+            rpId: rpId,
+            timeout: 120000,
+            userVerification: 'preferred',
+            // No allowCredentials - browser will show all available passkeys for this rpId
+        };
 
         try {
             const credential = await navigator.credentials.get({
-                publicKey: publicKeyOptions,
-            });
+                publicKey: publicKeyOptionsDiscoverable,
+                mediation: "optional",
+            } as CredentialRequestOptions);
             
             if (!credential) {
                 throw new Error('No credential returned');
             }
             
-            console.log(`[SafeWallet] Got credential successfully`);
+            console.log(`[SafeWallet] Got credential via discoverable lookup`);
             return credential;
         } catch (error) {
-            console.error(`[SafeWallet] Credential get error:`, error);
+            console.error(`[SafeWallet] All credential methods failed:`, error);
             throw error;
         }
     };
