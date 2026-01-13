@@ -145,7 +145,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
             };
 
             // Calculate the Safe address with WebAuthn signer as owner
-            const webAuthnSignerAddress = calculateWebAuthnSignerAddress(publicKey);
+            const webAuthnSignerAddress = calculateWebAuthnSignerAddress(publicKey, targetChainId);
             
             // Get the Safe address with this owner
             const address = await getSafeAddress({

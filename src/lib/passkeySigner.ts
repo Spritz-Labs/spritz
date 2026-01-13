@@ -25,8 +25,30 @@ import {
 export const SAFE_WEBAUTHN_SIGNER_FACTORY = "0xF7488fFbe67327ac9f37D5F722d83Fc900852Fbf" as const;
 export const SAFE_WEBAUTHN_SIGNER_SINGLETON = "0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47" as const;
 
-// P256 (secp256r1) verifier precompile address (available on some chains)
-export const P256_VERIFIER_ADDRESS = "0x0000000000000000000000000000000000000100" as const;
+// P256 (secp256r1) verifier addresses per chain
+// Some chains have the precompile at 0x100, others use Safe's FCL verifier
+export const P256_VERIFIER_ADDRESSES: Record<number, Address> = {
+    // Base uses Safe's FCL (Fast Crypto Library) P256 verifier
+    8453: "0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226",
+    // Ethereum mainnet - FCL verifier
+    1: "0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226",
+    // Arbitrum - FCL verifier  
+    42161: "0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226",
+    // Optimism - has precompile at 0x100
+    10: "0x0000000000000000000000000000000000000100",
+    // Polygon - FCL verifier
+    137: "0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226",
+};
+
+// Default verifier (FCL) for chains not explicitly listed
+export const DEFAULT_P256_VERIFIER = "0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226" as const;
+
+/**
+ * Get the P256 verifier address for a specific chain
+ */
+export function getP256VerifierAddress(chainId: number): Address {
+    return P256_VERIFIER_ADDRESSES[chainId] || DEFAULT_P256_VERIFIER;
+}
 
 // COSE key types and algorithms
 const COSE_KTY_EC2 = 2; // Elliptic Curve key type
@@ -180,17 +202,23 @@ function parseCborMap(data: Buffer): Map<number, number | Buffer> {
  * 
  * The signer address is deterministic based on the public key coordinates.
  * It's calculated using CREATE2 with the WebAuthn signer factory.
+ * 
+ * @param publicKey - The P256 public key coordinates
+ * @param chainId - The chain ID (needed to get correct verifier address)
  */
-export function calculateWebAuthnSignerAddress(publicKey: P256PublicKey): Address {
+export function calculateWebAuthnSignerAddress(publicKey: P256PublicKey, chainId: number = 8453): Address {
     // The signer is deployed using CREATE2 with:
     // - Factory: SAFE_WEBAUTHN_SIGNER_FACTORY
     // - Salt: keccak256(abi.encode(x, y, P256_VERIFIER))
     // - Init code: proxy creation code + singleton address
     
+    const verifierAddress = getP256VerifierAddress(chainId);
+    console.log(`[PasskeySigner] Using P256 verifier for chain ${chainId}: ${verifierAddress}`);
+    
     const salt = keccak256(
         encodePacked(
             ["uint256", "uint256", "address"],
-            [BigInt(publicKey.x), BigInt(publicKey.y), P256_VERIFIER_ADDRESS]
+            [BigInt(publicKey.x), BigInt(publicKey.y), verifierAddress]
         )
     );
     
@@ -345,14 +373,20 @@ export interface PasskeyCredentialWithSigner {
 
 /**
  * Get passkey credential with Safe signer info
+ * 
+ * @param credentialId - The WebAuthn credential ID
+ * @param cosePublicKey - The COSE-encoded public key
+ * @param userAddress - The user's address
+ * @param chainId - The chain ID (defaults to Base 8453)
  */
 export function getPasskeySignerInfo(
     credentialId: string,
     cosePublicKey: string,
-    userAddress: Address
+    userAddress: Address,
+    chainId: number = 8453
 ): PasskeyCredentialWithSigner {
     const publicKey = parseCosePublicKey(cosePublicKey);
-    const signerAddress = calculateWebAuthnSignerAddress(publicKey);
+    const signerAddress = calculateWebAuthnSignerAddress(publicKey, chainId);
     
     return {
         credentialId,

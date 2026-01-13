@@ -362,9 +362,10 @@ export async function createPasskeySafeAccountClient(
     const pimlicoClient = getPimlicoClient(chainId);
 
     // For passkey signing, we need to use a WebAuthn signer as the Safe owner
-    // The signer address is deterministic based on the public key coordinates
+    // The signer address is deterministic based on the public key coordinates and verifier
     const { calculateWebAuthnSignerAddress } = await import("./passkeySigner");
-    const webAuthnSignerAddress = calculateWebAuthnSignerAddress(passkeyCredential.publicKey);
+    const webAuthnSignerAddress = calculateWebAuthnSignerAddress(passkeyCredential.publicKey, chainId);
+    console.log(`[SafeWallet] WebAuthn signer address: ${webAuthnSignerAddress}`);
 
     // Create Safe account with the WebAuthn signer as owner
     const safeAccount = await toSafeSmartAccount({
