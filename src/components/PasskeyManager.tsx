@@ -23,6 +23,16 @@ type Props = {
     smartWalletAddress?: string | null;
 };
 
+// Detect user's platform for backup guidance
+function detectPlatform(): "apple" | "android" | "windows" | "other" {
+    if (typeof navigator === "undefined") return "other";
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("mac")) return "apple";
+    if (ua.includes("android")) return "android";
+    if (ua.includes("windows")) return "windows";
+    return "other";
+}
+
 export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smartWalletAddress }: Props) {
     const [credentials, setCredentials] = useState<PasskeyCredential[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +41,11 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [showDeleteWarning, setShowDeleteWarning] = useState<string | null>(null);
+    const [showBackupTips, setShowBackupTips] = useState(false);
+    
+    const platform = detectPlatform();
+    const hasSyncedPasskey = credentials.some(c => c.backedUp);
+    const hasOnlyDevicePasskeys = credentials.length > 0 && !hasSyncedPasskey;
 
     const fetchCredentials = useCallback(async () => {
         try {
@@ -359,6 +374,21 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                 )}
             </div>
 
+            {/* Warning for users with only device-bound passkeys */}
+            {hasOnlyDevicePasskeys && passkeyIsWalletKey && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+                    <div className="flex items-start gap-2">
+                        <span className="text-amber-400 text-sm">⚠️</span>
+                        <div className="text-xs">
+                            <p className="text-amber-300 font-medium">Your passkey isn&apos;t backed up</p>
+                            <p className="text-zinc-400 mt-0.5">
+                                If you lose this device, you&apos;ll lose wallet access. Add a backup passkey or enable cloud sync.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <button
                 onClick={handleAddPasskey}
                 disabled={isAdding}
@@ -377,14 +407,94 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
-                        <span>Add New Passkey</span>
+                        <span>{credentials.length > 0 ? "Add Backup Passkey" : "Add Passkey"}</span>
                     </>
                 )}
             </button>
 
-            <p className="text-center text-zinc-500 text-xs mt-3">
-                Synced passkeys work across your devices via iCloud, Google, etc.
-            </p>
+            {/* Backup Tips Section */}
+            <div className="mt-4">
+                <button
+                    onClick={() => setShowBackupTips(!showBackupTips)}
+                    className="w-full flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-300 transition-colors py-2"
+                >
+                    <span className="flex items-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        How to backup passkeys
+                    </span>
+                    <svg 
+                        className={`w-4 h-4 transition-transform ${showBackupTips ? "rotate-180" : ""}`} 
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                
+                <AnimatePresence>
+                    {showBackupTips && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="bg-zinc-800/50 rounded-xl p-4 space-y-3 text-xs">
+                                <p className="text-zinc-300 font-medium">Passkeys can&apos;t be exported, but you can:</p>
+                                
+                                <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-emerald-400">✓</span>
+                                        <div>
+                                            <p className="text-zinc-300 font-medium">Add multiple passkeys</p>
+                                            <p className="text-zinc-500">Create passkeys on different devices as backups</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-emerald-400">✓</span>
+                                        <div>
+                                            <p className="text-zinc-300 font-medium">Use cloud sync</p>
+                                            <p className="text-zinc-500">
+                                                {platform === "apple" && "Enable iCloud Keychain in Settings → [Your Name] → iCloud → Passwords & Keychain"}
+                                                {platform === "android" && "Enable Google Password Manager sync in Settings → Google → Passwords"}
+                                                {platform === "windows" && "Use a browser with sync (Chrome, Edge) or add a YubiKey as backup"}
+                                                {platform === "other" && "Enable password sync in your browser or use a hardware key"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-emerald-400">✓</span>
+                                        <div>
+                                            <p className="text-zinc-300 font-medium">Use a hardware key</p>
+                                            <p className="text-zinc-500">YubiKey 5 series supports passkeys as a physical backup</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {hasSyncedPasskey ? (
+                                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2 mt-2">
+                                        <p className="text-emerald-400 flex items-center gap-1.5">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            You have a synced passkey - you&apos;re protected!
+                                        </p>
+                                    </div>
+                                ) : credentials.length > 0 ? (
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 mt-2">
+                                        <p className="text-amber-400">
+                                            💡 Your passkey is device-only. Consider adding a backup.
+                                        </p>
+                                    </div>
+                                ) : null}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
         </motion.div>
     );
 }
