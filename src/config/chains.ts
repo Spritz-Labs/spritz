@@ -96,8 +96,15 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
 export const CHAIN_LIST = Object.values(SUPPORTED_CHAINS);
 
 // Chains enabled for sending (Safe wallet support)
-// Base only during testing phase
-export const SEND_ENABLED_CHAIN_IDS = [8453]; // Base
+export const SEND_ENABLED_CHAIN_IDS = [
+    1,      // Ethereum (user pays USDC for gas)
+    8453,   // Base (sponsored)
+    42161,  // Arbitrum (sponsored)
+    10,     // Optimism (sponsored)
+    137,    // Polygon (sponsored)
+    56,     // BNB Chain (sponsored)
+    130,    // Unichain (sponsored)
+];
 
 // Check if a chain supports sending
 export function isSendEnabledChain(chainId: number): boolean {

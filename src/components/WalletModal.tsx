@@ -14,7 +14,18 @@ import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
-import { SEND_ENABLED_CHAIN_IDS } from "@/config/chains";
+import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
+
+// Chain info for display
+const CHAIN_INFO: Record<number, { name: string; icon: string; color: string; sponsorship: "free" | "usdc" }> = {
+    1: { name: "Ethereum", icon: "🔷", color: "#627EEA", sponsorship: "usdc" },
+    8453: { name: "Base", icon: "🔵", color: "#0052FF", sponsorship: "free" },
+    42161: { name: "Arbitrum", icon: "⬡", color: "#28A0F0", sponsorship: "free" },
+    10: { name: "Optimism", icon: "🔴", color: "#FF0420", sponsorship: "free" },
+    137: { name: "Polygon", icon: "🟣", color: "#8247E5", sponsorship: "free" },
+    56: { name: "BNB Chain", icon: "🔶", color: "#F3BA2F", sponsorship: "free" },
+    130: { name: "Unichain", icon: "🦄", color: "#FF007A", sponsorship: "free" },
+};
 
 type WalletModalProps = {
     isOpen: boolean;
@@ -251,6 +262,11 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>("balances");
+    
+    // Selected chain for sending (default to Base)
+    const [selectedChainId, setSelectedChainId] = useState<number>(8453);
+    const [showChainSelector, setShowChainSelector] = useState(false);
+    const selectedChainInfo = CHAIN_INFO[selectedChainId] || CHAIN_INFO[8453];
 
     // Send form state
     const [sendToken, setSendToken] = useState<TokenBalance | null>(null);
@@ -362,7 +378,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 resolvedRecipient,
                 sendAmount,
                 tokenAddress,
-                tokenDecimals
+                tokenDecimals,
+                selectedChainId
             );
         } else if (useSafeForSend && safeAddress) {
             // Send via Safe smart wallet (EOA signer)
@@ -412,10 +429,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     // Get all tokens flat for send selector (only from send-enabled chains)
     const allTokens = useMemo(() => {
-        const tokens: (TokenBalance & { chainIcon: string; chainName: string })[] = [];
+        const tokens: (TokenBalance & { chainIcon: string; chainName: string; chainId: number })[] = [];
         for (const chainBalance of balances) {
-            // Only include tokens from send-enabled chains (Base only for now)
-            if (!SEND_ENABLED_CHAIN_IDS.includes(chainBalance.chain.id)) {
+            // Only include tokens from the selected chain
+            if (chainBalance.chain.id !== selectedChainId) {
                 continue;
             }
             if (chainBalance.nativeBalance) {
@@ -423,6 +440,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                     ...chainBalance.nativeBalance,
                     chainIcon: chainBalance.chain.icon,
                     chainName: chainBalance.chain.name,
+                    chainId: chainBalance.chain.id,
                 });
             }
             for (const token of chainBalance.tokens) {
@@ -430,15 +448,20 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                     ...token,
                     chainIcon: chainBalance.chain.icon,
                     chainName: chainBalance.chain.name,
+                    chainId: chainBalance.chain.id,
                 });
             }
         }
         // Sort by USD value
         return tokens.sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0));
-    }, [balances]);
+    }, [balances, selectedChainId]);
 
-    // Filter balances to only show send-enabled chains (Base only for now)
+    // Filter balances to only show selected chain
+    // Show all supported chains in balances view
     const filteredBalances = balances.filter(b => SEND_ENABLED_CHAIN_IDS.includes(b.chain.id));
+    
+    // Get selected chain balance for display
+    const selectedChainBalance = balances.find(b => b.chain.id === selectedChainId);
 
     // Reset to balances tab when modal opens/closes
     useEffect(() => {
@@ -574,7 +597,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     <p className="text-3xl font-bold text-white">{formatUsd(totalUsd)}</p>
                                 )}
                                 <p className="text-xs text-zinc-600 mt-1">
-                                    Base Network
+                                    {selectedChainInfo.icon} {selectedChainInfo.name}
                                 </p>
                             </div>
                         </div>
@@ -631,10 +654,55 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 <>
                                     {/* Filter and Refresh bar */}
                                     <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
-                                        {/* Chain indicator - Base only for now */}
-                                        <div className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1">
-                                            <span className="text-xs">🔵</span>
-                                            <span className="text-xs text-zinc-300">Base</span>
+                                        {/* Chain selector */}
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => setShowChainSelector(!showChainSelector)}
+                                                className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 hover:bg-zinc-700 transition-colors"
+                                            >
+                                                <span className="text-xs">{selectedChainInfo.icon}</span>
+                                                <span className="text-xs text-zinc-300">{selectedChainInfo.name}</span>
+                                                <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                            
+                                            {/* Chain dropdown */}
+                                            <AnimatePresence>
+                                                {showChainSelector && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -5 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0, y: -5 }}
+                                                        className="absolute top-full left-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 min-w-[160px]"
+                                                    >
+                                                        {SEND_ENABLED_CHAIN_IDS.map((chainId) => {
+                                                            const info = CHAIN_INFO[chainId];
+                                                            if (!info) return null;
+                                                            return (
+                                                                <button
+                                                                    key={chainId}
+                                                                    onClick={() => {
+                                                                        setSelectedChainId(chainId);
+                                                                        setShowChainSelector(false);
+                                                                    }}
+                                                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-700 transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                                                                        selectedChainId === chainId ? "bg-zinc-700" : ""
+                                                                    }`}
+                                                                >
+                                                                    <span className="text-sm">{info.icon}</span>
+                                                                    <span className="text-sm text-zinc-300 flex-1">{info.name}</span>
+                                                                    {info.sponsorship === "free" ? (
+                                                                        <span className="text-[10px] text-green-400 bg-green-900/30 px-1 rounded">Free</span>
+                                                                    ) : (
+                                                                        <span className="text-[10px] text-yellow-400 bg-yellow-900/30 px-1 rounded">USDC</span>
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                         </div>
 
                                         <div className="flex items-center gap-2">
@@ -795,12 +863,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     <div className="mt-6">
                                         <div className="flex justify-center">
                                             <div className="px-3 py-2 bg-zinc-800 rounded-lg text-sm text-zinc-300 flex items-center gap-2">
-                                                <span>🔵</span>
-                                                <span>Base Network</span>
+                                                <span>🌐</span>
+                                                <span>Same address on all chains</span>
                                             </div>
                                         </div>
                                         <p className="text-xs text-zinc-600 text-center mt-2">
-                                            Send & receive on Base
+                                            This address works on Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain & Unichain
                                         </p>
                                     </div>
                                         </>

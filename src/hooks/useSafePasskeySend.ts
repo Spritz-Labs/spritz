@@ -34,6 +34,7 @@ export interface UseSafePasskeySendReturn {
     isReady: boolean;
     isSending: boolean;
     safeAddress: Address | null;
+    chainId: number;
     
     // Actions
     initialize: (userAddress: Address) => Promise<void>;
@@ -41,8 +42,10 @@ export interface UseSafePasskeySendReturn {
         to: Address, 
         amount: string, 
         tokenAddress?: Address, 
-        tokenDecimals?: number
+        tokenDecimals?: number,
+        chainId?: number
     ) => Promise<string | null>;
+    setChainId: (chainId: number) => void;
     reset: () => void;
 }
 
@@ -52,7 +55,7 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
     const [txHash, setTxHash] = useState<string | null>(null);
     const [credential, setCredential] = useState<PasskeyCredentialData | null>(null);
     const [safeAddress, setSafeAddress] = useState<Address | null>(null);
-    const [chainId] = useState<number>(8453); // Base only for now
+    const [chainId, setChainId] = useState<number>(8453); // Default to Base
 
     /**
      * Load passkey credential and predict Safe address
@@ -112,19 +115,23 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
         to: Address,
         amount: string,
         tokenAddress?: Address,
-        tokenDecimals?: number
+        tokenDecimals?: number,
+        txChainId?: number
     ): Promise<string | null> => {
         if (!credential) {
             setError("Passkey not initialized");
             return null;
         }
 
+        // Use provided chainId or fallback to current state
+        const effectiveChainId = txChainId || chainId;
+
         setStatus("signing");
         setError(null);
         setTxHash(null);
 
         try {
-            console.log("[SafePasskeySend] Starting passkey transaction");
+            console.log("[SafePasskeySend] Starting passkey transaction on chain:", effectiveChainId);
             console.log("[SafePasskeySend] Credential ID:", credential.credentialId.slice(0, 20) + "...");
 
             // Create the passkey credential object
@@ -139,10 +146,10 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
 
             // Create Safe account client with passkey signer
             // This uses SafeWebAuthnSharedSigner for ERC-4337 compatibility
-            console.log("[SafePasskeySend] Creating Safe account client...");
+            console.log("[SafePasskeySend] Creating Safe account client for chain:", effectiveChainId);
             const safeClient = await createPasskeySafeAccountClient(
                 passkeyCredential,
-                chainId
+                effectiveChainId
             );
 
             console.log("[SafePasskeySend] Safe client created, sending transaction...");
@@ -208,8 +215,10 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
         isReady: status === "ready",
         isSending: status === "signing" || status === "sending",
         safeAddress,
+        chainId,
         initialize,
         sendTransaction,
+        setChainId,
         reset,
     };
 }
