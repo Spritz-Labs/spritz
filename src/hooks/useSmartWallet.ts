@@ -166,11 +166,13 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
             const data = await response.json();
             
             // Merge server data with client-side calculated address
+            // IMPORTANT: Server address takes priority (passkey users have different Safe)
             setSmartWallet({
                 ...clientSideWallet,
                 ...data,
-                // Ensure we use the Safe address calculation
-                smartWalletAddress: clientSideWallet?.smartWalletAddress || data.smartWalletAddress,
+                // Server address takes priority - passkey users have a different Safe
+                // based on their P256 public key, not their Spritz ID
+                smartWalletAddress: data.smartWalletAddress || clientSideWallet?.smartWalletAddress,
             });
         } catch (err) {
             console.error("[useSmartWallet] Error:", err);

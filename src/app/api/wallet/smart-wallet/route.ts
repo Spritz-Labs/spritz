@@ -66,13 +66,14 @@ export async function GET(request: NextRequest) {
 
             walletType = determineWalletType(user);
 
-            // For passkey users, use the stored passkey-based Safe address
-            // This address is calculated from the passkey's P256 public key
-            if (walletType === "passkey" && user?.smart_wallet_address) {
+            // PRIORITY 1: If user has a stored smart_wallet_address, use it
+            // This handles passkey users who have their passkey-based Safe stored
+            if (user?.smart_wallet_address) {
                 smartWalletAddress = user.smart_wallet_address as Address;
-                console.log("[SmartWallet] Using stored passkey Safe address:", smartWalletAddress.slice(0, 10));
-            } else if (walletType === "passkey") {
-                // Passkey user without stored Safe address - check if they have credentials
+                console.log("[SmartWallet] Using stored Safe address:", smartWalletAddress.slice(0, 10));
+            } else {
+                // PRIORITY 2: Check if user has passkey credentials
+                // Passkey users need their Safe address calculated from P256 public key
                 const { data: credential } = await supabase
                     .from("passkey_credentials")
                     .select("public_key_x, public_key_y")
@@ -83,27 +84,26 @@ export async function GET(request: NextRequest) {
                     .single();
                 
                 if (credential?.public_key_x && credential?.public_key_y) {
-                    // User has passkey - Safe address will be calculated on first tx
-                    // For now, use a placeholder that will be updated
-                    console.log("[SmartWallet] Passkey user needs Safe address calculation on first tx");
+                    // User has passkey credentials - Safe address will be set on first tx
+                    // Return a flag indicating passkey user needs address calculation
+                    console.log("[SmartWallet] Passkey user - Safe address will be set on first transaction");
+                    walletType = "passkey"; // Override wallet type
+                    // For now, calculate the fallback (will be wrong, but transaction will set correct one)
                     smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
                 } else {
-                    // No passkey credentials - use fallback
+                    // PRIORITY 3: Non-passkey users - use Spritz ID-based Safe
                     smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
-                }
-            } else {
-                // Non-passkey users: use Spritz ID-based Safe
-                smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
-                
-                // Store if not already stored
-                if (user && !user.smart_wallet_address) {
-                    await supabase
-                        .from("shout_users")
-                        .update({ 
-                            smart_wallet_address: smartWalletAddress,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("wallet_address", spritzId);
+                    
+                    // Store for future lookups
+                    if (user) {
+                        await supabase
+                            .from("shout_users")
+                            .update({ 
+                                smart_wallet_address: smartWalletAddress,
+                                updated_at: new Date().toISOString(),
+                            })
+                            .eq("wallet_address", spritzId);
+                    }
                 }
             }
         } else {
