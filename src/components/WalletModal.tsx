@@ -692,6 +692,40 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "receive" && (
                                 <div className="p-6">
+                                    {/* Email/Digital ID users without passkey - must register first */}
+                                    {needsPasskeyForSend && passkeyStatus === "error" ? (
+                                        <div className="flex flex-col items-center justify-center text-center">
+                                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-500/10 flex items-center justify-center">
+                                                <span className="text-3xl">⚠️</span>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-white mb-2">Register Passkey First</h3>
+                                            <p className="text-sm text-zinc-400 mb-4 max-w-xs">
+                                                Before receiving tokens, you need to register a passkey. 
+                                                This ensures you can access and send your funds later.
+                                            </p>
+                                            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 mb-6 max-w-xs">
+                                                <p className="text-xs text-orange-300">
+                                                    <strong>Why?</strong> Without a passkey, any funds sent to your wallet would be locked forever.
+                                                </p>
+                                            </div>
+                                            <a
+                                                href="/settings"
+                                                className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
+                                            >
+                                                Register Passkey
+                                            </a>
+                                            <p className="text-xs text-zinc-600 mt-4">
+                                                🔒 Takes less than 30 seconds
+                                            </p>
+                                        </div>
+                                    ) : needsPasskeyForSend && passkeyStatus === "loading" ? (
+                                        <div className="flex flex-col items-center justify-center">
+                                            <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
+                                            <p className="text-sm text-zinc-400">Checking wallet setup...</p>
+                                        </div>
+                                    ) : (
+                                        /* Normal receive flow - user has passkey or is wallet user */
+                                        <>
                                     <div className="text-center mb-6">
                                         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
                                             <span className="text-3xl">📥</span>
@@ -763,6 +797,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             Send & receive on Base
                                         </p>
                                     </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
 
