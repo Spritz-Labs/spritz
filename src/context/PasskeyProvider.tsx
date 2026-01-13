@@ -31,6 +31,7 @@ export type PasskeyState = {
     smartAccountAddress: Address | null;
     error: string | null;
     hasStoredSession: boolean;
+    warning: string | null; // Warning for non-synced passkeys etc.
 };
 
 export type LoginOptions = {
@@ -42,6 +43,7 @@ export type PasskeyContextType = PasskeyState & {
     login: (options?: LoginOptions) => Promise<void>;
     logout: () => void;
     clearError: () => void;
+    clearWarning: () => void;
 };
 
 const PasskeyContext = createContext<PasskeyContextType | null>(null);
@@ -151,6 +153,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         smartAccountAddress: null,
         error: null,
         hasStoredSession: false,
+        warning: null,
     });
 
     // Check for stored session on mount (including backwards compatibility for old system)
@@ -186,6 +189,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                                 smartAccountAddress: session.userAddress as Address,
                                 error: null,
                                 hasStoredSession: true,
+                                warning: null,
                             });
                             return;
                         } else if (res.status === 401) {
@@ -209,6 +213,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         smartAccountAddress: session.userAddress as Address,
                         error: null,
                         hasStoredSession: true,
+                        warning: null,
                     });
                     return;
                 } else {
@@ -240,6 +245,10 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
 
     const clearError = useCallback(() => {
         setState((prev) => ({ ...prev, error: null }));
+    }, []);
+
+    const clearWarning = useCallback(() => {
+        setState((prev) => ({ ...prev, warning: null }));
     }, []);
 
     // Generate a deterministic wallet address from credential
@@ -310,9 +319,10 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     throw new Error(error.error || "Failed to verify registration");
                 }
 
-                const { sessionToken, userAddress: serverUserAddress, credentialId } = await verifyResponse.json();
+                const { sessionToken, userAddress: serverUserAddress, credentialId, backedUp } = await verifyResponse.json();
                 console.log("[Passkey] Registration verified! Credential ID:", credentialId?.slice(0, 20) + "...");
                 console.log("[Passkey] Server returned address:", serverUserAddress);
+                console.log("[Passkey] Passkey synced (backed up):", backedUp);
 
                 // Use the address returned by the server (derived from credential ID on server)
                 // Or the recovered address if this was a recovery registration
@@ -326,15 +336,24 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 localStorage.setItem(SESSION_STORAGE_KEY, sessionToken);
                 localStorage.setItem(USER_ADDRESS_KEY, walletAddress);
 
+                // Warn user if passkey is NOT synced across devices
+                const warning = backedUp === false 
+                    ? "⚠️ Your passkey is only saved on this device. You won't be able to login from other devices. Consider adding a synced passkey in Settings."
+                    : null;
+
                 setState({
                     isLoading: false,
                     isAuthenticated: true,
                     smartAccountAddress: walletAddress,
                     error: null,
                     hasStoredSession: true,
+                    warning,
                 });
 
                 console.log("[Passkey] Registration complete! Address:", walletAddress);
+                if (warning) {
+                    console.warn("[Passkey]", warning);
+                }
             } catch (error) {
                 console.error("[Passkey] Registration error:", error);
                 const errorMessage =
@@ -517,6 +536,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 smartAccountAddress: walletAddress,
                 error: null,
                 hasStoredSession: true,
+                warning: null,
             });
 
             console.log("[Passkey] Login complete! Address:", walletAddress);
@@ -568,6 +588,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             smartAccountAddress: null,
             error: null,
             hasStoredSession: false,
+            warning: null,
         });
         
         console.log("[Passkey] Logout complete");
@@ -581,6 +602,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 login,
                 logout,
                 clearError,
+                clearWarning,
             }}
         >
             {children}
