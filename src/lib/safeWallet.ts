@@ -357,10 +357,23 @@ export async function createPasskeySafeAccountClient(
     const publicClient = getPublicClient(chainId);
     const pimlicoClient = getPimlicoClient(chainId);
 
+    // Validate the passkey credential
+    if (!passkeyCredential.credentialId || passkeyCredential.credentialId.length < 10) {
+        throw new Error(`Invalid credential ID: ${passkeyCredential.credentialId}`);
+    }
+    if (!passkeyCredential.publicKey.x || !passkeyCredential.publicKey.y) {
+        throw new Error("Missing public key coordinates");
+    }
+
     // Convert our P256 public key to the format viem/ox expects (concatenated x||y, 64 bytes)
     // x and y are each 32 bytes (64 hex chars) with 0x prefix
     const xHex = passkeyCredential.publicKey.x.replace(/^0x/i, '');
     const yHex = passkeyCredential.publicKey.y.replace(/^0x/i, '');
+    
+    // Validate coordinates are valid hex
+    if (!/^[0-9a-fA-F]+$/.test(xHex) || !/^[0-9a-fA-F]+$/.test(yHex)) {
+        throw new Error(`Invalid public key format: x=${xHex.slice(0, 20)}..., y=${yHex.slice(0, 20)}...`);
+    }
     
     // Ensure each coordinate is exactly 64 hex chars (32 bytes), pad with leading zeros if needed
     const xPadded = xHex.padStart(64, '0');
@@ -368,6 +381,11 @@ export async function createPasskeySafeAccountClient(
     
     // Concatenate: total 128 hex chars (64 bytes)
     const formattedPublicKey = `0x${xPadded}${yPadded}` as Hex;
+    
+    // Validate final length
+    if (formattedPublicKey.length !== 130) {
+        throw new Error(`Invalid public key length: ${formattedPublicKey.length}, expected 130`);
+    }
 
     console.log(`[SafeWallet] Creating WebAuthn account with credential: ${passkeyCredential.credentialId.slice(0, 20)}...`);
     console.log(`[SafeWallet] Public key X: ${passkeyCredential.publicKey.x} (${xHex.length} chars without 0x)`);
