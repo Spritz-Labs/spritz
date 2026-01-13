@@ -148,7 +148,8 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
             console.log("[SafePasskeySend] Safe client created, sending transaction...");
             setStatus("sending");
 
-            // Send the transaction
+            // Send the transaction with explicit gas limits for WebAuthn
+            // (simulation-based gas estimation fails for passkey signatures)
             let hash;
             if (tokenAddress && tokenDecimals !== undefined) {
                 // ERC20 token transfer
@@ -160,14 +161,14 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
                     tokenAddress,
                     tokenAmount,
                     tokenDecimals,
-                });
+                }, true); // isWebAuthn = true for passkey transactions
             } else {
                 // Native ETH transfer
                 console.log(`[SafePasskeySend] Sending ETH: ${amount} to ${to}`);
                 hash = await sendSafeTransaction(safeClient, {
                     to,
                     value: parseEther(amount),
-                });
+                }, true); // isWebAuthn = true for passkey transactions
             }
 
             console.log("[SafePasskeySend] Transaction sent:", hash);

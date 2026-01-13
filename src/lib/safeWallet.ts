@@ -287,13 +287,28 @@ export function encodeERC20Transfer(to: Address, amount: bigint): `0x${string}` 
     });
 }
 
+// Gas limits for WebAuthn transactions (simulation-based estimation fails for passkeys)
+// These are generous limits for Safe deployment + WebAuthn signature validation
+const WEBAUTHN_GAS_LIMITS = {
+    verificationGasLimit: BigInt(800000),   // Safe deployment + WebAuthn signature validation
+    callGasLimit: BigInt(200000),           // Actual transaction execution  
+    preVerificationGas: BigInt(100000),     // Pre-verification overhead
+    paymasterVerificationGasLimit: BigInt(150000),
+    paymasterPostOpGasLimit: BigInt(50000),
+};
+
 /**
  * Send a transaction through a Safe Smart Account
  * Supports both native ETH transfers and ERC20 token transfers
+ * 
+ * @param client - The Smart Account Client
+ * @param params - Transaction parameters
+ * @param isWebAuthn - If true, uses explicit gas limits (required for passkey accounts)
  */
 export async function sendSafeTransaction(
     client: SmartAccountClient,
-    params: SendTransactionParams
+    params: SendTransactionParams,
+    isWebAuthn = false
 ): Promise<`0x${string}`> {
     const { to, value, data, tokenAddress, tokenAmount } = params;
     
@@ -320,10 +335,20 @@ export async function sendSafeTransaction(
     
     // Use sendUserOperation for ERC-4337 transactions
     // The SmartAccountClient handles wrapping this in a UserOperation
-    const txHash = await client.sendTransaction({
-        calls,
+    // For WebAuthn accounts, we must provide explicit gas limits since simulation fails
+    const txParams: Record<string, unknown> = { calls };
+    
+    if (isWebAuthn) {
+        console.log(`[SafeWallet] Using explicit gas limits for WebAuthn transaction`);
+        txParams.verificationGasLimit = WEBAUTHN_GAS_LIMITS.verificationGasLimit;
+        txParams.callGasLimit = WEBAUTHN_GAS_LIMITS.callGasLimit;
+        txParams.preVerificationGas = WEBAUTHN_GAS_LIMITS.preVerificationGas;
+        txParams.paymasterVerificationGasLimit = WEBAUTHN_GAS_LIMITS.paymasterVerificationGasLimit;
+        txParams.paymasterPostOpGasLimit = WEBAUTHN_GAS_LIMITS.paymasterPostOpGasLimit;
+    }
+    
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    const txHash = await client.sendTransaction(txParams as any);
     
     return txHash;
 }
@@ -393,13 +418,78 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] Formatted public key (full): ${formattedPublicKey}`);
     console.log(`[SafeWallet] Formatted public key length: ${formattedPublicKey.length} (should be 130 for 64 bytes + 0x)`);
 
+    // Get the rpId - must match the domain where the passkey was created
+    // In browser, use current hostname; this ensures passkeys created on app.spritz.chat work there
+    const rpId = typeof window !== 'undefined' ? window.location.hostname : 'app.spritz.chat';
+    console.log(`[SafeWallet] Using rpId: ${rpId}`);
+
+    // Helper to convert base64url to ArrayBuffer (matching login flow)
+    const base64urlToArrayBuffer = (base64url: string): ArrayBuffer => {
+        const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+        const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+        const binaryString = atob(base64 + padding);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    };
+
+    // Custom getFn that exactly mirrors the working login flow
+    // This uses the same navigator.credentials.get() options that work for login
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const customGetFn = async (options?: any): Promise<any> => {
+        console.log(`[SafeWallet] customGetFn called`);
+        
+        if (!options?.publicKey) {
+            console.log(`[SafeWallet] No publicKey in options, using default get`);
+            return navigator.credentials.get(options);
+        }
+
+        // Build options exactly like the working login flow
+        const credentialIdBuffer = base64urlToArrayBuffer(passkeyCredential.credentialId);
+        
+        const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+            challenge: options.publicKey.challenge, // Keep the challenge from viem/ox
+            rpId: rpId, // Use our explicit rpId
+            timeout: 120000,
+            userVerification: 'preferred', // Match login flow (ox uses 'required')
+            allowCredentials: [{
+                id: credentialIdBuffer,
+                type: 'public-key',
+                transports: ['internal', 'hybrid'] as AuthenticatorTransport[],
+            }],
+        };
+
+        console.log(`[SafeWallet] Using login-style options with rpId: ${rpId}`);
+        console.log(`[SafeWallet] Credential ID (first 20 chars): ${passkeyCredential.credentialId.slice(0, 20)}...`);
+        console.log(`[SafeWallet] Challenge length: ${options.publicKey.challenge?.byteLength || 0} bytes`);
+
+        try {
+            const credential = await navigator.credentials.get({
+                publicKey: publicKeyOptions,
+            });
+            
+            if (!credential) {
+                throw new Error('No credential returned');
+            }
+            
+            console.log(`[SafeWallet] Got credential successfully`);
+            return credential;
+        } catch (error) {
+            console.error(`[SafeWallet] Credential get error:`, error);
+            throw error;
+        }
+    };
+
     // Create a WebAuthn account using viem's built-in support
     const webAuthnAccount = toWebAuthnAccount({
         credential: {
             id: passkeyCredential.credentialId,
             publicKey: formattedPublicKey,
         },
-        // rpId will be inferred from current domain in browser
+        rpId, // Explicitly set rpId to match where passkey was created
+        getFn: customGetFn, // Use custom function that mirrors login flow
     });
 
     console.log(`[SafeWallet] WebAuthn account created, type: ${webAuthnAccount.type}`);
@@ -429,59 +519,13 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] Creating smart account client...`);
     console.log(`[SafeWallet] Paymaster context:`, paymasterContext);
 
-    // For WebAuthn + Safe, gas estimation via simulation fails because the dummy signature
-    // used during estimation doesn't pass WebAuthn validation. We need to:
-    // 1. Get gas prices from Pimlico
-    // 2. Provide explicit gas limits that work for Safe + WebAuthn transactions
-    // 3. Use the paymaster with these explicit values
-    
+    // Use Pimlico client directly as paymaster - it handles sponsorship
     const smartAccountClient = createSmartAccountClient({
         account: safeAccount,
         chain,
         bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-        // Use custom paymaster config that provides explicit gas limits
-        paymaster: {
-            async getPaymasterData(userOperation) {
-                console.log(`[SafeWallet] Getting paymaster data for userOp...`);
-                // Call Pimlico to get paymaster signature
-                const paymasterResult = await pimlicoClient.getPaymasterData({
-                    ...userOperation,
-                    chainId,
-                    entryPointAddress: entryPoint07Address,
-                    context: paymasterContext,
-                });
-                console.log(`[SafeWallet] Paymaster result:`, paymasterResult);
-                return paymasterResult;
-            },
-            async getPaymasterStubData(userOperation) {
-                console.log(`[SafeWallet] Getting paymaster stub data...`);
-                // For WebAuthn, simulation fails. Provide explicit gas limits.
-                // These are generous limits for Safe + WebAuthn first deployment + transfer
-                const stubResult = await pimlicoClient.getPaymasterStubData({
-                    ...userOperation,
-                    chainId,
-                    entryPointAddress: entryPoint07Address,
-                    context: paymasterContext,
-                });
-                
-                console.log(`[SafeWallet] Paymaster stub result:`, stubResult);
-                
-                // If gas limits came back as 0, provide fallback values
-                // Safe + WebAuthn deployment + simple tx needs roughly these amounts
-                const result = {
-                    ...stubResult,
-                    // Override with explicit gas limits if they're 0 or missing
-                    verificationGasLimit: stubResult.verificationGasLimit || BigInt(500000),
-                    callGasLimit: stubResult.callGasLimit || BigInt(200000),
-                    preVerificationGas: stubResult.preVerificationGas || BigInt(100000),
-                    paymasterVerificationGasLimit: stubResult.paymasterVerificationGasLimit || BigInt(100000),
-                    paymasterPostOpGasLimit: stubResult.paymasterPostOpGasLimit || BigInt(50000),
-                };
-                
-                console.log(`[SafeWallet] Final stub result with fallbacks:`, result);
-                return result;
-            },
-        },
+        paymaster: pimlicoClient,
+        paymasterContext: paymasterContext,
         userOperation: {
             estimateFeesPerGas: async () => {
                 const prices = await pimlicoClient.getUserOperationGasPrice();
