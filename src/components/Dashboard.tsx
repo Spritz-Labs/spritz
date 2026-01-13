@@ -90,6 +90,7 @@ type DashboardProps = {
     userAddress: string; // Can be EVM (0x...) or Solana address
     onLogout: () => void;
     isPasskeyUser?: boolean;
+    isEmailUser?: boolean;
     walletType: WalletType;
     isBetaTester?: boolean;
     siweUser?: SiweUser;
@@ -111,6 +112,7 @@ function DashboardContent({
     userAddress,
     onLogout,
     isPasskeyUser,
+    isEmailUser,
     walletType,
     isBetaTester,
     siweUser,
@@ -4785,7 +4787,7 @@ function DashboardContent({
                 onClose={() => setIsWalletModalOpen(false)}
                 userAddress={userAddress}
                 emailVerified={siweUser?.emailVerified}
-                authMethod={isPasskeyUser ? "passkey" : walletType === "solana" ? "solana" : "wallet"}
+                authMethod={isPasskeyUser ? "passkey" : isEmailUser ? "email" : walletType === "solana" ? "solana" : "wallet"}
             />
 
             {/* Live Stream Player removed - now using /live/[id] page */}
@@ -4798,6 +4800,7 @@ export function Dashboard({
     userAddress,
     onLogout,
     isPasskeyUser,
+    isEmailUser,
     walletType,
     isBetaTester,
     siweUser,
@@ -4809,6 +4812,7 @@ export function Dashboard({
                 userAddress={userAddress}
                 onLogout={onLogout}
                 isPasskeyUser={isPasskeyUser}
+                isEmailUser={isEmailUser}
                 walletType={walletType}
                 isBetaTester={isBetaTester}
                 siweUser={siweUser}

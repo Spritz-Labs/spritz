@@ -518,6 +518,7 @@ export default function Home() {
                     userAddress={userAddress}
                     onLogout={handleLogout}
                     isPasskeyUser={isPasskeyAuthenticated}
+                    isEmailUser={isEmailAuthenticated}
                     walletType={activeWalletType}
                     isBetaTester={isBetaTester}
                     siweUser={siweUser}
