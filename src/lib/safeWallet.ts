@@ -119,10 +119,7 @@ export function getPaymasterContext() {
     const policyId = getSponsorshipPolicyId();
     if (policyId) {
         console.log(`[SafeWallet] Using sponsorship policy: ${policyId}`);
-        // Try without policy first to debug
-        console.log(`[SafeWallet] DEBUG: Temporarily NOT using sponsorship policy to debug`);
-        return undefined; // TODO: Re-enable after debugging
-        // return { sponsorshipPolicyId: policyId };
+        return { sponsorshipPolicyId: policyId };
     }
     console.log("[SafeWallet] No sponsorship policy configured");
     return undefined;
@@ -432,14 +429,59 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] Creating smart account client...`);
     console.log(`[SafeWallet] Paymaster context:`, paymasterContext);
 
-    // Create smart account client with Pimlico bundler and paymaster
-    // Let permissionless.js handle the paymaster integration
+    // For WebAuthn + Safe, gas estimation via simulation fails because the dummy signature
+    // used during estimation doesn't pass WebAuthn validation. We need to:
+    // 1. Get gas prices from Pimlico
+    // 2. Provide explicit gas limits that work for Safe + WebAuthn transactions
+    // 3. Use the paymaster with these explicit values
+    
     const smartAccountClient = createSmartAccountClient({
         account: safeAccount,
         chain,
         bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-        paymaster: pimlicoClient,
-        paymasterContext,
+        // Use custom paymaster config that provides explicit gas limits
+        paymaster: {
+            async getPaymasterData(userOperation) {
+                console.log(`[SafeWallet] Getting paymaster data for userOp...`);
+                // Call Pimlico to get paymaster signature
+                const paymasterResult = await pimlicoClient.getPaymasterData({
+                    ...userOperation,
+                    chainId,
+                    entryPointAddress: entryPoint07Address,
+                    context: paymasterContext,
+                });
+                console.log(`[SafeWallet] Paymaster result:`, paymasterResult);
+                return paymasterResult;
+            },
+            async getPaymasterStubData(userOperation) {
+                console.log(`[SafeWallet] Getting paymaster stub data...`);
+                // For WebAuthn, simulation fails. Provide explicit gas limits.
+                // These are generous limits for Safe + WebAuthn first deployment + transfer
+                const stubResult = await pimlicoClient.getPaymasterStubData({
+                    ...userOperation,
+                    chainId,
+                    entryPointAddress: entryPoint07Address,
+                    context: paymasterContext,
+                });
+                
+                console.log(`[SafeWallet] Paymaster stub result:`, stubResult);
+                
+                // If gas limits came back as 0, provide fallback values
+                // Safe + WebAuthn deployment + simple tx needs roughly these amounts
+                const result = {
+                    ...stubResult,
+                    // Override with explicit gas limits if they're 0 or missing
+                    verificationGasLimit: stubResult.verificationGasLimit || BigInt(500000),
+                    callGasLimit: stubResult.callGasLimit || BigInt(200000),
+                    preVerificationGas: stubResult.preVerificationGas || BigInt(100000),
+                    paymasterVerificationGasLimit: stubResult.paymasterVerificationGasLimit || BigInt(100000),
+                    paymasterPostOpGasLimit: stubResult.paymasterPostOpGasLimit || BigInt(50000),
+                };
+                
+                console.log(`[SafeWallet] Final stub result with fallbacks:`, result);
+                return result;
+            },
+        },
         userOperation: {
             estimateFeesPerGas: async () => {
                 const prices = await pimlicoClient.getUserOperationGasPrice();
