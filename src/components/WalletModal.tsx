@@ -14,6 +14,7 @@ import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import { useOnramp } from "@/hooks/useOnramp";
+import { PasskeyManager } from "./PasskeyManager";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
@@ -266,6 +267,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>("balances");
+    const [showPasskeyManager, setShowPasskeyManager] = useState(false);
     
     // Selected chain for sending (default to Base)
     const [selectedChainId, setSelectedChainId] = useState<number>(8453);
@@ -805,12 +807,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     )}
                                                 </p>
                                             </div>
-                                            <a
-                                                href="/settings"
+                                            <button
+                                                onClick={() => setShowPasskeyManager(true)}
                                                 className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
                                             >
                                                 Register Passkey
-                                            </a>
+                                            </button>
                                             <p className="text-xs text-zinc-600 mt-4">
                                                 🔒 Takes less than 30 seconds
                                             </p>
@@ -990,12 +992,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     <>To send tokens securely, you need to register a passkey. This ensures only you can authorize transactions - we never store your keys.</>
                                                 )}
                                             </p>
-                                            <a
-                                                href="/settings"
+                                            <button
+                                                onClick={() => setShowPasskeyManager(true)}
                                                 className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
                                             >
                                                 Register Passkey
-                                            </a>
+                                            </button>
                                             <p className="text-xs text-zinc-600 mt-4">
                                                 🔒 Your passkey stays on your device
                                             </p>
@@ -1576,6 +1578,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         </div>
                     </motion.div>
                 </motion.div>
+            )}
+
+            {/* Passkey Manager Modal */}
+            {showPasskeyManager && (
+                <PasskeyManager
+                    userAddress={userAddress}
+                    onClose={() => setShowPasskeyManager(false)}
+                />
             )}
         </AnimatePresence>
     );
