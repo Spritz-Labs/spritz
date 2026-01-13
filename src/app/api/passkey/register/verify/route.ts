@@ -270,9 +270,42 @@ export async function POST(request: NextRequest) {
                 addressSource = "EXISTING_AUTH";
                 console.log("[Passkey] User is authenticated, linking to existing account:", finalUserAddress);
             } else {
-                // New registration - generate unique address from credential ID
-                finalUserAddress = generateWalletAddressFromCredential(credentialId);
-                addressSource = "NEW";
+                // DEFENSIVE CHECK: If a session cookie was sent but invalid/expired,
+                // reject registration to prevent accidentally creating a new account
+                // for a user who SHOULD be linked to an existing account
+                const sessionCookie = request.cookies.get("spritz_session");
+                if (sessionCookie?.value) {
+                    // Session cookie exists but is invalid - user's session expired
+                    console.error("[Passkey] BLOCKED: Session cookie present but invalid. User must re-login.");
+                    return NextResponse.json(
+                        { error: "Your session has expired. Please log in again before registering a passkey." },
+                        { status: 401 }
+                    );
+                }
+                
+                // DEFENSIVE CHECK: Also check if the temp userAddress provided in the challenge
+                // belongs to an existing account (Digital ID users might have lost their session)
+                const { data: existingAccount } = await supabase
+                    .from("shout_users")
+                    .select("wallet_address, wallet_type, login_count")
+                    .eq("wallet_address", userAddress.toLowerCase())
+                    .single();
+                
+                if (existingAccount && existingAccount.login_count > 0) {
+                    // There's an existing account at this address! Don't create a new one.
+                    console.log("[Passkey] Found existing account, linking passkey to it:", userAddress);
+                    finalUserAddress = userAddress.toLowerCase();
+                    addressSource = "EXISTING_ACCOUNT";
+                } else {
+                    // Genuinely new user - generate unique address from credential ID
+                    // NOTE: If a World ID/Email user registers a passkey without being logged in,
+                    // they will get a new account. They can recover by logging in with their
+                    // original method (World ID, Email, Wallet) which will find their existing account.
+                    finalUserAddress = generateWalletAddressFromCredential(credentialId);
+                    addressSource = "NEW";
+                    console.log("[Passkey] New passkey-only account, generated address:", finalUserAddress.slice(0, 10));
+                    console.log("[Passkey] Note: If user has existing World ID/Email account, they should log in first");
+                }
             }
         }
         
