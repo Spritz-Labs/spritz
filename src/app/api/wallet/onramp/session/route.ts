@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/session";
-import { SignJWT } from "jose";
+import { SignJWT, importPKCS8 } from "jose";
 import { checkRateLimit } from "@/lib/ratelimit";
 
 /**
@@ -17,6 +17,8 @@ import { checkRateLimit } from "@/lib/ratelimit";
  */
 
 // CDP API configuration
+// CDP_API_KEY_NAME = API Key ID (UUID format)
+// CDP_API_KEY_PRIVATE_KEY = Ed25519 private key (base64 encoded) or EC private key (PEM format)
 const CDP_API_KEY_NAME = process.env.CDP_API_KEY_NAME;
 const CDP_API_KEY_PRIVATE_KEY = process.env.CDP_API_KEY_PRIVATE_KEY;
 
@@ -27,7 +29,17 @@ const SUPPORTED_BLOCKCHAINS = ["base", "ethereum", "polygon", "arbitrum", "optim
 const SUPPORTED_ASSETS = ["ETH", "USDC", "USDT", "DAI"];
 
 /**
+ * Detect if the key is Ed25519 (base64) or EC (PEM format)
+ */
+function isEd25519Key(key: string): boolean {
+    // PEM keys start with "-----BEGIN"
+    // Ed25519 keys from CDP are just base64 strings
+    return !key.includes("-----BEGIN");
+}
+
+/**
  * Generate a JWT for CDP API authentication
+ * Supports both Ed25519 (new default) and ECDSA (legacy) keys
  */
 async function generateCdpJwt(): Promise<string> {
     if (!CDP_API_KEY_NAME || !CDP_API_KEY_PRIVATE_KEY) {
@@ -35,52 +47,73 @@ async function generateCdpJwt(): Promise<string> {
     }
 
     const now = Math.floor(Date.now() / 1000);
+    const nonce = crypto.randomUUID();
     
-    // Parse the private key (EC P-256 format from CDP)
-    // CDP provides keys in PEM format
-    const privateKeyPem = CDP_API_KEY_PRIVATE_KEY.replace(/\\n/g, "\n");
+    // Determine key type and import accordingly
+    const isEd25519 = isEd25519Key(CDP_API_KEY_PRIVATE_KEY);
     
-    // Import the EC private key
-    const privateKey = await crypto.subtle.importKey(
-        "pkcs8",
-        pemToArrayBuffer(privateKeyPem),
-        { name: "ECDSA", namedCurve: "P-256" },
-        true,
-        ["sign"]
-    );
+    let privateKey: CryptoKey;
+    let algorithm: string;
+    
+    if (isEd25519) {
+        // Ed25519 key (base64 encoded, 64 bytes = seed + public key, or 32 bytes = seed only)
+        console.log("[Onramp] Using Ed25519 key for JWT");
+        algorithm = "EdDSA";
+        
+        // Decode the base64 private key
+        const keyBytes = Uint8Array.from(atob(CDP_API_KEY_PRIVATE_KEY), c => c.charCodeAt(0));
+        
+        // CDP Ed25519 keys are 64 bytes (seed + public), we need just the seed (first 32 bytes)
+        // Or they might be 32 bytes (just seed)
+        const seed = keyBytes.length === 64 ? keyBytes.slice(0, 32) : keyBytes;
+        
+        // Import as Ed25519 private key
+        // Jose library expects PKCS8 format, so we need to wrap the raw key
+        // For Ed25519, the PKCS8 prefix is fixed
+        const pkcs8Prefix = new Uint8Array([
+            0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70,
+            0x04, 0x22, 0x04, 0x20
+        ]);
+        const pkcs8Key = new Uint8Array(pkcs8Prefix.length + seed.length);
+        pkcs8Key.set(pkcs8Prefix);
+        pkcs8Key.set(seed, pkcs8Prefix.length);
+        
+        privateKey = await crypto.subtle.importKey(
+            "pkcs8",
+            pkcs8Key,
+            { name: "Ed25519" },
+            false,
+            ["sign"]
+        );
+    } else {
+        // ECDSA key (PEM format)
+        console.log("[Onramp] Using ECDSA key for JWT");
+        algorithm = "ES256";
+        
+        const pem = CDP_API_KEY_PRIVATE_KEY.replace(/\\n/g, "\n");
+        privateKey = await importPKCS8(pem, "ES256");
+    }
 
     // Create JWT with CDP-required claims
+    // See: https://docs.cdp.coinbase.com/get-started/authentication/jwt-authentication
     const jwt = await new SignJWT({
         sub: CDP_API_KEY_NAME,
         iss: "cdp",
         aud: ["cdp_service"],
+        nonce: nonce,
     })
-        .setProtectedHeader({ alg: "ES256", kid: CDP_API_KEY_NAME, typ: "JWT" })
+        .setProtectedHeader({ 
+            alg: algorithm, 
+            kid: CDP_API_KEY_NAME, 
+            typ: "JWT",
+            nonce: nonce,
+        })
         .setIssuedAt(now)
         .setExpirationTime(now + 120) // 2 minutes
         .setNotBefore(now)
         .sign(privateKey);
 
     return jwt;
-}
-
-/**
- * Convert PEM to ArrayBuffer for WebCrypto
- */
-function pemToArrayBuffer(pem: string): ArrayBuffer {
-    const base64 = pem
-        .replace("-----BEGIN EC PRIVATE KEY-----", "")
-        .replace("-----END EC PRIVATE KEY-----", "")
-        .replace("-----BEGIN PRIVATE KEY-----", "")
-        .replace("-----END PRIVATE KEY-----", "")
-        .replace(/\s/g, "");
-    
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
 }
 
 /**

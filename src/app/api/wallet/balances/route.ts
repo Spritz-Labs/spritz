@@ -370,6 +370,18 @@ async function fetchChainBalances(
     }
 }
 
+// Preferred chain order for display (by importance/usage)
+const CHAIN_DISPLAY_ORDER = [
+    "ethereum",   // Mainnet first
+    "base",       // L2s in order of popularity
+    "arbitrum",
+    "optimism",
+    "polygon",
+    "bsc",
+    "unichain",
+    "avalanche",
+];
+
 // GET /api/wallet/balances - Fetch balances across all supported chains
 export async function GET(request: NextRequest) {
     // Require authentication
@@ -402,17 +414,41 @@ export async function GET(request: NextRequest) {
         ? chainsParam.split(",").filter(c => c in SUPPORTED_CHAINS)
         : Object.keys(SUPPORTED_CHAINS);
 
+    // Sort chains by preferred display order
+    const sortedChains = [...requestedChains].sort((a, b) => {
+        const aIndex = CHAIN_DISPLAY_ORDER.indexOf(a);
+        const bIndex = CHAIN_DISPLAY_ORDER.indexOf(b);
+        // Chains not in the order list go to the end
+        if (aIndex === -1 && bIndex === -1) return 0;
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+    });
+
     try {
         // Fetch balances for all requested chains in parallel
         // The Graph Token API returns USD values directly, no need for separate price fetching
-        const chainPromises = requestedChains.map((chainKey) =>
+        console.log(`[Wallet] Fetching balances for ${address.slice(0, 10)}... on ${sortedChains.length} chains:`, sortedChains.join(", "));
+        
+        const chainPromises = sortedChains.map((chainKey) =>
             fetchChainBalances(address, SUPPORTED_CHAINS[chainKey])
         );
 
         const balances = await Promise.all(chainPromises);
 
+        // Log per-chain results for debugging
+        for (const balance of balances) {
+            const hasBalance = balance.nativeBalance || balance.tokens.length > 0;
+            if (balance.error) {
+                console.warn(`[Wallet] ${balance.chain.name}: Error - ${balance.error}`);
+            } else if (hasBalance) {
+                console.log(`[Wallet] ${balance.chain.name}: $${balance.totalUsd.toFixed(2)} (native: ${balance.nativeBalance?.balanceFormatted || "0"}, tokens: ${balance.tokens.length})`);
+            }
+        }
+
         // Calculate total USD across all chains
         const totalUsd = balances.reduce((sum, chain) => sum + chain.totalUsd, 0);
+        console.log(`[Wallet] Total portfolio: $${totalUsd.toFixed(2)}`);
 
         const response: WalletBalancesResponse = {
             address,

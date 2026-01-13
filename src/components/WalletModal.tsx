@@ -17,8 +17,8 @@ import { useOnramp } from "@/hooks/useOnramp";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
-// Chain info for display
-const CHAIN_INFO: Record<number, { name: string; icon: string; color: string; sponsorship: "free" | "usdc" }> = {
+// Chain info for display (must include ALL chains from SUPPORTED_CHAINS in chains.ts)
+const CHAIN_INFO: Record<number, { name: string; icon: string; color: string; sponsorship: "free" | "usdc" | "none" }> = {
     1: { name: "Ethereum", icon: "🔷", color: "#627EEA", sponsorship: "usdc" },
     8453: { name: "Base", icon: "🔵", color: "#0052FF", sponsorship: "free" },
     42161: { name: "Arbitrum", icon: "⬡", color: "#28A0F0", sponsorship: "free" },
@@ -26,6 +26,7 @@ const CHAIN_INFO: Record<number, { name: string; icon: string; color: string; sp
     137: { name: "Polygon", icon: "🟣", color: "#8247E5", sponsorship: "free" },
     56: { name: "BNB Chain", icon: "🔶", color: "#F3BA2F", sponsorship: "free" },
     130: { name: "Unichain", icon: "🦄", color: "#FF007A", sponsorship: "free" },
+    43114: { name: "Avalanche", icon: "🔺", color: "#E84142", sponsorship: "none" }, // View only, send not yet enabled
 };
 
 type WalletModalProps = {
@@ -470,9 +471,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         return tokens.sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0));
     }, [balances]);
 
-    // Filter balances to only show selected chain
-    // Show all supported chains in balances view
-    const filteredBalances = balances.filter(b => SEND_ENABLED_CHAIN_IDS.includes(b.chain.id));
+    // Show ALL chains in balances view (not just send-enabled)
+    // This ensures users can see their full portfolio across all supported chains
+    // Send token selector is separately filtered to only send-enabled chains
+    const filteredBalances = balances;
     
     // Get selected chain balance for display
     const selectedChainBalance = balances.find(b => b.chain.id === selectedChainId);
