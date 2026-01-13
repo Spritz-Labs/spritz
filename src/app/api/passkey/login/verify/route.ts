@@ -4,6 +4,14 @@ import { createClient } from "@supabase/supabase-js";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/types";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
+import crypto from "crypto";
+
+// Generate address from credential ID (must match registration logic exactly)
+function generateWalletAddressFromCredential(credentialId: string): string {
+    const data = `spritz-passkey-wallet:${credentialId}`;
+    const hash = crypto.createHash("sha256").update(data).digest("hex");
+    return `0x${hash.slice(0, 40)}`;
+}
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -162,22 +170,50 @@ export async function POST(request: NextRequest) {
             console.error("[Passkey] Credential not found. Sent ID:", credential.id);
             console.error("[Passkey] DB error:", credError?.message);
             
-            // Try to find similar credentials for debugging
-            const { data: allCreds } = await supabase
-                .from("passkey_credentials")
-                .select("credential_id, user_address, created_at")
-                .order("created_at", { ascending: false })
-                .limit(5);
+            // RESCUE FLOW: Check if this credential SHOULD belong to an existing account
+            // Compute what address this credential would derive to
+            const derivedAddress = generateWalletAddressFromCredential(credential.id);
+            console.log("[Passkey] Derived address for rescue check:", derivedAddress);
             
-            if (allCreds) {
-                console.log("[Passkey] Recent credentials in DB:", 
-                    allCreds.map(c => ({ 
-                        id: c.credential_id.slice(0, 20) + "...", 
-                        addr: c.user_address.slice(0, 10) + "..." 
-                    }))
+            // Check if this address exists in our user database
+            const { data: existingUser } = await supabase
+                .from("shout_users")
+                .select("wallet_address, login_count")
+                .eq("wallet_address", derivedAddress)
+                .single();
+            
+            if (existingUser) {
+                // Account exists! This is an orphaned passkey that was never saved to DB
+                console.log("[Passkey] RESCUE: Found orphaned account!", derivedAddress);
+                console.log("[Passkey] User has", existingUser.login_count, "previous logins");
+                
+                // Generate a rescue token (valid for 10 minutes)
+                const rescueToken = crypto.randomUUID();
+                const rescueExpiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+                
+                // Store rescue token
+                await supabase.from("passkey_challenges").insert({
+                    challenge: rescueToken,
+                    ceremony_type: "rescue",
+                    user_address: derivedAddress,
+                    expires_at: rescueExpiry,
+                    used: false,
+                });
+                
+                // Return rescue info to frontend
+                return NextResponse.json(
+                    { 
+                        error: "rescue_available",
+                        message: "We found your account! Your passkey needs to be re-linked.",
+                        rescueAddress: derivedAddress,
+                        rescueToken: rescueToken,
+                    },
+                    { status: 400 }
                 );
             }
             
+            // No rescue available - truly not found
+            console.log("[Passkey] No rescue available, derived address not in DB");
             return NextResponse.json(
                 { error: "Credential not found. Please register first." },
                 { status: 400 }

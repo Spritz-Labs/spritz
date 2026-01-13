@@ -44,6 +44,8 @@ export type PasskeyContextType = PasskeyState & {
     logout: () => void;
     clearError: () => void;
     clearWarning: () => void;
+    rescue: () => Promise<void>; // Rescue orphaned passkey
+    needsRescue: boolean; // Whether a rescue is pending
 };
 
 const PasskeyContext = createContext<PasskeyContextType | null>(null);
@@ -506,6 +508,28 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 const errorData = await verifyResponse.json();
                 const errorMsg = errorData.error || "Failed to verify authentication";
                 
+                // RESCUE FLOW: Check if this is a rescuable orphaned passkey
+                if (errorMsg === "rescue_available" && errorData.rescueToken && errorData.rescueAddress) {
+                    console.log("[Passkey] RESCUE: Found orphaned account!", errorData.rescueAddress);
+                    console.log("[Passkey] RESCUE: Starting re-registration to link passkey...");
+                    
+                    // Store rescue token for the registration flow
+                    localStorage.setItem("spritz_recovery_token", errorData.rescueToken);
+                    localStorage.setItem("spritz_recovery_address", errorData.rescueAddress);
+                    
+                    // Show a message and trigger re-registration
+                    setState((prev) => ({
+                        ...prev,
+                        isLoading: false,
+                        error: null,
+                        warning: `Found your account (${errorData.rescueAddress.slice(0, 10)}...)! Click "Rescue Account" to re-link your passkey.`,
+                    }));
+                    
+                    // Store that we need rescue
+                    localStorage.setItem("spritz_needs_rescue", "true");
+                    return;
+                }
+                
                 // SECURITY: Old credential migration removed - insecure
                 // If credential not found, user must re-register their passkey
                 if (errorMsg.includes("not found") || errorMsg.includes("register first")) {
@@ -552,7 +576,103 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 error: errorMessage,
             }));
         }
-    }, [generateWalletAddress]);
+    }, []);
+
+    // Check if rescue is needed
+    const needsRescue = typeof window !== "undefined" && localStorage.getItem("spritz_needs_rescue") === "true";
+
+    // Rescue orphaned passkey by re-registering
+    const rescue = useCallback(async () => {
+        const rescueToken = localStorage.getItem("spritz_recovery_token");
+        const rescueAddress = localStorage.getItem("spritz_recovery_address");
+        
+        if (!rescueToken || !rescueAddress) {
+            console.error("[Passkey] No rescue token found");
+            setState((prev) => ({ ...prev, error: "No rescue pending. Please try logging in again." }));
+            return;
+        }
+        
+        console.log("[Passkey] RESCUE: Starting re-registration for", rescueAddress);
+        setState((prev) => ({ ...prev, isLoading: true, error: null, warning: null }));
+        
+        try {
+            // Step 1: Get registration options
+            const optionsResponse = await fetch("/api/passkey/register/options", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userAddress: rescueAddress,
+                    displayName: "Rescued Passkey",
+                }),
+            });
+
+            if (!optionsResponse.ok) {
+                const error = await optionsResponse.json();
+                throw new Error(error.error || "Failed to get registration options");
+            }
+
+            const { options } = await optionsResponse.json();
+            console.log("[Passkey] RESCUE: Got registration options");
+
+            // Step 2: Create credential using WebAuthn
+            const credential = await startRegistration({ optionsJSON: options });
+            console.log("[Passkey] RESCUE: WebAuthn registration complete");
+
+            // Step 3: Verify with server (include rescue token)
+            const verifyResponse = await fetch("/api/passkey/register/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userAddress: rescueAddress,
+                    displayName: "Rescued Passkey",
+                    credential,
+                    challenge: options.challenge,
+                    recoveryToken: rescueToken, // Rescue token
+                }),
+                credentials: "include",
+            });
+
+            if (!verifyResponse.ok) {
+                const error = await verifyResponse.json();
+                throw new Error(error.error || "Failed to verify registration");
+            }
+
+            const { sessionToken, userAddress: serverUserAddress } = await verifyResponse.json();
+            console.log("[Passkey] RESCUE: Successfully linked passkey to", serverUserAddress);
+
+            // Clear rescue state
+            localStorage.removeItem("spritz_recovery_token");
+            localStorage.removeItem("spritz_recovery_address");
+            localStorage.removeItem("spritz_needs_rescue");
+
+            // Store session
+            localStorage.setItem(SESSION_STORAGE_KEY, sessionToken);
+            localStorage.setItem(USER_ADDRESS_KEY, serverUserAddress);
+
+            setState({
+                isLoading: false,
+                isAuthenticated: true,
+                smartAccountAddress: serverUserAddress as Address,
+                error: null,
+                hasStoredSession: true,
+                warning: null,
+            });
+
+            console.log("[Passkey] RESCUE complete! Address:", serverUserAddress);
+        } catch (error) {
+            console.error("[Passkey] RESCUE error:", error);
+            // Clear rescue state on error
+            localStorage.removeItem("spritz_needs_rescue");
+            
+            const errorMessage = error instanceof Error ? error.message : "Failed to rescue account";
+            setState((prev) => ({
+                ...prev,
+                isLoading: false,
+                error: errorMessage,
+                warning: null,
+            }));
+        }
+    }, []);
 
     const logout = useCallback(async () => {
         console.log("[Passkey] Logging out...");
@@ -603,6 +723,8 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 logout,
                 clearError,
                 clearWarning,
+                rescue,
+                needsRescue,
             }}
         >
             {children}

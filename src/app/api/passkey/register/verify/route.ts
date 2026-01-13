@@ -106,41 +106,71 @@ export async function POST(request: NextRequest) {
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         
-        // Check if this is a recovery registration
+        // Check if this is a recovery registration (email recovery)
         let recoveredAddress: string | null = null;
         if (recoveryToken) {
-            console.log("[Passkey] Recovery token provided, checking validity...");
-            const { data: recoveryData, error: recoveryError } = await supabase
-                .from("passkey_recovery_codes")
+            // First check if it's a rescue token (from orphaned passkey flow)
+            const { data: rescueData, error: rescueError } = await supabase
+                .from("passkey_challenges")
                 .select("*")
-                .eq("recovery_code", recoveryToken.toUpperCase().trim())
+                .eq("challenge", recoveryToken)
+                .eq("ceremony_type", "rescue")
                 .eq("used", false)
                 .single();
             
-            if (recoveryError || !recoveryData) {
-                console.error("[Passkey] Invalid or used recovery token");
-                return NextResponse.json(
-                    { error: "Invalid or already used recovery token" },
-                    { status: 400 }
-                );
+            if (rescueData && !rescueError) {
+                // This is a rescue token
+                if (new Date(rescueData.expires_at) < new Date()) {
+                    console.error("[Passkey] Rescue token expired");
+                    return NextResponse.json(
+                        { error: "Rescue token has expired. Please try logging in again." },
+                        { status: 400 }
+                    );
+                }
+                
+                recoveredAddress = rescueData.user_address;
+                console.log("[Passkey] RESCUE: Linking passkey to rescued address:", recoveredAddress);
+                
+                // Mark rescue token as used
+                await supabase
+                    .from("passkey_challenges")
+                    .update({ used: true })
+                    .eq("id", rescueData.id);
+            } else {
+                // Check if it's an email recovery token
+                console.log("[Passkey] Recovery token provided, checking validity...");
+                const { data: recoveryData, error: recoveryError } = await supabase
+                    .from("passkey_recovery_codes")
+                    .select("*")
+                    .eq("recovery_code", recoveryToken.toUpperCase().trim())
+                    .eq("used", false)
+                    .single();
+                
+                if (recoveryError || !recoveryData) {
+                    console.error("[Passkey] Invalid or used recovery token");
+                    return NextResponse.json(
+                        { error: "Invalid or already used recovery token" },
+                        { status: 400 }
+                    );
+                }
+                
+                if (new Date(recoveryData.expires_at) < new Date()) {
+                    console.error("[Passkey] Recovery token expired");
+                    return NextResponse.json(
+                        { error: "Recovery token has expired" },
+                        { status: 400 }
+                    );
+                }
+                
+                recoveredAddress = recoveryData.user_address;
+                console.log("[Passkey] Valid recovery for address:", recoveredAddress);
+                
+                // Mark recovery code as used
+                await supabase
+                    .from("passkey_recovery_codes")
+                    .update({ used: true, used_at: new Date().toISOString() })
+                    .eq("id", recoveryData.id);
             }
-            
-            if (new Date(recoveryData.expires_at) < new Date()) {
-                console.error("[Passkey] Recovery token expired");
-                return NextResponse.json(
-                    { error: "Recovery token has expired" },
-                    { status: 400 }
-                );
-            }
-            
-            recoveredAddress = recoveryData.user_address;
-            console.log("[Passkey] Valid recovery for address:", recoveredAddress);
-            
-            // Mark recovery code as used
-            await supabase
-                .from("passkey_recovery_codes")
-                .update({ used: true, used_at: new Date().toISOString() })
-                .eq("id", recoveryData.id);
         }
 
         // Verify the challenge exists and hasn't expired
