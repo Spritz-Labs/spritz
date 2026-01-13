@@ -426,16 +426,23 @@ export async function createPasskeySafeAccountClient(
     // Get sponsorship context if configured
     const paymasterContext = getPaymasterContext();
 
+    console.log(`[SafeWallet] Creating smart account client...`);
+    console.log(`[SafeWallet] Paymaster context:`, paymasterContext);
+
     // Create smart account client with Pimlico
+    // Try without paymaster first to debug the simulation issue
     const smartAccountClient = createSmartAccountClient({
         account: safeAccount,
         chain,
         bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-        paymaster: pimlicoClient,
-        paymasterContext, // Include sponsorship policy if set
+        // Temporarily disable paymaster to debug simulation failure
+        // paymaster: pimlicoClient,
+        // paymasterContext,
         userOperation: {
             estimateFeesPerGas: async () => {
-                return (await pimlicoClient.getUserOperationGasPrice()).fast;
+                const prices = await pimlicoClient.getUserOperationGasPrice();
+                console.log(`[SafeWallet] Gas prices:`, prices.fast);
+                return prices.fast;
             },
         },
     });
