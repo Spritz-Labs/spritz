@@ -545,59 +545,636 @@ src/
     └── chains.ts           # Supported chains config
 ```
 
-## Smart Wallet Architecture
+## Authentication & Identity System
 
-Spritz uses Safe Smart Accounts (ERC-4337) to provide a seamless, non-custodial wallet experience across all authentication methods.
+Spritz supports multiple authentication methods, each providing a unique "Spritz ID" (identity address) used for social features. Users can also access the Spritz Wallet (a Safe Smart Account) for on-chain transactions.
+
+### Two Address System
+
+Every user has **two addresses**:
+
+| Address Type | Purpose | Stored In |
+|--------------|---------|-----------|
+| **Spritz ID** | Identity for profile, friends, messages, username | `shout_users.wallet_address` |
+| **Spritz Wallet** | Smart contract wallet for on-chain funds | Safe Smart Account (ERC-4337) |
+
+### Authentication Methods Overview
+
+| Method | Spritz ID Source | Can Sign EVM Txs? | Needs Passkey for Wallet? |
+|--------|------------------|-------------------|---------------------------|
+| **EVM Wallet** | Wallet address (EOA) | ✅ Yes | ❌ No (wallet signs) |
+| **Passkey** | Derived from credential ID | ✅ Via passkey | ✅ Built-in |
+| **Email** | Existing account OR derived | ❌ No | ✅ Yes |
+| **World ID** | `nullifier_hash` from World ID | ❌ No | ✅ Yes |
+| **Alien ID** | `alienAddress` from Alien | ❌ No | ✅ Yes |
+| **Solana** | Solana wallet address | ❌ No (different chain) | ✅ Yes |
+
+---
+
+## Authentication Method Details
+
+### 1. EVM Wallet (MetaMask, Coinbase Wallet, etc.)
+
+**Authentication Flow:**
+```
+User connects wallet via Reown AppKit
+    ↓
+Frontend requests SIWE (Sign-In With Ethereum) message
+    ↓
+User signs message with wallet
+    ↓
+Server verifies signature, creates session
+    ↓
+Spritz ID = wallet address (e.g., 0x1234...)
+```
+
+**Spritz Wallet (Safe):**
+- Safe address derived from wallet address as owner
+- Wallet signs Safe transactions directly
+- No passkey needed - the connected wallet IS the signer
+
+**User Flow:**
+1. Click "Connect Wallet"
+2. Select wallet (MetaMask, Coinbase, etc.)
+3. Sign SIWE message
+4. Full access to app + wallet features
+
+---
+
+### 2. Passkey (Face ID, Touch ID, Windows Hello)
+
+**Authentication Flow:**
+```
+User clicks "Login with Passkey"
+    ↓
+Server generates authentication challenge
+    ↓
+Browser triggers WebAuthn ceremony
+    ↓
+User authenticates with biometric
+    ↓
+Server verifies credential, creates session
+    ↓
+Spritz ID = stored user_address from passkey_credentials table
+```
+
+**Spritz Wallet (Safe):**
+- P256 public key extracted from passkey
+- Safe WebAuthn Signer address calculated from public key
+- Safe address derived from WebAuthn signer as owner
+- Passkey signs all transactions via WebAuthn
+
+**New User Registration:**
+```
+User clicks "Create Account"
+    ↓
+Server generates registration challenge
+    ↓
+Browser creates new passkey (WebAuthn)
+    ↓
+Server extracts P256 public key (x, y coordinates)
+    ↓
+Spritz ID = deterministic hash of credential ID
+    ↓
+Safe signer address calculated from public key
+```
+
+**Key Storage:**
+- `passkey_credentials.credential_id` - WebAuthn credential identifier
+- `passkey_credentials.public_key_x/y` - P256 coordinates for Safe signing
+- `passkey_credentials.safe_signer_address` - Precomputed WebAuthn signer
+
+---
+
+### 3. Email Login
+
+**Authentication Flow:**
+```
+User enters email address
+    ↓
+Server sends 6-digit verification code via Resend
+    ↓
+User enters code
+    ↓
+Server verifies code, checks for existing account:
+    
+    IF email matches existing verified account:
+        → Use that account's address (preserves profile!)
+    ELSE:
+        → Derive new address from email + EMAIL_AUTH_SECRET
+    ↓
+Session created with final address
+```
+
+**Spritz Wallet (Safe):**
+- Email users CANNOT sign EVM transactions directly
+- Must register a passkey to use Spritz Wallet
+- Once passkey registered, Safe uses passkey as signer
+
+**Backwards Compatibility:**
+- If user already has account with email (from any auth method)
+- Email login finds and uses that existing account
+- Prevents duplicate accounts when EMAIL_AUTH_SECRET changes
+
+---
+
+### 4. World ID (Worldcoin)
+
+**Authentication Flow:**
+```
+User clicks "Sign in with World ID"
+    ↓
+World ID SDK opens verification
+    ↓
+User verifies with Orb/Device
+    ↓
+Server receives proof + nullifier_hash
+    ↓
+Server verifies proof with World ID API
+    ↓
+Spritz ID = nullifier_hash (unique per person per app)
+```
+
+**Spritz Wallet (Safe):**
+- World ID users CANNOT sign EVM transactions
+- `nullifier_hash` is a proof identifier, not a real address
+- Must register passkey while logged in with World ID
+- Passkey links to their World ID identity (nullifier_hash)
+
+**Identity Persistence:**
+- `nullifier_hash` is deterministic per person per app
+- Same person always gets same Spritz ID
+- Sybil-resistant: one person = one account
+
+---
+
+### 5. Alien ID
+
+**Authentication Flow:**
+```
+User clicks "Sign in with Alien ID"
+    ↓
+Alien ID SDK opens verification
+    ↓
+User authenticates with Alien
+    ↓
+Server receives alienAddress
+    ↓
+Spritz ID = alienAddress
+```
+
+**Spritz Wallet (Safe):**
+- Same as World ID - cannot sign EVM transactions
+- Must register passkey to use Spritz Wallet
+- Passkey links to their Alien ID address
+
+---
+
+### 6. Solana Wallet (Phantom, Solflare, etc.)
+
+**Authentication Flow:**
+```
+User connects Solana wallet
+    ↓
+Frontend requests SIWS (Sign-In With Solana) message
+    ↓
+User signs message with Solana wallet
+    ↓
+Server verifies signature
+    ↓
+Spritz ID = Solana address (base58 format)
+```
+
+**Spritz Wallet (Safe):**
+- Solana wallets cannot sign EVM transactions
+- Must register passkey for Spritz Wallet
+- EVM funds stored in Safe on EVM chains
+
+---
+
+## Adding Passkey to Existing Account
+
+When a logged-in user registers a passkey:
+
+```
+User is logged in (World ID, Email, Wallet, etc.)
+    ↓
+Session contains their Spritz ID
+    ↓
+User clicks "Add Passkey" in Wallet settings
+    ↓
+Server checks getAuthenticatedUser()
+    ↓
+IF authenticated:
+    → Passkey linked to EXISTING Spritz ID ✅
+ELSE IF session cookie present but invalid:
+    → REJECT: "Session expired, please log in again"
+ELSE:
+    → Create new account (for passkey-only registration)
+```
+
+**Defensive Protections:**
+1. If session exists → passkey links to existing account
+2. If session cookie present but expired → reject (prevents accidental new account)
+3. If userAddress matches existing account → link to it
+4. Only create new account if genuinely new user
+
+---
+
+## Spritz Wallet (Safe Smart Account)
+
+### Architecture
+
+Spritz uses Safe Smart Accounts with ERC-4337 (Account Abstraction):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Spritz Wallet                         │
+├─────────────────────────────────────────────────────────┤
+│  Safe Smart Account (same address on all EVM chains)    │
+│  ├── Owner: EOA address OR WebAuthn Signer              │
+│  ├── Bundler: Pimlico                                   │
+│  └── Paymaster: Sponsored (L2) or ERC-20 USDC (mainnet) │
+└─────────────────────────────────────────────────────────┘
+```
 
 ### Supported Chains
 
-| Chain | Chain ID | Gas | Notes |
-|-------|----------|-----|-------|
-| Ethereum | 1 | User pays (USDC) | ERC-20 paymaster |
-| Base | 8453 | Sponsored | Free transactions |
-| Arbitrum | 42161 | Sponsored | Free transactions |
-| Optimism | 10 | Sponsored | Free transactions |
-| Polygon | 137 | Sponsored | Free transactions |
-| BNB Chain | 56 | Sponsored | Free transactions |
-| Unichain | 130 | Sponsored | Free transactions |
+| Chain | Chain ID | Gas Payment | Sponsorship |
+|-------|----------|-------------|-------------|
+| Ethereum | 1 | ETH (or USDC if available) | User pays |
+| Base | 8453 | Sponsored | Free |
+| Arbitrum | 42161 | Sponsored | Free |
+| Optimism | 10 | Sponsored | Free |
+| Polygon | 137 | Sponsored | Free |
+| BNB Chain | 56 | Sponsored | Free |
+| Unichain | 130 | Sponsored | Free |
+
+### Safe Address Calculation
+
+**For Wallet Users (EOA signer):**
+```typescript
+safeAddress = calculateSafeAddress(walletAddress)
+// Safe is owned by the user's EOA
+```
+
+**For Passkey Users (WebAuthn signer):**
+```typescript
+webAuthnSignerAddress = calculateWebAuthnSignerAddress(publicKeyX, publicKeyY)
+safeAddress = calculateSafeAddress(webAuthnSignerAddress)
+// Safe is owned by the passkey's P256 signer
+```
 
 ### Same Address Everywhere
 
 Your Safe wallet address is **deterministic and identical** across all EVM chains. Send to any chain, funds are never lost - just on a different network at the same address.
 
-### Authentication Methods & Wallet Access
+---
 
-| Auth Method | Spritz ID | Wallet Signer | Notes |
-|-------------|-----------|---------------|-------|
-| **EVM Wallet** | Wallet address | Wallet signs | MetaMask, Coinbase, etc. |
-| **Passkey** | Derived address | Passkey (WebAuthn) | Face ID, Touch ID |
-| **Email** | Derived address | Passkey required | Must register passkey |
-| **World ID** | Derived address | Passkey required | Must register passkey |
-| **Alien ID** | Derived address | Passkey required | Must register passkey |
-| **Solana** | Solana address | Passkey required | Can't sign EVM txs |
+## Complete User Flows
 
-### Passkey Flow
-
-For non-EVM-wallet users, the wallet uses WebAuthn passkeys for transaction signing:
+### Flow 1: New User with Wallet
 
 ```
-User logs in (email/passkey/Solana/etc.)
-    ↓
-System prompts to register passkey (if not already)
-    ↓
-Passkey creates P256 public key stored on device
-    ↓
-Safe Smart Account created with passkey as signer
-    ↓
-User can now send/receive on all EVM chains
+1. User connects MetaMask
+2. Signs SIWE message
+3. Spritz ID = wallet address
+4. Safe address calculated from wallet
+5. User can send/receive immediately
+   (wallet signs Safe transactions)
 ```
 
-### Key Benefits
+### Flow 2: New User with Passkey
 
-- **Non-Custodial** - Private keys never leave the user's device
-- **No Seed Phrases** - Passkeys are backed up automatically (iCloud, Google, etc.)
-- **Cross-Chain** - Same address on all supported chains
-- **Gasless** - Sponsored transactions on L2s via Pimlico
+```
+1. User clicks "Create Account"
+2. Creates passkey (Face ID/Touch ID)
+3. Spritz ID = hash(credential_id)
+4. Safe address calculated from passkey signer
+5. User can send/receive immediately
+   (passkey signs Safe transactions)
+```
+
+### Flow 3: New User with World ID
+
+```
+1. User verifies with World ID
+2. Spritz ID = nullifier_hash
+3. User sees profile, can chat, add friends
+4. User opens Wallet → "Register Passkey to Send"
+5. Creates passkey (linked to nullifier_hash)
+6. Safe address calculated from passkey signer
+7. User can now send/receive
+```
+
+### Flow 4: Existing User Adds Passkey
+
+```
+1. User logged in with Email/WorldID/etc.
+2. Opens Wallet settings → "Add Passkey"
+3. Creates passkey
+4. Server detects existing session
+5. Passkey linked to EXISTING Spritz ID
+6. Safe uses new passkey as signer
+7. Profile, friends, messages preserved ✅
+```
+
+---
+
+## Key Security Properties
+
+### Identity Persistence
+- **Wallet**: Address never changes
+- **Passkey**: Credential ID never changes
+- **Email**: Finds existing account first, then derives
+- **World ID**: Same nullifier_hash for same person
+- **Alien ID**: Same address for same account
+
+### Non-Custodial
+- Private keys never leave user's device
+- Passkeys backed up via iCloud/Google automatically
+- Server only stores public keys
+
+### Session Management
+- JWT sessions in HTTP-only cookies (7 days)
+- Frontend tokens in localStorage (30 days, signed)
+- CSRF protection via origin validation
+
+---
+
+## Huddle01 Video Calls
+
+Huddle01 provides decentralized video/voice calls with WebRTC.
+
+### Room Creation Flow
+
+```
+User initiates call to friend
+    ↓
+Server calls Huddle01 API to create room
+    POST https://api.huddle01.com/api/v2/sdk/rooms/create-room
+    ↓
+Returns roomId (unique room identifier)
+    ↓
+Room shared with callee via push notification
+```
+
+### Token Generation Flow
+
+```
+User joins room (caller or callee)
+    ↓
+Server generates access token via Huddle01 SDK
+    ↓
+Token includes:
+    - roomId: The room to join
+    - role: HOST (full permissions)
+    - permissions: cam, mic, screen, data
+    - metadata: displayName, walletAddress
+    ↓
+Token signed with HUDDLE01_API_KEY
+    ↓
+Client uses token to connect to room
+```
+
+### Token Permissions
+
+```typescript
+permissions: {
+    admin: true,           // Can manage room
+    canConsume: true,      // Can receive media
+    canProduce: true,      // Can send media
+    canProduceSources: {
+        cam: true,         // Camera access
+        mic: true,         // Microphone access
+        screen: true,      // Screen share
+    },
+    canRecvData: true,     // Receive data messages
+    canSendData: true,     // Send data messages
+    canUpdateMetadata: true,
+}
+```
+
+### Call Types
+
+| Type | Description | Implementation |
+|------|-------------|----------------|
+| **1:1 Call** | Direct call between two users | Single room, both as HOST |
+| **Group Call** | Multi-party call | Single room, all as HOST |
+| **Voice Only** | Audio without video | Camera disabled client-side |
+
+### Security Model
+
+- Room IDs are random UUIDs (unguessable)
+- Tokens are short-lived JWTs
+- Each participant gets their own token
+- Wallet address embedded in metadata for identification
+
+---
+
+## Logos Messaging (Waku)
+
+Spritz uses [Logos Messaging](https://logos.co/tech-stack) protocols (formerly Waku) for decentralized, end-to-end encrypted messaging.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Message Flow                          │
+├─────────────────────────────────────────────────────────┤
+│  Sender                                                  │
+│    ↓                                                     │
+│  Encrypt message with symmetric key (AES-GCM)           │
+│    ↓                                                     │
+│  Encode with Protobuf                                   │
+│    ↓                                                     │
+│  Publish to Waku network (content topic = conversation) │
+│    ↓                                                     │
+│  Store encrypted copy in Supabase (backup)              │
+│    ↓                                                     │
+│  Receiver subscribes to content topic                   │
+│    ↓                                                     │
+│  Decrypt with shared symmetric key                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Initialization Flow
+
+```
+User logs in (any auth method)
+    ↓
+WakuProvider.initialize() called with userAddress
+    ↓
+Waku light node created (browser-based)
+    ↓
+Connects to Waku network peers
+    ↓
+Loads stored encryption keys from localStorage
+    ↓
+Subscribes to user's content topics
+    ↓
+Ready to send/receive messages
+```
+
+### End-to-End Encryption Across All Login Types
+
+Spritz provides E2E encryption for **all users regardless of authentication method**. This works because every auth method produces a deterministic "Spritz ID" (address) used for key derivation.
+
+**How It Works:**
+
+| Auth Method | Spritz ID Source | E2E Encryption |
+|-------------|------------------|----------------|
+| **EVM Wallet** | Wallet address (0x...) | ✅ Uses wallet address |
+| **Passkey** | Hash of credential ID | ✅ Uses derived address |
+| **Email** | Existing account OR derived from email | ✅ Uses account address |
+| **World ID** | `nullifier_hash` from verification | ✅ Uses nullifier as address |
+| **Alien ID** | `alienAddress` from Alien | ✅ Uses Alien address |
+| **Solana** | Solana wallet address (base58) | ✅ Uses Solana address |
+
+**Key Insight:** The encryption system doesn't care *how* you logged in—it only needs your Spritz ID. Since all auth methods produce a stable, unique identifier, E2E encryption works identically for everyone.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              E2E Encryption Key Establishment                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  User A (any auth method)     User B (any auth method)          │
+│  Spritz ID: 0xABC...          Spritz ID: 0xDEF...               │
+│       │                             │                            │
+│       └──────────┬──────────────────┘                            │
+│                  ↓                                               │
+│  Sort addresses: [0xABC..., 0xDEF...]                           │
+│                  ↓                                               │
+│  Derive key: SHA256("spritz-dm-key-v1:0xABC:0xDEF")            │
+│                  ↓                                               │
+│  Both users derive IDENTICAL symmetric key                      │
+│  (no key exchange needed!)                                      │
+│                  ↓                                               │
+│  Messages encrypted with AES-256-GCM                            │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Cross-Auth-Method Example:**
+```
+Alice: Logged in with World ID (nullifier_hash = 0x123...)
+Bob:   Logged in with MetaMask (wallet address = 0x456...)
+
+Both can message each other with full E2E encryption:
+1. Alice's app derives key from sorted(0x123, 0x456)
+2. Bob's app derives key from sorted(0x123, 0x456)
+3. Same key → encrypted messages work both directions
+```
+
+### Encryption Key Derivation
+
+**For Direct Messages (DMs):**
+```typescript
+// Deterministic key from both addresses (sorted)
+const seed = `spritz-dm-key-v1:${address1}:${address2}`;
+const symmetricKey = SHA256(seed);
+// Both parties derive the same key independently
+```
+
+**For Group Chats:**
+```typescript
+// Random symmetric key generated on group creation
+const symmetricKey = generateSymmetricKey(); // 256-bit AES key
+// Key shared with members via encrypted channel
+```
+
+### Content Topics
+
+Messages are published to specific "content topics" based on conversation:
+
+```
+/spritz/1/dm-{sortedAddresses}/proto     # Direct messages
+/spritz/1/group-{groupId}/proto          # Group messages
+```
+
+### Message Storage
+
+Messages are stored in multiple locations for reliability:
+
+| Storage | Purpose | Encryption |
+|---------|---------|------------|
+| **Waku Network** | Real-time delivery | Symmetric (AES-GCM) |
+| **Supabase** | Backup/history | Symmetric (AES-GCM) |
+| **localStorage** | Offline access | Symmetric (AES-GCM) |
+
+### Message Format (Protobuf)
+
+```protobuf
+message ChatMessage {
+    uint64 timestamp = 1;      // Unix timestamp
+    string sender = 2;         // Sender address
+    string content = 3;        // Message text
+    string messageId = 4;      // Unique ID (UUID)
+    string messageType = 5;    // "text", "pixel_art", "system"
+}
+```
+
+### Group Management
+
+**Creating a Group:**
+```
+User creates group with name, emoji, members
+    ↓
+Generate random groupId
+    ↓
+Generate random symmetric key
+    ↓
+Store group info in Supabase (shout_groups table)
+    ↓
+Encrypt group key for each member
+    ↓
+Members can decrypt key and join conversation
+```
+
+**Group Invites:**
+```
+Owner invites new member
+    ↓
+Encrypt symmetric key for new member
+    ↓
+Store encrypted key in shout_group_invites
+    ↓
+Invitee decrypts key and joins group
+```
+
+### Security Properties
+
+| Property | Implementation |
+|----------|----------------|
+| **End-to-End Encryption** | AES-256-GCM symmetric encryption |
+| **Forward Secrecy** | Not currently (would need ratcheting) |
+| **Key Storage** | localStorage (encrypted backup in Supabase) |
+| **Message Authentication** | GCM mode provides authentication |
+| **Sender Verification** | Sender address in signed message |
+
+### Real-time Updates
+
+```typescript
+// Subscribe to conversation
+streamMessages(peerAddress, (message) => {
+    // Decrypt and display new message
+    const decrypted = decrypt(message, symmetricKey);
+    addToConversation(decrypted);
+});
+
+// Also subscribe to Supabase realtime for backup delivery
+supabase
+    .channel('messages')
+    .on('INSERT', handleNewMessage)
+    .subscribe();
+```
+
+### Offline Support
+
+1. Messages cached in localStorage
+2. On reconnect, sync from Supabase backup
+3. Deduplicate by messageId
+4. Merge with real-time Waku messages
 
 ## AI Agents
 
