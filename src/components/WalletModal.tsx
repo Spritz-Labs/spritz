@@ -231,9 +231,11 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     // Determine if user authenticated via passkey (needs Safe signing)
     const isPasskeyUser = authMethod === "passkey";
     
-    // For email/digital_id/world_id users, they should also use passkey signing
+    // For email/digital_id/world_id/solana users, they should use passkey signing
     // This means we don't store any private keys - passkey is the only signer
-    const needsPasskeyForSend = authMethod === "email" || authMethod === "alien_id" || authMethod === "world_id";
+    // Solana users need passkey because Solana wallets can't sign EVM transactions
+    const isSolanaUser = authMethod === "solana";
+    const needsPasskeyForSend = authMethod === "email" || authMethod === "alien_id" || authMethod === "world_id" || isSolanaUser;
     const canUsePasskeySigning = isPasskeyUser || needsPasskeyForSend;
 
     // Get Smart Wallet (Safe) address
@@ -774,12 +776,19 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                             <h3 className="text-lg font-semibold text-white mb-2">Register Passkey First</h3>
                                             <p className="text-sm text-zinc-400 mb-4 max-w-xs">
-                                                Before receiving tokens, you need to register a passkey. 
-                                                This ensures you can access and send your funds later.
+                                                {isSolanaUser ? (
+                                                    <>Your Solana wallet works on Solana, but to receive tokens on EVM chains (Ethereum, Base, etc.), you need a passkey.</>
+                                                ) : (
+                                                    <>Before receiving tokens, you need to register a passkey. This ensures you can access and send your funds later.</>
+                                                )}
                                             </p>
                                             <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 mb-6 max-w-xs">
                                                 <p className="text-xs text-orange-300">
-                                                    <strong>Why?</strong> Without a passkey, any funds sent to your wallet would be locked forever.
+                                                    {isSolanaUser ? (
+                                                        <><strong>Why?</strong> Solana wallets can&apos;t sign EVM transactions. A passkey gives you control over your EVM wallet.</>
+                                                    ) : (
+                                                        <><strong>Why?</strong> Without a passkey, any funds sent to your wallet would be locked forever.</>
+                                                    )}
                                                 </p>
                                             </div>
                                             <a
@@ -894,8 +903,11 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                             <h3 className="text-lg font-semibold text-white mb-2">Register Passkey to Send</h3>
                                             <p className="text-sm text-zinc-400 mb-4 max-w-xs">
-                                                To send tokens securely, you need to register a passkey. 
-                                                This ensures only you can authorize transactions - we never store your keys.
+                                                {isSolanaUser ? (
+                                                    <>Your Solana wallet can't sign EVM transactions. Register a passkey to send tokens on Ethereum, Base, and other EVM chains.</>
+                                                ) : (
+                                                    <>To send tokens securely, you need to register a passkey. This ensures only you can authorize transactions - we never store your keys.</>
+                                                )}
                                             </p>
                                             <a
                                                 href="/settings"
