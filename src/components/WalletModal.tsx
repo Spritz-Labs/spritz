@@ -993,9 +993,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3">
                                                 <div className="flex items-center gap-2">
                                                     <input
-                                                        type="number"
+                                                        type="text"
+                                                        inputMode="decimal"
                                                         value={sendAmount}
-                                                        onChange={(e) => setSendAmount(e.target.value)}
+                                                        onChange={(e) => {
+                                                            // Only allow valid decimal numbers
+                                                            const value = e.target.value;
+                                                            if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                                                setSendAmount(value);
+                                                            }
+                                                        }}
                                                         placeholder="0.00"
                                                         className="flex-1 bg-transparent text-white text-xl font-medium placeholder-zinc-500 focus:outline-none"
                                                     />
