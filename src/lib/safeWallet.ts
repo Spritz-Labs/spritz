@@ -370,9 +370,10 @@ export async function createPasskeySafeAccountClient(
     const formattedPublicKey = `0x${xPadded}${yPadded}` as Hex;
 
     console.log(`[SafeWallet] Creating WebAuthn account with credential: ${passkeyCredential.credentialId.slice(0, 20)}...`);
-    console.log(`[SafeWallet] Public key X: ${passkeyCredential.publicKey.x.slice(0, 20)}... (${xHex.length} chars)`);
-    console.log(`[SafeWallet] Public key Y: ${passkeyCredential.publicKey.y.slice(0, 20)}... (${yHex.length} chars)`);
-    console.log(`[SafeWallet] Formatted public key: ${formattedPublicKey.slice(0, 30)}... (${formattedPublicKey.length - 2} chars)`);
+    console.log(`[SafeWallet] Public key X: ${passkeyCredential.publicKey.x} (${xHex.length} chars without 0x)`);
+    console.log(`[SafeWallet] Public key Y: ${passkeyCredential.publicKey.y} (${yHex.length} chars without 0x)`);
+    console.log(`[SafeWallet] Formatted public key (full): ${formattedPublicKey}`);
+    console.log(`[SafeWallet] Formatted public key length: ${formattedPublicKey.length} (should be 130 for 64 bytes + 0x)`);
 
     // Create a WebAuthn account using viem's built-in support
     const webAuthnAccount = toWebAuthnAccount({
@@ -386,17 +387,20 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] WebAuthn account created, type: ${webAuthnAccount.type}`);
 
     // Create Safe account with the WebAuthn account as owner
-    // permissionless.js will automatically use SafeWebAuthnSharedSigner
-    // Using Safe v1.5.0 for better WebAuthn compatibility
+    // Explicitly pass WebAuthn-related addresses for clarity
+    // Using Safe v1.4.1 which is more widely deployed
     const safeAccount = await toSafeSmartAccount({
         client: publicClient,
         owners: [webAuthnAccount],
-        version: "1.5.0",
+        version: "1.4.1",
         entryPoint: {
             address: entryPoint07Address,
             version: "0.7",
         },
         saltNonce: BigInt(0),
+        // Explicitly set WebAuthn addresses (these are the defaults but being explicit)
+        safeWebAuthnSharedSignerAddress: "0x94a4F6affBd8975951142c3999aEAB7ecee555c2" as Address,
+        safeP256VerifierAddress: "0xA86e0054C51E4894D88762a017ECc5E5235f5DBA" as Address,
     });
 
     console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
