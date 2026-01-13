@@ -321,6 +321,7 @@ export function useChannels(userAddress: string | null) {
 
 export function useChannelMessages(channelId: string | null, userAddress: string | null) {
     const [messages, setMessages] = useState<ChannelMessage[]>([]);
+    const [pinnedMessages, setPinnedMessages] = useState<ChannelMessage[]>([]);
     const [reactions, setReactions] = useState<Record<string, ChannelMessageReaction[]>>({});
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -527,10 +528,87 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         [channelId, userAddress]
     );
 
+    // Fetch pinned messages for a channel
+    const fetchPinnedMessages = useCallback(async () => {
+        if (!channelId) return;
+
+        try {
+            const res = await fetch(`/api/channels/${channelId}/messages/pin`);
+            const data = await res.json();
+
+            if (res.ok) {
+                setPinnedMessages(data.pinnedMessages || []);
+            }
+        } catch (e) {
+            console.error("[useChannelMessages] Error fetching pinned messages:", e);
+        }
+    }, [channelId]);
+
+    // Pin or unpin a message (admin only)
+    const togglePinMessage = useCallback(
+        async (messageId: string, pin: boolean) => {
+            if (!channelId) return false;
+
+            try {
+                const res = await fetch(`/api/channels/${channelId}/messages/pin`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ messageId, pin }),
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || "Failed to update pin status");
+                }
+
+                // Update local state
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === messageId
+                            ? {
+                                  ...msg,
+                                  is_pinned: pin,
+                                  pinned_by: pin ? userAddress : null,
+                                  pinned_at: pin ? new Date().toISOString() : null,
+                              }
+                            : msg
+                    )
+                );
+
+                // Update pinned messages list
+                if (pin) {
+                    const pinnedMsg = messages.find((m) => m.id === messageId);
+                    if (pinnedMsg) {
+                        setPinnedMessages((prev) => [
+                            {
+                                ...pinnedMsg,
+                                is_pinned: true,
+                                pinned_by: userAddress,
+                                pinned_at: new Date().toISOString(),
+                            },
+                            ...prev,
+                        ]);
+                    }
+                } else {
+                    setPinnedMessages((prev) => prev.filter((m) => m.id !== messageId));
+                }
+
+                return true;
+            } catch (e) {
+                console.error("[useChannelMessages] Pin error:", e);
+                return false;
+            }
+        },
+        [channelId, userAddress, messages]
+    );
+
     // Fetch messages on mount and when channel changes
     useEffect(() => {
         fetchMessages();
-    }, [fetchMessages]);
+        fetchPinnedMessages();
+    }, [fetchMessages, fetchPinnedMessages]);
 
     // Poll for new messages every 5 seconds
     useEffect(() => {
@@ -542,15 +620,18 @@ export function useChannelMessages(channelId: string | null, userAddress: string
 
     return {
         messages,
+        pinnedMessages,
         reactions,
         isLoading,
         isLoadingMore,
         hasMore,
         error,
         fetchMessages,
+        fetchPinnedMessages,
         loadMoreMessages,
         sendMessage,
         toggleReaction,
+        togglePinMessage,
         replyingTo,
         setReplyingTo,
     };

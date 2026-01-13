@@ -18,6 +18,10 @@ export type ChannelMessage = {
     created_at: string;
     reply_to_id?: string | null;
     reply_to?: ChannelMessage | null;
+    // Pinned message fields
+    is_pinned?: boolean;
+    pinned_by?: string | null;
+    pinned_at?: string | null;
 };
 
 export type ChannelReaction = {
@@ -40,7 +44,7 @@ export async function GET(
 
     let query = supabase
         .from("shout_channel_messages")
-        .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+        .select("*, reply_to:reply_to_id(id, sender_address, content, message_type), is_pinned, pinned_by, pinned_at")
         .eq("channel_id", id)
         .order("created_at", { ascending: false })
         .limit(limit);

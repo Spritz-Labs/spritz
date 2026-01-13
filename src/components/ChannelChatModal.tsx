@@ -37,6 +37,8 @@ type ChannelChatModalProps = {
     notificationsEnabled?: boolean;
     onToggleNotifications?: () => void;
     onSetActiveChannel?: (channelId: string | null) => void;
+    // Admin controls
+    isAdmin?: boolean;
 };
 
 export function ChannelChatModal({
@@ -51,15 +53,18 @@ export function ChannelChatModal({
     notificationsEnabled = false,
     onToggleNotifications,
     onSetActiveChannel,
+    isAdmin = false,
 }: ChannelChatModalProps) {
     const { 
         messages, 
+        pinnedMessages,
         reactions,
         isLoading,
         isLoadingMore,
         hasMore,
         sendMessage, 
         toggleReaction,
+        togglePinMessage,
         loadMoreMessages,
         replyingTo,
         setReplyingTo 
@@ -73,6 +78,8 @@ export function ChannelChatModal({
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
+    const [showPinnedMessages, setShowPinnedMessages] = useState(false);
+    const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -261,6 +268,18 @@ export function ChannelChatModal({
         setSelectedMessage(null);
     };
 
+    const handlePinMessage = async (messageId: string, currentlyPinned: boolean) => {
+        if (!isAdmin || pinningMessage) return;
+        
+        setPinningMessage(messageId);
+        try {
+            await togglePinMessage(messageId, !currentlyPinned);
+        } finally {
+            setPinningMessage(null);
+            setSelectedMessage(null);
+        }
+    };
+
     // Toggle message selection for mobile tap actions
     const handleMessageTap = (messageId: string) => {
         setSelectedMessage(selectedMessage === messageId ? null : messageId);
@@ -434,6 +453,23 @@ export function ChannelChatModal({
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
+                            {/* Pinned Messages Button */}
+                            {pinnedMessages.length > 0 && (
+                                <button
+                                    onClick={() => setShowPinnedMessages(!showPinnedMessages)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                        showPinnedMessages
+                                            ? "bg-amber-500/20 text-amber-400"
+                                            : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                                    }`}
+                                    title="View pinned messages"
+                                >
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                                    </svg>
+                                    <span>{pinnedMessages.length}</span>
+                                </button>
+                            )}
                             <button
                                 onClick={onLeave}
                                 className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -528,6 +564,60 @@ export function ChannelChatModal({
                             </button>
                         </div>
                     </div>
+
+                    {/* Pinned Messages Panel */}
+                    <AnimatePresence>
+                        {showPinnedMessages && pinnedMessages.length > 0 && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="border-b border-zinc-800 overflow-hidden"
+                            >
+                                <div className="p-3 bg-amber-500/5 max-h-48 overflow-y-auto">
+                                    <div className="flex items-center gap-2 mb-2 text-amber-400">
+                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Pinned Messages</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {pinnedMessages.map((msg) => (
+                                            <div
+                                                key={msg.id}
+                                                className="flex items-start gap-2 p-2 bg-zinc-800/50 rounded-lg group"
+                                            >
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs text-zinc-400 mb-0.5">
+                                                        {formatSender(msg.sender_address)}
+                                                    </p>
+                                                    <p className="text-sm text-white truncate">
+                                                        {msg.content}
+                                                    </p>
+                                                </div>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => handlePinMessage(msg.id, true)}
+                                                        disabled={pinningMessage === msg.id}
+                                                        className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                        title="Unpin message"
+                                                    >
+                                                        {pinningMessage === msg.id ? (
+                                                            <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                                        ) : (
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Messages */}
                     <div 
@@ -676,8 +766,24 @@ export function ChannelChatModal({
                                             {/* Message content */}
                                             <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"} max-w-[80%]`}>
                                                 {showSender && !isOwn && (
-                                                    <p className="text-xs text-zinc-500 mb-1 ml-1 font-medium">
+                                                    <p className="text-xs text-zinc-500 mb-1 ml-1 font-medium flex items-center gap-1">
                                                         {formatSender(msg.sender_address)}
+                                                        {msg.is_pinned && (
+                                                            <span className="text-amber-400" title="Pinned message">
+                                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                                    <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
+                                                                </svg>
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                )}
+                                                {/* Pinned indicator for own messages or when sender not shown */}
+                                                {msg.is_pinned && (showSender || isOwn) && isOwn && (
+                                                    <p className="text-xs text-amber-400 mb-1 mr-1 font-medium flex items-center gap-1 justify-end">
+                                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
+                                                        </svg>
+                                                        Pinned
                                                     </p>
                                                 )}
                                                 {isImage ? (
@@ -803,6 +909,27 @@ export function ChannelChatModal({
                                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                                                         </svg>
                                                                     </button>
+                                                                    {/* Pin Button - Admin Only */}
+                                                                    {isAdmin && (
+                                                                        <button
+                                                                            onClick={() => handlePinMessage(msg.id, msg.is_pinned || false)}
+                                                                            disabled={pinningMessage === msg.id}
+                                                                            className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border transition-colors ${
+                                                                                msg.is_pinned
+                                                                                    ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                                                                                    : "bg-zinc-700 hover:bg-zinc-600 border-zinc-600 text-zinc-300"
+                                                                            }`}
+                                                                            title={msg.is_pinned ? "Unpin message" : "Pin message"}
+                                                                        >
+                                                                            {pinningMessage === msg.id ? (
+                                                                                <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                                                            ) : (
+                                                                                <svg className="w-4 h-4" fill={msg.is_pinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={msg.is_pinned ? 0 : 2}>
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                                                                </svg>
+                                                                            )}
+                                                                        </button>
+                                                                    )}
                                                                 </motion.div>
                                                             )}
                                                         </AnimatePresence>

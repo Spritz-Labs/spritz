@@ -3950,22 +3950,22 @@ function DashboardContent({
                     </AnimatePresence>
                 </main>
 
-                {/* Bottom Navigation Bar - Floating Pill Style */}
-                <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 safe-area-pb">
-                    <div className="bg-zinc-900/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl shadow-black/50 px-2">
-                        <div className="flex items-center gap-1 py-2">
+                {/* Bottom Navigation Bar - Mobile-First Fixed Style */}
+                <nav className="fixed bottom-0 left-0 right-0 z-50 pb-[env(safe-area-inset-bottom)]">
+                    <div className="bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 shadow-2xl shadow-black/50">
+                        <div className="flex items-center justify-around py-1.5 px-1 max-w-lg mx-auto">
                             {/* Wallet Tab - Beta testers only */}
                             {hasBetaAccess && (
                                 <button
                                     onClick={() => setIsWalletModalOpen(true)}
-                                    className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                    className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
                                         isWalletModalOpen
                                             ? "text-emerald-400 bg-emerald-500/20"
-                                            : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                            : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                     }`}
                                 >
-                                    <span className="text-lg">💳</span>
-                                    <span className="text-[10px] font-medium">
+                                    <span className="text-xl">💳</span>
+                                    <span className="text-[9px] font-medium mt-0.5">
                                         Wallet
                                     </span>
                                 </button>
@@ -3974,14 +3974,14 @@ function DashboardContent({
                             {/* Agents Tab */}
                             <button
                                 onClick={() => setActiveNavTab("agents")}
-                                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
                                     activeNavTab === "agents"
                                         ? "text-purple-400 bg-purple-500/20"
-                                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                 }`}
                             >
-                                <span className="text-lg">✨</span>
-                                <span className="text-[10px] font-medium">
+                                <span className="text-xl">✨</span>
+                                <span className="text-[9px] font-medium mt-0.5">
                                     Agents
                                 </span>
                             </button>
@@ -3989,14 +3989,14 @@ function DashboardContent({
                             {/* Friends Tab */}
                             <button
                                 onClick={() => setActiveNavTab("friends")}
-                                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
                                     activeNavTab === "friends"
                                         ? "text-orange-400 bg-orange-500/20"
-                                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                 }`}
                             >
-                                <span className="text-lg">👥</span>
-                                <span className="text-[10px] font-medium">
+                                <span className="text-xl">👥</span>
+                                <span className="text-[9px] font-medium mt-0.5">
                                     Friends
                                 </span>
                             </button>
@@ -4004,14 +4004,14 @@ function DashboardContent({
                             {/* Chats Tab */}
                             <button
                                 onClick={() => setActiveNavTab("chats")}
-                                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all relative ${
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all relative ${
                                     activeNavTab === "chats"
                                         ? "text-blue-400 bg-blue-500/20"
-                                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                 }`}
                             >
-                                <span className="text-lg">💬</span>
-                                <span className="text-[10px] font-medium">
+                                <span className="text-xl">💬</span>
+                                <span className="text-[9px] font-medium mt-0.5">
                                     Chats
                                 </span>
                                 {/* Unread indicator */}
@@ -4019,21 +4019,21 @@ function DashboardContent({
                                     Object.values(unreadCounts).some(
                                         (c) => c > 0
                                     ) && (
-                                        <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                                        <span className="absolute top-0 right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                                     )}
                             </button>
 
                             {/* Calls Tab */}
                             <button
                                 onClick={() => setActiveNavTab("calls")}
-                                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
                                     activeNavTab === "calls"
                                         ? "text-green-400 bg-green-500/20"
-                                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                 }`}
                             >
-                                <span className="text-lg">📞</span>
-                                <span className="text-[10px] font-medium">
+                                <span className="text-xl">📞</span>
+                                <span className="text-[9px] font-medium mt-0.5">
                                     Calls
                                 </span>
                             </button>
@@ -4043,14 +4043,14 @@ function DashboardContent({
                                 onClick={() => {
                                     setIsBugReportModalOpen(true);
                                 }}
-                                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
                                     isBugReportModalOpen
                                         ? "text-orange-400 bg-orange-500/20"
-                                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                 }`}
                             >
-                                <span className="text-lg">🐛</span>
-                                <span className="text-[10px] font-medium">
+                                <span className="text-xl">🐛</span>
+                                <span className="text-[9px] font-medium mt-0.5">
                                     Report
                                 </span>
                             </button>
@@ -4058,14 +4058,14 @@ function DashboardContent({
                             {/* Settings Tab - just opens modal, doesn't change active tab */}
                             <button
                                 onClick={() => setIsSettingsModalOpen(true)}
-                                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
                                     isSettingsModalOpen
                                         ? "text-zinc-200 bg-zinc-700/50"
-                                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                 }`}
                             >
-                                <span className="text-lg">⚙️</span>
-                                <span className="text-[10px] font-medium">
+                                <span className="text-xl">⚙️</span>
+                                <span className="text-[9px] font-medium mt-0.5">
                                     Settings
                                 </span>
                             </button>
@@ -4073,8 +4073,8 @@ function DashboardContent({
                     </div>
                 </nav>
 
-                {/* Spacer for floating bottom nav */}
-                <div className="h-24" />
+                {/* Spacer for fixed bottom nav + safe area */}
+                <div className="h-20 pb-[env(safe-area-inset-bottom)]" />
 
                 {/* Footer - Sticky to bottom */}
                 <footer className="border-t border-zinc-800 bg-zinc-900/50 py-4 px-4 mt-auto">
@@ -4578,6 +4578,7 @@ function DashboardContent({
                     notificationsEnabled={isNotificationsEnabled(selectedChannel.id)}
                     onToggleNotifications={() => toggleChannelNotifications(selectedChannel.id)}
                     onSetActiveChannel={setActiveChannel}
+                    isAdmin={isAdmin}
                 />
             )}
 
