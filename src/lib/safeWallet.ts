@@ -429,15 +429,13 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] Creating smart account client...`);
     console.log(`[SafeWallet] Paymaster context:`, paymasterContext);
 
-    // Create smart account client with Pimlico
-    // Try without paymaster first to debug the simulation issue
+    // Create smart account client with Pimlico bundler and paymaster
     const smartAccountClient = createSmartAccountClient({
         account: safeAccount,
         chain,
         bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-        // Temporarily disable paymaster to debug simulation failure
-        // paymaster: pimlicoClient,
-        // paymasterContext,
+        paymaster: pimlicoClient,
+        paymasterContext,
         userOperation: {
             estimateFeesPerGas: async () => {
                 const prices = await pimlicoClient.getUserOperationGasPrice();
