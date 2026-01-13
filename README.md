@@ -38,12 +38,22 @@ Real-time messaging, video calls, livestreaming, and AI agents for Web3. Connect
 
 ### 🔐 Identity & Authentication
 
-- **Multi-Chain Support** - Connect Ethereum, Base, and Solana wallets
+- **Multi-Chain Support** - Connect Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Unichain, and Solana wallets
 - **SIWE/SIWS** - Sign-In With Ethereum/Solana for secure authentication
 - **Passkey Authentication** - Passwordless login using Face ID, Touch ID, or Windows Hello
 - **Multi-Wallet Support** - Connect MetaMask, Coinbase Wallet, Phantom, and 300+ wallets
 - **ENS Integration** - Resolve ENS names with live avatar preview
-- **Smart Accounts** - ERC-4337 account abstraction with Safe
+- **Smart Accounts** - ERC-4337 account abstraction with Safe (same address on all EVM chains)
+
+### 💰 Smart Wallet
+
+- **Non-Custodial** - Your keys, your crypto. We never store private keys
+- **Passkey Signing** - Sign transactions with Face ID, Touch ID, or Windows Hello
+- **Multi-Chain** - Same wallet address on all 7 supported EVM chains
+- **Gas Sponsorship** - Free transactions on L2s (Base, Arbitrum, Optimism, Polygon, BNB Chain, Unichain)
+- **ERC-20 Gas** - Pay gas in USDC on Ethereum mainnet (no ETH needed)
+- **The Graph Integration** - Real-time token balances and transaction history
+- **Trusted Tokens** - Spam token filtering with curated whitelist
 
 ### 👥 Social
 
@@ -87,7 +97,8 @@ Real-time messaging, video calls, livestreaming, and AI agents for Web3. Connect
 | **3D Graphics** | Three.js with React Three Fiber |
 | **Web3 (EVM)** | viem, wagmi, permissionless.js |
 | **Web3 (Solana)** | @solana/wallet-adapter |
-| **Account Abstraction** | Pimlico, Safe Smart Accounts |
+| **Account Abstraction** | Pimlico, Safe Smart Accounts (ERC-4337) |
+| **Token Data** | The Graph Token API |
 | **Wallet Connection** | Reown AppKit (WalletConnect) |
 | **Video Calls** | Huddle01 SDK |
 | **Livestreaming** | Livepeer (WebRTC/WHIP + HLS) |
@@ -179,8 +190,12 @@ LIVEPEER_API_KEY=your_livepeer_api_key
 ### Smart Accounts (Passkeys)
 
 ```env
-# Pimlico (ERC-4337)
+# Pimlico (ERC-4337 Bundler & Paymaster)
 NEXT_PUBLIC_PIMLICO_API_KEY=your_pimlico_api_key
+NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID=sp_your_policy_id
+
+# The Graph Token API (for balances & transactions)
+GRAPH_TOKEN_API_KEY=your_graph_token_api_key
 
 # Email Auth (Optional - for email login feature)
 EMAIL_AUTH_SECRET=your_secure_secret_for_email_key_derivation
@@ -272,7 +287,24 @@ GOOGLE_REDIRECT_URI=https://app.spritz.chat/api/calendar/callback
 1. Go to [Pimlico Dashboard](https://dashboard.pimlico.io/)
 2. Create an account and project
 3. Copy your API key
-4. Enable Base Sepolia network
+4. Create a sponsorship policy and copy the policy ID
+5. Fund your paymaster on each chain you want to sponsor:
+
+| Chain | Sponsorship | Fund Paymaster? |
+|-------|-------------|-----------------|
+| Ethereum | User pays USDC | No |
+| Base | Sponsored | Yes |
+| Arbitrum | Sponsored | Yes |
+| Optimism | Sponsored | Yes |
+| Polygon | Sponsored | Yes |
+| BNB Chain | Sponsored | Yes |
+| Unichain | Sponsored | Yes |
+
+### The Graph Token API
+
+1. Go to [The Graph Token API](https://thegraph.com/studio/apikeys/)
+2. Create an API key
+3. Token API provides real-time balances and transaction history across all chains
 
 ### Huddle01
 
@@ -499,11 +531,73 @@ src/
 │   ├── useAuth.ts          # Authentication
 │   ├── useStreams.ts       # Livestream management
 │   ├── useBetaAccess.ts    # Feature flags
+│   ├── useSmartWallet.ts   # Safe wallet address
+│   ├── useSafePasskeySend.ts # Passkey transaction signing
+│   ├── useWalletBalances.ts  # Multi-chain balances
+│   ├── useTransactionHistory.ts # Tx history
 │   └── ...
-└── lib/
-    ├── livepeer.ts         # Livepeer API utils
-    └── x402.ts             # x402 payment utils
+├── lib/
+│   ├── safeWallet.ts       # Safe + Pimlico integration
+│   ├── smartAccount.ts     # Address calculation
+│   ├── livepeer.ts         # Livepeer API utils
+│   └── x402.ts             # x402 payment utils
+└── config/
+    └── chains.ts           # Supported chains config
 ```
+
+## Smart Wallet Architecture
+
+Spritz uses Safe Smart Accounts (ERC-4337) to provide a seamless, non-custodial wallet experience across all authentication methods.
+
+### Supported Chains
+
+| Chain | Chain ID | Gas | Notes |
+|-------|----------|-----|-------|
+| Ethereum | 1 | User pays (USDC) | ERC-20 paymaster |
+| Base | 8453 | Sponsored | Free transactions |
+| Arbitrum | 42161 | Sponsored | Free transactions |
+| Optimism | 10 | Sponsored | Free transactions |
+| Polygon | 137 | Sponsored | Free transactions |
+| BNB Chain | 56 | Sponsored | Free transactions |
+| Unichain | 130 | Sponsored | Free transactions |
+
+### Same Address Everywhere
+
+Your Safe wallet address is **deterministic and identical** across all EVM chains. Send to any chain, funds are never lost - just on a different network at the same address.
+
+### Authentication Methods & Wallet Access
+
+| Auth Method | Spritz ID | Wallet Signer | Notes |
+|-------------|-----------|---------------|-------|
+| **EVM Wallet** | Wallet address | Wallet signs | MetaMask, Coinbase, etc. |
+| **Passkey** | Derived address | Passkey (WebAuthn) | Face ID, Touch ID |
+| **Email** | Derived address | Passkey required | Must register passkey |
+| **World ID** | Derived address | Passkey required | Must register passkey |
+| **Alien ID** | Derived address | Passkey required | Must register passkey |
+| **Solana** | Solana address | Passkey required | Can't sign EVM txs |
+
+### Passkey Flow
+
+For non-EVM-wallet users, the wallet uses WebAuthn passkeys for transaction signing:
+
+```
+User logs in (email/passkey/Solana/etc.)
+    ↓
+System prompts to register passkey (if not already)
+    ↓
+Passkey creates P256 public key stored on device
+    ↓
+Safe Smart Account created with passkey as signer
+    ↓
+User can now send/receive on all EVM chains
+```
+
+### Key Benefits
+
+- **Non-Custodial** - Private keys never leave the user's device
+- **No Seed Phrases** - Passkeys are backed up automatically (iCloud, Google, etc.)
+- **Cross-Chain** - Same address on all supported chains
+- **Gasless** - Sponsored transactions on L2s via Pimlico
 
 ## AI Agents
 
@@ -594,4 +688,4 @@ Commercial use requires a separate license. Contact connect@spritz.chat for comm
 
 Built with 🍊 by the Spritz team
 
-Powered by [Google Gemini](https://ai.google.dev/), [Huddle01](https://huddle01.com), [Livepeer](https://livepeer.org), [Logos Messaging](https://logos.co/tech-stack), [Supabase](https://supabase.com), [Pimlico](https://pimlico.io), [Reown](https://reown.com), and [x402](https://x402.org)
+Powered by [Google Gemini](https://ai.google.dev/), [Huddle01](https://huddle01.com), [Livepeer](https://livepeer.org), [Logos Messaging](https://logos.co/tech-stack), [Supabase](https://supabase.com), [Pimlico](https://pimlico.io), [Safe](https://safe.global), [The Graph](https://thegraph.com), [Reown](https://reown.com), and [x402](https://x402.org)
