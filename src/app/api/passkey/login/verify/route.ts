@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
 
         // Verify the authentication response
         const allowedOrigins = getAllowedOrigins();
-        const rpId = getRpId(request);
+        // rpId already defined above for logging
         
         let verification;
         try {
