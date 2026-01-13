@@ -21,6 +21,7 @@ import {
     formatEther,
     custom,
     bytesToHex,
+    concat,
 } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon } from "viem/chains";
 import { 
@@ -34,11 +35,13 @@ import {
 import { 
     createPimlicoClient,
 } from "permissionless/clients/pimlico";
-import { entryPoint07Address } from "viem/account-abstraction";
 import { 
-    encodeWebAuthnSignature,
+    entryPoint07Address,
+    toWebAuthnAccount,
+    type WebAuthnAccount,
+} from "viem/account-abstraction";
+import { 
     type P256PublicKey,
-    SAFE_WEBAUTHN_SIGNER_SINGLETON,
 } from "./passkeySigner";
 
 // Supported chains for Safe deployment (Base only for now during testing)
@@ -327,27 +330,21 @@ export async function sendSafeTransaction(
 }
 
 /**
- * Passkey signing function type
- */
-export type PasskeySignFunction = (challenge: Hex) => Promise<{
-    authenticatorData: Uint8Array;
-    clientDataJSON: string;
-    signature: Uint8Array;
-} | null>;
-
-/**
  * Passkey credential for Safe
+ * Using viem's WebAuthn types for proper integration
  */
 export interface PasskeyCredential {
-    publicKey: P256PublicKey;
+    /** The credential ID (base64url encoded) */
     credentialId: string;
-    sign: PasskeySignFunction;
+    /** The P256 public key coordinates */
+    publicKey: P256PublicKey;
 }
 
 /**
  * Create a Safe Smart Account Client with a passkey owner
  * 
- * This uses Safe's WebAuthn signer module to enable passkey-based signing.
+ * Uses viem's toWebAuthnAccount and permissionless.js's Safe + WebAuthn integration.
+ * This properly uses SafeWebAuthnSharedSigner for ERC-4337 compatibility.
  */
 export async function createPasskeySafeAccountClient(
     passkeyCredential: PasskeyCredential,
@@ -361,59 +358,33 @@ export async function createPasskeySafeAccountClient(
     const publicClient = getPublicClient(chainId);
     const pimlicoClient = getPimlicoClient(chainId);
 
-    // For passkey signing, we need to use a WebAuthn signer as the Safe owner
-    // The signer address is deterministic based on the public key coordinates and verifier
-    const { calculateWebAuthnSignerAddress } = await import("./passkeySigner");
-    const webAuthnSignerAddress = calculateWebAuthnSignerAddress(passkeyCredential.publicKey, chainId);
-    console.log(`[SafeWallet] WebAuthn signer address: ${webAuthnSignerAddress}`);
+    // Convert our P256 public key to the format viem expects (concatenated x||y)
+    // Remove '0x' prefix, concatenate, add '0x' back
+    const publicKeyHex = concat([
+        passkeyCredential.publicKey.x as Hex,
+        passkeyCredential.publicKey.y as Hex,
+    ]).slice(2); // Remove extra 0x from concat
+    const formattedPublicKey = `0x${publicKeyHex.replace(/^0x/, '')}` as Hex;
 
-    // Create Safe account with the WebAuthn signer as owner
+    console.log(`[SafeWallet] Creating WebAuthn account with credential: ${passkeyCredential.credentialId.slice(0, 20)}...`);
+    console.log(`[SafeWallet] Public key (hex): ${formattedPublicKey.slice(0, 30)}...`);
+
+    // Create a WebAuthn account using viem's built-in support
+    const webAuthnAccount = toWebAuthnAccount({
+        credential: {
+            id: passkeyCredential.credentialId,
+            publicKey: formattedPublicKey,
+        },
+        // rpId will be inferred from current domain in browser
+    });
+
+    console.log(`[SafeWallet] WebAuthn account created, type: ${webAuthnAccount.type}`);
+
+    // Create Safe account with the WebAuthn account as owner
+    // permissionless.js will automatically use SafeWebAuthnSharedSigner
     const safeAccount = await toSafeSmartAccount({
         client: publicClient,
-        owners: [{
-            address: webAuthnSignerAddress,
-            type: "local",
-            signMessage: async ({ message }: { message: string | { raw: string | Uint8Array } }) => {
-                // For passkey signing, we need to sign the message with WebAuthn
-                const messageBytes = typeof message === "string" 
-                    ? new TextEncoder().encode(message)
-                    : typeof message.raw === "string"
-                        ? new TextEncoder().encode(message.raw)
-                        : message.raw;
-                
-                const challenge = bytesToHex(messageBytes instanceof Uint8Array ? messageBytes : new Uint8Array(messageBytes));
-                const result = await passkeyCredential.sign(challenge as Hex);
-                
-                if (!result) {
-                    throw new Error("Passkey signing cancelled");
-                }
-                
-                // Encode the WebAuthn signature
-                return encodeWebAuthnSignature(
-                    result.authenticatorData,
-                    result.clientDataJSON,
-                    result.signature
-                );
-            },
-            signTypedData: async (typedData: Record<string, unknown>) => {
-                // For typed data, we hash it first then sign
-                const { hashTypedData } = await import("viem");
-                const hash = hashTypedData(typedData as Parameters<typeof hashTypedData>[0]);
-                
-                const result = await passkeyCredential.sign(hash);
-                
-                if (!result) {
-                    throw new Error("Passkey signing cancelled");
-                }
-                
-                return encodeWebAuthnSignature(
-                    result.authenticatorData,
-                    result.clientDataJSON,
-                    result.signature
-                );
-            },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any],
+        owners: [webAuthnAccount],
         version: "1.4.1",
         entryPoint: {
             address: entryPoint07Address,
@@ -421,6 +392,8 @@ export async function createPasskeySafeAccountClient(
         },
         saltNonce: BigInt(0),
     });
+
+    console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
 
     // Get sponsorship context if configured
     const paymasterContext = getPaymasterContext();

@@ -3,18 +3,19 @@
 /**
  * Safe Passkey Send Hook
  * 
- * Uses permissionless + Pimlico for passkey-based Safe transaction signing.
+ * Uses permissionless + Pimlico + viem's WebAuthn support for passkey-based Safe transaction signing.
  * This enables users who registered with passkeys to send transactions.
+ * 
+ * Uses SafeWebAuthnSharedSigner for proper ERC-4337 compatibility.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { type Address, type Hex, parseEther, parseUnits } from "viem";
 import {
     createPasskeySafeAccountClient,
     sendSafeTransaction,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
-import { type P256PublicKey } from "@/lib/passkeySigner";
 
 export type SafePasskeyStatus = "idle" | "loading" | "ready" | "signing" | "sending" | "success" | "error";
 
@@ -90,7 +91,7 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
             });
 
             // For now, use the user's Spritz address as the Safe address
-            // In production, this would be a counterfactual Safe address
+            // In production, this would be the counterfactual Safe address
             setSafeAddress(userAddress);
             setStatus("ready");
             
@@ -103,6 +104,9 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
 
     /**
      * Send a transaction using passkey signing via permissionless + Pimlico
+     * 
+     * This uses viem's toWebAuthnAccount which handles all the WebAuthn
+     * signing logic internally, including prompting the user for their passkey.
      */
     const sendTransaction = useCallback(async (
         to: Address,
@@ -120,71 +124,28 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
         setTxHash(null);
 
         try {
-            console.log("[SafePasskeySend] Creating passkey credential for signing");
+            console.log("[SafePasskeySend] Starting passkey transaction");
             console.log("[SafePasskeySend] Credential ID:", credential.credentialId.slice(0, 20) + "...");
 
-            // Create the passkey credential object with signing function
-            const publicKey: P256PublicKey = {
-                x: credential.publicKeyX as Hex,
-                y: credential.publicKeyY as Hex,
-            };
-
-            // Create a signing function that prompts for passkey
-            const signWithPasskey = async (challenge: Hex): Promise<{
-                authenticatorData: Uint8Array;
-                clientDataJSON: string;
-                signature: Uint8Array;
-            } | null> => {
-                const rpId = window.location.hostname;
-                const challengeBytes = hexToBytes(challenge);
-                
-                const options: PublicKeyCredentialRequestOptions = {
-                    challenge: challengeBytes.buffer.slice(
-                        challengeBytes.byteOffset,
-                        challengeBytes.byteOffset + challengeBytes.byteLength
-                    ) as ArrayBuffer,
-                    rpId,
-                    allowCredentials: [{
-                        id: base64UrlToArrayBuffer(credential.credentialId),
-                        type: "public-key",
-                        transports: ["internal", "hybrid"] as AuthenticatorTransport[],
-                    }],
-                    userVerification: "required",
-                    timeout: 60000,
-                };
-
-                try {
-                    const assertion = await navigator.credentials.get({
-                        publicKey: options,
-                    }) as PublicKeyCredential;
-
-                    if (!assertion) return null;
-
-                    const response = assertion.response as AuthenticatorAssertionResponse;
-                    
-                    return {
-                        authenticatorData: new Uint8Array(response.authenticatorData),
-                        clientDataJSON: new TextDecoder().decode(response.clientDataJSON),
-                        signature: new Uint8Array(response.signature),
-                    };
-                } catch {
-                    return null;
-                }
-            };
-
+            // Create the passkey credential object
+            // viem's toWebAuthnAccount will handle the actual signing
             const passkeyCredential: PasskeyCredential = {
-                publicKey,
                 credentialId: credential.credentialId,
-                sign: signWithPasskey,
+                publicKey: {
+                    x: credential.publicKeyX as Hex,
+                    y: credential.publicKeyY as Hex,
+                },
             };
 
             // Create Safe account client with passkey signer
+            // This uses SafeWebAuthnSharedSigner for ERC-4337 compatibility
             console.log("[SafePasskeySend] Creating Safe account client...");
             const safeClient = await createPasskeySafeAccountClient(
                 passkeyCredential,
                 chainId
             );
 
+            console.log("[SafePasskeySend] Safe client created, sending transaction...");
             setStatus("sending");
 
             // Send the transaction
@@ -250,25 +211,4 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
         sendTransaction,
         reset,
     };
-}
-
-// Helper to convert hex string to bytes
-function hexToBytes(hex: Hex): Uint8Array {
-    const bytes = new Uint8Array((hex.length - 2) / 2);
-    for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(hex.slice(2 + i * 2, 4 + i * 2), 16);
-    }
-    return bytes;
-}
-
-// Convert base64url string to ArrayBuffer
-function base64UrlToArrayBuffer(base64url: string): ArrayBuffer {
-    const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, "=");
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes.buffer;
 }

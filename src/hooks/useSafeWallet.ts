@@ -199,10 +199,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
             };
 
             // Store the passkey credential for signing
+            // Note: viem's toWebAuthnAccount handles the actual signing
             setPasskeyCredential({
                 publicKey,
                 credentialId: credential.credentialId,
-                sign: signWithPasskey,
             });
 
             // Check if already deployed
