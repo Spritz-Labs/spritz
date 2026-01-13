@@ -387,10 +387,11 @@ export async function createPasskeySafeAccountClient(
 
     // Create Safe account with the WebAuthn account as owner
     // permissionless.js will automatically use SafeWebAuthnSharedSigner
+    // Using Safe v1.5.0 for better WebAuthn compatibility
     const safeAccount = await toSafeSmartAccount({
         client: publicClient,
         owners: [webAuthnAccount],
-        version: "1.4.1",
+        version: "1.5.0",
         entryPoint: {
             address: entryPoint07Address,
             version: "0.7",
