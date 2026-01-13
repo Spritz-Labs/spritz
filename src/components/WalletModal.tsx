@@ -1363,15 +1363,37 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
+                                        {/* Safe Wallet warning for EOA users */}
+                                        {useSafeForSend && !canUsePasskeySigning && safeAddress && (
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                                                <div className="flex gap-2">
+                                                    <span className="text-amber-400">⚠️</span>
+                                                    <div>
+                                                        <p className="text-xs text-amber-300 font-medium">Safe Wallet requires deposits first</p>
+                                                        <p className="text-xs text-zinc-400 mt-1">
+                                                            Your Safe is a <strong>separate address</strong> from your connected wallet. 
+                                                            Deposit funds to your Safe first:
+                                                        </p>
+                                                        <p className="text-xs text-amber-400/80 font-mono mt-1 break-all">
+                                                            {safeAddress.slice(0, 18)}...{safeAddress.slice(-8)}
+                                                        </p>
+                                                        <p className="text-xs text-zinc-500 mt-1">
+                                                            Or toggle to EOA to send directly from your wallet.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Mainnet info for Safe wallet */}
                                         {useSafeForSend && selectedChainId === 1 && (
                                             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
                                                 <div className="flex gap-2">
                                                     <span className="text-blue-400">ℹ️</span>
                                                     <div>
-                                                        <p className="text-xs text-blue-300 font-medium">Ethereum mainnet gas fees</p>
+                                                        <p className="text-xs text-blue-300 font-medium">Mainnet: USDC required for gas</p>
                                                         <p className="text-xs text-zinc-400 mt-1">
-                                                            Gas will be paid from your wallet&apos;s ETH balance.
+                                                            Safe needs ETH to send + USDC to pay for gas.
                                                             For <strong className="text-emerald-400">free</strong> transactions, try Base or other L2 chains.
                                                         </p>
                                                     </div>
