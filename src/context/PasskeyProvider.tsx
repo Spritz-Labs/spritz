@@ -62,19 +62,6 @@ function base64UrlDecode(str: string): string {
     }
 }
 
-// Browser-compatible base64url encode
-function base64UrlEncode(str: string): string {
-    try {
-        return btoa(str)
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '');
-    } catch {
-        // Fallback for Node.js environment (SSR)
-        return Buffer.from(str).toString("base64url");
-    }
-}
-
 // Validate and decode session token (handles both JWT format and simple base64)
 function validateSession(token: string): { userAddress: string; exp: number } | null {
     try {
@@ -126,14 +113,6 @@ type OldCredential = {
     raw: { id: string; type: string };
 };
 
-async function hashWithDeviceEntropy(publicKey: string, deviceId: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(publicKey + deviceId);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 function checkForOldCredentials(): { 
     hasOldCredentials: boolean; 
     credential?: OldCredential; 
@@ -165,21 +144,6 @@ function checkForOldCredentials(): {
     }
 }
 
-// Migrate old credential to new system by deriving the same address
-async function migrateOldCredential(credential: OldCredential, deviceId: string): Promise<string | null> {
-    try {
-        // Derive the wallet address the same way the old system did
-        const deviceHash = await hashWithDeviceEntropy(credential.publicKey, deviceId);
-        const walletAddress = `0x${deviceHash.slice(0, 40)}`;
-        
-        console.log("[Passkey] Derived address from old credential:", walletAddress);
-        return walletAddress;
-    } catch (e) {
-        console.error("[Passkey] Error migrating old credential:", e);
-        return null;
-    }
-}
-
 export function PasskeyProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<PasskeyState>({
         isLoading: false,
@@ -206,24 +170,39 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     console.log("[Passkey] Restored valid session, expires:", 
                         new Date(session.exp).toLocaleDateString());
                     
-                    // Refresh the server session cookie
+                    // SECURITY: Try to extend the server session cookie
+                    // This only works if there's already a valid HttpOnly cookie
                     try {
                         const res = await fetch("/api/auth/session", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ 
-                                userAddress: session.userAddress,
-                                authMethod: "passkey",
-                            }),
-                            credentials: "include",
+                            credentials: "include", // Send existing cookie
                         });
                         if (res.ok) {
-                            console.log("[Passkey] Server session refreshed");
+                            console.log("[Passkey] Server session extended");
+                            setState({
+                                isLoading: false,
+                                isAuthenticated: true,
+                                smartAccountAddress: session.userAddress as Address,
+                                error: null,
+                                hasStoredSession: true,
+                            });
+                            return;
+                        } else if (res.status === 401) {
+                            // Server session expired - localStorage token not enough
+                            // User needs to re-authenticate
+                            console.log("[Passkey] Server session expired, re-auth required");
+                            localStorage.removeItem(SESSION_STORAGE_KEY);
+                            localStorage.removeItem(USER_ADDRESS_KEY);
+                            setState((prev) => ({ ...prev, hasStoredSession: false }));
+                            return;
                         }
                     } catch (e) {
-                        console.warn("[Passkey] Failed to refresh server session:", e);
+                        console.warn("[Passkey] Failed to extend server session:", e);
                     }
                     
+                    // If we couldn't extend but have valid localStorage, still show as authenticated
+                    // (user will need to re-auth on next sensitive action)
                     setState({
                         isLoading: false,
                         isAuthenticated: true,
@@ -237,48 +216,16 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 }
             }
 
-            // Check for OLD credentials (pre-migration system)
+            // SECURITY: Old credential migration removed - insecure
+            // Users with old credentials must re-authenticate via passkey login
+            // This ensures proper server-side verification
             const oldCredCheck = checkForOldCredentials();
-            if (oldCredCheck.hasOldCredentials && oldCredCheck.credential && oldCredCheck.deviceId) {
-                console.log("[Passkey] Attempting to restore from OLD credential system...");
-                
-                // Derive the wallet address from old credentials
-                const derivedAddress = await migrateOldCredential(
-                    oldCredCheck.credential, 
-                    oldCredCheck.deviceId
-                );
-                
-                if (derivedAddress) {
-                    // Check if the derived address matches what was stored
-                    const addressMatches = oldCredCheck.storedAddress?.toLowerCase() === derivedAddress.toLowerCase();
-                    console.log("[Passkey] Address derivation:", addressMatches ? "MATCHES" : "MISMATCH");
-                    
-                    const finalAddress = oldCredCheck.storedAddress || derivedAddress;
-                    
-                    // Create a new-style session token for the old user
-                    const newSessionToken = base64UrlEncode(JSON.stringify({
-                        sub: finalAddress.toLowerCase(),
-                        iat: Date.now(),
-                        exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-                        type: "passkey_migrated",
-                    }));
-                    
-                    // Store in new format
-                    localStorage.setItem(SESSION_STORAGE_KEY, newSessionToken);
-                    localStorage.setItem(USER_ADDRESS_KEY, finalAddress.toLowerCase());
-                    
-                    console.log("[Passkey] ✅ Migrated old credential to new session format");
-                    console.log("[Passkey] User address:", finalAddress);
-                    
-                    setState({
-                        isLoading: false,
-                        isAuthenticated: true,
-                        smartAccountAddress: finalAddress.toLowerCase() as Address,
-                        error: null,
-                        hasStoredSession: true,
-                    });
-                    return;
-                }
+            if (oldCredCheck.hasOldCredentials) {
+                console.log("[Passkey] Found old credentials - user must re-authenticate");
+                console.log("[Passkey] Old credential system is deprecated for security");
+                // Clear old credentials to prevent confusion
+                localStorage.removeItem(OLD_CREDENTIAL_STORAGE_KEY);
+                localStorage.removeItem(OLD_DEVICE_ID_STORAGE_KEY);
             }
 
             // No valid session found
@@ -540,47 +487,13 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 const errorData = await verifyResponse.json();
                 const errorMsg = errorData.error || "Failed to verify authentication";
                 
-                // Check if this is a "credential not found" error - might be an old user
+                // SECURITY: Old credential migration removed - insecure
+                // If credential not found, user must re-register their passkey
                 if (errorMsg.includes("not found") || errorMsg.includes("register first")) {
-                    console.log("[Passkey] Server credential not found, checking for old localStorage credentials...");
-                    
-                    // Try to restore from old credentials
-                    const oldCredCheck = checkForOldCredentials();
-                    if (oldCredCheck.hasOldCredentials && oldCredCheck.credential && oldCredCheck.deviceId) {
-                        console.log("[Passkey] Found old credentials! Attempting migration...");
-                        
-                        const derivedAddress = await migrateOldCredential(
-                            oldCredCheck.credential, 
-                            oldCredCheck.deviceId
-                        );
-                        
-                        if (derivedAddress) {
-                            const finalAddress = oldCredCheck.storedAddress || derivedAddress;
-                            
-                            // Create a new-style session token
-                            const newSessionToken = base64UrlEncode(JSON.stringify({
-                                sub: finalAddress.toLowerCase(),
-                                iat: Date.now(),
-                                exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-                                type: "passkey_migrated",
-                            }));
-                            
-                            localStorage.setItem(SESSION_STORAGE_KEY, newSessionToken);
-                            localStorage.setItem(USER_ADDRESS_KEY, finalAddress.toLowerCase());
-                            
-                            console.log("[Passkey] ✅ Migrated old credential during login!");
-                            console.log("[Passkey] User address:", finalAddress);
-                            
-                            setState({
-                                isLoading: false,
-                                isAuthenticated: true,
-                                smartAccountAddress: finalAddress.toLowerCase() as Address,
-                                error: null,
-                                hasStoredSession: true,
-                            });
-                            return;
-                        }
-                    }
+                    console.log("[Passkey] Server credential not found - user must register a new passkey");
+                    // Clear any old credentials
+                    localStorage.removeItem(OLD_CREDENTIAL_STORAGE_KEY);
+                    localStorage.removeItem(OLD_DEVICE_ID_STORAGE_KEY);
                 }
                 
                 throw new Error(errorMsg);

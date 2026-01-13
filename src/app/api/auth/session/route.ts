@@ -44,93 +44,51 @@ export async function GET(request: NextRequest) {
     });
 }
 
-// POST /api/auth/session/refresh - Refresh/recreate session from localStorage data
-// This is used when the user has a valid localStorage session but the HTTP-only cookie expired
+// POST /api/auth/session - Extend an existing valid session
+// SECURITY: This endpoint ONLY works if the user already has a valid session cookie.
+// It does NOT create sessions from scratch - that must go through proper auth flows
+// (passkey login, email verification, wallet signature, etc.)
 export async function POST(request: NextRequest) {
     // Rate limit
     const rateLimitResponse = await checkRateLimit(request, "auth");
     if (rateLimitResponse) return rateLimitResponse;
 
     try {
-        // Safely parse JSON body
-        let body;
-        try {
-            const text = await request.text();
-            if (!text || text.trim() === "") {
-                return NextResponse.json(
-                    { error: "Request body is required" },
-                    { status: 400 }
-                );
-            }
-            body = JSON.parse(text);
-        } catch {
+        // SECURITY: Require existing valid session - this endpoint only EXTENDS sessions
+        // It cannot CREATE sessions from scratch
+        const existingSession = await getAuthenticatedUser(request);
+        if (!existingSession) {
+            console.warn("[Session] Attempted session refresh without valid existing session");
             return NextResponse.json(
-                { error: "Invalid JSON in request body" },
-                { status: 400 }
+                { error: "Authentication required. Please login again." },
+                { status: 401 }
             );
         }
         
-        const { userAddress, authMethod } = body;
+        // Use the verified session data, not client-provided data
+        const userAddress = existingSession.userAddress;
+        const authMethod = existingSession.authMethod;
         
-        if (!userAddress || !authMethod) {
-            return NextResponse.json(
-                { error: "userAddress and authMethod required" },
-                { status: 400 }
-            );
-        }
-        
-        // Validate authMethod
-        const validMethods: SessionPayload["authMethod"][] = [
-            "wallet", "email", "passkey", "world_id", "alien_id", "solana"
-        ];
-        if (!validMethods.includes(authMethod)) {
-            return NextResponse.json(
-                { error: "Invalid auth method" },
-                { status: 400 }
-            );
-        }
-        
-        // Verify user exists in database
+        // Optionally update last login in database
         if (supabase) {
-            const { data: user, error } = await supabase
+            await supabase
                 .from("shout_users")
-                .select("id, wallet_address")
-                .eq("wallet_address", userAddress.toLowerCase ? userAddress.toLowerCase() : userAddress)
-                .maybeSingle();
-            
-            if (error || !user) {
-                // User doesn't exist - create them
-                console.log("[Session] Creating new user for refresh:", userAddress.slice(0, 20) + "...");
-                const { error: insertError } = await supabase.from("shout_users").insert({
-                    wallet_address: userAddress.toLowerCase ? userAddress.toLowerCase() : userAddress,
-                    first_login: new Date().toISOString(),
-                    last_login: new Date().toISOString(),
-                    login_count: 1,
-                });
-                if (insertError) {
-                    console.error("[Session] Error creating user:", insertError);
-                }
-            } else {
-                // Update last login
-                await supabase
-                    .from("shout_users")
-                    .update({ last_login: new Date().toISOString() })
-                    .eq("wallet_address", user.wallet_address);
-            }
+                .update({ last_login: new Date().toISOString() })
+                .eq("wallet_address", userAddress);
         }
         
-        console.log("[Session] Refreshed session for:", userAddress.slice(0, 20) + "...", "method:", authMethod);
+        console.log("[Session] Extended session for:", userAddress.slice(0, 10) + "...", "method:", authMethod);
         
-        // Create new session
+        // Create new session with extended expiry
         return createAuthResponse(
-            userAddress.toLowerCase ? userAddress.toLowerCase() : userAddress,
+            userAddress,
             authMethod,
-            { success: true, refreshed: true }
+            { success: true, extended: true }
         );
     } catch (error) {
-        console.error("[Session] Refresh error:", error);
+        console.error("[Session] Extend error:", error);
         return NextResponse.json(
-            { error: "Failed to refresh session" },
+            { error: "Failed to extend session" },
             { status: 500 }
         );
     }
