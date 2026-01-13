@@ -12,9 +12,15 @@ const supabaseKey =
 const supabase =
     supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Secret for key derivation (in production, use a secure secret from env)
-const EMAIL_AUTH_SECRET =
-    process.env.EMAIL_AUTH_SECRET || "spritz-email-auth-secret-v1";
+// SECURITY: Email auth secret must be explicitly set - no fallback
+const EMAIL_AUTH_SECRET = process.env.EMAIL_AUTH_SECRET;
+if (!EMAIL_AUTH_SECRET) {
+    if (process.env.NODE_ENV === "production") {
+        throw new Error("CRITICAL: EMAIL_AUTH_SECRET must be set in production!");
+    }
+    console.warn("[EmailLogin] WARNING: No EMAIL_AUTH_SECRET set. Using insecure default for development only.");
+}
+const EFFECTIVE_EMAIL_SECRET = EMAIL_AUTH_SECRET || "dev-only-insecure-email-secret-do-not-use-in-production";
 
 // Session token generation moved to @/lib/session (createFrontendSessionToken)
 // SECURITY: Tokens are now signed with HMAC-SHA256
@@ -81,7 +87,7 @@ export async function POST(request: NextRequest) {
             .eq("id", verification.id);
 
         // Derive the smart account address from email
-        const privateKey = derivePrivateKeyFromEmail(normalizedEmail, EMAIL_AUTH_SECRET);
+        const privateKey = derivePrivateKeyFromEmail(normalizedEmail, EFFECTIVE_EMAIL_SECRET);
         const account = privateKeyToAccount(privateKey);
         const smartAccountAddress = account.address.toLowerCase();
 
