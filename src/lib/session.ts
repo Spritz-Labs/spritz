@@ -2,7 +2,17 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-const SESSION_SECRET = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET || "fallback-secret-change-me";
+// SECURITY: No fallback secrets - must be explicitly set
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET;
+if (!SESSION_SECRET) {
+    // In development, warn but allow. In production, this should fail.
+    if (process.env.NODE_ENV === "production") {
+        throw new Error("CRITICAL: SESSION_SECRET or NEXTAUTH_SECRET must be set in production!");
+    }
+    console.warn("[Session] WARNING: No SESSION_SECRET set. Using insecure default for development only.");
+}
+const EFFECTIVE_SECRET = SESSION_SECRET || "dev-only-insecure-secret-do-not-use-in-production";
+
 const SESSION_DURATION = 7 * 24 * 60 * 60; // 7 days in seconds
 const SESSION_COOKIE_NAME = "spritz_session";
 
@@ -20,7 +30,7 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean) as string[];
 
 // Encode secret for jose library
-const encodedSecret = new TextEncoder().encode(SESSION_SECRET);
+const encodedSecret = new TextEncoder().encode(EFFECTIVE_SECRET);
 
 export interface SessionPayload {
     userAddress: string;
@@ -225,4 +235,71 @@ export async function createAuthResponse(
     });
     
     return setSessionCookie(response, token);
+}
+
+/**
+ * Create a signed token for frontend localStorage
+ * This is a shorter-lived token that the frontend can read (not HttpOnly)
+ * but is still signed to prevent forgery.
+ * 
+ * SECURITY: This token is signed with HMAC-SHA256, not just base64 encoded.
+ */
+export async function createFrontendSessionToken(
+    userAddress: string,
+    authMethod: SessionPayload["authMethod"]
+): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    const FRONTEND_TOKEN_DURATION = 30 * 24 * 60 * 60; // 30 days
+    
+    return new SignJWT({
+        userAddress: userAddress.toLowerCase(),
+        authMethod,
+        purpose: "frontend", // Distinguish from cookie tokens
+    })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt(now)
+        .setExpirationTime(now + FRONTEND_TOKEN_DURATION)
+        .sign(encodedSecret);
+}
+
+/**
+ * Create a signed recovery token
+ * Used for account recovery flows - short-lived (15 minutes)
+ * 
+ * SECURITY: Signed to prevent forgery of recovery tokens
+ */
+export async function createRecoveryToken(
+    userAddress: string,
+    type: "passkey_recovery" | "email_recovery" = "passkey_recovery"
+): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    const RECOVERY_TOKEN_DURATION = 15 * 60; // 15 minutes
+    
+    return new SignJWT({
+        userAddress: userAddress.toLowerCase(),
+        type,
+    })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt(now)
+        .setExpirationTime(now + RECOVERY_TOKEN_DURATION)
+        .sign(encodedSecret);
+}
+
+/**
+ * Verify a recovery token
+ * Returns the user address if valid, null otherwise
+ */
+export async function verifyRecoveryToken(
+    token: string,
+    expectedType: "passkey_recovery" | "email_recovery" = "passkey_recovery"
+): Promise<{ userAddress: string } | null> {
+    try {
+        const { payload } = await jwtVerify(token, encodedSecret);
+        if (payload.type !== expectedType) {
+            return null;
+        }
+        return { userAddress: payload.userAddress as string };
+    } catch {
+        return null;
+    }
 }

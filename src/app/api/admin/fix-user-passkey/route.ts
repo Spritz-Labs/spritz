@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { parseCosePublicKey, calculateWebAuthnSignerAddress } from "@/lib/passkeySigner";
+import { checkRateLimit } from "@/lib/ratelimit";
+import { timingSafeEqual as cryptoTimingSafeEqual } from "crypto";
+
+// Constant-time string comparison to prevent timing attacks
+function timingSafeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    return cryptoTimingSafeEqual(bufA, bufB);
+}
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Admin secret for protection
-const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin-secret-change-me";
+// SECURITY: Admin secret must be explicitly set - no fallback
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
+if (!ADMIN_SECRET && process.env.NODE_ENV === "production") {
+    console.error("[SECURITY] ADMIN_SECRET not set in production - admin endpoints disabled");
+}
 
 /**
  * POST /api/admin/fix-user-passkey
@@ -19,11 +32,27 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin-secret-change-me";
  * - The credential used for login doesn't match the one with P256 coords
  */
 export async function POST(request: NextRequest) {
+    // SECURITY: Rate limit admin endpoints strictly (5 requests per minute)
+    const rateLimitResponse = await checkRateLimit(request, "strict");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
         const { userAddress, adminSecret } = await request.json();
 
-        // Verify admin secret
-        if (adminSecret !== ADMIN_SECRET) {
+        // SECURITY: Admin secret must be configured
+        if (!ADMIN_SECRET) {
+            console.error("[Admin] Attempted admin action but ADMIN_SECRET not configured");
+            return NextResponse.json(
+                { error: "Admin functionality not configured" },
+                { status: 503 }
+            );
+        }
+
+        // SECURITY: Verify admin secret with constant-time comparison
+        if (!adminSecret || adminSecret.length !== ADMIN_SECRET.length || 
+            !timingSafeEqual(adminSecret, ADMIN_SECRET)) {
+            console.warn("[Admin] Failed admin authentication attempt from:", 
+                request.headers.get("x-forwarded-for") || "unknown");
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -36,6 +65,9 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
+        
+        // SECURITY: Log admin action for audit trail
+        console.log("[Admin] fix-user-passkey called for:", userAddress.slice(0, 10) + "...");
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         const normalizedAddress = userAddress.toLowerCase();

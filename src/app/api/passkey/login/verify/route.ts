@@ -3,7 +3,7 @@ import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/types";
 import { checkRateLimit } from "@/lib/ratelimit";
-import { createAuthResponse } from "@/lib/session";
+import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -31,16 +31,8 @@ function getRpId(request: NextRequest): string {
     return host.split(":")[0];
 }
 
-// Generate a session token for frontend localStorage (matches register flow)
-function generateSessionToken(userAddress: string): string {
-    const payload = {
-        sub: userAddress.toLowerCase(),
-        iat: Date.now(),
-        exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-        type: "passkey",
-    };
-    return Buffer.from(JSON.stringify(payload)).toString("base64url");
-}
+// Session token generation moved to @/lib/session (createFrontendSessionToken)
+// SECURITY: Tokens are now signed with HMAC-SHA256
 
 // Get allowed origins - support multiple origins for different environments
 function getAllowedOrigins(): string[] {
@@ -213,7 +205,8 @@ export async function POST(request: NextRequest) {
                     counter: storedCredential.counter,
                     transports: storedCredential.transports as AuthenticatorTransport[],
                 },
-                requireUserVerification: false,
+                // SECURITY: Require user verification (biometric/PIN) for wallet operations
+                requireUserVerification: true,
             });
         } catch (verifyError) {
             console.error("[Passkey] Authentication verification failed:", verifyError);
@@ -271,8 +264,9 @@ export async function POST(request: NextRequest) {
                 .eq("wallet_address", storedCredential.user_address);
         }
 
-        // Generate session token for frontend localStorage (30 days)
-        const sessionToken = generateSessionToken(storedCredential.user_address);
+        // Generate SIGNED session token for frontend localStorage (30 days)
+        // SECURITY: Token is signed with HMAC-SHA256, not just base64 encoded
+        const sessionToken = await createFrontendSessionToken(storedCredential.user_address, "passkey");
 
         // Return session with cookie AND sessionToken for frontend
         return createAuthResponse(

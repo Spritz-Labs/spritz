@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateRegistrationOptions } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit } from "@/lib/ratelimit";
+import { verifyRecoveryToken } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -31,24 +33,14 @@ function getRpId(request: NextRequest): string {
     return host.split(":")[0];
 }
 
-// Validate recovery token
-function validateRecoveryToken(token: string): { valid: boolean; userAddress?: string } {
-    try {
-        const payload = JSON.parse(Buffer.from(token, "base64url").toString());
-        if (
-            payload.type === "passkey_recovery" &&
-            payload.exp > Date.now() &&
-            payload.userAddress
-        ) {
-            return { valid: true, userAddress: payload.userAddress };
-        }
-        return { valid: false };
-    } catch {
-        return { valid: false };
-    }
-}
+// SECURITY: Recovery token validation moved to @/lib/session (verifyRecoveryToken)
+// Now uses signed JWTs instead of unsigned base64
 
 export async function POST(request: NextRequest) {
+    // SECURITY: Rate limit registration attempts (10 per minute)
+    const rateLimitResponse = await checkRateLimit(request, "auth");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
         const { userAddress, displayName, recoveryToken } = await request.json();
         const rpId = getRpId(request);
@@ -60,14 +52,15 @@ export async function POST(request: NextRequest) {
         let isRecoveryFlow = false;
 
         if (recoveryToken) {
-            const recoveryResult = validateRecoveryToken(recoveryToken);
-            if (!recoveryResult.valid || !recoveryResult.userAddress) {
+            // SECURITY: Recovery tokens are now signed JWTs
+            const recoveryResult = await verifyRecoveryToken(recoveryToken, "passkey_recovery");
+            if (!recoveryResult?.userAddress) {
                 return NextResponse.json(
                     { error: "Invalid or expired recovery token" },
                     { status: 400 }
                 );
             }
-            // Use the user address from the recovery token
+            // Use the user address from the signed recovery token
             actualUserAddress = recoveryResult.userAddress;
             isRecoveryFlow = true;
             console.log("[Passkey] Recovery flow for:", actualUserAddress);

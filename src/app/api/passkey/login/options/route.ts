@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAuthenticationOptions } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -34,6 +35,10 @@ function getRpId(request: NextRequest): string {
 }
 
 export async function POST(request: NextRequest) {
+    // SECURITY: Rate limit login attempts (10 per minute)
+    const rateLimitResponse = await checkRateLimit(request, "auth");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
         const { userAddress, useDevicePasskey } = await request.json();
         const rpId = getRpId(request);

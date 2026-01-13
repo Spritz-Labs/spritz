@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
-import { createAuthResponse } from "@/lib/session";
+import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
+import { checkRateLimit } from "@/lib/ratelimit";
 import crypto from "crypto";
 import { 
     parseCosePublicKey, 
@@ -68,6 +69,10 @@ function getAllowedOrigins(): string[] {
 }
 
 export async function POST(request: NextRequest) {
+    // SECURITY: Rate limit registration verification (10 per minute)
+    const rateLimitResponse = await checkRateLimit(request, "auth");
+    if (rateLimitResponse) return rateLimitResponse;
+
     try {
         const { 
             userAddress, 
@@ -174,7 +179,8 @@ export async function POST(request: NextRequest) {
                 expectedChallenge: challenge,
                 expectedOrigin: allowedOrigins,
                 expectedRPID: rpId,
-                requireUserVerification: false, // Allow both UV and non-UV
+                // SECURITY: Require user verification (biometric/PIN) for wallet operations
+                requireUserVerification: true,
             });
         } catch (verifyError) {
             console.error("[Passkey] Verification failed:", verifyError);
@@ -310,8 +316,9 @@ export async function POST(request: NextRequest) {
                 .eq("wallet_address", finalUserAddress);
         }
 
-        // Generate a session token for frontend localStorage (30 days)
-        const sessionToken = await generateSessionToken(finalUserAddress);
+        // Generate a SIGNED session token for frontend localStorage (30 days)
+        // SECURITY: This token is signed with HMAC-SHA256, not just base64 encoded
+        const sessionToken = await createFrontendSessionToken(finalUserAddress, "passkey");
 
         // Return session with HttpOnly cookie AND sessionToken for frontend
         // IMPORTANT: Return the finalUserAddress so client uses the correct address
@@ -323,7 +330,7 @@ export async function POST(request: NextRequest) {
                 verified: true,
                 credentialId,
                 backedUp,
-                sessionToken, // For frontend localStorage
+                sessionToken, // For frontend localStorage (now signed!)
                 userAddress: finalUserAddress, // This is the REAL address to use
             }
         );
@@ -334,17 +341,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-}
-
-// Generate a simple session token
-async function generateSessionToken(userAddress: string): Promise<string> {
-    const payload = {
-        sub: userAddress,
-        iat: Date.now(),
-        exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-        type: "passkey",
-    };
-    
-    // Encode as base64 (in production, sign this with a secret)
-    return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }

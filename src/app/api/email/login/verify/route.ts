@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { privateKeyToAccount } from "viem/accounts";
 import { createHash } from "crypto";
-import { createAuthResponse } from "@/lib/session";
+import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -16,16 +16,8 @@ const supabase =
 const EMAIL_AUTH_SECRET =
     process.env.EMAIL_AUTH_SECRET || "spritz-email-auth-secret-v1";
 
-// Generate a session token for frontend localStorage (matches passkey flow)
-function generateSessionToken(userAddress: string): string {
-    const payload = {
-        sub: userAddress.toLowerCase(),
-        iat: Date.now(),
-        exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-        type: "email",
-    };
-    return Buffer.from(JSON.stringify(payload)).toString("base64url");
-}
+// Session token generation moved to @/lib/session (createFrontendSessionToken)
+// SECURITY: Tokens are now signed with HMAC-SHA256
 
 // Derive a deterministic private key from email + secret (server-side version)
 function derivePrivateKeyFromEmail(
@@ -157,8 +149,9 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Generate session token for frontend localStorage (matches passkey flow)
-        const sessionToken = generateSessionToken(smartAccountAddress);
+        // Generate SIGNED session token for frontend localStorage (matches passkey flow)
+        // SECURITY: Token is signed with HMAC-SHA256, not just base64 encoded
+        const sessionToken = await createFrontendSessionToken(smartAccountAddress, "email");
 
         // Return session with cookie AND sessionToken for frontend
         return createAuthResponse(
