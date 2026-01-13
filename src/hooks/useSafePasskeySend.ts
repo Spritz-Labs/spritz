@@ -17,6 +17,7 @@ import {
     chainRequiresErc20Payment,
     getChainUsdcAddress,
     getPublicClient,
+    checkPaymasterAllowance,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
 
@@ -150,7 +151,7 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
             };
 
             // Check if this chain requires ERC-20 payment (mainnet)
-            // If user has no USDC, fall back to native ETH payment
+            // If user has no USDC or no approval, fall back to native ETH payment
             let forceNativeGas = false;
             if (chainRequiresErc20Payment(effectiveChainId) && safeAddress) {
                 const usdcAddress = getChainUsdcAddress(effectiveChainId);
@@ -171,16 +172,23 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
                             args: [safeAddress],
                         }) as bigint;
                         
-                        // Need at least 0.50 USDC for gas (rough estimate)
-                        const minUsdcForGas = BigInt(500000); // 0.50 USDC (6 decimals)
+                        // Need at least 2 USDC for gas (safe estimate for mainnet)
+                        const minUsdcForGas = BigInt(2_000_000); // 2 USDC (6 decimals)
                         if (usdcBalance < minUsdcForGas) {
                             console.log(`[SafePasskeySend] Insufficient USDC for gas (${formatUnits(usdcBalance, 6)} USDC), falling back to ETH payment`);
                             forceNativeGas = true;
                         } else {
-                            console.log(`[SafePasskeySend] Using USDC for gas payment (${formatUnits(usdcBalance, 6)} USDC available)`);
+                            // Also check for paymaster approval
+                            const { hasApproval, allowance } = await checkPaymasterAllowance(safeAddress, effectiveChainId);
+                            if (!hasApproval) {
+                                console.log(`[SafePasskeySend] No USDC approval for paymaster (allowance: ${formatUnits(allowance, 6)} USDC), falling back to ETH payment`);
+                                forceNativeGas = true;
+                            } else {
+                                console.log(`[SafePasskeySend] Using USDC for gas payment (${formatUnits(usdcBalance, 6)} USDC available, ${formatUnits(allowance, 6)} USDC approved)`);
+                            }
                         }
                     } catch (err) {
-                        console.log("[SafePasskeySend] Could not check USDC balance, falling back to ETH payment");
+                        console.log("[SafePasskeySend] Could not check USDC balance/approval, falling back to ETH payment");
                         forceNativeGas = true;
                     }
                 }
@@ -234,6 +242,33 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
             if (err instanceof DOMException && err.name === "NotAllowedError") {
                 setError("Passkey signing was cancelled");
                 setStatus("idle");
+                return null;
+            }
+
+            // Handle transaction errors with helpful messages
+            const errString = err instanceof Error ? err.message : String(err);
+            
+            // Check for common UserOperation errors
+            if (errString.includes("UserOperation reverted") || 
+                errString.includes("reverted during simulation") ||
+                errString.includes("reason: 0x")) {
+                
+                if (chainRequiresErc20Payment(effectiveChainId)) {
+                    setError("Transaction failed. Mainnet requires ETH + gas fees. Ensure your Safe has funds. Try a free L2 like Base instead.");
+                } else {
+                    setError("Insufficient funds. Deposit tokens to your wallet address first.");
+                }
+                setStatus("error");
+                return null;
+            }
+            
+            if (errString.includes("insufficient") || errString.includes("paymaster")) {
+                if (chainRequiresErc20Payment(effectiveChainId)) {
+                    setError("Gas payment failed. Ensure you have ETH in your Safe for gas, or try a free L2 like Base.");
+                } else {
+                    setError("Insufficient balance to cover gas fees.");
+                }
+                setStatus("error");
                 return null;
             }
 

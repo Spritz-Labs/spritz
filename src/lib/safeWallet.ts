@@ -243,6 +243,58 @@ export function getChainUsdcAddress(chainId: number): Address | undefined {
     return USDC_ADDRESSES[chainId];
 }
 
+/**
+ * Pimlico ERC-20 Paymaster address for approval checking
+ * This is the contract that needs USDC approval to pay for gas
+ */
+export const PIMLICO_ERC20_PAYMASTER_ADDRESS: Address = "0x0000000000000039cd5e8aE05257CE51C473ddd1";
+
+/**
+ * Check if the paymaster has sufficient USDC allowance
+ */
+export async function checkPaymasterAllowance(
+    safeAddress: Address,
+    chainId: number
+): Promise<{ hasApproval: boolean; allowance: bigint; minRequired: bigint }> {
+    const usdcAddress = USDC_ADDRESSES[chainId];
+    if (!usdcAddress) {
+        return { hasApproval: true, allowance: BigInt(0), minRequired: BigInt(0) };
+    }
+    
+    try {
+        const publicClient = getPublicClient(chainId);
+        const erc20Abi = [{ 
+            name: 'allowance', 
+            type: 'function', 
+            inputs: [
+                { name: 'owner', type: 'address' },
+                { name: 'spender', type: 'address' }
+            ], 
+            outputs: [{ name: '', type: 'uint256' }] 
+        }] as const;
+        
+        const allowance = await publicClient.readContract({
+            address: usdcAddress,
+            abi: erc20Abi,
+            functionName: 'allowance',
+            args: [safeAddress, PIMLICO_ERC20_PAYMASTER_ADDRESS],
+        }) as bigint;
+        
+        // Minimum required is about 2 USDC for gas on mainnet (generous estimate)
+        const minRequired = BigInt(2_000_000); // 2 USDC (6 decimals)
+        
+        return {
+            hasApproval: allowance >= minRequired,
+            allowance,
+            minRequired,
+        };
+    } catch (err) {
+        console.error("[SafeWallet] Error checking paymaster allowance:", err);
+        // If we can't check, assume no approval
+        return { hasApproval: false, allowance: BigInt(0), minRequired: BigInt(2_000_000) };
+    }
+}
+
 export interface SafeWalletConfig {
     ownerAddress: Address;
     chainId: number;

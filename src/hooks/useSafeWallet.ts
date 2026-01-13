@@ -11,6 +11,8 @@ import {
     sendSafeTransaction,
     estimateSafeGas,
     SAFE_SUPPORTED_CHAINS,
+    chainRequiresErc20Payment,
+    checkPaymasterAllowance,
     type SendTransactionParams,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
@@ -356,9 +358,20 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 errString.includes("reverted during simulation") ||
                 errString.includes("reason: 0x")) {
                 
-                if (chainId === 1) {
+                if (chainRequiresErc20Payment(chainId) && safeAddress) {
+                    // Check if the issue is USDC approval
+                    try {
+                        const { hasApproval } = await checkPaymasterAllowance(safeAddress, chainId);
+                        if (!hasApproval) {
+                            setError("USDC approval required. Your Safe needs to approve the gas paymaster to spend USDC. Try using a free L2 like Base instead, or contact support.");
+                            setStatus("error");
+                            return null;
+                        }
+                    } catch {
+                        // If approval check fails, continue with generic error
+                    }
                     // Mainnet uses USDC paymaster
-                    setError("Insufficient funds in Safe. Mainnet requires ETH (to send) + USDC (for gas). Try a free L2 like Base instead.");
+                    setError("Transaction failed. Mainnet requires ETH (to send) + USDC (for gas). Ensure you have at least 2 USDC for gas fees, or try a free L2 like Base.");
                 } else {
                     // L2s have sponsored gas but still need the token
                     setError("Insufficient funds in Safe. Deposit tokens to your Safe wallet address first.");
@@ -368,7 +381,11 @@ export function useSafeWallet(): UseSafeWalletReturn {
             }
             
             if (errString.includes("insufficient") || errString.includes("paymaster")) {
-                setError("Insufficient balance to cover gas fees. Deposit more funds to your Safe wallet.");
+                if (chainRequiresErc20Payment(chainId)) {
+                    setError("Gas payment failed. Ensure you have at least 2 USDC in your Safe for gas fees, or try a free L2 like Base.");
+                } else {
+                    setError("Insufficient balance to cover gas fees. Deposit more funds to your Safe wallet.");
+                }
                 setStatus("error");
                 return null;
             }

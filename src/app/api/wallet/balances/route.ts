@@ -227,25 +227,37 @@ async function fetchChainBalances(
                 const native = nativeList[0];
                 const rawAmount = native.amount || "0";
                 const decimals = native.decimals || 18;
-                const tokenAmount = parseFloat(rawAmount) / Math.pow(10, decimals);
-                const balanceUsd = typeof native.value === "number" ? native.value : null;
+                // native.value is the formatted token amount (e.g., 0.5 ETH), NOT USD value
+                const tokenAmount = typeof native.value === "number" 
+                    ? native.value 
+                    : parseFloat(rawAmount) / Math.pow(10, decimals);
+                
+                // Only create balance if non-zero (same as RPC fallback)
+                if (tokenAmount > 0) {
+                    // Fetch USD price for native token (not provided by Graph API)
+                    const usdPrice = await getNativeTokenPrice(chain.symbol);
+                    const balanceUsd = usdPrice ? tokenAmount * usdPrice : null;
 
-                nativeBalance = {
-                    contractAddress: "native",
-                    symbol: native.symbol || chain.symbol,
-                    name: native.name || chain.name,
-                    decimals: decimals,
-                    balance: rawAmount,
-                    balanceFormatted: tokenAmount.toString(),
-                    balanceUsd: balanceUsd,
-                    tokenType: "native",
-                    logoUrl: NATIVE_TOKEN_LOGOS[chain.symbol] || undefined,
-                };
+                    nativeBalance = {
+                        contractAddress: "native",
+                        symbol: native.symbol || chain.symbol,
+                        name: native.name || chain.name,
+                        decimals: decimals,
+                        balance: rawAmount,
+                        balanceFormatted: tokenAmount.toString(),
+                        balanceUsd: balanceUsd,
+                        tokenType: "native",
+                        logoUrl: NATIVE_TOKEN_LOGOS[chain.symbol] || undefined,
+                    };
 
-                if (balanceUsd && balanceUsd > 0) {
-                    totalUsd += balanceUsd;
+                    if (balanceUsd && balanceUsd > 0) {
+                        totalUsd += balanceUsd;
+                    }
                 }
                 nativeFromGraph = true;
+            } else {
+                // Graph returned an empty array - will try RPC fallback
+                console.log(`[Wallet] ${chain.name}: Graph API returned no native balance data`);
             }
         } else {
             const errorText = await nativeResponse.text();
@@ -254,6 +266,7 @@ async function fetchChainBalances(
 
         // Fallback: Fetch native balance directly via RPC if Graph returned empty
         if (!nativeFromGraph && chain.rpcUrl) {
+            console.log(`[Wallet] ${chain.name}: Using RPC fallback for native balance`);
             try {
                 const rpcResponse = await fetch(chain.rpcUrl, {
                     method: "POST",
@@ -272,6 +285,8 @@ async function fetchChainBalances(
                         const rawAmount = BigInt(rpcData.result).toString();
                         const decimals = 18;
                         const tokenAmount = parseFloat(rawAmount) / Math.pow(10, decimals);
+                        
+                        console.log(`[Wallet] ${chain.name}: RPC returned ${tokenAmount} ${chain.symbol}`);
                         
                         // Only create balance if non-zero
                         if (tokenAmount > 0) {
@@ -295,11 +310,17 @@ async function fetchChainBalances(
                                 totalUsd += balanceUsd;
                             }
                         }
+                    } else if (rpcData.error) {
+                        console.error(`[Wallet] ${chain.name}: RPC error:`, rpcData.error);
                     }
+                } else {
+                    console.error(`[Wallet] ${chain.name}: RPC request failed with status ${rpcResponse.status}`);
                 }
             } catch (rpcError) {
                 console.error(`[Wallet] RPC fallback error for ${chain.name}:`, rpcError);
             }
+        } else if (!nativeFromGraph) {
+            console.warn(`[Wallet] ${chain.name}: No RPC URL configured for fallback`);
         }
 
         // Process ERC-20 token balances
@@ -308,6 +329,17 @@ async function fetchChainBalances(
             const tokenList = tokensData.data || tokensData;
             
             if (Array.isArray(tokenList)) {
+                // Debug: log first token's structure to understand API response
+                if (tokenList.length > 0) {
+                    const sampleToken = tokenList[0];
+                    console.log(`[Wallet] ${chain.name}: Sample token response:`, {
+                        symbol: sampleToken.symbol,
+                        amount: sampleToken.amount,
+                        value: sampleToken.value,
+                        value_usd: sampleToken.value_usd,
+                    });
+                }
+                
                 for (const token of tokenList) {
                     const contractAddr = token.contract || token.contractAddress;
                     
@@ -321,10 +353,26 @@ async function fetchChainBalances(
 
                     const rawAmount = token.amount || token.balance || "0";
                     const decimals = token.decimals || 18;
-                    const tokenAmount = parseFloat(rawAmount) / Math.pow(10, decimals);
-                    const balanceUsd = typeof token.value === "number" ? token.value : null;
-
+                    // token.value is the formatted token amount, not USD
+                    const tokenAmount = typeof token.value === "number"
+                        ? token.value
+                        : parseFloat(rawAmount) / Math.pow(10, decimals);
+                    
+                    // Skip zero balances
+                    if (tokenAmount <= 0) continue;
+                    
                     const symbol = token.symbol || "???";
+                    
+                    // Use value_usd if available (The Graph Token API provides this for ERC-20)
+                    // Fallback: For stablecoins (USDC, USDT, DAI), assume 1:1 USD value
+                    let balanceUsd: number | null = typeof token.value_usd === "number" ? token.value_usd : null;
+                    if (balanceUsd === null) {
+                        const stablecoins = ["USDC", "USDT", "DAI", "BUSD", "TUSD", "USDP", "GUSD", "FRAX"];
+                        if (stablecoins.includes(symbol.toUpperCase())) {
+                            balanceUsd = tokenAmount; // 1:1 USD ratio for stablecoins
+                        }
+                    }
+
                     const tokenBalance: TokenBalance = {
                         contractAddress: contractAddr,
                         symbol: symbol,
@@ -339,6 +387,9 @@ async function fetchChainBalances(
 
                     if (balanceUsd && balanceUsd > 0) {
                         totalUsd += balanceUsd;
+                        console.log(`[Wallet] ${chain.name}: Added ${symbol} $${balanceUsd.toFixed(2)} to total (now $${totalUsd.toFixed(2)})`);
+                    } else {
+                        console.log(`[Wallet] ${chain.name}: ${symbol} has no USD value (value_usd: ${token.value_usd}, calculated: ${balanceUsd})`);
                     }
 
                     balances.push(tokenBalance);
@@ -351,6 +402,9 @@ async function fetchChainBalances(
 
         // Sort tokens by USD value (highest first)
         balances.sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0));
+
+        // Log summary for debugging
+        console.log(`[Wallet] ${chain.name}: Final total = $${totalUsd.toFixed(2)} (native: $${nativeBalance?.balanceUsd?.toFixed(2) || 0}, tokens: ${balances.length} with ${balances.filter(t => t.balanceUsd).length} having USD values)`);
 
         return {
             chain,
@@ -442,7 +496,10 @@ export async function GET(request: NextRequest) {
             if (balance.error) {
                 console.warn(`[Wallet] ${balance.chain.name}: Error - ${balance.error}`);
             } else if (hasBalance) {
-                console.log(`[Wallet] ${balance.chain.name}: $${balance.totalUsd.toFixed(2)} (native: ${balance.nativeBalance?.balanceFormatted || "0"}, tokens: ${balance.tokens.length})`);
+                const nativeInfo = balance.nativeBalance 
+                    ? `${balance.nativeBalance.balanceFormatted} ${balance.chain.symbol} ($${(balance.nativeBalance.balanceUsd || 0).toFixed(2)})`
+                    : "0";
+                console.log(`[Wallet] ${balance.chain.name}: $${balance.totalUsd.toFixed(2)} (native: ${nativeInfo}, tokens: ${balance.tokens.length})`);
             }
         }
 

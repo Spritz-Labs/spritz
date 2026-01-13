@@ -1387,14 +1387,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                                         {/* Mainnet info for Safe wallet */}
                                         {useSafeForSend && selectedChainId === 1 && (
-                                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
                                                 <div className="flex gap-2">
-                                                    <span className="text-blue-400">ℹ️</span>
+                                                    <span className="text-amber-400">⚠️</span>
                                                     <div>
-                                                        <p className="text-xs text-blue-300 font-medium">Mainnet: USDC required for gas</p>
+                                                        <p className="text-xs text-amber-300 font-medium">Mainnet transactions are not free</p>
                                                         <p className="text-xs text-zinc-400 mt-1">
-                                                            Safe needs ETH to send + USDC to pay for gas.
-                                                            For <strong className="text-emerald-400">free</strong> transactions, try Base or other L2 chains.
+                                                            Gas fees apply on Ethereum mainnet. Your Safe needs ETH for both the transfer and gas.
+                                                        </p>
+                                                        <p className="text-xs text-emerald-400 mt-1">
+                                                            💡 <strong>Tip:</strong> Use Base or other L2s for <strong>free</strong> transactions!
                                                         </p>
                                                     </div>
                                                 </div>
