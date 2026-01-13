@@ -920,17 +920,46 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </>
                                     )}
 
-                                    {/* Supported chain info */}
-                                    <div className="mt-6">
-                                        <div className="flex justify-center">
-                                            <div className="px-3 py-2 bg-zinc-800 rounded-lg text-sm text-zinc-300 flex items-center gap-2">
-                                                <span>🌐</span>
-                                                <span>Same address on all chains</span>
+                                    {/* Supported chains - CRITICAL for users to understand */}
+                                    <div className="mt-6 bg-zinc-800/50 rounded-xl p-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="text-emerald-400">✓</span>
+                                            <span className="text-sm font-medium text-white">Deposit on these chains only:</span>
+                                        </div>
+                                        
+                                        {/* Supported chain pills */}
+                                        <div className="flex flex-wrap gap-2 mb-4">
+                                            {SEND_ENABLED_CHAIN_IDS.map((chainId) => {
+                                                const info = CHAIN_INFO[chainId];
+                                                if (!info) return null;
+                                                return (
+                                                    <div 
+                                                        key={chainId}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
+                                                        style={{ backgroundColor: `${info.color}20`, color: info.color }}
+                                                    >
+                                                        <span>{info.icon}</span>
+                                                        <span>{info.name}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Warning about unsupported chains */}
+                                        <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                                            <div className="flex gap-2">
+                                                <span className="text-orange-400 text-sm">⚠️</span>
+                                                <div>
+                                                    <p className="text-xs text-orange-300 font-medium mb-1">
+                                                        Do NOT deposit from other chains
+                                                    </p>
+                                                    <p className="text-xs text-zinc-400">
+                                                        This is a Smart Wallet. Sending funds from unsupported chains 
+                                                        (Avalanche, Solana, etc.) may result in <strong className="text-orange-300">permanent loss</strong>.
+                                                    </p>
+                                                </div>
                                             </div>
                                         </div>
-                                        <p className="text-xs text-zinc-600 text-center mt-2">
-                                            This address works on Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain & Unichain
-                                        </p>
                                     </div>
                                         </>
                                     )}
