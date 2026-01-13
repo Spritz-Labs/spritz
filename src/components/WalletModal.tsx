@@ -268,6 +268,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>("balances");
     const [showPasskeyManager, setShowPasskeyManager] = useState(false);
+    const [hasAcknowledgedChainWarning, setHasAcknowledgedChainWarning] = useState(false);
     
     // Selected chain for sending (default to Base)
     const [selectedChainId, setSelectedChainId] = useState<number>(8453);
@@ -486,9 +487,11 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         if (isOpen) {
             setActiveTab("balances");
             setCopied(false);
+            setHasAcknowledgedChainWarning(false);
         } else {
             // Reset send form when modal closes
             resetSendForm();
+            setHasAcknowledgedChainWarning(false);
         }
     }, [isOpen, resetSendForm]);
 
@@ -822,8 +825,57 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
                                             <p className="text-sm text-zinc-400">Checking wallet setup...</p>
                                         </div>
+                                    ) : !hasAcknowledgedChainWarning ? (
+                                        /* Chain warning - must acknowledge before seeing QR */
+                                        <div className="flex flex-col items-center justify-center text-center p-4">
+                                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                                                <span className="text-3xl">⚠️</span>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-white mb-4">Important: Supported Chains Only</h3>
+                                            
+                                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-4 w-full max-w-xs">
+                                                <p className="text-xs text-emerald-400 font-medium mb-2">✓ Deposit on these chains only:</p>
+                                                <div className="grid grid-cols-2 gap-2 text-left">
+                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
+                                                        <span>🔷</span> Ethereum
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
+                                                        <span>🔵</span> Base
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
+                                                        <span>⬡</span> Arbitrum
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
+                                                        <span>🔴</span> Optimism
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
+                                                        <span>🟣</span> Polygon
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
+                                                        <span>🔶</span> BNB Chain
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
+                                                        <span>🦄</span> Unichain
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 w-full max-w-xs">
+                                                <p className="text-xs text-red-400 font-medium mb-2">⚠️ Do NOT deposit from other chains</p>
+                                                <p className="text-xs text-zinc-400">
+                                                    This is a Smart Wallet. Sending funds from unsupported chains (Avalanche, Solana, etc.) may result in <strong className="text-red-400">permanent loss</strong>.
+                                                </p>
+                                            </div>
+                                            
+                                            <button
+                                                onClick={() => setHasAcknowledgedChainWarning(true)}
+                                                className="w-full max-w-xs py-3 px-6 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl transition-colors"
+                                            >
+                                                I Understand, Show My Address
+                                            </button>
+                                        </div>
                                     ) : (
-                                        /* Normal receive flow - user has passkey or is wallet user */
+                                        /* Normal receive flow - user has acknowledged warning */
                                         <>
                                     <div className="text-center mb-6">
                                         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
