@@ -419,8 +419,21 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] Formatted public key length: ${formattedPublicKey.length} (should be 130 for 64 bytes + 0x)`);
 
     // Get the rpId - must match the domain where the passkey was created
-    // In browser, use current hostname; this ensures passkeys created on app.spritz.chat work there
-    const rpId = typeof window !== 'undefined' ? window.location.hostname : 'app.spritz.chat';
+    // IMPORTANT: Registration uses "spritz.chat" (parent domain) for all *.spritz.chat subdomains
+    // So we must use "spritz.chat" here too, not "app.spritz.chat"
+    const getRpId = (): string => {
+        if (typeof window === 'undefined') return 'spritz.chat';
+        const hostname = window.location.hostname;
+        // Match the registration logic: use parent domain for spritz.chat subdomains
+        if (hostname.includes('spritz.chat')) {
+            return 'spritz.chat';
+        }
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'localhost';
+        }
+        return hostname;
+    };
+    const rpId = getRpId();
     console.log(`[SafeWallet] Using rpId: ${rpId}`);
 
     // Helper to convert base64url to ArrayBuffer (matching login flow)
