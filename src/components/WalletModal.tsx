@@ -13,6 +13,7 @@ import { useSendTransaction, isValidAddress } from "@/hooks/useSendTransaction";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
+import { useOnramp } from "@/hooks/useOnramp";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
@@ -335,6 +336,15 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             initializePasskey(userAddress as Address);
         }
     }, [isOpen, canUsePasskeySigning, userAddress, isPasskeyReady, passkeyStatus, initializePasskey, authMethod]);
+
+    // Onramp (Buy crypto) hook
+    const {
+        status: onrampStatus,
+        error: onrampError,
+        initializeOnramp,
+        openOnramp,
+        reset: resetOnramp,
+    } = useOnramp();
 
     // Use Safe for sending or EOA
     // Passkey users and email/digital_id users MUST use Safe (they have no EOA we control)
@@ -859,7 +869,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                                     <button
                                                 onClick={handleCopySmartWallet}
-                                                className={`w-full py-3 rounded-xl font-medium transition-all mb-4 ${
+                                                className={`w-full py-3 rounded-xl font-medium transition-all mb-3 ${
                                             copied 
                                                 ? "bg-emerald-500 text-white" 
                                                 : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
@@ -867,6 +877,44 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     >
                                                 {copied ? "✓ Address Copied!" : "Copy Address"}
                                     </button>
+
+                                    {/* Buy Crypto with Coinbase */}
+                                    <button
+                                        onClick={async () => {
+                                            if (onrampStatus === "ready") {
+                                                openOnramp();
+                                            } else if (smartWalletAddress) {
+                                                const url = await initializeOnramp(smartWalletAddress, {
+                                                    presetFiatAmount: 50,
+                                                    defaultNetwork: "base",
+                                                    defaultAsset: "USDC",
+                                                });
+                                                if (url) {
+                                                    openOnramp();
+                                                }
+                                            }
+                                        }}
+                                        disabled={onrampStatus === "loading" || !smartWalletAddress}
+                                        className="w-full py-3 rounded-xl font-medium transition-all mb-4 bg-[#0052FF]/20 text-[#0052FF] hover:bg-[#0052FF]/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {onrampStatus === "loading" ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-[#0052FF]/30 border-t-[#0052FF] rounded-full animate-spin" />
+                                                Initializing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-5 h-5" viewBox="0 0 32 32" fill="none">
+                                                    <rect width="32" height="32" rx="16" fill="currentColor" fillOpacity="0.15"/>
+                                                    <path d="M16 8C11.582 8 8 11.582 8 16s3.582 8 8 8 8-3.582 8-8-3.582-8-8-8zm0 12.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9z" fill="currentColor"/>
+                                                </svg>
+                                                Buy with Coinbase
+                                            </>
+                                        )}
+                                    </button>
+                                    {onrampError && (
+                                        <p className="text-xs text-red-400 text-center mb-4">{onrampError}</p>
+                                    )}
                                         </>
                                     )}
 
