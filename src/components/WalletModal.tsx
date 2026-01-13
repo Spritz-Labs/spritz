@@ -433,8 +433,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const allTokens = useMemo(() => {
         const tokens: (TokenBalance & { chainIcon: string; chainName: string; chainId: number })[] = [];
         for (const chainBalance of balances) {
-            // Only include tokens from the selected chain
-            if (chainBalance.chain.id !== selectedChainId) {
+            // Include tokens from ALL send-enabled chains (not just selected)
+            // This way users can see all their assets and select any
+            if (!SEND_ENABLED_CHAIN_IDS.includes(chainBalance.chain.id)) {
                 continue;
             }
             if (chainBalance.nativeBalance) {
@@ -454,9 +455,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 });
             }
         }
-        // Sort by USD value
+        // Sort by USD value (highest first)
         return tokens.sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0));
-    }, [balances, selectedChainId]);
+    }, [balances]);
 
     // Filter balances to only show selected chain
     // Show all supported chains in balances view
@@ -995,6 +996,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                                 key={`${token.contractAddress}-${idx}`}
                                                                 onClick={() => {
                                                                     setSendToken(token);
+                                                                    // Auto-switch to the token's chain
+                                                                    if (token.chainId && token.chainId !== selectedChainId) {
+                                                                        setSelectedChainId(token.chainId);
+                                                                    }
                                                                     setShowTokenSelector(false);
                                                                 }}
                                                                 className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors text-left"
@@ -1009,7 +1014,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-sm text-white font-medium">{token.symbol}</span>
-                                                                        <span className="text-xs text-zinc-600">{(token as TokenBalance & { chainIcon?: string }).chainIcon}</span>
+                                                                        <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                                            <span>{token.chainIcon}</span>
+                                                                            <span>{token.chainName}</span>
+                                                                        </span>
                                                                     </div>
                                                                     <p className="text-xs text-zinc-500">
                                                                         {formatTokenBalance(token.balance, token.decimals, token.balanceFormatted)}
