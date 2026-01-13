@@ -14,12 +14,18 @@ import {
 
 export type SmartWalletInfo = {
     spritzId: Address;
-    smartWalletAddress: Address;
+    smartWalletAddress: Address | null;
     isDeployed: boolean;
     walletType: "passkey" | "email" | "wallet" | "digitalid";
     canSign: boolean;
     signerType: "eoa" | "passkey" | "none";
     supportedChains: { chainId: number; name: string; sponsorship?: "free" | "usdc" }[];
+    /** Whether user needs to create a passkey before they can use the wallet */
+    needsPasskey?: boolean;
+    /** The passkey credential ID that controls this wallet */
+    passkeyCredentialId?: string | null;
+    /** Warning message about passkey being wallet key */
+    warning?: string;
 };
 
 type UseSmartWalletReturn = {
@@ -159,6 +165,7 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
             });
 
             if (!response.ok) {
+                // For wallet users, we can fallback to client-side calculation
                 if (clientSideWallet) {
                     setSmartWallet(clientSideWallet);
                 }
@@ -167,19 +174,41 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
 
             const data = await response.json();
             
-            // Merge server data with client-side calculated address
-            // IMPORTANT: Server address takes priority (passkey users have different Safe)
+            // If user needs a passkey, return the server response as-is
+            // (smartWalletAddress will be null)
+            if (data.needsPasskey) {
+                setSmartWallet({
+                    spritzId: data.spritzId || (userAddress.toLowerCase() as Address),
+                    smartWalletAddress: null,
+                    isDeployed: false,
+                    walletType: data.walletType || "email",
+                    canSign: false,
+                    signerType: "none",
+                    supportedChains: data.supportedChains || [],
+                    needsPasskey: true,
+                    passkeyCredentialId: null,
+                });
+                return;
+            }
+            
+            // Server address takes priority - it knows the correct Safe owner
             setSmartWallet({
-                ...clientSideWallet,
-                ...data,
-                // Server address takes priority - passkey users have a different Safe
-                // based on their P256 public key, not their Spritz ID
-                smartWalletAddress: data.smartWalletAddress || clientSideWallet?.smartWalletAddress,
+                spritzId: data.spritzId,
+                smartWalletAddress: data.smartWalletAddress,
+                isDeployed: data.isDeployed || false,
+                walletType: data.walletType || "wallet",
+                canSign: data.canSign || false,
+                signerType: data.signerType || "none",
+                supportedChains: data.supportedChains || clientSideWallet?.supportedChains || [],
+                needsPasskey: false,
+                passkeyCredentialId: data.passkeyCredentialId,
+                warning: data.warning,
             });
         } catch (err) {
             console.error("[useSmartWallet] Error:", err);
             setError(err instanceof Error ? err.message : "Failed to get smart wallet");
             
+            // Only fallback for wallet users (who don't need passkeys)
             if (clientSideWallet) {
                 setSmartWallet(clientSideWallet);
             }

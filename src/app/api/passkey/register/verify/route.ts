@@ -11,6 +11,8 @@ import {
     calculateWebAuthnSignerAddress,
     type P256PublicKey,
 } from "@/lib/passkeySigner";
+import { calculateSafeAddress } from "@/lib/smartAccount";
+import { type Address } from "viem";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -361,6 +363,14 @@ export async function POST(request: NextRequest) {
             console.log("[Passkey] Safe signer ready:", safeSignerAddress.slice(0, 10) + "...");
         }
 
+        // Calculate the Smart Wallet (Safe) address from the passkey signer
+        // This is where the user's funds will be stored
+        let smartWalletAddress: string | null = null;
+        if (safeSignerAddress) {
+            smartWalletAddress = calculateSafeAddress(safeSignerAddress as Address);
+            console.log("[Passkey] Smart Wallet (Safe) address:", smartWalletAddress.slice(0, 10) + "...");
+        }
+
         // Create/update user in shout_users table with the FINAL address
         const { data: existingUser } = await supabase
             .from("shout_users")
@@ -369,22 +379,45 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
         
         if (!existingUser) {
-            // Create new user
+            // Create new user with wallet address
             await supabase.from("shout_users").insert({
                 wallet_address: finalUserAddress,
                 first_login: new Date().toISOString(),
                 last_login: new Date().toISOString(),
                 login_count: 1,
+                // Store the Smart Wallet address derived from passkey
+                // IMPORTANT: This passkey now controls this wallet
+                smart_wallet_address: smartWalletAddress,
             });
-            console.log("[Passkey] Created user record:", finalUserAddress);
+            console.log("[Passkey] Created user record with wallet:", finalUserAddress);
+            if (smartWalletAddress) {
+                console.log("[Passkey] Wallet address locked to this passkey:", smartWalletAddress.slice(0, 10) + "...");
+            }
         } else {
             // Update existing user
+            // Only set smart_wallet_address if user doesn't already have one
+            // (prevents changing wallet address if user already has funds)
+            const updateData: Record<string, unknown> = {
+                last_login: new Date().toISOString(),
+                login_count: (existingUser.login_count || 0) + 1,
+            };
+            
+            if (smartWalletAddress && !existingUser.smart_wallet_address) {
+                // First passkey for this user - set their wallet address
+                updateData.smart_wallet_address = smartWalletAddress;
+                console.log("[Passkey] Set wallet for existing user:", smartWalletAddress.slice(0, 10) + "...");
+            } else if (smartWalletAddress && existingUser.smart_wallet_address && 
+                       smartWalletAddress.toLowerCase() !== existingUser.smart_wallet_address.toLowerCase()) {
+                // WARNING: User already has a different wallet address
+                // This could happen if they're adding a second passkey
+                console.warn("[Passkey] WARNING: User already has a wallet address:", existingUser.smart_wallet_address);
+                console.warn("[Passkey] New passkey would create different wallet:", smartWalletAddress);
+                console.warn("[Passkey] Keeping existing wallet to protect funds");
+            }
+            
             await supabase
                 .from("shout_users")
-                .update({
-                    last_login: new Date().toISOString(),
-                    login_count: (existingUser.login_count || 0) + 1,
-                })
+                .update(updateData)
                 .eq("wallet_address", finalUserAddress);
         }
 

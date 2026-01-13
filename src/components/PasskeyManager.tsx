@@ -11,20 +11,26 @@ type PasskeyCredential = {
     createdAt: string;
     lastUsedAt: string | null;
     backedUp: boolean;
+    isWalletKey?: boolean; // This passkey controls a wallet
 };
 
 type Props = {
     userAddress: string;
     onClose?: () => void;
+    /** If true, user needs passkey to access their wallet (email/digitalid users) */
+    passkeyIsWalletKey?: boolean;
+    /** Smart wallet address controlled by passkey */
+    smartWalletAddress?: string | null;
 };
 
-export function PasskeyManager({ userAddress, onClose }: Props) {
+export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smartWalletAddress }: Props) {
     const [credentials, setCredentials] = useState<PasskeyCredential[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isAdding, setIsAdding] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [showDeleteWarning, setShowDeleteWarning] = useState<string | null>(null);
 
     const fetchCredentials = useCallback(async () => {
         try {
@@ -51,18 +57,34 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
         fetchCredentials();
     }, [fetchCredentials]);
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to remove this passkey? This cannot be undone.")) {
-            return;
+    const handleDeleteClick = (id: string) => {
+        // If this passkey controls the wallet and it's the only one, show serious warning
+        if (passkeyIsWalletKey && credentials.length === 1) {
+            setShowDeleteWarning(id);
+        } else if (passkeyIsWalletKey) {
+            // Multiple passkeys but still warn
+            if (!confirm("Remove this passkey?\n\nNote: Your other passkey(s) will still control your wallet.")) {
+                return;
+            }
+            performDelete(id);
+        } else {
+            // Non-wallet passkey, simple confirm
+            if (!confirm("Are you sure you want to remove this passkey?")) {
+                return;
+            }
+            performDelete(id);
         }
+    };
 
+    const performDelete = async (id: string) => {
         try {
             setDeletingId(id);
             setError(null);
+            setShowDeleteWarning(null);
 
             const response = await fetch(`/api/passkey/credentials?id=${id}`, {
                 method: "DELETE",
-                credentials: "include", // Send session cookie
+                credentials: "include",
             });
 
             if (!response.ok) {
@@ -171,6 +193,26 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
                 )}
             </div>
 
+            {/* Warning: Passkey controls wallet */}
+            {passkeyIsWalletKey && credentials.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+                    <div className="flex items-start gap-2">
+                        <span className="text-amber-400">🔑</span>
+                        <div className="text-xs">
+                            <p className="text-amber-300 font-medium">Your passkey is your wallet key</p>
+                            <p className="text-zinc-400 mt-0.5">
+                                Deleting your passkey will make your wallet inaccessible.
+                                {smartWalletAddress && (
+                                    <span className="block mt-1 font-mono text-amber-400/70">
+                                        {smartWalletAddress.slice(0, 10)}...{smartWalletAddress.slice(-6)}
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <AnimatePresence>
                 {error && (
                     <motion.div
@@ -190,6 +232,61 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
                         className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mb-4"
                     >
                         <p className="text-emerald-400 text-sm">{success}</p>
+                    </motion.div>
+                )}
+                
+                {/* Serious warning modal for deleting last wallet-key passkey */}
+                {showDeleteWarning && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+                        onClick={() => setShowDeleteWarning(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.9 }}
+                            className="bg-zinc-900 border border-red-500/50 rounded-2xl p-6 max-w-sm w-full"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="text-center mb-4">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                                    <span className="text-3xl">⚠️</span>
+                                </div>
+                                <h3 className="text-lg font-bold text-red-400">Delete Wallet Access?</h3>
+                            </div>
+                            
+                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-4">
+                                <p className="text-sm text-red-300 font-medium mb-2">
+                                    This is your ONLY passkey!
+                                </p>
+                                <p className="text-xs text-zinc-400">
+                                    If you delete it, you will <strong className="text-red-400">permanently lose access</strong> to your wallet and any funds in it.
+                                </p>
+                                {smartWalletAddress && (
+                                    <p className="text-xs text-red-400/80 mt-2 font-mono">
+                                        Wallet: {smartWalletAddress.slice(0, 10)}...{smartWalletAddress.slice(-6)}
+                                    </p>
+                                )}
+                            </div>
+                            
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowDeleteWarning(null)}
+                                    className="flex-1 py-2 px-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => performDelete(showDeleteWarning)}
+                                    className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                >
+                                    Delete Anyway
+                                </button>
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -241,7 +338,7 @@ export function PasskeyManager({ userAddress, onClose }: Props) {
                                 </div>
                             </div>
                             <button
-                                onClick={() => handleDelete(credential.id)}
+                                onClick={() => handleDeleteClick(credential.id)}
                                 disabled={deletingId === credential.id}
                                 className="text-red-400 hover:text-red-300 transition-colors p-2 hover:bg-red-500/10 rounded-lg disabled:opacity-50"
                                 title="Remove passkey"

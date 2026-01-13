@@ -48,12 +48,26 @@ Real-time messaging, video calls, livestreaming, and AI agents for Web3. Connect
 ### 💰 Smart Wallet
 
 - **Non-Custodial** - Your keys, your crypto. We never store private keys
+- **Passkey = Wallet Key** - For non-wallet users, your passkey IS your wallet key (losing it means losing access)
 - **Passkey Signing** - Sign transactions with Face ID, Touch ID, or Windows Hello
 - **Multi-Chain** - Same wallet address on all 7 supported EVM chains
 - **Gas Sponsorship** - Free transactions on L2s (Base, Arbitrum, Optimism, Polygon, BNB Chain, Unichain)
 - **ERC-20 Gas** - Pay gas in USDC on Ethereum mainnet (no ETH needed)
 - **The Graph Integration** - Real-time token balances and transaction history
 - **Trusted Tokens** - Spam token filtering with curated whitelist
+
+**Wallet Architecture by Auth Type:**
+
+| Auth Method | Wallet Owner | How to Sign | Passkey Required? |
+|-------------|--------------|-------------|-------------------|
+| **EVM Wallet** | Your wallet EOA | Connected wallet | ❌ No |
+| **Passkey** | Passkey signer | Your passkey | ✅ Built-in |
+| **Email** | Passkey signer | Your passkey | ✅ Must create |
+| **World ID** | Passkey signer | Your passkey | ✅ Must create |
+| **Alien ID** | Passkey signer | Your passkey | ✅ Must create |
+| **Solana** | Passkey signer | Your passkey | ✅ Must create |
+
+> ⚠️ **Important for Email/Digital ID users:** Your passkey controls your wallet. If you delete your passkey, you will lose access to any funds in your wallet. Use a synced passkey (iCloud Keychain, Google Password Manager) for backup.
 
 ### 👥 Social
 
@@ -560,14 +574,19 @@ Every user has **two addresses**:
 
 ### Authentication Methods Overview
 
-| Method | Spritz ID Source | Can Sign EVM Txs? | Needs Passkey for Wallet? |
-|--------|------------------|-------------------|---------------------------|
-| **EVM Wallet** | Wallet address (EOA) | ✅ Yes | ❌ No (wallet signs) |
-| **Passkey** | Derived from credential ID | ✅ Via passkey | ✅ Built-in |
-| **Email** | Existing account OR derived | ❌ No | ✅ Yes |
-| **World ID** | `nullifier_hash` from World ID | ❌ No | ✅ Yes |
-| **Alien ID** | `alienAddress` from Alien | ❌ No | ✅ Yes |
-| **Solana** | Solana wallet address | ❌ No (different chain) | ✅ Yes |
+| Method | Spritz ID Source | Wallet Owner | Has Wallet Immediately? |
+|--------|------------------|--------------|-------------------------|
+| **EVM Wallet** | Wallet address (EOA) | Wallet EOA | ✅ Yes - wallet signs |
+| **Passkey** | Derived from credential ID | Passkey signer | ✅ Yes - passkey signs |
+| **Email** | Existing account OR derived | Passkey signer | ❌ No - must create passkey first |
+| **World ID** | `nullifier_hash` from World ID | Passkey signer | ❌ No - must create passkey first |
+| **Alien ID** | `alienAddress` from Alien | Passkey signer | ❌ No - must create passkey first |
+| **Solana** | Solana wallet address | Passkey signer | ❌ No - must create passkey first |
+
+**Key Architecture Points:**
+- **EVM Wallet users**: Your connected wallet signs transactions directly. No passkey needed.
+- **Everyone else**: You MUST create a passkey before you can receive/send tokens. Your passkey becomes your wallet key.
+- **Passkey = Wallet Access**: For non-wallet users, the passkey IS the key to your funds. Losing your passkey means losing wallet access.
 
 ---
 

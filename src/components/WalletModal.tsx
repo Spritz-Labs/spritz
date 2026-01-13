@@ -787,89 +787,77 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "receive" && (
                                 <div className="p-6">
-                                    {/* Email/Digital ID users without passkey - must register first */}
-                                    {needsPasskeyForSend && passkeyStatus === "error" ? (
+                                    {/* Email/Digital ID users without passkey - must create one to unlock wallet */}
+                                    {(smartWallet?.needsPasskey || (needsPasskeyForSend && passkeyStatus === "error")) ? (
                                         <div className="flex flex-col items-center justify-center text-center">
-                                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-500/10 flex items-center justify-center">
-                                                <span className="text-3xl">⚠️</span>
+                                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-500/10 flex items-center justify-center">
+                                                <span className="text-3xl">🔐</span>
                                             </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Register Passkey First</h3>
+                                            <h3 className="text-lg font-semibold text-white mb-2">Create Your Wallet</h3>
                                             <p className="text-sm text-zinc-400 mb-4 max-w-xs">
                                                 {isSolanaUser ? (
-                                                    <>Your Solana wallet works on Solana, but to receive tokens on EVM chains (Ethereum, Base, etc.), you need a passkey.</>
+                                                    <>Your Solana wallet works on Solana, but to use EVM chains (Ethereum, Base, etc.), you need a passkey.</>
                                                 ) : (
-                                                    <>Before receiving tokens, you need to register a passkey. This ensures you can access and send your funds later.</>
+                                                    <>Set up a passkey to create your wallet. Your passkey will be your wallet key - it&apos;s how you sign transactions.</>
                                                 )}
                                             </p>
-                                            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 mb-6 max-w-xs">
-                                                <p className="text-xs text-orange-300">
-                                                    {isSolanaUser ? (
-                                                        <><strong>Why?</strong> Solana wallets can&apos;t sign EVM transactions. A passkey gives you control over your EVM wallet.</>
-                                                    ) : (
-                                                        <><strong>Why?</strong> Without a passkey, any funds sent to your wallet would be locked forever.</>
-                                                    )}
+                                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-4 max-w-xs">
+                                                <p className="text-xs text-purple-300 mb-2">
+                                                    <strong>🔑 Your Passkey = Your Wallet Key</strong>
+                                                </p>
+                                                <p className="text-xs text-zinc-400">
+                                                    Your passkey controls your wallet. If you delete your passkey, you&apos;ll lose access to any funds in your wallet.
+                                                </p>
+                                            </div>
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 max-w-xs">
+                                                <p className="text-xs text-amber-300">
+                                                    <strong>💡 Tip:</strong> Use a passkey that syncs across devices (iCloud Keychain, Google Password Manager, or a hardware key like YubiKey).
                                                 </p>
                                             </div>
                                             <button
                                                 onClick={() => setShowPasskeyManager(true)}
                                                 className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
                                             >
-                                                Register Passkey
+                                                Create Passkey & Wallet
                                             </button>
                                             <p className="text-xs text-zinc-600 mt-4">
                                                 🔒 Takes less than 30 seconds
                                             </p>
                                         </div>
-                                    ) : needsPasskeyForSend && passkeyStatus === "loading" ? (
+                                    ) : (needsPasskeyForSend && passkeyStatus === "loading") || isSmartWalletLoading ? (
                                         <div className="flex flex-col items-center justify-center">
                                             <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
-                                            <p className="text-sm text-zinc-400">Checking wallet setup...</p>
+                                            <p className="text-sm text-zinc-400">Loading wallet...</p>
                                         </div>
                                     ) : !hasAcknowledgedChainWarning ? (
-                                        /* Chain warning - must acknowledge before seeing QR */
-                                        <div className="flex flex-col items-center justify-center text-center p-4">
-                                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-500/10 flex items-center justify-center">
-                                                <span className="text-3xl">⚠️</span>
-                                            </div>
-                                            <h3 className="text-lg font-semibold text-white mb-4">Important: Supported Chains Only</h3>
+                                        /* Chain warning - compact to fit without scrolling */
+                                        <div className="flex flex-col items-center text-center px-2 py-1">
+                                            <h3 className="text-base font-semibold text-white mb-2 flex items-center gap-2">
+                                                <span>⚠️</span> Supported Chains Only
+                                            </h3>
                                             
-                                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-4 w-full max-w-xs">
-                                                <p className="text-xs text-emerald-400 font-medium mb-2">✓ Deposit on these chains only:</p>
-                                                <div className="grid grid-cols-2 gap-2 text-left">
-                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
-                                                        <span>🔷</span> Ethereum
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
-                                                        <span>🔵</span> Base
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
-                                                        <span>⬡</span> Arbitrum
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
-                                                        <span>🔴</span> Optimism
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
-                                                        <span>🟣</span> Polygon
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
-                                                        <span>🔶</span> BNB Chain
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-sm text-zinc-300">
-                                                        <span>🦄</span> Unichain
-                                                    </div>
+                                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5 mb-2 w-full">
+                                                <p className="text-xs text-emerald-400 font-medium mb-1.5">✓ Deposit on these chains:</p>
+                                                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-zinc-300">
+                                                    <span>🔷 Ethereum</span>
+                                                    <span>🔵 Base</span>
+                                                    <span>⬡ Arbitrum</span>
+                                                    <span>🔴 Optimism</span>
+                                                    <span>🟣 Polygon</span>
+                                                    <span>🔶 BNB</span>
+                                                    <span>🦄 Unichain</span>
                                                 </div>
                                             </div>
                                             
-                                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 w-full max-w-xs">
-                                                <p className="text-xs text-red-400 font-medium mb-2">⚠️ Do NOT deposit from other chains</p>
-                                                <p className="text-xs text-zinc-400">
-                                                    This is a Smart Wallet. Sending funds from unsupported chains (Avalanche, Solana, etc.) may result in <strong className="text-red-400">permanent loss</strong>.
+                                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mb-3 w-full">
+                                                <p className="text-xs text-red-400">
+                                                    <strong>⚠️ Do NOT</strong> send from other chains (Avalanche, Solana, etc.) — funds may be <strong>permanently lost</strong>.
                                                 </p>
                                             </div>
                                             
                                             <button
                                                 onClick={() => setHasAcknowledgedChainWarning(true)}
-                                                className="w-full max-w-xs py-3 px-6 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl transition-colors"
+                                                className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-xl transition-colors"
                                             >
                                                 I Understand, Show My Address
                                             </button>
@@ -887,11 +875,15 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </p>
                                     </div>
 
-                                    {/* Loading state for smart wallet */}
-                                    {isSmartWalletLoading && (
-                                        <div className="flex items-center justify-center gap-2 mb-4">
-                                            <div className="w-4 h-4 border-2 border-zinc-600 border-t-emerald-500 rounded-full animate-spin" />
-                                            <span className="text-xs text-zinc-500">Loading wallet address...</span>
+                                    {/* Passkey wallet warning - remind users that passkey = wallet key */}
+                                    {smartWallet?.warning && needsPasskeyForSend && (
+                                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4 mx-auto max-w-xs">
+                                            <div className="flex items-start gap-2">
+                                                <span className="text-amber-400 text-sm">🔑</span>
+                                                <p className="text-xs text-amber-200/80">
+                                                    <strong>Your passkey controls this wallet.</strong> Keep it safe - losing your passkey means losing access to funds.
+                                                </p>
+                                            </div>
                                         </div>
                                     )}
 
@@ -1022,33 +1014,38 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "send" && (
                                 <div className="flex flex-col h-full relative">
-                                    {/* Passkey/Email/Digital ID users - Show loading state */}
-                                    {canUsePasskeySigning && passkeyStatus === "loading" ? (
+                                    {/* Loading state */}
+                                    {((canUsePasskeySigning && passkeyStatus === "loading") || isSmartWalletLoading) ? (
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
-                                            <p className="text-sm text-zinc-400">Initializing wallet...</p>
+                                            <p className="text-sm text-zinc-400">Loading wallet...</p>
                                         </div>
-                                    ) : canUsePasskeySigning && passkeyStatus === "error" && needsPasskeyForSend ? (
-                                        /* Email/Digital ID users without a passkey - prompt to register */
+                                    ) : (smartWallet?.needsPasskey || (canUsePasskeySigning && passkeyStatus === "error" && needsPasskeyForSend)) ? (
+                                        /* Email/Digital ID users without a passkey - prompt to create one */
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
-                                                <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                                </svg>
+                                                <span className="text-3xl">🔐</span>
                                             </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Register Passkey to Send</h3>
+                                            <h3 className="text-lg font-semibold text-white mb-2">Create Your Wallet</h3>
                                             <p className="text-sm text-zinc-400 mb-4 max-w-xs">
                                                 {isSolanaUser ? (
-                                                    <>Your Solana wallet can't sign EVM transactions. Register a passkey to send tokens on Ethereum, Base, and other EVM chains.</>
+                                                    <>Your Solana wallet can&apos;t sign EVM transactions. Create a passkey to get your EVM wallet.</>
                                                 ) : (
-                                                    <>To send tokens securely, you need to register a passkey. This ensures only you can authorize transactions - we never store your keys.</>
+                                                    <>Set up a passkey to create your wallet. Your passkey will be your wallet key - it signs all your transactions.</>
                                                 )}
                                             </p>
+                                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-6 max-w-xs">
+                                                <p className="text-xs text-purple-300">
+                                                    <strong>🔑 Your Passkey = Your Wallet Key</strong>
+                                                    <br />
+                                                    <span className="text-zinc-400">Keep it safe - losing it means losing wallet access.</span>
+                                                </p>
+                                            </div>
                                             <button
                                                 onClick={() => setShowPasskeyManager(true)}
                                                 className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
                                             >
-                                                Register Passkey
+                                                Create Passkey & Wallet
                                             </button>
                                             <p className="text-xs text-zinc-600 mt-4">
                                                 🔒 Your passkey stays on your device
@@ -1636,7 +1633,15 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             {showPasskeyManager && (
                 <PasskeyManager
                     userAddress={userAddress}
-                    onClose={() => setShowPasskeyManager(false)}
+                    onClose={() => {
+                        setShowPasskeyManager(false);
+                        // Refresh smart wallet to check if user now has a passkey
+                        if (smartWallet?.needsPasskey) {
+                            window.location.reload();
+                        }
+                    }}
+                    passkeyIsWalletKey={needsPasskeyForSend}
+                    smartWalletAddress={smartWalletAddress}
                 />
             )}
         </AnimatePresence>

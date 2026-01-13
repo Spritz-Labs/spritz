@@ -24,15 +24,29 @@ function determineWalletType(user: { wallet_type?: string } | null): WalletType 
     return "wallet"; // Default to wallet (connected EOA)
 }
 
+// Check if user type requires a passkey to sign transactions
+function requiresPasskeyToSign(walletType: WalletType): boolean {
+    // Wallet users can sign with their connected wallet
+    // Everyone else needs a passkey
+    return walletType !== "wallet";
+}
+
 /**
  * GET /api/wallet/smart-wallet
  * 
  * Get the user's Smart Wallet address.
- * Creates one deterministically if it doesn't exist.
+ * 
+ * ARCHITECTURE:
+ * - Wallet users: Safe owned by their connected wallet (they can sign directly)
+ * - Passkey/Email/Digital ID users: Safe owned by their passkey signer
+ *   - If no passkey exists, returns needsPasskey: true
+ *   - The passkey IS their wallet key - losing it means losing access
  * 
  * Returns:
  * - spritzId: The user's identity address
- * - smartWalletAddress: The Smart Wallet address
+ * - smartWalletAddress: The Smart Wallet address (null if needs passkey)
+ * - needsPasskey: Whether user needs to create a passkey first
+ * - passkeyCredentialId: The passkey that controls this wallet
  * - isDeployed: Whether the wallet is deployed on-chain
  * - supportedChains: List of supported chains
  */
@@ -51,13 +65,21 @@ export async function GET(request: NextRequest) {
     try {
         let walletType: WalletType = "wallet";
         let isDeployed = false;
-        let smartWalletAddress: Address;
+        let smartWalletAddress: Address | null = null;
+        let needsPasskey = false;
+        let passkeyCredentialId: string | null = null;
+        let canSign = false;
+        let signerType: "eoa" | "passkey" | "none" = "none";
 
-        // Try to get user data and determine wallet type
-        if (supabaseUrl && supabaseServiceKey) {
+        if (!supabaseUrl || !supabaseServiceKey) {
+            // No DB access - fallback for wallet users only
+            smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
+            canSign = true;
+            signerType = "eoa";
+        } else {
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
             
-            // Get user data to determine wallet type and stored smart wallet
+            // Get user data
             const { data: user } = await supabase
                 .from("shout_users")
                 .select("wallet_type, smart_wallet_address")
@@ -65,52 +87,67 @@ export async function GET(request: NextRequest) {
                 .single();
 
             walletType = determineWalletType(user);
+            
+            // Check if user has a passkey
+            const { data: credential } = await supabase
+                .from("passkey_credentials")
+                .select("id, credential_id, safe_signer_address, public_key_x, public_key_y")
+                .eq("user_address", spritzId)
+                .not("public_key_x", "is", null)
+                .order("last_used_at", { ascending: false, nullsFirst: false })
+                .limit(1)
+                .single();
 
-            // PRIORITY 1: If user has a stored smart_wallet_address, use it
-            // This handles passkey users who have their passkey-based Safe stored
-            if (user?.smart_wallet_address) {
-                smartWalletAddress = user.smart_wallet_address as Address;
-                console.log("[SmartWallet] Using stored Safe address:", smartWalletAddress.slice(0, 10));
-            } else {
-                // PRIORITY 2: Check if user has passkey credentials with safe_signer_address
-                // Passkey users need their Safe address calculated from WebAuthn signer
-                const { data: credential } = await supabase
-                    .from("passkey_credentials")
-                    .select("public_key_x, public_key_y, safe_signer_address")
-                    .eq("user_address", spritzId)
-                    .not("public_key_x", "is", null)
-                    .order("last_used_at", { ascending: false, nullsFirst: false })
-                    .limit(1)
-                    .single();
+            const hasValidPasskey = !!(credential?.safe_signer_address && credential?.public_key_x);
+            
+            if (walletType === "wallet") {
+                // WALLET USERS: Safe owned by their connected wallet
+                // They can sign with their connected wallet, no passkey needed
                 
-                if (credential?.safe_signer_address) {
-                    // User has passkey with signer address - calculate correct Safe address
-                    walletType = "passkey";
-                    smartWalletAddress = calculateSafeAddress(credential.safe_signer_address as Address);
-                    console.log("[SmartWallet] Passkey user - Safe address from signer:", smartWalletAddress.slice(0, 10));
-                    
-                    // Store for future lookups
-                    if (user) {
-                        await supabase
-                            .from("shout_users")
-                            .update({ 
-                                smart_wallet_address: smartWalletAddress,
-                                updated_at: new Date().toISOString(),
-                            })
-                            .eq("wallet_address", spritzId);
-                    }
-                } else if (credential?.public_key_x && credential?.public_key_y) {
-                    // User has passkey but no signer address stored yet (legacy)
-                    // Fall back to identity-based calculation (will be corrected on first tx)
-                    console.log("[SmartWallet] Passkey user without signer - legacy fallback");
-                    walletType = "passkey";
-                    smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
+                if (user?.smart_wallet_address) {
+                    smartWalletAddress = user.smart_wallet_address as Address;
                 } else {
-                    // PRIORITY 3: Non-passkey users - use Spritz ID-based Safe
                     smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
                     
                     // Store for future lookups
-                    if (user) {
+                    await supabase
+                        .from("shout_users")
+                        .update({ 
+                            smart_wallet_address: smartWalletAddress,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("wallet_address", spritzId);
+                }
+                
+                canSign = true;
+                signerType = "eoa";
+                console.log("[SmartWallet] Wallet user - Safe owned by connected wallet:", smartWalletAddress?.slice(0, 10));
+                
+            } else {
+                // PASSKEY/EMAIL/DIGITAL ID USERS: Safe owned by passkey signer
+                // They MUST have a passkey to access their wallet
+                
+                if (!hasValidPasskey) {
+                    // No passkey - user needs to create one first
+                    needsPasskey = true;
+                    smartWalletAddress = null;
+                    canSign = false;
+                    signerType = "none";
+                    console.log("[SmartWallet] Non-wallet user without passkey - needs passkey setup");
+                    
+                } else {
+                    // Has passkey - Safe is owned by the passkey signer
+                    passkeyCredentialId = credential.credential_id;
+                    
+                    // Check if we have a stored address (prevents address changes)
+                    if (user?.smart_wallet_address) {
+                        smartWalletAddress = user.smart_wallet_address as Address;
+                        console.log("[SmartWallet] Using stored passkey-based Safe:", smartWalletAddress.slice(0, 10));
+                    } else {
+                        // Calculate Safe from passkey signer
+                        smartWalletAddress = calculateSafeAddress(credential.safe_signer_address as Address);
+                        
+                        // Store permanently - this passkey now controls this Safe
                         await supabase
                             .from("shout_users")
                             .update({ 
@@ -118,66 +155,56 @@ export async function GET(request: NextRequest) {
                                 updated_at: new Date().toISOString(),
                             })
                             .eq("wallet_address", spritzId);
+                        
+                        console.log("[SmartWallet] Created passkey-based Safe:", smartWalletAddress.slice(0, 10));
                     }
+                    
+                    canSign = true;
+                    signerType = "passkey";
                 }
             }
-        } else {
-            // No DB access - fallback to calculation
-            smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
         }
 
-        // Check deployment status and get signing info
-        let canSign = false;
-        let signerType: "eoa" | "passkey" | "none" = "none";
-        
-        try {
-            const result = await getSmartWalletAddress(spritzId, walletType);
-            isDeployed = result.isDeployed;
-            canSign = result.canSign;
-            signerType = result.signerType;
-        } catch {
-            // Set defaults based on wallet type
-            canSign = walletType === "wallet" || walletType === "email";
-            signerType = canSign ? "eoa" : "none";
+        // Check deployment status if we have an address
+        if (smartWalletAddress) {
+            try {
+                const result = await getSmartWalletAddress(spritzId, walletType);
+                isDeployed = result.isDeployed;
+            } catch {
+                isDeployed = false;
+            }
         }
 
-        console.log("[SmartWallet] Address lookup:", {
-            loginAddress: spritzId.slice(0, 10) + "...",
-            spritzWallet: smartWalletAddress.slice(0, 10) + "...",
+        console.log("[SmartWallet] Result:", {
+            spritzId: spritzId.slice(0, 10) + "...",
+            smartWallet: smartWalletAddress?.slice(0, 10) || "none",
             walletType,
+            needsPasskey,
             canSign,
-            note: "Safe counterfactual address - deploys on first tx",
         });
 
         return NextResponse.json({
             spritzId,
             smartWalletAddress,
+            needsPasskey,
+            passkeyCredentialId,
             isDeployed,
             walletType,
             canSign,
             signerType,
             supportedChains: getSupportedChains(),
+            // Warning message for non-wallet users
+            ...(requiresPasskeyToSign(walletType) && !needsPasskey && {
+                warning: "Your passkey is your wallet key. If you delete your passkey, you will lose access to this wallet and any funds in it.",
+            }),
         });
 
     } catch (error) {
         console.error("[SmartWallet] Error:", error);
-        
-        // Even on error, try to return a calculated address
-        try {
-            const smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
-            return NextResponse.json({
-                spritzId,
-                smartWalletAddress,
-                isDeployed: false,
-                walletType: "wallet" as WalletType,
-                supportedChains: getSupportedChains(),
-            });
-        } catch {
-            return NextResponse.json(
-                { error: "Failed to get smart wallet" },
-                { status: 500 }
-            );
-        }
+        return NextResponse.json(
+            { error: "Failed to get smart wallet" },
+            { status: 500 }
+        );
     }
 }
 
