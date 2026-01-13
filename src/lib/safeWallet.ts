@@ -21,7 +21,6 @@ import {
     formatEther,
     custom,
     bytesToHex,
-    concat,
 } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon } from "viem/chains";
 import { 
@@ -358,16 +357,22 @@ export async function createPasskeySafeAccountClient(
     const publicClient = getPublicClient(chainId);
     const pimlicoClient = getPimlicoClient(chainId);
 
-    // Convert our P256 public key to the format viem expects (concatenated x||y)
-    // Remove '0x' prefix, concatenate, add '0x' back
-    const publicKeyHex = concat([
-        passkeyCredential.publicKey.x as Hex,
-        passkeyCredential.publicKey.y as Hex,
-    ]).slice(2); // Remove extra 0x from concat
-    const formattedPublicKey = `0x${publicKeyHex.replace(/^0x/, '')}` as Hex;
+    // Convert our P256 public key to the format viem/ox expects (concatenated x||y, 64 bytes)
+    // x and y are each 32 bytes (64 hex chars) with 0x prefix
+    const xHex = passkeyCredential.publicKey.x.replace(/^0x/i, '');
+    const yHex = passkeyCredential.publicKey.y.replace(/^0x/i, '');
+    
+    // Ensure each coordinate is exactly 64 hex chars (32 bytes), pad with leading zeros if needed
+    const xPadded = xHex.padStart(64, '0');
+    const yPadded = yHex.padStart(64, '0');
+    
+    // Concatenate: total 128 hex chars (64 bytes)
+    const formattedPublicKey = `0x${xPadded}${yPadded}` as Hex;
 
     console.log(`[SafeWallet] Creating WebAuthn account with credential: ${passkeyCredential.credentialId.slice(0, 20)}...`);
-    console.log(`[SafeWallet] Public key (hex): ${formattedPublicKey.slice(0, 30)}...`);
+    console.log(`[SafeWallet] Public key X: ${passkeyCredential.publicKey.x.slice(0, 20)}... (${xHex.length} chars)`);
+    console.log(`[SafeWallet] Public key Y: ${passkeyCredential.publicKey.y.slice(0, 20)}... (${yHex.length} chars)`);
+    console.log(`[SafeWallet] Formatted public key: ${formattedPublicKey.slice(0, 30)}... (${formattedPublicKey.length - 2} chars)`);
 
     // Create a WebAuthn account using viem's built-in support
     const webAuthnAccount = toWebAuthnAccount({
