@@ -435,53 +435,14 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] Creating smart account client...`);
     console.log(`[SafeWallet] Paymaster context:`, paymasterContext);
 
-    // Create smart account client with Pimlico bundler
-    // Use paymaster client properly with sponsorship
+    // Create smart account client with Pimlico bundler and paymaster
+    // Let permissionless.js handle the paymaster integration
     const smartAccountClient = createSmartAccountClient({
         account: safeAccount,
         chain,
         bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-        // Use the Pimlico client as paymaster with proper sponsorship
-        paymaster: {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            async getPaymasterData(userOperation: any) {
-                console.log("[SafeWallet] Getting paymaster data for UserOp...");
-                try {
-                    const result = await pimlicoClient.sponsorUserOperation({
-                        userOperation: {
-                            ...userOperation,
-                            signature: userOperation.signature || "0x",
-                        },
-                        ...(paymasterContext && { sponsorshipPolicyId: paymasterContext.sponsorshipPolicyId }),
-                    });
-                    console.log("[SafeWallet] Paymaster data received:", {
-                        paymaster: result.paymaster,
-                        paymasterDataLength: result.paymasterData?.length,
-                    });
-                    return result;
-                } catch (err) {
-                    console.error("[SafeWallet] Paymaster error:", err);
-                    throw err;
-                }
-            },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            async getPaymasterStubData(userOperation: any) {
-                console.log("[SafeWallet] Getting paymaster stub data...");
-                try {
-                    const result = await pimlicoClient.sponsorUserOperation({
-                        userOperation: {
-                            ...userOperation,
-                            signature: userOperation.signature || "0x",
-                        },
-                        ...(paymasterContext && { sponsorshipPolicyId: paymasterContext.sponsorshipPolicyId }),
-                    });
-                    return result;
-                } catch (err) {
-                    console.error("[SafeWallet] Paymaster stub error:", err);
-                    throw err;
-                }
-            },
-        },
+        paymaster: pimlicoClient,
+        paymasterContext,
         userOperation: {
             estimateFeesPerGas: async () => {
                 const prices = await pimlicoClient.getUserOperationGasPrice();
