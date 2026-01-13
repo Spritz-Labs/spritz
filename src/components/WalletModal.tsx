@@ -385,11 +385,17 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         }
 
         if (hash) {
-            // Success - refresh balances after a delay
+            // Success - refresh balances after delays to catch blockchain indexing
+            // First refresh after 3 seconds
             setTimeout(() => {
                 refresh();
                 refreshTx();
-            }, 2000);
+            }, 3000);
+            // Second refresh after 8 seconds to catch any indexing lag
+            setTimeout(() => {
+                refresh();
+                refreshTx();
+            }, 8000);
         }
     }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx]);
 
