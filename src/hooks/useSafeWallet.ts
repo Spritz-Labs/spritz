@@ -348,14 +348,27 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 return null;
             }
 
-            // Handle mainnet transaction errors with helpful message
+            // Handle transaction errors with helpful messages
             const errString = err instanceof Error ? err.message : String(err);
-            if (chainId === 1 && (
-                errString.includes("UserOperation reverted") ||
-                errString.includes("insufficient") ||
-                errString.includes("paymaster")
-            )) {
-                setError("Transaction failed. Ensure you have enough ETH for gas. For free transactions, try Base or another L2 chain.");
+            
+            // Check for common UserOperation errors
+            if (errString.includes("UserOperation reverted") || 
+                errString.includes("reverted during simulation") ||
+                errString.includes("reason: 0x")) {
+                
+                if (chainId === 1) {
+                    // Mainnet uses USDC paymaster
+                    setError("Insufficient funds in Safe. Mainnet requires ETH (to send) + USDC (for gas). Try a free L2 like Base instead.");
+                } else {
+                    // L2s have sponsored gas but still need the token
+                    setError("Insufficient funds in Safe. Deposit tokens to your Safe wallet address first.");
+                }
+                setStatus("error");
+                return null;
+            }
+            
+            if (errString.includes("insufficient") || errString.includes("paymaster")) {
+                setError("Insufficient balance to cover gas fees. Deposit more funds to your Safe wallet.");
                 setStatus("error");
                 return null;
             }
