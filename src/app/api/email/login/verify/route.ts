@@ -86,88 +86,95 @@ export async function POST(request: NextRequest) {
             .update({ verified: true })
             .eq("id", verification.id);
 
-        // Derive the smart account address from email
-        const privateKey = derivePrivateKeyFromEmail(normalizedEmail, EFFECTIVE_EMAIL_SECRET);
-        const account = privateKeyToAccount(privateKey);
-        const smartAccountAddress = account.address.toLowerCase();
-
-        // Find or create user with this address
-        let { data: user, error: userError } = await supabase
+        // CRITICAL FIX: Check for EXISTING account with this email FIRST
+        // This prevents creating duplicate accounts when EMAIL_AUTH_SECRET changes
+        // or when users have accounts from different auth methods
+        const { data: existingUsers } = await supabase
             .from("shout_users")
             .select("*")
-            .eq("wallet_address", smartAccountAddress)
-            .single();
+            .eq("email", normalizedEmail)
+            .eq("email_verified", true)
+            .order("login_count", { ascending: false }); // Prefer most-used account
 
-        if (userError && userError.code === "PGRST116") {
-            // User doesn't exist, create them
-            const { data: newUser, error: createError } = await supabase
+        let user = existingUsers?.[0] || null;
+        let finalAddress: string;
+
+        if (user) {
+            // Use the EXISTING account - don't create a new one!
+            console.log("[EmailLogin] Found existing account for email:", normalizedEmail, "->", user.wallet_address);
+            finalAddress = user.wallet_address;
+            
+            // Update last login
+            await supabase
                 .from("shout_users")
-                .insert({
-                    wallet_address: smartAccountAddress,
-                    email: normalizedEmail,
-                    email_verified: true,
-                    email_verified_at: new Date().toISOString(),
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
+                .update({
+                    last_login: new Date().toISOString(),
+                    login_count: (user.login_count || 0) + 1,
                 })
-                .select()
+                .eq("wallet_address", finalAddress);
+        } else {
+            // No existing account with this email - derive address and create new user
+            const privateKey = derivePrivateKeyFromEmail(normalizedEmail, EFFECTIVE_EMAIL_SECRET);
+            const account = privateKeyToAccount(privateKey);
+            finalAddress = account.address.toLowerCase();
+
+            // Check if this derived address already exists (edge case)
+            const { data: derivedUser } = await supabase
+                .from("shout_users")
+                .select("*")
+                .eq("wallet_address", finalAddress)
                 .single();
 
-            if (createError) {
-                console.error("[EmailLogin] Error creating user:", createError);
-                // Continue anyway - user can still login
+            if (derivedUser) {
+                user = derivedUser;
+                // Update with verified email
+                await supabase
+                    .from("shout_users")
+                    .update({
+                        email: normalizedEmail,
+                        email_verified: true,
+                        email_verified_at: new Date().toISOString(),
+                        last_login: new Date().toISOString(),
+                        login_count: (derivedUser.login_count || 0) + 1,
+                    })
+                    .eq("wallet_address", finalAddress);
             } else {
-                user = newUser;
-            }
-        } else if (user && !user.email_verified) {
-            // User exists but email not verified - update it
-            const { error: updateError } = await supabase
-                .from("shout_users")
-                .update({
-                    email: normalizedEmail,
-                    email_verified: true,
-                    email_verified_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                })
-                .eq("wallet_address", smartAccountAddress);
+                // Create new user
+                const { data: newUser, error: createError } = await supabase
+                    .from("shout_users")
+                    .insert({
+                        wallet_address: finalAddress,
+                        email: normalizedEmail,
+                        email_verified: true,
+                        email_verified_at: new Date().toISOString(),
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        login_count: 1,
+                    })
+                    .select()
+                    .single();
 
-            if (updateError) {
-                console.error("[EmailLogin] Error updating user email:", updateError);
-                // Continue anyway - verification still succeeded
-            } else {
-                // Update local user object
-                user = { ...user, email: normalizedEmail, email_verified: true };
-            }
-        } else if (user && user.email !== normalizedEmail) {
-            // User exists with different email - update it
-            const { error: updateError } = await supabase
-                .from("shout_users")
-                .update({
-                    email: normalizedEmail,
-                    email_verified: true,
-                    email_verified_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                })
-                .eq("wallet_address", smartAccountAddress);
-
-            if (updateError) {
-                console.error("[EmailLogin] Error updating user email:", updateError);
+                if (createError) {
+                    console.error("[EmailLogin] Error creating user:", createError);
+                } else {
+                    user = newUser;
+                }
             }
         }
 
         // Generate SIGNED session token for frontend localStorage (matches passkey flow)
         // SECURITY: Token is signed with HMAC-SHA256, not just base64 encoded
-        const sessionToken = await createFrontendSessionToken(smartAccountAddress, "email");
+        const sessionToken = await createFrontendSessionToken(finalAddress, "email");
 
         // Return session with cookie AND sessionToken for frontend
         return createAuthResponse(
-            smartAccountAddress,
+            finalAddress,
             "email",
             {
                 success: true,
                 message: "Email verified successfully",
                 email: normalizedEmail,
-                walletAddress: smartAccountAddress,
+                walletAddress: finalAddress,
                 sessionToken, // For frontend localStorage
                 user: user ? {
                     id: user.id,

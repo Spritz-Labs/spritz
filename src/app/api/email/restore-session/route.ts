@@ -67,41 +67,63 @@ export async function POST(request: NextRequest) {
         const normalizedEmail = email.toLowerCase();
         const normalizedAddress = address.toLowerCase();
 
-        // Server re-derives the address from email to verify it matches
-        const privateKey = derivePrivateKeyFromEmail(normalizedEmail, EFFECTIVE_EMAIL_SECRET);
-        const account = privateKeyToAccount(privateKey);
-        const expectedAddress = account.address.toLowerCase();
-
-        // Verify the client-provided address matches the derived address
-        if (normalizedAddress !== expectedAddress) {
-            console.warn("[EmailRestore] Address mismatch:", {
-                provided: normalizedAddress,
-                expected: expectedAddress,
-            });
-            return NextResponse.json(
-                { error: "Invalid session data" },
-                { status: 401 }
-            );
-        }
-
-        // Find user in database
-        const { data: user } = await supabase
+        // FIRST: Check if user has an existing account with this email at the provided address
+        // This handles cases where users logged in via existing account (not derived address)
+        const { data: existingUser } = await supabase
             .from("shout_users")
             .select("*")
-            .eq("wallet_address", expectedAddress)
+            .eq("wallet_address", normalizedAddress)
+            .eq("email", normalizedEmail)
+            .eq("email_verified", true)
             .single();
 
+        let user = existingUser;
+        let finalAddress = normalizedAddress;
+
+        if (!existingUser) {
+            // No existing user at provided address - fall back to derived address check
+            const privateKey = derivePrivateKeyFromEmail(normalizedEmail, EFFECTIVE_EMAIL_SECRET);
+            const account = privateKeyToAccount(privateKey);
+            const expectedAddress = account.address.toLowerCase();
+
+            // Verify the client-provided address matches the derived address
+            if (normalizedAddress !== expectedAddress) {
+                console.warn("[EmailRestore] Address mismatch and no existing account:", {
+                    provided: normalizedAddress,
+                    expected: expectedAddress,
+                    email: normalizedEmail,
+                });
+                return NextResponse.json(
+                    { error: "Invalid session data" },
+                    { status: 401 }
+                );
+            }
+
+            finalAddress = expectedAddress;
+            
+            // Find user at derived address
+            const { data: derivedUser } = await supabase
+                .from("shout_users")
+                .select("*")
+                .eq("wallet_address", expectedAddress)
+                .single();
+            
+            user = derivedUser;
+        } else {
+            console.log("[EmailRestore] Found existing account for email:", normalizedEmail, "->", normalizedAddress);
+        }
+
         // Create session for the verified email user
-        console.log("[EmailRestore] Restoring session for:", normalizedEmail);
+        console.log("[EmailRestore] Restoring session for:", normalizedEmail, "->", finalAddress);
         
         return createAuthResponse(
-            expectedAddress,
+            finalAddress,
             "email",
             {
                 success: true,
                 message: "Session restored",
                 email: normalizedEmail,
-                walletAddress: expectedAddress,
+                walletAddress: finalAddress,
                 user: user ? {
                     id: user.id,
                     wallet_address: user.wallet_address,
