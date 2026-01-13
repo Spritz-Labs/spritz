@@ -95,6 +95,20 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get("sortOrder") || "desc";
     const betaAccessFilter = searchParams.get("betaAccessFilter");
 
+    // If searching by username, first look up addresses from shout_usernames table
+    let usernameAddresses: string[] = [];
+    if (search) {
+        const sanitizedSearch = search.replace(/[%_\\'"]/g, '\\$&').toLowerCase();
+        const { data: usernameMatches } = await supabase
+            .from("shout_usernames")
+            .select("wallet_address")
+            .ilike("username", `%${sanitizedSearch}%`);
+        
+        if (usernameMatches) {
+            usernameAddresses = usernameMatches.map(u => u.wallet_address);
+        }
+    }
+
     let query = supabase
         .from("shout_users")
         .select("*", { count: "exact" });
@@ -102,7 +116,18 @@ export async function GET(request: NextRequest) {
     if (search) {
         // Sanitize search to prevent SQL injection - escape special chars
         const sanitizedSearch = search.replace(/[%_\\'"]/g, '\\$&');
-        query = query.or(`wallet_address.ilike.%${sanitizedSearch}%,ens_name.ilike.%${sanitizedSearch}%,username.ilike.%${sanitizedSearch}%`);
+        
+        // Build search condition: address, ENS, or username matches
+        let searchCondition = `wallet_address.ilike.%${sanitizedSearch}%,ens_name.ilike.%${sanitizedSearch}%`;
+        
+        // If we found username matches, add those addresses to the search
+        if (usernameAddresses.length > 0) {
+            // Add each username-matched address to the search
+            const addressConditions = usernameAddresses.map(addr => `wallet_address.eq.${addr}`).join(',');
+            searchCondition += `,${addressConditions}`;
+        }
+        
+        query = query.or(searchCondition);
     }
 
     // Apply beta access filter
@@ -158,10 +183,26 @@ export async function GET(request: NextRequest) {
         }
     }
 
-    // Add used_invites to each user
+    // Fetch usernames from shout_usernames table
+    let usernames: Record<string, string> = {};
+    if (userAddresses.length > 0) {
+        const { data: usernameData } = await supabase
+            .from("shout_usernames")
+            .select("wallet_address, username")
+            .in("wallet_address", userAddresses);
+        
+        if (usernameData) {
+            for (const un of usernameData) {
+                usernames[un.wallet_address] = un.username;
+            }
+        }
+    }
+
+    // Add used_invites and username to each user
     const usersWithInvites = filteredUsers.map(user => ({
         ...user,
         invites_used: usedInviteCounts[user.wallet_address] || 0,
+        username: usernames[user.wallet_address] || user.username || null,
     }));
 
     // For "neither" filter, we need to recalculate total count
