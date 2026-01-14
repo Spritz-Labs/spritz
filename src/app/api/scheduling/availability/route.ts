@@ -182,21 +182,52 @@ export async function GET(request: NextRequest) {
                     try {
                         const { credentials } = await oauth2Client.refreshAccessToken();
                         
-                        // Update stored tokens
-                        await supabase
+                        // Update stored tokens AND last_sync_at
+                        const { error: updateError } = await supabase
                             .from("shout_calendar_connections")
                             .update({
                                 access_token: credentials.access_token,
                                 token_expires_at: credentials.expiry_date 
                                     ? new Date(credentials.expiry_date).toISOString()
                                     : new Date(Date.now() + 3600 * 1000).toISOString(),
+                                last_sync_at: new Date().toISOString(), // Update sync time on successful refresh
+                                updated_at: new Date().toISOString(),
                             })
                             .eq("wallet_address", userAddress.toLowerCase())
                             .eq("provider", "google");
                         
+                        if (updateError) {
+                            console.error("[Scheduling] Failed to update tokens in DB:", updateError);
+                        } else {
+                            console.log("[Scheduling] Successfully refreshed token for", userAddress);
+                        }
+                        
                         oauth2Client.setCredentials(credentials);
-                    } catch (refreshError) {
-                        console.error("[Scheduling] Token refresh failed:", refreshError);
+                    } catch (refreshError: unknown) {
+                        // Log detailed error for debugging
+                        const errorMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
+                        const errorDetails = refreshError instanceof Error && 'response' in refreshError 
+                            ? (refreshError as any).response?.data 
+                            : null;
+                        
+                        console.error("[Scheduling] Token refresh failed:", {
+                            userAddress,
+                            error: errorMessage,
+                            details: errorDetails,
+                            hasRefreshToken: !!connection.refresh_token,
+                            tokenExpiresAt: connection.token_expires_at,
+                        });
+                        
+                        // Mark the connection as needing re-auth
+                        await supabase
+                            .from("shout_calendar_connections")
+                            .update({
+                                is_active: false, // Mark as inactive so user knows to reconnect
+                                updated_at: new Date().toISOString(),
+                            })
+                            .eq("wallet_address", userAddress.toLowerCase())
+                            .eq("provider", "google");
+                        
                         // IMPORTANT: If token refresh fails, return empty slots for safety
                         // User needs to reconnect their Google Calendar
                         console.log("[Scheduling] Token refresh failed - returning empty slots. User should reconnect Google Calendar.");
@@ -209,6 +240,17 @@ export async function GET(request: NextRequest) {
                 } else if (isExpired) {
                     // Token expired but no refresh token - can't refresh
                     console.log("[Scheduling] Token expired with no refresh token - returning empty slots");
+                    
+                    // Mark as inactive
+                    await supabase
+                        .from("shout_calendar_connections")
+                        .update({
+                            is_active: false,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("wallet_address", userAddress.toLowerCase())
+                        .eq("provider", "google");
+                    
                     return NextResponse.json({
                         availableSlots: [],
                         message: "Calendar connection expired. Please reconnect your Google Calendar in settings.",
@@ -230,6 +272,15 @@ export async function GET(request: NextRequest) {
                 const busyPeriods = busyResponse.data.calendars?.[connection.calendar_id || "primary"]?.busy || [];
                 
                 console.log("[Scheduling] Found", busyPeriods.length, "busy periods from Google Calendar");
+                
+                // Update last_sync_at on successful calendar check
+                await supabase
+                    .from("shout_calendar_connections")
+                    .update({
+                        last_sync_at: new Date().toISOString(),
+                    })
+                    .eq("wallet_address", userAddress.toLowerCase())
+                    .eq("provider", "google");
 
                 // Filter out slots that conflict with busy periods
                 availableSlots = potentialSlots.filter((slot) => {
