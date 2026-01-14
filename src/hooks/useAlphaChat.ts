@@ -12,6 +12,9 @@ export type AlphaMessage = {
     created_at: string;
     reply_to_id?: string | null;
     reply_to?: AlphaMessage | null;
+    is_pinned?: boolean;
+    pinned_by?: string | null;
+    pinned_at?: string | null;
 };
 
 export type AlphaReaction = {
@@ -41,6 +44,7 @@ export type AlphaMembership = {
 
 type AlphaChatState = {
     messages: AlphaMessage[];
+    pinnedMessages: AlphaMessage[];
     reactions: Record<string, AlphaMessageReaction[]>;
     membership: AlphaMembership | null;
     unreadCount: number;
@@ -56,6 +60,7 @@ const PAGE_SIZE = 50;
 export function useAlphaChat(userAddress: string | null) {
     const [state, setState] = useState<AlphaChatState>({
         messages: [],
+        pinnedMessages: [],
         reactions: {},
         membership: null,
         unreadCount: 0,
@@ -121,6 +126,18 @@ export function useAlphaChat(userAddress: string | null) {
                 console.error("[AlphaChat] Messages query error:", messagesError);
             }
 
+            // Get pinned messages
+            const { data: pinnedData, error: pinnedError } = await client
+                .from("shout_alpha_messages")
+                .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                .eq("is_pinned", true)
+                .order("pinned_at", { ascending: false });
+
+            if (pinnedError) {
+                console.error("[AlphaChat] Pinned messages query error:", pinnedError);
+            }
+            const pinnedMessages = pinnedData || [];
+
             console.log("[AlphaChat] Loaded", messages?.length || 0, "messages");
 
             // Get reactions for these messages
@@ -167,6 +184,7 @@ export function useAlphaChat(userAddress: string | null) {
 
             setState({
                 messages: messages || [],
+                pinnedMessages,
                 reactions: processedReactions,
                 membership: membershipData,
                 unreadCount,
@@ -567,6 +585,70 @@ export function useAlphaChat(userAddress: string | null) {
         }
     }, [userAddress]);
 
+    // Toggle pin on a message (admin only)
+    const togglePinMessage = useCallback(async (messageId: string, shouldPin: boolean): Promise<boolean> => {
+        if (!isSupabaseConfigured || !supabase || !userAddress) return false;
+
+        try {
+            const updateData = shouldPin
+                ? {
+                    is_pinned: true,
+                    pinned_by: userAddress.toLowerCase(),
+                    pinned_at: new Date().toISOString(),
+                }
+                : {
+                    is_pinned: false,
+                    pinned_by: null,
+                    pinned_at: null,
+                };
+
+            const { error } = await supabase
+                .from("shout_alpha_messages")
+                .update(updateData)
+                .eq("id", messageId);
+
+            if (error) {
+                console.error("[AlphaChat] Toggle pin error:", error);
+                return false;
+            }
+
+            // Update local state
+            setState(prev => {
+                // Update the message in messages array
+                const updatedMessages = prev.messages.map(m =>
+                    m.id === messageId
+                        ? { ...m, is_pinned: shouldPin, pinned_by: shouldPin ? userAddress.toLowerCase() : null, pinned_at: shouldPin ? new Date().toISOString() : null }
+                        : m
+                );
+
+                // Update pinned messages list
+                let updatedPinned: AlphaMessage[];
+                if (shouldPin) {
+                    const pinnedMsg = updatedMessages.find(m => m.id === messageId);
+                    if (pinnedMsg) {
+                        updatedPinned = [pinnedMsg, ...prev.pinnedMessages.filter(m => m.id !== messageId)];
+                    } else {
+                        updatedPinned = prev.pinnedMessages;
+                    }
+                } else {
+                    updatedPinned = prev.pinnedMessages.filter(m => m.id !== messageId);
+                }
+
+                return {
+                    ...prev,
+                    messages: updatedMessages,
+                    pinnedMessages: updatedPinned,
+                };
+            });
+
+            console.log("[AlphaChat] Message", shouldPin ? "pinned" : "unpinned", messageId);
+            return true;
+        } catch (err) {
+            console.error("[AlphaChat] Toggle pin error:", err);
+            return false;
+        }
+    }, [userAddress]);
+
     // Mark messages as read
     const markAsRead = useCallback(async () => {
         if (!isSupabaseConfigured || !supabase || !userAddress) return;
@@ -763,6 +845,7 @@ export function useAlphaChat(userAddress: string | null) {
         loadMoreMessages,
         setReplyingTo,
         toggleReaction,
+        togglePinMessage,
     };
 }
 

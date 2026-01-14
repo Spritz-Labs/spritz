@@ -4506,6 +4506,7 @@ function DashboardContent({
                             address.toLowerCase()
                     )
                 }
+                isAdmin={isAdmin}
             />
 
             {/* Create Group Modal */}

@@ -10,6 +10,8 @@ import { PixelArtShare } from "./PixelArtShare";
 import { QuickReactionPicker } from "./EmojiPicker";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
+import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
+import { useModeration } from "@/hooks/useModeration";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -28,6 +30,7 @@ interface AlphaChatModalProps {
     // Shared hook state from parent
     alphaChat: {
         messages: AlphaMessage[];
+        pinnedMessages: AlphaMessage[];
         reactions: Record<string, AlphaMessageReaction[]>;
         membership: AlphaMembership | null;
         isMember: boolean;
@@ -43,6 +46,7 @@ interface AlphaChatModalProps {
         joinChannel: () => Promise<boolean>;
         setReplyingTo: (message: AlphaMessage | null) => void;
         toggleReaction: (messageId: string, emoji: string) => Promise<boolean>;
+        togglePinMessage: (messageId: string, shouldPin: boolean) => Promise<boolean>;
         refreshMessages?: () => Promise<void>;
         loadMoreMessages: () => Promise<void>;
     };
@@ -55,6 +59,8 @@ interface AlphaChatModalProps {
     onAddFriend?: (address: string) => Promise<boolean>;
     // Check if already a friend
     isFriend?: (address: string) => boolean;
+    // Admin controls
+    isAdmin?: boolean;
 }
 
 export function AlphaChatModal({
@@ -65,9 +71,11 @@ export function AlphaChatModal({
     getUserInfo,
     onAddFriend,
     isFriend,
+    isAdmin = false,
 }: AlphaChatModalProps) {
     const {
         messages,
+        pinnedMessages,
         reactions,
         membership,
         isMember,
@@ -83,11 +91,20 @@ export function AlphaChatModal({
         joinChannel,
         setReplyingTo,
         toggleReaction,
+        togglePinMessage,
         refreshMessages,
         loadMoreMessages,
     } = alphaChat;
     
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [showPinnedMessages, setShowPinnedMessages] = useState(false);
+    const [pinningMessage, setPinningMessage] = useState<string | null>(null);
+    const [showModerationPanel, setShowModerationPanel] = useState(false);
+    const [muteTarget, setMuteTarget] = useState<{ address: string; name: string } | null>(null);
+    const [deletingMessage, setDeletingMessage] = useState<string | null>(null);
+
+    // Moderation hook (null channelId = global/alpha chat)
+    const moderation = useModeration(userAddress, null);
 
     const [newMessage, setNewMessage] = useState("");
     const [showPixelArt, setShowPixelArt] = useState(false);
@@ -236,6 +253,51 @@ export function AlphaChatModal({
             setIsAddingFriend(false);
         }
     };
+
+    // Handle pin message (admin or moderator with pin permission)
+    const handlePinMessage = async (messageId: string, currentlyPinned: boolean) => {
+        if ((!isAdmin && !moderation.permissions.canPin) || pinningMessage) return;
+
+        setPinningMessage(messageId);
+        try {
+            await togglePinMessage(messageId, !currentlyPinned);
+        } finally {
+            setPinningMessage(null);
+        }
+    };
+
+    // Handle delete message (moderator with delete permission)
+    const handleDeleteMessage = async (messageId: string) => {
+        if (!moderation.permissions.canDelete || deletingMessage) return;
+
+        const confirmed = window.confirm("Delete this message? This action will be logged.");
+        if (!confirmed) return;
+
+        setDeletingMessage(messageId);
+        try {
+            const success = await moderation.deleteMessage(messageId, "alpha");
+            if (success) {
+                // Remove from local state
+                // The hook should handle this, but we can trigger a refresh
+                refreshMessages?.();
+            }
+        } finally {
+            setDeletingMessage(null);
+        }
+    };
+
+    // Handle mute user
+    const handleMuteUser = async (duration: string, reason?: string): Promise<boolean> => {
+        if (!muteTarget) return false;
+        const success = await moderation.muteUser(muteTarget.address, { duration, reason });
+        if (success) {
+            setMuteTarget(null);
+        }
+        return success;
+    };
+
+    // Check if current user is muted
+    const isCurrentUserMuted = moderation.isUserMuted(userAddress);
 
     // Send message
     const handleSend = useCallback(async () => {
@@ -440,6 +502,37 @@ export function AlphaChatModal({
                                     </button>
                                 )}
 
+                                {/* Pinned Messages Button */}
+                                {pinnedMessages.length > 0 && (
+                                    <button
+                                        onClick={() => setShowPinnedMessages(!showPinnedMessages)}
+                                        className={`p-2 rounded-lg flex items-center gap-1 transition-colors ${
+                                            showPinnedMessages
+                                                ? "bg-amber-500/20 text-amber-400"
+                                                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+                                        }`}
+                                        title="View pinned messages"
+                                    >
+                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                                        </svg>
+                                        <span className="text-xs font-medium">{pinnedMessages.length}</span>
+                                    </button>
+                                )}
+
+                                {/* Moderation Button - For mods/admins */}
+                                {(moderation.permissions.isModerator || isAdmin) && (
+                                    <button
+                                        onClick={() => setShowModerationPanel(true)}
+                                        className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-amber-400 hover:bg-zinc-700 transition-colors"
+                                        title="Moderation panel"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                    </button>
+                                )}
+
                                 {/* Notification Toggle */}
                                 {isMember && membership && (
                                     <button
@@ -622,6 +715,67 @@ export function AlphaChatModal({
                             {/* Messages */}
                             {isMember && (
                                 <>
+                                    {/* Pinned Messages Panel */}
+                                    <AnimatePresence>
+                                        {showPinnedMessages && pinnedMessages.length > 0 && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="border-b border-zinc-800 overflow-hidden"
+                                            >
+                                                <div className="p-4 bg-zinc-900/50 max-h-60 overflow-y-auto">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <span className="text-sm font-medium text-amber-400 flex items-center gap-2">
+                                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                                                            </svg>
+                                                            Pinned Messages
+                                                        </span>
+                                                        <button
+                                                            onClick={() => setShowPinnedMessages(false)}
+                                                            className="text-zinc-500 hover:text-white"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {pinnedMessages.map((msg) => (
+                                                            <div key={msg.id} className="bg-zinc-800/50 rounded-lg p-3 flex items-start gap-3">
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs text-orange-400 font-medium mb-1">
+                                                                        {formatSender(msg.sender_address)}
+                                                                    </p>
+                                                                    <p className="text-sm text-white break-words line-clamp-2">
+                                                                        {msg.content.startsWith("[PIXEL_ART]") ? "🎨 Pixel Art" : msg.content}
+                                                                    </p>
+                                                                </div>
+                                                                {isAdmin && (
+                                                                    <button
+                                                                        onClick={() => handlePinMessage(msg.id, true)}
+                                                                        disabled={pinningMessage === msg.id}
+                                                                        className="text-zinc-500 hover:text-red-400 transition-colors flex-shrink-0"
+                                                                        title="Unpin message"
+                                                                    >
+                                                                        {pinningMessage === msg.id ? (
+                                                                            <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                                                        ) : (
+                                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                            </svg>
+                                                                        )}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
                                     <div 
                                         ref={messagesContainerRef}
                                         onScroll={handleScroll}
@@ -659,12 +813,15 @@ export function AlphaChatModal({
                                                         <span className="text-xs text-zinc-500">Scroll up to load more</span>
                                                     </div>
                                                 )}
-                                                {messages.map((msg, msgIndex) => {
+                                                {messages
+                                                .filter(msg => !msg.is_deleted) // Hide deleted messages
+                                                .map((msg, msgIndex) => {
                                                 const isOwn =
                                                     msg.sender_address.toLowerCase() ===
                                                     userAddress.toLowerCase();
                                                 const isPixelArt = isPixelArtMessage(msg.content);
                                                 const senderAvatar = getSenderAvatar(msg.sender_address);
+                                                const isSenderMuted = moderation.isUserMuted(msg.sender_address);
                                                 // Only show user popup on the FIRST message from this sender to avoid duplicates
                                                 const isFirstMessageFromSender = messages.findIndex(
                                                     m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
@@ -763,6 +920,41 @@ export function AlphaChatModal({
                                                                             </svg>
                                                                             Copy Address
                                                                         </button>
+                                                                        
+                                                                        {/* Mute Button - Moderators only */}
+                                                                        {moderation.permissions.canMute && (
+                                                                            moderation.isUserMuted(msg.sender_address) ? (
+                                                                                <button
+                                                                                    onClick={async () => {
+                                                                                        await moderation.unmuteUser(msg.sender_address);
+                                                                                        setSelectedUser(null);
+                                                                                    }}
+                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm transition-colors"
+                                                                                >
+                                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                                                    </svg>
+                                                                                    Unmute User
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        setMuteTarget({
+                                                                                            address: msg.sender_address,
+                                                                                            name: formatSender(msg.sender_address),
+                                                                                        });
+                                                                                        setSelectedUser(null);
+                                                                                    }}
+                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
+                                                                                >
+                                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                                                    </svg>
+                                                                                    Mute User
+                                                                                </button>
+                                                                            )
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -864,20 +1056,25 @@ export function AlphaChatModal({
                                                                 </div>
                                                             )}
 
-                                                            <p
-                                                                className={`text-xs mt-1 ${
-                                                                    isOwn
-                                                                        ? "text-white/70"
-                                                                        : "text-zinc-500"
-                                                                }`}
-                                                            >
-                                                                {new Date(
-                                                                    msg.created_at
-                                                                ).toLocaleTimeString([], {
-                                                                    hour: "2-digit",
-                                                                    minute: "2-digit",
-                                                                })}
-                                                            </p>
+                                                            <div className={`flex items-center gap-1.5 text-xs mt-1 ${
+                                                                isOwn ? "text-white/70" : "text-zinc-500"
+                                                            }`}>
+                                                                {msg.is_pinned && (
+                                                                    <span className="text-amber-400 flex items-center gap-0.5" title="Pinned">
+                                                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                                                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                                                                        </svg>
+                                                                    </span>
+                                                                )}
+                                                                <span>
+                                                                    {new Date(
+                                                                        msg.created_at
+                                                                    ).toLocaleTimeString([], {
+                                                                        hour: "2-digit",
+                                                                        minute: "2-digit",
+                                                                    })}
+                                                                </span>
+                                                            </div>
 
                                                             {/* Message Actions - Show on tap (mobile) or click */}
                                                             <AnimatePresence>
@@ -909,6 +1106,44 @@ export function AlphaChatModal({
                                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                                                             </svg>
                                                                         </button>
+                                                                        {/* Pin Button - Admin/Moderator with pin permission */}
+                                                                        {(isAdmin || moderation.permissions.canPin) && (
+                                                                            <button
+                                                                                onClick={() => handlePinMessage(msg.id, msg.is_pinned || false)}
+                                                                                disabled={pinningMessage === msg.id}
+                                                                                className={`w-8 h-8 rounded-full ${
+                                                                                    msg.is_pinned
+                                                                                        ? "bg-amber-500/20 text-amber-400"
+                                                                                        : "bg-zinc-700 hover:bg-zinc-600 text-zinc-300"
+                                                                                } flex items-center justify-center shadow-lg border border-zinc-600`}
+                                                                                title={msg.is_pinned ? "Unpin message" : "Pin message"}
+                                                                            >
+                                                                                {pinningMessage === msg.id ? (
+                                                                                    <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                                                                ) : (
+                                                                                    <svg className="w-4 h-4" fill={msg.is_pinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={msg.is_pinned ? 0 : 2}>
+                                                                                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                                                                                    </svg>
+                                                                                )}
+                                                                            </button>
+                                                                        )}
+                                                                        {/* Delete Button - Admin/Moderator with delete permission */}
+                                                                        {(isAdmin || moderation.permissions.canDelete) && !isOwn && (
+                                                                            <button
+                                                                                onClick={() => handleDeleteMessage(msg.id)}
+                                                                                disabled={deletingMessage === msg.id}
+                                                                                className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-red-500/20 text-zinc-300 hover:text-red-400 flex items-center justify-center shadow-lg border border-zinc-600 transition-colors"
+                                                                                title="Delete message"
+                                                                            >
+                                                                                {deletingMessage === msg.id ? (
+                                                                                    <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                                                                ) : (
+                                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                                    </svg>
+                                                                                )}
+                                                                            </button>
+                                                                        )}
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
@@ -980,20 +1215,32 @@ export function AlphaChatModal({
                                                     />
                                                 </svg>
                                             </button>
-                                            <MentionInput
-                                                inputRef={inputRef}
-                                                value={newMessage}
-                                                onChange={setNewMessage}
-                                                onKeyDown={handleKeyPress}
-                                                placeholder={replyingTo ? "Type your reply... (@ to mention)" : "Message the community... (@ to mention)"}
-                                                users={mentionableUsers}
-                                                className={`w-full bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all ${
-                                                    isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"
-                                                }`}
-                                            />
+                                            {isCurrentUserMuted ? (
+                                                <div className={`flex-1 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 flex items-center justify-center gap-2 ${
+                                                    isFullscreen ? "py-4 px-5" : "py-3 px-4"
+                                                }`}>
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                    </svg>
+                                                    <span className="text-sm">You are muted from this chat</span>
+                                                </div>
+                                            ) : (
+                                                <MentionInput
+                                                    inputRef={inputRef}
+                                                    value={newMessage}
+                                                    onChange={setNewMessage}
+                                                    onKeyDown={handleKeyPress}
+                                                    placeholder={replyingTo ? "Type your reply... (@ to mention)" : "Message the community... (@ to mention)"}
+                                                    users={mentionableUsers}
+                                                    className={`w-full bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all ${
+                                                        isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"
+                                                    }`}
+                                                />
+                                            )}
                                             <button
                                                 onClick={handleSend}
-                                                disabled={!newMessage.trim() || isSending}
+                                                disabled={!newMessage.trim() || isSending || isCurrentUserMuted}
                                                 className={`rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "p-4" : "p-3"}`}
                                             >
                                                 {isSending ? (
@@ -1046,6 +1293,27 @@ export function AlphaChatModal({
                         onSend={handleSendPixelArt}
                         isSending={isUploadingPixelArt}
                     />
+
+                    {/* Moderation Panel */}
+                    <ModerationPanel
+                        isOpen={showModerationPanel}
+                        onClose={() => setShowModerationPanel(false)}
+                        userAddress={userAddress}
+                        channelId={null}
+                        channelName="Spritz Global Chat"
+                        getUserInfo={getUserInfo}
+                    />
+
+                    {/* Quick Mute Dialog */}
+                    {muteTarget && (
+                        <QuickMuteDialog
+                            isOpen={!!muteTarget}
+                            onClose={() => setMuteTarget(null)}
+                            targetAddress={muteTarget.address}
+                            targetName={muteTarget.name}
+                            onMute={handleMuteUser}
+                        />
+                    )}
                 </>
             )}
         </AnimatePresence>
