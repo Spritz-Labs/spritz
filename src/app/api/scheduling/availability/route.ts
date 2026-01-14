@@ -197,8 +197,23 @@ export async function GET(request: NextRequest) {
                         oauth2Client.setCredentials(credentials);
                     } catch (refreshError) {
                         console.error("[Scheduling] Token refresh failed:", refreshError);
-                        // Continue without calendar check
+                        // IMPORTANT: If token refresh fails, return empty slots for safety
+                        // User needs to reconnect their Google Calendar
+                        console.log("[Scheduling] Token refresh failed - returning empty slots. User should reconnect Google Calendar.");
+                        return NextResponse.json({
+                            availableSlots: [],
+                            message: "Calendar connection expired. Please reconnect your Google Calendar in settings.",
+                            calendarError: true,
+                        });
                     }
+                } else if (isExpired) {
+                    // Token expired but no refresh token - can't refresh
+                    console.log("[Scheduling] Token expired with no refresh token - returning empty slots");
+                    return NextResponse.json({
+                        availableSlots: [],
+                        message: "Calendar connection expired. Please reconnect your Google Calendar in settings.",
+                        calendarError: true,
+                    });
                 }
 
                 const calendar = google.calendar({ version: "v3", auth: oauth2Client });
@@ -237,8 +252,11 @@ export async function GET(request: NextRequest) {
                 console.log("[Scheduling] Filtered from", potentialSlots.length, "to", availableSlots.length, "available slots");
             } catch (error) {
                 console.error("[Scheduling] Google Calendar error:", error);
-                // If calendar check fails, return all potential slots
-                // (better to show more slots than none)
+                // IMPORTANT: If calendar is connected but check fails, show NO slots
+                // This prevents double-booking when there's an API issue
+                // User should reconnect their calendar if this happens
+                console.log("[Scheduling] Calendar check failed - returning empty slots for safety");
+                availableSlots = [];
             }
         } else {
             console.log("[Scheduling] No Google Calendar connected for", userAddress);
