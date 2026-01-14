@@ -1,10 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createPublicClient, http, normalize } from "viem";
+import { mainnet } from "viem/chains";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Viem client for ENS resolution
+const viemClient = createPublicClient({
+    chain: mainnet,
+    transport: http(`https://eth-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`),
+});
+
+/**
+ * Resolve a slug to a wallet address
+ * Supports: wallet addresses, ENS names, Spritz usernames, custom slugs
+ */
+async function resolveSlugToWalletAddress(slug: string): Promise<string | null> {
+    const normalizedSlug = slug.toLowerCase();
+    
+    // 1. Direct wallet address
+    if (normalizedSlug.startsWith("0x") && normalizedSlug.length === 42) {
+        console.log(`[Schedule] Slug is a wallet address: ${normalizedSlug}`);
+        return normalizedSlug;
+    }
+    
+    // 2. ENS name (ends with .eth)
+    if (normalizedSlug.endsWith(".eth")) {
+        try {
+            console.log(`[Schedule] Resolving ENS name: ${slug}`);
+            const address = await viemClient.getEnsAddress({
+                name: normalize(slug),
+            });
+            if (address) {
+                console.log(`[Schedule] ENS resolved to: ${address}`);
+                return address.toLowerCase();
+            }
+        } catch (err) {
+            console.log(`[Schedule] ENS resolution failed for ${slug}:`, err);
+        }
+        // ENS name didn't resolve, don't fall through - return null
+        return null;
+    }
+    
+    // 3. Spritz username (lookup in shout_usernames)
+    const { data: usernameRecord } = await supabase
+        .from("shout_usernames")
+        .select("wallet_address")
+        .eq("username", normalizedSlug)
+        .maybeSingle();
+    
+    if (usernameRecord?.wallet_address) {
+        console.log(`[Schedule] Username "${slug}" resolved to: ${usernameRecord.wallet_address}`);
+        return usernameRecord.wallet_address.toLowerCase();
+    }
+    
+    // 4. Custom scheduling slug (lookup in shout_user_settings)
+    const { data: slugRecord } = await supabase
+        .from("shout_user_settings")
+        .select("wallet_address")
+        .eq("scheduling_slug", normalizedSlug)
+        .maybeSingle();
+    
+    if (slugRecord?.wallet_address) {
+        console.log(`[Schedule] Scheduling slug "${slug}" resolved to: ${slugRecord.wallet_address}`);
+        return slugRecord.wallet_address.toLowerCase();
+    }
+    
+    console.log(`[Schedule] Could not resolve slug: ${slug}`);
+    return null;
+}
 
 // GET /api/public/schedule/[slug] - Get public scheduling profile
 export async function GET(
@@ -21,8 +88,18 @@ export async function GET(
             );
         }
 
-        // Try to find by slug first, then by wallet address
-        let query = supabase
+        // Resolve slug to wallet address (supports addresses, ENS, usernames, custom slugs)
+        const walletAddress = await resolveSlugToWalletAddress(slug);
+        
+        if (!walletAddress) {
+            return NextResponse.json(
+                { error: "User not found" },
+                { status: 404 }
+            );
+        }
+
+        // Fetch settings by resolved wallet address
+        const { data: settings, error } = await supabase
             .from("shout_user_settings")
             .select(`
                 wallet_address,
@@ -39,16 +116,9 @@ export async function GET(
                 scheduling_wallet_address,
                 scheduling_buffer_minutes,
                 scheduling_advance_notice_hours
-            `);
-
-        // Check if slug looks like an address (starts with 0x)
-        if (slug.toLowerCase().startsWith("0x")) {
-            query = query.eq("wallet_address", slug.toLowerCase());
-        } else {
-            query = query.eq("scheduling_slug", slug.toLowerCase());
-        }
-
-        const { data: settings, error } = await query.single();
+            `)
+            .eq("wallet_address", walletAddress)
+            .single();
 
         if (error || !settings) {
             return NextResponse.json(
