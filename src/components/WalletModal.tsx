@@ -1434,14 +1434,22 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Legacy Safe Recovery Link - for Mainnet */}
+                                        {/* Legacy Safe Recovery Link - for Mainnet wallet users */}
                                         {selectedChainId === 1 && !canUsePasskeySigning && (
-                                            <button
-                                                onClick={() => setShowLegacyRecovery(true)}
-                                                className="w-full text-xs text-zinc-500 hover:text-amber-400 transition-colors py-2"
-                                            >
-                                                🔧 Recover funds from old Safe address?
-                                            </button>
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                                                <button
+                                                    onClick={() => setShowLegacyRecovery(true)}
+                                                    className="w-full flex items-center justify-between text-left"
+                                                >
+                                                    <div>
+                                                        <p className="text-xs text-amber-300 font-medium">🔧 Legacy Safe Recovery</p>
+                                                        <p className="text-xs text-zinc-400 mt-0.5">
+                                                            Sent funds to old address? Recover them here.
+                                                        </p>
+                                                    </div>
+                                                    <span className="text-amber-400">→</span>
+                                                </button>
+                                            </div>
                                         )}
 
                                         {/* Error Message */}
