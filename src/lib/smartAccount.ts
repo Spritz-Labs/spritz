@@ -325,3 +325,268 @@ export function getOwnerFromSafeAddress(_safeAddress: Address): Address | null {
     // For now, return null as we don't have this capability
     return null;
 }
+
+// ============================================================================
+// LEGACY SAFE RECOVERY
+// These functions help recover funds from the old basic Safe addresses
+// that were calculated before we switched to permissionless.js
+// ============================================================================
+
+// Safe Proxy Factory ABI for deployment
+const SAFE_PROXY_FACTORY_ABI = [
+    {
+        name: "createProxyWithNonce",
+        type: "function",
+        inputs: [
+            { name: "_singleton", type: "address" },
+            { name: "initializer", type: "bytes" },
+            { name: "saltNonce", type: "uint256" },
+        ],
+        outputs: [{ name: "proxy", type: "address" }],
+    },
+] as const;
+
+// Safe ABI for direct execution
+const LEGACY_SAFE_ABI = [
+    {
+        name: "execTransaction",
+        type: "function",
+        inputs: [
+            { name: "to", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "data", type: "bytes" },
+            { name: "operation", type: "uint8" },
+            { name: "safeTxGas", type: "uint256" },
+            { name: "baseGas", type: "uint256" },
+            { name: "gasPrice", type: "uint256" },
+            { name: "gasToken", type: "address" },
+            { name: "refundReceiver", type: "address" },
+            { name: "signatures", type: "bytes" },
+        ],
+        outputs: [{ name: "success", type: "bool" }],
+    },
+    {
+        name: "getTransactionHash",
+        type: "function",
+        inputs: [
+            { name: "to", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "data", type: "bytes" },
+            { name: "operation", type: "uint8" },
+            { name: "safeTxGas", type: "uint256" },
+            { name: "baseGas", type: "uint256" },
+            { name: "gasPrice", type: "uint256" },
+            { name: "gasToken", type: "address" },
+            { name: "refundReceiver", type: "address" },
+            { name: "_nonce", type: "uint256" },
+        ],
+        outputs: [{ name: "", type: "bytes32" }],
+    },
+    {
+        name: "nonce",
+        type: "function",
+        inputs: [],
+        outputs: [{ name: "", type: "uint256" }],
+    },
+] as const;
+
+/**
+ * Check if a legacy Safe is deployed
+ */
+export async function isLegacySafeDeployed(
+    safeAddress: Address,
+    chainId: number = 1
+): Promise<boolean> {
+    const publicClient = getPublicClient(chainId);
+    try {
+        const code = await publicClient.getCode({ address: safeAddress });
+        return code !== undefined && code !== "0x" && code.length > 2;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Deploy a legacy Safe (basic Safe without 4337 module)
+ * 
+ * This deploys the Safe that matches the old calculateSafeAddress() calculation.
+ * The EOA pays gas for deployment.
+ */
+export async function deployLegacySafe(
+    ownerAddress: Address,
+    chainId: number,
+    walletClient: {
+        account: { address: Address };
+        writeContract: (args: any) => Promise<Hex>;
+    }
+): Promise<{ safeAddress: Address; txHash: Hex }> {
+    const chain = SAFE_CHAINS[chainId as keyof typeof SAFE_CHAINS];
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    // Calculate expected address
+    const expectedAddress = calculateSafeAddress(ownerAddress, SPRITZ_SALT_NONCE);
+    
+    // Check if already deployed
+    const deployed = await isLegacySafeDeployed(expectedAddress, chainId);
+    if (deployed) {
+        console.log("[LegacySafe] Already deployed at:", expectedAddress);
+        return { safeAddress: expectedAddress, txHash: "0x" as Hex };
+    }
+
+    console.log("[LegacySafe] Deploying legacy Safe for owner:", ownerAddress.slice(0, 10));
+    console.log("[LegacySafe] Expected address:", expectedAddress);
+
+    // Get initializer data
+    const initializer = encodeSafeInitializer(ownerAddress);
+
+    // Deploy via proxy factory
+    const txHash = await walletClient.writeContract({
+        address: SAFE_PROXY_FACTORY_ADDRESS,
+        abi: SAFE_PROXY_FACTORY_ABI,
+        functionName: "createProxyWithNonce",
+        args: [SAFE_SINGLETON_ADDRESS, initializer, SPRITZ_SALT_NONCE],
+        chain,
+    });
+
+    console.log("[LegacySafe] Deployment tx:", txHash);
+
+    return { safeAddress: expectedAddress, txHash };
+}
+
+/**
+ * Execute a transaction from a legacy Safe
+ * 
+ * This allows the owner EOA to execute transactions from the old basic Safe.
+ * The EOA signs the Safe transaction and pays gas.
+ */
+export async function execLegacySafeTransaction(
+    safeAddress: Address,
+    chainId: number,
+    to: Address,
+    value: bigint,
+    data: Hex = "0x",
+    walletClient: {
+        account: { address: Address };
+        signMessage: (args: { message: { raw: Hex } }) => Promise<Hex>;
+        writeContract: (args: any) => Promise<Hex>;
+    }
+): Promise<Hex> {
+    const publicClient = getPublicClient(chainId);
+    const chain = SAFE_CHAINS[chainId as keyof typeof SAFE_CHAINS];
+    
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    console.log(`[LegacySafe] Executing from ${safeAddress.slice(0, 10)}...`);
+    console.log(`[LegacySafe] To: ${to}, Value: ${value} wei`);
+
+    // Check if Safe is deployed
+    const deployed = await isLegacySafeDeployed(safeAddress, chainId);
+    if (!deployed) {
+        throw new Error("Legacy Safe is not deployed. Deploy it first.");
+    }
+
+    // Get the Safe's current nonce
+    const nonce = await publicClient.readContract({
+        address: safeAddress,
+        abi: LEGACY_SAFE_ABI,
+        functionName: "nonce",
+    });
+    
+    console.log(`[LegacySafe] Safe nonce: ${nonce}`);
+
+    // Safe transaction parameters (no gas refund)
+    const operation = 0;
+    const safeTxGas = BigInt(0);
+    const baseGas = BigInt(0);
+    const gasPrice = BigInt(0);
+    const gasToken = "0x0000000000000000000000000000000000000000" as Address;
+    const refundReceiver = "0x0000000000000000000000000000000000000000" as Address;
+
+    // Get transaction hash from Safe
+    const safeTxHash = await publicClient.readContract({
+        address: safeAddress,
+        abi: LEGACY_SAFE_ABI,
+        functionName: "getTransactionHash",
+        args: [to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, nonce],
+    });
+
+    console.log(`[LegacySafe] Safe tx hash: ${safeTxHash}`);
+
+    // Sign the hash
+    const signature = await walletClient.signMessage({
+        message: { raw: safeTxHash as Hex },
+    });
+
+    // Adjust v value for Safe's eth_sign format
+    let v = parseInt(signature.slice(-2), 16);
+    if (v < 27) v += 27;
+    v += 4; // Safe adds 4 for eth_sign
+    
+    const adjustedSignature = (signature.slice(0, -2) + v.toString(16).padStart(2, "0")) as Hex;
+
+    console.log(`[LegacySafe] Executing transaction...`);
+
+    // Execute
+    const txHash = await walletClient.writeContract({
+        address: safeAddress,
+        abi: LEGACY_SAFE_ABI,
+        functionName: "execTransaction",
+        args: [to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, adjustedSignature],
+        chain,
+    });
+
+    console.log(`[LegacySafe] Transaction sent: ${txHash}`);
+
+    return txHash as Hex;
+}
+
+/**
+ * Recover funds from a legacy Safe
+ * 
+ * Combines deployment (if needed) and withdrawal into one flow.
+ */
+export async function recoverFromLegacySafe(
+    ownerAddress: Address,
+    chainId: number,
+    recipientAddress: Address,
+    amountWei: bigint,
+    walletClient: {
+        account: { address: Address };
+        signMessage: (args: { message: { raw: Hex } }) => Promise<Hex>;
+        writeContract: (args: any) => Promise<Hex>;
+    }
+): Promise<{ deployTxHash?: Hex; withdrawTxHash: Hex; safeAddress: Address }> {
+    // Calculate the legacy Safe address
+    const safeAddress = calculateSafeAddress(ownerAddress, SPRITZ_SALT_NONCE);
+    console.log(`[LegacySafe] Recovery from: ${safeAddress}`);
+
+    // Check if deployed
+    let deployTxHash: Hex | undefined;
+    const deployed = await isLegacySafeDeployed(safeAddress, chainId);
+    
+    if (!deployed) {
+        console.log(`[LegacySafe] Safe not deployed, deploying first...`);
+        const result = await deployLegacySafe(ownerAddress, chainId, walletClient);
+        deployTxHash = result.txHash;
+        
+        // Wait a bit for deployment to confirm
+        console.log(`[LegacySafe] Waiting for deployment confirmation...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+
+    // Execute withdrawal
+    const withdrawTxHash = await execLegacySafeTransaction(
+        safeAddress,
+        chainId,
+        recipientAddress,
+        amountWei,
+        "0x",
+        walletClient
+    );
+
+    return { deployTxHash, withdrawTxHash, safeAddress };
+}
