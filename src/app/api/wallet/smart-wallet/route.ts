@@ -192,6 +192,11 @@ export async function GET(request: NextRequest) {
             canSign,
         });
 
+        // Generate Safe app URL for direct access
+        const safeAppUrl = smartWalletAddress 
+            ? `https://app.safe.global/home?safe=base:${smartWalletAddress}`
+            : null;
+
         return NextResponse.json({
             spritzId,
             smartWalletAddress,
@@ -202,6 +207,8 @@ export async function GET(request: NextRequest) {
             canSign,
             signerType,
             supportedChains: getSupportedChains(),
+            // Safe app URL for direct wallet access (even outside Spritz)
+            safeAppUrl,
             // Warning message for non-wallet users
             ...(requiresPasskeyToSign(walletType) && !needsPasskey && {
                 warning: "Your passkey is your wallet key. If you delete your passkey, you will lose access to this wallet and any funds in it.",

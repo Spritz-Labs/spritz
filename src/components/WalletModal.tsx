@@ -15,7 +15,6 @@ import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import { useOnramp } from "@/hooks/useOnramp";
 import { PasskeyManager } from "./PasskeyManager";
-import { LegacySafeRecovery } from "./LegacySafeRecovery";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
@@ -293,7 +292,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     } = useEnsResolver();
     const [showTokenSelector, setShowTokenSelector] = useState(false);
     const [showSendConfirm, setShowSendConfirm] = useState(false);
-    const [showLegacyRecovery, setShowLegacyRecovery] = useState(false);
 
     // Send transaction hook
     const {
@@ -923,16 +921,28 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 </div>
                                     </div>
 
-                                    <button
-                                                onClick={handleCopySmartWallet}
-                                                className={`w-full py-3 rounded-xl font-medium transition-all mb-3 ${
-                                            copied 
-                                                ? "bg-emerald-500 text-white" 
-                                                : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-                                        }`}
-                                    >
-                                                {copied ? "✓ Address Copied!" : "Copy Address"}
-                                    </button>
+                                    <div className="flex gap-2 mb-3">
+                                        <button
+                                            onClick={handleCopySmartWallet}
+                                            className={`flex-1 py-3 rounded-xl font-medium transition-all ${
+                                                copied 
+                                                    ? "bg-emerald-500 text-white" 
+                                                    : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                                            }`}
+                                        >
+                                            {copied ? "✓ Address Copied!" : "Copy Address"}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const safeUrl = `https://app.safe.global/home?safe=base:${smartWalletAddress}`;
+                                                window.open(safeUrl, "_blank");
+                                            }}
+                                            className="px-4 py-3 rounded-xl font-medium transition-all bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                                            title="View in Safe App - Access your wallet directly"
+                                        >
+                                            🔐
+                                        </button>
+                                    </div>
 
                                     {/* Buy Crypto with Coinbase */}
                                     <button
@@ -1434,24 +1444,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Legacy Safe Recovery Link - for Mainnet wallet users */}
-                                        {selectedChainId === 1 && !canUsePasskeySigning && (
-                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-                                                <button
-                                                    onClick={() => setShowLegacyRecovery(true)}
-                                                    className="w-full flex items-center justify-between text-left"
-                                                >
-                                                    <div>
-                                                        <p className="text-xs text-amber-300 font-medium">🔧 Legacy Safe Recovery</p>
-                                                        <p className="text-xs text-zinc-400 mt-0.5">
-                                                            Sent funds to old address? Recover them here.
-                                                        </p>
-                                                    </div>
-                                                    <span className="text-amber-400">→</span>
-                                                </button>
-                                            </div>
-                                        )}
-
                                         {/* Error Message */}
                                         {effectiveError && (
                                             <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
@@ -1587,7 +1579,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     </div>
 
                                     {/* View on Explorer button */}
-                                    <div className="p-4 border-t border-zinc-800/50">
+                                    <div className="p-4 border-t border-zinc-800/50 space-y-2">
                                         <button
                                             onClick={() => {
                                                 const address = smartWallet?.smartWalletAddress || userAddress;
@@ -1597,6 +1589,18 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         >
                                             View All on Explorer ↗
                                         </button>
+                                        {smartWallet?.smartWalletAddress && (
+                                            <button
+                                                onClick={() => {
+                                                    // Safe app URL - use Base as default chain prefix
+                                                    const safeUrl = `https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`;
+                                                    window.open(safeUrl, "_blank");
+                                                }}
+                                                className="w-full py-2.5 rounded-xl font-medium text-sm bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2"
+                                            >
+                                                <span>🔐</span> View in Safe App ↗
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -1718,27 +1722,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 />
             )}
 
-            {/* Legacy Safe Recovery Modal */}
-            {showLegacyRecovery && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-                    onClick={() => setShowLegacyRecovery(false)}
-                >
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                    <motion.div
-                        initial={{ scale: 0.95, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.95, opacity: 0 }}
-                        className="relative z-10 w-full max-w-md"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <LegacySafeRecovery onClose={() => setShowLegacyRecovery(false)} />
-                    </motion.div>
-                </motion.div>
-            )}
         </AnimatePresence>
     );
 }
