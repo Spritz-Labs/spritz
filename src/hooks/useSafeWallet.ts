@@ -12,6 +12,7 @@ import {
     estimateSafeGas,
     SAFE_SUPPORTED_CHAINS,
     chainRequiresErc20Payment,
+    checkPaymasterAllowance,
     type SendTransactionParams,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
@@ -277,13 +278,29 @@ export function useSafeWallet(): UseSafeWalletReturn {
         setTxHash(null);
 
         try {
+            // First, get the Safe address to check for USDC approval on mainnet
+            // We need to know if we should use native gas BEFORE creating the client
+            let forceNativeGas = false;
+            const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId });
+            
+            if (chainRequiresErc20Payment(chainId) && predictedSafeAddress) {
+                console.log(`[SafeWallet] Checking USDC approval for mainnet transaction...`);
+                const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, chainId);
+                console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
+                if (!hasApproval) {
+                    console.log(`[SafeWallet] No USDC approval - will use native ETH for gas`);
+                    forceNativeGas = true;
+                }
+            }
+            
             let safeClient;
 
             if (signerType === "passkey" && passkeyCredential) {
                 // Create Safe account client with passkey signer
                 safeClient = await createPasskeySafeAccountClient(
                     passkeyCredential,
-                    chainId
+                    chainId,
+                    { forceNativeGas }
                 );
             } else {
                 // Create Safe account client with EOA signer
@@ -296,14 +313,15 @@ export function useSafeWallet(): UseSafeWalletReturn {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     async (typedData: any) => {
                         return await signTypedDataAsync(typedData);
-                    }
+                    },
+                    { forceNativeGas }
                 );
             }
 
             // Get the Safe address from the client (more reliable than state variable)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
-            console.log(`[SafeWallet] Safe account address for approval batch: ${safeAccountAddress}`);
+            console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, forceNativeGas: ${forceNativeGas}`);
 
             // Send the transaction - handle both native ETH and ERC20 tokens
             // Pass chainId and safeAddress for automatic USDC approval batching on mainnet

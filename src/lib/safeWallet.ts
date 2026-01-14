@@ -355,12 +355,20 @@ export async function isSafeDeployed(
 /**
  * Create a Safe Smart Account Client
  * This client can be used to send transactions through the Safe
+ * 
+ * @param ownerAddress - The owner's EOA address
+ * @param chainId - The chain ID
+ * @param signMessage - Function to sign messages
+ * @param signTypedData - Function to sign typed data
+ * @param options - Optional configuration
+ * @param options.forceNativeGas - If true, user pays gas in native token (ETH) instead of USDC
  */
 export async function createSafeAccountClient(
     ownerAddress: Address,
     chainId: number,
     signMessage: (message: string) => Promise<`0x${string}`>,
     signTypedData: (data: unknown) => Promise<`0x${string}`>,
+    options?: { forceNativeGas?: boolean }
 ): Promise<SmartAccountClient> {
     const chain = SAFE_SUPPORTED_CHAINS[chainId];
     if (!chain) {
@@ -401,7 +409,8 @@ export async function createSafeAccountClient(
         console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
 
         // Get sponsorship context if configured (chain-aware)
-        const paymasterContext = getPaymasterContext(chainId);
+        // If forceNativeGas is true, user pays in ETH instead of USDC (for mainnet when no approval)
+        const paymasterContext = getPaymasterContext(chainId, options?.forceNativeGas);
 
         // Create smart account client with Pimlico as bundler and paymaster
         const smartAccountClient = createSmartAccountClient({
@@ -544,34 +553,9 @@ export async function sendSafeTransaction(
         });
     }
     
-    // Check if we need to batch USDC approval for mainnet ERC-20 paymaster
-    let calls = mainCalls;
-    console.log(`[SafeWallet] Checking approval batch: chainId=${chainId}, safeAddress=${safeAddress?.slice(0, 10)}..., requiresErc20=${chainId ? chainRequiresErc20Payment(chainId) : 'N/A'}`);
-    
-    if (chainId && safeAddress && chainRequiresErc20Payment(chainId)) {
-        const usdcAddress = USDC_ADDRESSES[chainId];
-        console.log(`[SafeWallet] USDC address for chain ${chainId}: ${usdcAddress}`);
-        if (usdcAddress) {
-            const { hasApproval, allowance } = await checkPaymasterAllowance(safeAddress, chainId);
-            console.log(`[SafeWallet] Current paymaster allowance: ${allowance.toString()} (hasApproval: ${hasApproval})`);
-            if (!hasApproval) {
-                console.log(`[SafeWallet] Batching USDC approval for paymaster ${PIMLICO_ERC20_PAYMASTER_ADDRESS}`);
-                // Approve a generous amount (100 USDC) to avoid needing approval for future transactions
-                // This is similar to how Uniswap and other DeFi apps handle approvals
-                const approvalAmount = BigInt(100_000_000); // 100 USDC (6 decimals)
-                const approveCall = {
-                    to: usdcAddress,
-                    value: BigInt(0),
-                    data: encodeERC20Approve(PIMLICO_ERC20_PAYMASTER_ADDRESS, approvalAmount),
-                };
-                // Prepend approval to calls
-                calls = [approveCall, ...mainCalls];
-                console.log(`[SafeWallet] Will approve ${approvalAmount} USDC (100 USDC) to paymaster at ${PIMLICO_ERC20_PAYMASTER_ADDRESS}`);
-            } else {
-                console.log(`[SafeWallet] Paymaster already has sufficient USDC approval`);
-            }
-        }
-    }
+    // Note: USDC approval checking is now done BEFORE creating the client
+    // If no approval exists on mainnet, forceNativeGas is set when creating the client
+    const calls = mainCalls;
     
     console.log(`[SafeWallet] Sending transaction with ${calls.length} call(s)`);
     
