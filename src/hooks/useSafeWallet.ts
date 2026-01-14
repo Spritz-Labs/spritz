@@ -323,8 +323,8 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 }
             }
             // For Mainnet without USDC approval:
-            // - If useEOAForGas is true, allow transaction (EOA pays gas)
-            // - Otherwise, block and guide user
+            // - Try bundler with native gas (Safe pays from its ETH balance)
+            // - If useEOAForGas is true, use direct execution (EOA pays gas)
             const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId: targetChainId });
             let forceNativeGas = useEOAForGas;
 
@@ -333,11 +333,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, targetChainId);
                 console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
                 if (!hasApproval) {
-                    // No USDC approval on Mainnet and user didn't opt for EOA gas
-                    console.log(`[SafeWallet] No USDC approval on Mainnet - need EOA gas payment`);
-                    setError("Mainnet requires gas fees. Enable 'Pay gas with wallet' to withdraw from Safe.");
-                    setStatus("error");
-                    return null;
+                    // No USDC approval - use native gas from Safe's ETH balance via bundler
+                    // This is more gas efficient than direct execution
+                    console.log(`[SafeWallet] No USDC approval on Mainnet - using bundler with native gas from Safe balance`);
+                    forceNativeGas = true;
                 }
             }
 

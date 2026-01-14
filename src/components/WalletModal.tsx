@@ -727,20 +727,19 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             {smartWalletAddress.slice(2, 4).toUpperCase()}
                                 </div>
                                         <div className="flex-1 min-w-0">
-                                            <code className="text-sm text-zinc-300 font-mono truncate block">
-                                                {truncateAddress(smartWalletAddress)}
-                                </code>
+                                            <p className="text-sm text-zinc-300 font-medium">
+                                                Smart Wallet
+                                            </p>
+                                            <p className="text-xs text-zinc-500">
+                                                Tap Receive to view address
+                                            </p>
                                         </div>
-                                <button
-                                            onClick={handleCopySmartWallet}
-                                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                                        copied 
-                                            ? "bg-emerald-500/20 text-emerald-400" 
-                                            : "bg-zinc-700 hover:bg-zinc-600 text-zinc-300"
-                                    }`}
-                                >
-                                    {copied ? "✓ Copied" : "Copy"}
-                                </button>
+                                        <button
+                                            onClick={() => setActiveTab("receive")}
+                                            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                                        >
+                                            Receive
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className="text-center py-2 text-sm text-zinc-500">
@@ -1009,14 +1008,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     ) : !hasAcknowledgedChainWarning ? (
                                         /* Chain warning - compact to fit without scrolling */
                                         <div className="flex flex-col items-center text-center px-2 py-1">
-                                            <h3 className="text-base font-semibold text-white mb-2 flex items-center gap-2">
-                                                <span>⚠️</span> Supported Chains Only
+                                            <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+                                                <span>⚠️</span> Before You Deposit
                                             </h3>
                                             
+                                            {/* Recommended chains */}
                                             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5 mb-2 w-full">
-                                                <p className="text-xs text-emerald-400 font-medium mb-1.5">✓ Deposit on these chains:</p>
+                                                <p className="text-xs text-emerald-400 font-medium mb-1.5">✓ Recommended: Free gas on L2s</p>
                                                 <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-zinc-300">
-                                                    <span className="flex items-center gap-1"><ChainIcon chainId={1} size={14} /> Ethereum</span>
                                                     <span className="flex items-center gap-1"><ChainIcon chainId={8453} size={14} /> Base</span>
                                                     <span className="flex items-center gap-1"><ChainIcon chainId={42161} size={14} /> Arbitrum</span>
                                                     <span className="flex items-center gap-1"><ChainIcon chainId={10} size={14} /> Optimism</span>
@@ -1025,10 +1024,21 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     <span className="flex items-center gap-1"><ChainIcon chainId={130} size={14} /> Unichain</span>
                                                 </div>
                                             </div>
+
+                                            {/* Mainnet warning */}
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 mb-2 w-full">
+                                                <p className="text-xs text-amber-400 font-medium mb-1">
+                                                    <ChainIcon chainId={1} size={14} /> Ethereum Mainnet — High Gas Fees
+                                                </p>
+                                                <p className="text-[10px] text-amber-300/70">
+                                                    Withdrawing from Mainnet costs $20-150+ in gas. Consider using L2s instead.
+                                                </p>
+                                            </div>
                                             
+                                            {/* Unsupported chains */}
                                             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mb-3 w-full">
                                                 <p className="text-xs text-red-400">
-                                                    <strong>⚠️ Do NOT</strong> send from other chains (Avalanche, Solana, etc.) — funds may be <strong>permanently lost</strong>.
+                                                    <strong>⚠️ Do NOT</strong> send from Avalanche, Solana, or other chains — funds will be <strong>permanently lost</strong>.
                                                 </p>
                                             </div>
                                             
@@ -1459,34 +1469,27 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* EOA Gas Payment Toggle - Only for Mainnet */}
+                                        {/* Mainnet Gas Info - Only for Mainnet */}
                                         {sendToken && selectedChainId === 1 && !canUsePasskeySigning && (
-                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex-1 mr-3">
-                                                        <p className="text-xs font-medium text-amber-300">
-                                                            Pay gas with connected wallet
-                                                        </p>
-                                                        <p className="text-[10px] text-amber-400/70 mt-0.5">
-                                                            {useEOAForGas 
-                                                                ? "Your connected wallet will pay ETH gas fees"
-                                                                : "Enable to send from Safe on Mainnet"
-                                                            }
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => setUseEOAForGas(!useEOAForGas)}
-                                                        className={`relative w-11 h-6 rounded-full transition-colors ${
-                                                            useEOAForGas 
-                                                                ? "bg-amber-500" 
-                                                                : "bg-zinc-700"
-                                                        }`}
-                                                    >
-                                                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
-                                                            useEOAForGas ? "left-6" : "left-1"
-                                                        }`} />
-                                                    </button>
+                                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="text-blue-400">ℹ️</span>
+                                                    <p className="text-xs font-medium text-blue-300">
+                                                        Gas paid from Safe balance
+                                                    </p>
                                                 </div>
+                                                <p className="text-[10px] text-blue-400/70">
+                                                    Gas fees will be deducted from your Safe&apos;s ETH balance. 
+                                                    Make sure to leave enough for fees.
+                                                </p>
+                                                {/* Advanced: EOA pays option */}
+                                                <button
+                                                    onClick={() => setUseEOAForGas(!useEOAForGas)}
+                                                    className="mt-2 text-[10px] text-zinc-500 hover:text-zinc-400 flex items-center gap-1"
+                                                >
+                                                    <span>{useEOAForGas ? "☑" : "☐"}</span>
+                                                    <span>Pay from connected wallet instead (slower, may cost more)</span>
+                                                </button>
                                             </div>
                                         )}
 
