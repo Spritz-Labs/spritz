@@ -95,8 +95,8 @@ function ChainIcon({ chainId, size = 20 }: { chainId: number; size?: number }) {
 
 // Chain info for display (must include ALL chains from SUPPORTED_CHAINS in chains.ts)
 // safePrefix is the chain identifier used in Safe App URLs: https://app.safe.global/home?safe={safePrefix}:{address}
-const CHAIN_INFO: Record<number, { name: string; color: string; sponsorship: "free" | "usdc" | "none"; safePrefix: string; symbol: string }> = {
-    1: { name: "Ethereum", color: "#627EEA", sponsorship: "usdc", safePrefix: "eth", symbol: "ETH" },
+const CHAIN_INFO: Record<number, { name: string; color: string; sponsorship: "free" | "usdc" | "none"; safePrefix: string; symbol: string; gasCost?: string }> = {
+    1: { name: "Ethereum", color: "#627EEA", sponsorship: "usdc", safePrefix: "eth", symbol: "ETH", gasCost: "$50-200+" },
     8453: { name: "Base", color: "#0052FF", sponsorship: "free", safePrefix: "base", symbol: "ETH" },
     42161: { name: "Arbitrum", color: "#28A0F0", sponsorship: "free", safePrefix: "arb1", symbol: "ETH" },
     10: { name: "Optimism", color: "#FF0420", sponsorship: "free", safePrefix: "oeth", symbol: "ETH" },
@@ -105,6 +105,91 @@ const CHAIN_INFO: Record<number, { name: string; color: string; sponsorship: "fr
     130: { name: "Unichain", color: "#FF007A", sponsorship: "free", safePrefix: "unichain", symbol: "ETH" },
     43114: { name: "Avalanche", color: "#E84142", sponsorship: "none", safePrefix: "avax", symbol: "AVAX" }, // View only, send not yet enabled
 };
+
+// Supported Networks Info Component
+function SupportedNetworksInfo({ isExpanded, onToggle }: { isExpanded: boolean; onToggle: () => void }) {
+    const freeGasChains = Object.entries(CHAIN_INFO).filter(([, info]) => info.sponsorship === "free");
+    const paidGasChains = Object.entries(CHAIN_INFO).filter(([, info]) => info.sponsorship === "usdc" || info.sponsorship === "none");
+    
+    return (
+        <div className="mx-4 mb-3">
+            <button
+                onClick={onToggle}
+                className="w-full flex items-center justify-between p-3 bg-zinc-800/50 hover:bg-zinc-800/70 rounded-xl transition-colors"
+            >
+                <div className="flex items-center gap-2">
+                    <span className="text-lg">🌐</span>
+                    <span className="text-sm font-medium text-white">Supported Networks</span>
+                    <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] rounded-full font-medium">
+                        {freeGasChains.length} free gas
+                    </span>
+                </div>
+                <svg 
+                    className={`w-4 h-4 text-zinc-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            
+            {isExpanded && (
+                <div className="mt-2 p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-3">
+                    {/* Free gas chains */}
+                    <div>
+                        <p className="text-xs text-emerald-400 font-medium mb-2 flex items-center gap-1">
+                            <span>✓</span> Free Gas (Recommended)
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                            {freeGasChains.map(([chainId, info]) => (
+                                <div 
+                                    key={chainId}
+                                    className="flex items-center gap-1.5 text-xs text-zinc-300 bg-zinc-800/50 px-2 py-1.5 rounded-lg"
+                                >
+                                    <ChainIcon chainId={Number(chainId)} size={14} />
+                                    <span className="truncate">{info.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    {/* Paid gas chains with warning */}
+                    <div>
+                        <p className="text-xs text-amber-400 font-medium mb-2 flex items-center gap-1">
+                            <span>⚠️</span> High Gas Fees
+                        </p>
+                        {paidGasChains.map(([chainId, info]) => (
+                            <div 
+                                key={chainId}
+                                className="flex items-center justify-between text-xs bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-lg mb-1 last:mb-0"
+                            >
+                                <div className="flex items-center gap-1.5 text-zinc-300">
+                                    <ChainIcon chainId={Number(chainId)} size={14} />
+                                    <span>{info.name}</span>
+                                </div>
+                                {info.gasCost && (
+                                    <span className="text-amber-400 font-medium">{info.gasCost}</span>
+                                )}
+                            </div>
+                        ))}
+                        <p className="text-[10px] text-amber-300/60 mt-2">
+                            First transaction on Ethereum requires deploying your Smart Account, which costs {CHAIN_INFO[1].gasCost} in gas fees.
+                        </p>
+                    </div>
+                    
+                    {/* Warning about unsupported chains */}
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+                        <p className="text-xs text-red-400">
+                            <strong>⚠️ Not Supported:</strong> Solana, Avalanche C-Chain, and other networks. 
+                            Sending from unsupported chains will result in <strong>permanent loss of funds</strong>.
+                        </p>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 // Helper to get Safe App URL for a specific chain
 // Uses /transactions/history which works better with ERC-4337 Safes than /home
@@ -410,6 +495,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const [activeTab, setActiveTab] = useState<TabType>("balances");
     const [showPasskeyManager, setShowPasskeyManager] = useState(false);
     const [hasAcknowledgedChainWarning, setHasAcknowledgedChainWarning] = useState(false);
+    const [showNetworksInfo, setShowNetworksInfo] = useState(false);
     
     // Selected chain for viewing balances and sending (default to Base)
     const [selectedChainId, setSelectedChainId] = useState<number>(8453);
@@ -819,6 +905,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 </div>
                             )}
                         </div>
+                        
+                        {/* Supported Networks Info - Collapsible */}
+                        <SupportedNetworksInfo 
+                            isExpanded={showNetworksInfo} 
+                            onToggle={() => setShowNetworksInfo(!showNetworksInfo)} 
+                        />
 
                         {/* Tab Navigation */}
                         <div className="px-4 pb-3">
@@ -1052,42 +1144,61 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             <p className="text-sm text-zinc-400">Loading wallet...</p>
                                         </div>
                                     ) : !hasAcknowledgedChainWarning ? (
-                                        /* Chain warning - compact to fit without scrolling */
+                                        /* Chain warning - comprehensive info about supported chains and gas */
                                         <div className="flex flex-col items-center text-center px-2 py-1">
                                             <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-                                                <span>⚠️</span> Before You Deposit
+                                                <span>⚠️</span> Important: Read Before Depositing
                                             </h3>
-                                            
-                                            {/* Recommended chains */}
-                                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5 mb-2 w-full">
-                                                <p className="text-xs text-emerald-400 font-medium mb-1.5">✓ Recommended: Free gas on L2s</p>
-                                                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-zinc-300">
-                                                    <span className="flex items-center gap-1"><ChainIcon chainId={8453} size={14} /> Base</span>
-                                                    <span className="flex items-center gap-1"><ChainIcon chainId={42161} size={14} /> Arbitrum</span>
-                                                    <span className="flex items-center gap-1"><ChainIcon chainId={10} size={14} /> Optimism</span>
-                                                    <span className="flex items-center gap-1"><ChainIcon chainId={137} size={14} /> Polygon</span>
-                                                    <span className="flex items-center gap-1"><ChainIcon chainId={56} size={14} /> BNB</span>
-                                                    <span className="flex items-center gap-1"><ChainIcon chainId={130} size={14} /> Unichain</span>
+
+                                            {/* Recommended chains - Free gas */}
+                                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mb-2 w-full">
+                                                <p className="text-xs text-emerald-400 font-semibold mb-2">✓ Recommended Networks (FREE Gas)</p>
+                                                <div className="grid grid-cols-3 gap-2 text-xs text-zinc-300">
+                                                    <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded"><ChainIcon chainId={8453} size={14} /> Base</span>
+                                                    <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded"><ChainIcon chainId={42161} size={14} /> Arbitrum</span>
+                                                    <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded"><ChainIcon chainId={10} size={14} /> Optimism</span>
+                                                    <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded"><ChainIcon chainId={137} size={14} /> Polygon</span>
+                                                    <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded"><ChainIcon chainId={56} size={14} /> BNB</span>
+                                                    <span className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded"><ChainIcon chainId={130} size={14} /> Unichain</span>
                                                 </div>
+                                                <p className="text-[10px] text-emerald-300/70 mt-2">
+                                                    Gas fees are sponsored on these networks. Send and receive for free!
+                                                </p>
                                             </div>
 
-                                            {/* Mainnet warning */}
-                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 mb-2 w-full">
-                                                <p className="text-xs text-amber-400 font-medium mb-1">
-                                                    <ChainIcon chainId={1} size={14} /> Ethereum Mainnet — High Gas Fees
+                                            {/* Mainnet warning - More prominent */}
+                                            <div className="bg-amber-500/15 border-2 border-amber-500/40 rounded-lg p-3 mb-2 w-full">
+                                                <div className="flex items-center justify-center gap-2 mb-2">
+                                                    <ChainIcon chainId={1} size={18} />
+                                                    <p className="text-sm text-amber-400 font-bold">
+                                                        Ethereum Mainnet
+                                                    </p>
+                                                </div>
+                                                <div className="bg-amber-500/20 rounded-lg p-2 mb-2">
+                                                    <p className="text-lg font-bold text-amber-300">
+                                                        $50 - $200+ Gas Fees
+                                                    </p>
+                                                </div>
+                                                <p className="text-[11px] text-amber-200/80">
+                                                    Your first transaction on Ethereum requires deploying a Smart Account, 
+                                                    which costs <strong>$50-200+</strong> depending on network congestion.
                                                 </p>
-                                                <p className="text-[10px] text-amber-300/70">
-                                                    Withdrawing from Mainnet costs $20-150+ in gas. Consider using L2s instead.
+                                                <p className="text-[10px] text-amber-300/60 mt-1">
+                                                    We recommend using L2 networks above for most transactions.
                                                 </p>
                                             </div>
-                                            
-                                            {/* Unsupported chains */}
-                                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mb-3 w-full">
-                                                <p className="text-xs text-red-400">
-                                                    <strong>⚠️ Do NOT</strong> send from Avalanche, Solana, or other chains — funds will be <strong>permanently lost</strong>.
+
+                                            {/* Unsupported chains - Critical warning */}
+                                            <div className="bg-red-500/15 border-2 border-red-500/40 rounded-lg p-2.5 mb-3 w-full">
+                                                <p className="text-xs text-red-400 font-semibold mb-1">
+                                                    🚫 NOT SUPPORTED - Funds Will Be Lost
+                                                </p>
+                                                <p className="text-[11px] text-red-300/80">
+                                                    Solana, Avalanche, and other networks are <strong>not supported</strong>. 
+                                                    Do not send from these chains.
                                                 </p>
                                             </div>
-                                            
+
                                             <button
                                                 onClick={() => setHasAcknowledgedChainWarning(true)}
                                                 className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-xl transition-colors"
@@ -1478,27 +1589,37 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Mainnet Gas Info - Only for Mainnet */}
-                                        {sendToken && selectedChainId === 1 && !canUsePasskeySigning && (
-                                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <span className="text-blue-400">ℹ️</span>
-                                                    <p className="text-xs font-medium text-blue-300">
-                                                        Gas paid from Safe balance
+                                        {/* Mainnet Warning - Prominent warning about high gas costs */}
+                                        {sendToken && selectedChainId === 1 && (
+                                            <div className="bg-amber-500/15 border-2 border-amber-500/40 rounded-xl p-3 space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xl">⚠️</span>
+                                                    <p className="text-sm font-bold text-amber-400">
+                                                        Ethereum Mainnet - High Gas Fees
                                                     </p>
                                                 </div>
-                                                <p className="text-[10px] text-blue-400/70">
-                                                    Gas fees will be deducted from your Safe&apos;s ETH balance. 
-                                                    Make sure to leave enough for fees.
+                                                <div className="bg-amber-500/20 rounded-lg p-2 text-center">
+                                                    <p className="text-xs text-amber-300/80 mb-1">Expected gas cost:</p>
+                                                    <p className="text-lg font-bold text-amber-300">$50 - $200+</p>
+                                                </div>
+                                                {!isSafeDeployed && (
+                                                    <p className="text-[11px] text-amber-200/80">
+                                                        <strong>First transaction?</strong> Your Smart Account needs to be deployed on Ethereum, 
+                                                        which adds significant gas costs. Consider using a free L2 network instead.
+                                                    </p>
+                                                )}
+                                                <p className="text-[10px] text-amber-300/60">
+                                                    Gas fees will be deducted from your wallet&apos;s ETH balance.
                                                 </p>
-                                                {/* Advanced: EOA pays option */}
-                                                <button
-                                                    onClick={() => setUseEOAForGas(!useEOAForGas)}
-                                                    className="mt-2 text-[10px] text-zinc-500 hover:text-zinc-400 flex items-center gap-1"
-                                                >
-                                                    <span>{useEOAForGas ? "☑" : "☐"}</span>
-                                                    <span>Pay from connected wallet instead (slower, may cost more)</span>
-                                                </button>
+                                                {!canUsePasskeySigning && (
+                                                    <button
+                                                        onClick={() => setUseEOAForGas(!useEOAForGas)}
+                                                        className="mt-1 text-[10px] text-zinc-400 hover:text-zinc-300 flex items-center gap-1"
+                                                    >
+                                                        <span>{useEOAForGas ? "☑" : "☐"}</span>
+                                                        <span>Pay from connected wallet instead</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
 
