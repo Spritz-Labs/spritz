@@ -17,7 +17,6 @@ import {
     chainRequiresErc20Payment,
     getChainUsdcAddress,
     getPublicClient,
-    checkPaymasterAllowance,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
 
@@ -151,7 +150,8 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
             };
 
             // Check if this chain requires ERC-20 payment (mainnet)
-            // If user has no USDC or no approval, fall back to native ETH payment
+            // If user has no USDC, fall back to native ETH payment
+            // Note: If user has USDC but no approval, the approval will be batched automatically
             let forceNativeGas = false;
             if (chainRequiresErc20Payment(effectiveChainId) && safeAddress) {
                 const usdcAddress = getChainUsdcAddress(effectiveChainId);
@@ -178,17 +178,10 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
                             console.log(`[SafePasskeySend] Insufficient USDC for gas (${formatUnits(usdcBalance, 6)} USDC), falling back to ETH payment`);
                             forceNativeGas = true;
                         } else {
-                            // Also check for paymaster approval
-                            const { hasApproval, allowance } = await checkPaymasterAllowance(safeAddress, effectiveChainId);
-                            if (!hasApproval) {
-                                console.log(`[SafePasskeySend] No USDC approval for paymaster (allowance: ${formatUnits(allowance, 6)} USDC), falling back to ETH payment`);
-                                forceNativeGas = true;
-                            } else {
-                                console.log(`[SafePasskeySend] Using USDC for gas payment (${formatUnits(usdcBalance, 6)} USDC available, ${formatUnits(allowance, 6)} USDC approved)`);
-                            }
+                            console.log(`[SafePasskeySend] Using USDC for gas payment (${formatUnits(usdcBalance, 6)} USDC available). Approval will be batched if needed.`);
                         }
                     } catch (err) {
-                        console.log("[SafePasskeySend] Could not check USDC balance/approval, falling back to ETH payment");
+                        console.log("[SafePasskeySend] Could not check USDC balance, falling back to ETH payment");
                         forceNativeGas = true;
                     }
                 }
@@ -203,11 +196,21 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
                 { forceNativeGas }
             );
 
-            console.log("[SafePasskeySend] Safe client created, sending transaction...");
+            // Get the Safe address from the client for approval batching
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
+            console.log("[SafePasskeySend] Safe client created, Safe address:", safeAccountAddress?.slice(0, 10) + "...");
             setStatus("sending");
 
             // Send the transaction with explicit gas limits for WebAuthn
             // (simulation-based gas estimation fails for passkey signatures)
+            // Pass chainId and safeAddress for automatic USDC approval batching on mainnet
+            const sendOptions = {
+                isWebAuthn: true,
+                chainId: effectiveChainId,
+                safeAddress: safeAccountAddress,
+            };
+            
             let hash;
             if (tokenAddress && tokenDecimals !== undefined) {
                 // ERC20 token transfer
@@ -219,14 +222,14 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
                     tokenAddress,
                     tokenAmount,
                     tokenDecimals,
-                }, true); // isWebAuthn = true for passkey transactions
+                }, sendOptions);
             } else {
                 // Native ETH transfer
                 console.log(`[SafePasskeySend] Sending ETH: ${amount} to ${to}`);
                 hash = await sendSafeTransaction(safeClient, {
                     to,
                     value: parseEther(amount),
-                }, true); // isWebAuthn = true for passkey transactions
+                }, sendOptions);
             }
 
             console.log("[SafePasskeySend] Transaction sent:", hash);

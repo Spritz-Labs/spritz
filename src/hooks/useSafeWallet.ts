@@ -302,6 +302,13 @@ export function useSafeWallet(): UseSafeWalletReturn {
             }
 
             // Send the transaction - handle both native ETH and ERC20 tokens
+            // Pass chainId and safeAddress for automatic USDC approval batching on mainnet
+            const sendOptions = {
+                isWebAuthn: false,
+                chainId,
+                safeAddress: safeAddress || undefined,
+            };
+            
             let hash;
             if (tokenAddress && tokenDecimals !== undefined) {
                 // ERC20 token transfer
@@ -313,14 +320,14 @@ export function useSafeWallet(): UseSafeWalletReturn {
                     tokenAddress,
                     tokenAmount,
                     tokenDecimals,
-                });
+                }, sendOptions);
             } else {
                 // Native ETH transfer
                 console.log(`[SafeWallet] Sending ETH: ${amount} to ${to}`);
                 hash = await sendSafeTransaction(safeClient, {
                     to,
                     value: parseEther(amount),
-                });
+                }, sendOptions);
             }
 
             setTxHash(hash);

@@ -446,6 +446,28 @@ const ERC20_TRANSFER_ABI = [{
     outputs: [{ name: "", type: "bool" }]
 }] as const;
 
+// ERC20 approve function signature
+const ERC20_APPROVE_ABI = [{
+    name: "approve",
+    type: "function",
+    inputs: [
+        { name: "spender", type: "address" },
+        { name: "amount", type: "uint256" }
+    ],
+    outputs: [{ name: "", type: "bool" }]
+}] as const;
+
+/**
+ * Encode an ERC20 approve call
+ */
+export function encodeERC20Approve(spender: Address, amount: bigint): `0x${string}` {
+    return encodeFunctionData({
+        abi: ERC20_APPROVE_ABI,
+        functionName: "approve",
+        args: [spender, amount],
+    });
+}
+
 /**
  * Encode an ERC20 transfer call
  */
@@ -467,40 +489,81 @@ const WEBAUTHN_GAS_LIMITS = {
     paymasterPostOpGasLimit: BigInt(50000),
 };
 
+export interface SendTransactionOptions {
+    /** If true, uses explicit gas limits (required for passkey/WebAuthn accounts) */
+    isWebAuthn?: boolean;
+    /** Chain ID for determining if USDC approval is needed */
+    chainId?: number;
+    /** Safe address for checking approval status */
+    safeAddress?: Address;
+}
+
 /**
  * Send a transaction through a Safe Smart Account
  * Supports both native ETH transfers and ERC20 token transfers
  * 
+ * For mainnet transactions using ERC-20 paymaster, automatically batches
+ * USDC approval if needed.
+ * 
  * @param client - The Smart Account Client
  * @param params - Transaction parameters
- * @param isWebAuthn - If true, uses explicit gas limits (required for passkey accounts)
+ * @param options - Additional options (isWebAuthn, chainId, safeAddress)
  */
 export async function sendSafeTransaction(
     client: SmartAccountClient,
     params: SendTransactionParams,
-    isWebAuthn = false
+    options: SendTransactionOptions | boolean = false
 ): Promise<`0x${string}`> {
+    // Handle legacy boolean parameter for backwards compatibility
+    const opts: SendTransactionOptions = typeof options === 'boolean' 
+        ? { isWebAuthn: options } 
+        : options;
+    const { isWebAuthn = false, chainId, safeAddress } = opts;
+    
     const { to, value, data, tokenAddress, tokenAmount } = params;
     
-    // Determine if this is a token transfer or native ETH transfer
-    let calls;
+    // Build the main transaction call(s)
+    const mainCalls: Array<{ to: Address; value: bigint; data: `0x${string}` }> = [];
     
     if (tokenAddress && tokenAmount !== undefined) {
         // ERC20 token transfer
         console.log(`[SafeWallet] Sending ERC20 token transfer: ${tokenAmount} to ${to}`);
-        calls = [{
+        mainCalls.push({
             to: tokenAddress,
             value: BigInt(0),
             data: encodeERC20Transfer(to, tokenAmount),
-        }];
+        });
     } else {
         // Native ETH transfer
         console.log(`[SafeWallet] Sending native ETH transfer: ${value} wei to ${to}`);
-        calls = [{
+        mainCalls.push({
             to,
             value,
-            data: data || "0x",
-        }];
+            data: data || "0x" as `0x${string}`,
+        });
+    }
+    
+    // Check if we need to batch USDC approval for mainnet ERC-20 paymaster
+    let calls = mainCalls;
+    if (chainId && safeAddress && chainRequiresErc20Payment(chainId)) {
+        const usdcAddress = USDC_ADDRESSES[chainId];
+        if (usdcAddress) {
+            const { hasApproval } = await checkPaymasterAllowance(safeAddress, chainId);
+            if (!hasApproval) {
+                console.log(`[SafeWallet] Batching USDC approval for paymaster`);
+                // Approve a generous amount (100 USDC) to avoid needing approval for future transactions
+                // This is similar to how Uniswap and other DeFi apps handle approvals
+                const approvalAmount = BigInt(100_000_000); // 100 USDC (6 decimals)
+                const approveCall = {
+                    to: usdcAddress,
+                    value: BigInt(0),
+                    data: encodeERC20Approve(PIMLICO_ERC20_PAYMASTER_ADDRESS, approvalAmount),
+                };
+                // Prepend approval to calls
+                calls = [approveCall, ...mainCalls];
+                console.log(`[SafeWallet] Will approve ${approvalAmount} USDC (100 USDC) for paymaster`);
+            }
+        }
     }
     
     // Use sendUserOperation for ERC-4337 transactions
@@ -510,8 +573,10 @@ export async function sendSafeTransaction(
     
     if (isWebAuthn) {
         console.log(`[SafeWallet] Using explicit gas limits for WebAuthn transaction`);
+        // Increase call gas limit if we're batching approval
+        const callGasMultiplier = calls.length > 1 ? BigInt(2) : BigInt(1);
         txParams.verificationGasLimit = WEBAUTHN_GAS_LIMITS.verificationGasLimit;
-        txParams.callGasLimit = WEBAUTHN_GAS_LIMITS.callGasLimit;
+        txParams.callGasLimit = WEBAUTHN_GAS_LIMITS.callGasLimit * callGasMultiplier;
         txParams.preVerificationGas = WEBAUTHN_GAS_LIMITS.preVerificationGas;
         txParams.paymasterVerificationGasLimit = WEBAUTHN_GAS_LIMITS.paymasterVerificationGasLimit;
         txParams.paymasterPostOpGasLimit = WEBAUTHN_GAS_LIMITS.paymasterPostOpGasLimit;
