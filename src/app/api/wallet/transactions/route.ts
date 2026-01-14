@@ -242,6 +242,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Address required" }, { status: 400 });
     }
 
+    // Basic address format validation
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+        return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
+    }
+
     try {
         // Determine which chains to query
         const chainsToQuery = chainFilter

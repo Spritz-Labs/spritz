@@ -449,12 +449,23 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     // Use the address from query params (smart wallet address from frontend)
-    // Authentication ensures only logged-in users can use this endpoint
+    // NOTE: This accepts any address intentionally - users view their Smart Wallet
+    // which has a different address than their spritzId (identity address).
+    // Authentication ensures only logged-in users can use this endpoint.
+    // Rate limiting should be applied at the infrastructure level.
     const addressParam = searchParams.get("address");
     
     if (!addressParam) {
         return NextResponse.json(
             { error: "Address required" },
+            { status: 400 }
+        );
+    }
+    
+    // Basic address format validation
+    if (!/^0x[a-fA-F0-9]{40}$/.test(addressParam)) {
+        return NextResponse.json(
+            { error: "Invalid address format" },
             { status: 400 }
         );
     }

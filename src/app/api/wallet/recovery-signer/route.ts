@@ -105,6 +105,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Prevent adding zero address
+        if (recoveryAddress === "0x0000000000000000000000000000000000000000") {
+            return NextResponse.json(
+                { error: "Cannot use zero address as recovery" },
+                { status: 400 }
+            );
+        }
+
         // Return success - client will handle the actual transaction
         return NextResponse.json({
             message: "Recovery address validated",

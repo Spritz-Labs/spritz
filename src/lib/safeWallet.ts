@@ -1010,6 +1010,12 @@ export async function execSafeTransactionDirect(
         throw new Error("Safe is not deployed. Deploy it first with a sponsored L2 transaction.");
     }
 
+    // Verify the wallet is an owner of this Safe
+    const isOwner = await isSafeOwner(safeAddress, walletClient.account.address, chainId);
+    if (!isOwner) {
+        throw new Error("Your wallet is not an owner of this Safe. Cannot execute transaction.");
+    }
+
     // Get the Safe's current nonce
     const nonce = await publicClient.readContract({
         address: safeAddress,
@@ -1258,6 +1264,14 @@ export async function addRecoverySigner(
     const alreadyOwner = await isSafeOwner(safeAddress, recoveryAddress, chainId);
     if (alreadyOwner) {
         throw new Error("This address is already an owner of the Safe");
+    }
+
+    // Verify the passkey's signer is an owner of this Safe
+    const { calculateWebAuthnSignerAddress } = await import("./passkeySigner");
+    const passkeySignerAddress = calculateWebAuthnSignerAddress(passkeyCredential.publicKey, chainId);
+    const isPasskeyOwner = await isSafeOwner(safeAddress, passkeySignerAddress, chainId);
+    if (!isPasskeyOwner) {
+        throw new Error("Your passkey is not an owner of this Safe. Cannot add recovery signer.");
     }
     
     // Encode the addOwnerWithThreshold call

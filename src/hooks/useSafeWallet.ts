@@ -69,7 +69,19 @@ export interface PasskeyCredentialInput {
     publicKeyY: Hex;
 }
 
-const ETH_PRICE_USD = 3500; // Should be fetched from price feed
+// Fetch ETH price from API
+async function fetchEthPrice(): Promise<number> {
+    try {
+        const response = await fetch("/api/prices?symbols=ETH");
+        if (response.ok) {
+            const data = await response.json();
+            return data.prices?.ETH || 3500; // Fallback to 3500 if API fails
+        }
+    } catch (error) {
+        console.error("[SafeWallet] Error fetching ETH price:", error);
+    }
+    return 3500; // Fallback price
+}
 
 export function useSafeWallet(): UseSafeWalletReturn {
     const { address: ownerAddress, isConnected, chainId: connectedChainId } = useAccount();
@@ -242,7 +254,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
             );
 
             const costEth = estimate.estimatedCostEth;
-            const costUsd = parseFloat(costEth) * ETH_PRICE_USD;
+            
+            // Fetch real-time ETH price
+            const ethPrice = await fetchEthPrice();
+            const costUsd = parseFloat(costEth) * ethPrice;
 
             setEstimatedGas({
                 costEth,
