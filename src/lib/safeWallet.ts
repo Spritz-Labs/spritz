@@ -168,16 +168,29 @@ function getPimlicoBundlerUrl(chainId: number): string {
     return url;
 }
 
+// RPC URLs for each supported chain (reliable public RPCs)
+const CHAIN_RPC_URLS: Record<number, string> = {
+    1: "https://eth.llamarpc.com",           // Ethereum Mainnet
+    8453: "https://mainnet.base.org",         // Base
+    42161: "https://arb1.arbitrum.io/rpc",    // Arbitrum
+    10: "https://mainnet.optimism.io",        // Optimism
+    137: "https://polygon-rpc.com",           // Polygon
+    56: "https://bsc-dataseed.binance.org",   // BSC
+    130: "https://mainnet.unichain.org",      // Unichain
+};
+
 // Create a public client for a chain
 export function getPublicClient(chainId: number) {
     const chain = SAFE_SUPPORTED_CHAINS[chainId];
     if (!chain) {
         throw new Error(`Unsupported chain: ${chainId}`);
     }
+
+    const rpcUrl = CHAIN_RPC_URLS[chainId];
     
     return createPublicClient({
         chain,
-        transport: http(),
+        transport: http(rpcUrl, { timeout: 30000 }), // 30s timeout with explicit RPC
     });
 }
 
