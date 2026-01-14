@@ -339,15 +339,14 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // Get the Safe address from the client (more reliable than state variable)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
-            console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, sponsorBootstrap: ${sponsorBootstrap}`);
+            console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, forceNativeGas: ${forceNativeGas}`);
 
             // Send the transaction - handle both native ETH and ERC20 tokens
-            // Pass sponsorBootstrap to batch USDC approval on Mainnet bootstrap
             const sendOptions = {
                 isWebAuthn: signerType === "passkey",
                 chainId,
                 safeAddress: safeAccountAddress,
-                sponsorBootstrap, // If true, will batch USDC approval for future transactions
+                forceNativeGas, // If true, EOA pays gas in ETH instead of paymaster
             };
             
             let hash;

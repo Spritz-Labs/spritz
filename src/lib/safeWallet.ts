@@ -394,15 +394,14 @@ export async function isSafeDeployed(
  * @param signMessage - Function to sign messages
  * @param signTypedData - Function to sign typed data
  * @param options - Optional configuration
- * @param options.forceNativeGas - If true, user pays gas in native token (ETH) instead of USDC
- * @param options.sponsorBootstrap - If true, sponsor this transaction (for Mainnet bootstrap)
+ * @param options.forceNativeGas - If true, user pays gas in native token (ETH) instead of using paymaster
  */
 export async function createSafeAccountClient(
     ownerAddress: Address,
     chainId: number,
     signMessage: (message: string) => Promise<`0x${string}`>,
     signTypedData: (data: unknown) => Promise<`0x${string}`>,
-    options?: { forceNativeGas?: boolean; sponsorBootstrap?: boolean }
+    options?: { forceNativeGas?: boolean }
 ): Promise<SmartAccountClient> {
     const chain = SAFE_SUPPORTED_CHAINS[chainId];
     if (!chain) {
@@ -440,16 +439,13 @@ export async function createSafeAccountClient(
             saltNonce: BigInt(0),
         });
 
-        console.log(`[SafeWallet] Safe account address: ${safeAccount.address}, forceNativeGas: ${options?.forceNativeGas}, sponsorBootstrap: ${options?.sponsorBootstrap}`);
+        console.log(`[SafeWallet] Safe account address: ${safeAccount.address}, forceNativeGas: ${options?.forceNativeGas}`);
 
-        // Get sponsorship context if configured (chain-aware)
-        // Priority: sponsorBootstrap > forceNativeGas > default chain config
-        const useNativeGas = options?.forceNativeGas === true && !options?.sponsorBootstrap;
-        const useSponsor = options?.sponsorBootstrap === true;
-        
-        const paymasterContext = useNativeGas 
-            ? undefined 
-            : getPaymasterContext(chainId, { forceSponsor: useSponsor });
+        // Get paymaster context based on chain config
+        // If forceNativeGas is true, skip paymaster and user pays in ETH
+        const paymasterContext = options?.forceNativeGas
+            ? undefined
+            : getPaymasterContext(chainId);
 
         // Create smart account client with Pimlico as bundler
         // IMPORTANT: Only include paymaster if we're NOT using native gas
@@ -468,13 +464,11 @@ export async function createSafeAccountClient(
         };
 
         // Only add paymaster if NOT using native gas
-        if (!useNativeGas) {
-            if (useSponsor) {
-                log(`[SafeWallet] Sponsoring Mainnet bootstrap transaction`);
-            } else {
-                log(`[SafeWallet] Using paymaster for gas sponsorship/ERC-20 payment`);
-            }
+        if (paymasterContext) {
+            log(`[SafeWallet] Using paymaster for gas sponsorship/ERC-20 payment`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (clientConfig as any).paymaster = pimlicoClient;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (clientConfig as any).paymasterContext = paymasterContext;
         } else {
             log(`[SafeWallet] No paymaster - user pays gas in native ETH`);
@@ -560,8 +554,8 @@ export interface SendTransactionOptions {
     chainId?: number;
     /** Safe address for checking approval status */
     safeAddress?: Address;
-    /** If true, this is a sponsored bootstrap transaction - bundle USDC approval */
-    sponsorBootstrap?: boolean;
+    /** If true, EOA pays gas in native ETH (no paymaster) */
+    forceNativeGas?: boolean;
 }
 
 /**
@@ -573,7 +567,7 @@ export interface SendTransactionOptions {
  * 
  * @param client - The Smart Account Client
  * @param params - Transaction parameters
- * @param options - Additional options (isWebAuthn, chainId, safeAddress, sponsorBootstrap)
+ * @param options - Additional options (isWebAuthn, forceNativeGas)
  */
 export async function sendSafeTransaction(
     client: SmartAccountClient,
@@ -581,30 +575,18 @@ export async function sendSafeTransaction(
     options: SendTransactionOptions | boolean = false
 ): Promise<`0x${string}`> {
     // Handle legacy boolean parameter for backwards compatibility
-    const opts: SendTransactionOptions = typeof options === 'boolean' 
-        ? { isWebAuthn: options } 
+    const opts: SendTransactionOptions = typeof options === 'boolean'
+        ? { isWebAuthn: options }
         : options;
-    const { isWebAuthn = false, chainId, safeAddress, sponsorBootstrap = false } = opts;
-    
+    const { isWebAuthn = false, forceNativeGas = false } = opts;
+
     const { to, value, data, tokenAddress, tokenAmount } = params;
-    
+
     // Build the transaction calls
     const calls: Array<{ to: Address; value: bigint; data: `0x${string}` }> = [];
     
-    // For sponsored Mainnet bootstrap transactions, batch USDC approval first
-    // This ensures future transactions can use the ERC-20 paymaster
-    if (sponsorBootstrap && chainId === 1) {
-        const usdcAddress = USDC_ADDRESSES[chainId];
-        if (usdcAddress) {
-            // Approve 100 USDC for the paymaster (enough for many transactions)
-            const approvalAmount = BigInt(100_000_000); // 100 USDC (6 decimals)
-            console.log(`[SafeWallet] Batching USDC approval for paymaster ${PIMLICO_ERC20_PAYMASTER_ADDRESS}`);
-            calls.push({
-                to: usdcAddress,
-                value: BigInt(0),
-                data: encodeERC20Approve(PIMLICO_ERC20_PAYMASTER_ADDRESS, approvalAmount),
-            });
-        }
+    if (forceNativeGas) {
+        log(`[SafeWallet] Using native gas payment (EOA pays)`);
     }
     
     // Add the main transaction
@@ -673,13 +655,12 @@ export interface PasskeyCredential {
  * @param passkeyCredential - The passkey credential with public key
  * @param chainId - The chain ID
  * @param options - Optional configuration
- * @param options.forceNativeGas - If true, user pays gas in native token (ETH) instead of USDC
- * @param options.sponsorBootstrap - If true, sponsor this transaction (for Mainnet bootstrap)
+ * @param options.forceNativeGas - If true, user pays gas in native token (ETH) instead of using paymaster
  */
 export async function createPasskeySafeAccountClient(
     passkeyCredential: PasskeyCredential,
     chainId: number,
-    options?: { forceNativeGas?: boolean; sponsorBootstrap?: boolean }
+    options?: { forceNativeGas?: boolean }
 ): Promise<SmartAccountClient> {
     const chain = SAFE_SUPPORTED_CHAINS[chainId];
     if (!chain) {
@@ -859,16 +840,13 @@ export async function createPasskeySafeAccountClient(
         safeP256VerifierAddress: "0xA86e0054C51E4894D88762a017ECc5E5235f5DBA" as Address,
     });
 
-    console.log(`[SafeWallet] Safe account address: ${safeAccount.address}, forceNativeGas: ${options?.forceNativeGas}, sponsorBootstrap: ${options?.sponsorBootstrap}`);
+    console.log(`[SafeWallet] Safe account address: ${safeAccount.address}, forceNativeGas: ${options?.forceNativeGas}`);
 
-    // Get sponsorship context if configured (chain-aware)
-    // Priority: sponsorBootstrap > forceNativeGas > default chain config
-    const useNativeGas = options?.forceNativeGas === true && !options?.sponsorBootstrap;
-    const useSponsor = options?.sponsorBootstrap === true;
-    
-    const paymasterContext = useNativeGas 
-        ? undefined 
-        : getPaymasterContext(chainId, { forceSponsor: useSponsor });
+    // Get paymaster context based on chain config
+    // If forceNativeGas is true, skip paymaster and user pays in ETH
+    const paymasterContext = options?.forceNativeGas
+        ? undefined
+        : getPaymasterContext(chainId);
 
     log(`[SafeWallet] Creating smart account client...`);
 
@@ -888,13 +866,11 @@ export async function createPasskeySafeAccountClient(
     };
 
     // Only add paymaster if NOT using native gas
-    if (!useNativeGas) {
-        if (useSponsor) {
-            log(`[SafeWallet] Sponsoring Mainnet bootstrap transaction`);
-        } else {
-            log(`[SafeWallet] Using paymaster for gas sponsorship/ERC-20 payment`);
-        }
+    if (paymasterContext) {
+        log(`[SafeWallet] Using paymaster for gas sponsorship/ERC-20 payment`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (clientConfig as any).paymaster = pimlicoClient;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (clientConfig as any).paymasterContext = paymasterContext;
     } else {
         log(`[SafeWallet] No paymaster - user pays gas in native ETH`);
