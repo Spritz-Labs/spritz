@@ -15,6 +15,7 @@ import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import { useOnramp } from "@/hooks/useOnramp";
 import { PasskeyManager } from "./PasskeyManager";
+import { RecoverySignerManager } from "./RecoverySignerManager";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
@@ -224,7 +225,7 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
     );
 }
 
-type TabType = "balances" | "send" | "history" | "receive";
+type TabType = "balances" | "send" | "history" | "receive" | "security";
 
 export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authMethod }: WalletModalProps) {
     // Check if wallet is connected (for sending)
@@ -671,6 +672,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     }`}
                                 >
                                     📜 History
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab("security")}
+                                    className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
+                                        activeTab === "security"
+                                            ? "bg-zinc-700 text-white shadow-sm"
+                                            : "text-zinc-400 hover:text-zinc-200"
+                                    }`}
+                                >
+                                    🔐
                                 </button>
                             </div>
                         </div>
@@ -1140,7 +1151,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                             No tokens with balance
                                                         </div>
                                                     ) : (
-                                                        allTokens.map((token, idx) => (
+                                                        allTokens.map((token, idx) => {
+                                                            const chainInfo = CHAIN_INFO[token.chainId];
+                                                            const isFreeGas = chainInfo?.sponsorship === "free";
+                                                            return (
                                                             <button
                                                                 key={`${token.contractAddress}-${idx}`}
                                                                 onClick={() => {
@@ -1151,32 +1165,48 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                                     }
                                                                     setShowTokenSelector(false);
                                                                 }}
-                                                                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors text-left"
+                                                                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors text-left border-b border-zinc-800/30 last:border-b-0"
                                                             >
-                                                                {token.logoUrl ? (
-                                                                    <img src={token.logoUrl} alt={token.symbol} className="w-8 h-8 rounded-full" />
-                                                                ) : (
-                                                                    <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-medium">
-                                                                        {token.symbol.slice(0, 2)}
+                                                                <div className="relative">
+                                                                    {token.logoUrl ? (
+                                                                        <img src={token.logoUrl} alt={token.symbol} className="w-10 h-10 rounded-full" />
+                                                                    ) : (
+                                                                        <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-medium">
+                                                                            {token.symbol.slice(0, 2)}
+                                                                        </div>
+                                                                    )}
+                                                                    {/* Chain badge on token icon */}
+                                                                    <div 
+                                                                        className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] border-2 border-zinc-900"
+                                                                        style={{ backgroundColor: chainInfo?.color || "#666" }}
+                                                                    >
+                                                                        {token.chainIcon}
                                                                     </div>
-                                                                )}
+                                                                </div>
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-sm text-white font-medium">{token.symbol}</span>
-                                                                        <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                                            <span>{token.chainIcon}</span>
-                                                                            <span>{token.chainName}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <span className="text-xs text-zinc-500">{token.chainName}</span>
+                                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                                                            isFreeGas 
+                                                                                ? "bg-emerald-500/20 text-emerald-400" 
+                                                                                : "bg-amber-500/20 text-amber-400"
+                                                                        }`}>
+                                                                            {isFreeGas ? "Free gas" : "Paid gas"}
                                                                         </span>
                                                                     </div>
-                                                                    <p className="text-xs text-zinc-500">
+                                                                    <p className="text-xs text-zinc-600 mt-0.5">
                                                                         {formatTokenBalance(token.balance, token.decimals, token.balanceFormatted)}
                                                                     </p>
                                                                 </div>
-                                                                <span className="text-sm text-zinc-400">
+                                                                <span className="text-sm text-zinc-400 font-medium">
                                                                     {token.balanceUsd ? formatUsd(token.balanceUsd) : "-"}
                                                                 </span>
                                                             </button>
-                                                        ))
+                                                        );})
+                                                        
                                                     )}
                                                 </div>
                                             </motion.div>
@@ -1227,6 +1257,39 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 </div>
                                             </button>
                                         </div>
+
+                                        {/* Chain Info Banner - shows when token selected */}
+                                        {sendToken && (
+                                            <div 
+                                                className="flex items-center justify-between p-3 rounded-xl border"
+                                                style={{ 
+                                                    backgroundColor: `${selectedChainInfo.color}10`,
+                                                    borderColor: `${selectedChainInfo.color}30`
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-lg">{selectedChainInfo.icon}</span>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-white">{selectedChainInfo.name}</p>
+                                                        <p className="text-xs text-zinc-400">
+                                                            {selectedChainInfo.sponsorship === "free" 
+                                                                ? "Transactions are sponsored (free)" 
+                                                                : selectedChainInfo.sponsorship === "usdc"
+                                                                ? "Gas paid in USDC or ETH"
+                                                                : "Standard gas fees apply"
+                                                            }
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className={`px-2 py-1 rounded-lg text-xs font-semibold ${
+                                                    selectedChainInfo.sponsorship === "free"
+                                                        ? "bg-emerald-500/20 text-emerald-400"
+                                                        : "bg-amber-500/20 text-amber-400"
+                                                }`}>
+                                                    {selectedChainInfo.sponsorship === "free" ? "✓ FREE" : "💰 GAS"}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Recipient Address with ENS support */}
                                         <div>
@@ -1601,6 +1664,66 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 <span>🔐</span> View in Safe App ↗
                                             </button>
                                         )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === "security" && (
+                                <div className="p-4 space-y-4">
+                                    {/* Header */}
+                                    <div className="text-center mb-2">
+                                        <h3 className="text-lg font-semibold text-white">Wallet Security</h3>
+                                        <p className="text-sm text-zinc-500">Manage access and recovery options</p>
+                                    </div>
+
+                                    {/* Recovery Signer Manager - for passkey wallets */}
+                                    {smartWallet?.smartWalletAddress && (
+                                        <RecoverySignerManager />
+                                    )}
+
+                                    {/* Passkey Manager Access */}
+                                    <button
+                                        onClick={() => setShowPasskeyManager(true)}
+                                        className="w-full flex items-center justify-between bg-zinc-800/50 hover:bg-zinc-800 rounded-xl p-4 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl">🔑</span>
+                                            <div className="text-left">
+                                                <p className="text-sm text-white font-medium">Passkey Manager</p>
+                                                <p className="text-xs text-zinc-500">View and manage your passkeys</p>
+                                            </div>
+                                        </div>
+                                        <svg className="w-5 h-5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </button>
+
+                                    {/* View in Safe App */}
+                                    {smartWallet?.smartWalletAddress && (
+                                        <a
+                                            href={`https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl p-4 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-2xl">🔐</span>
+                                                <div className="text-left">
+                                                    <p className="text-sm text-emerald-400 font-medium">Open in Safe App</p>
+                                                    <p className="text-xs text-zinc-500">Full control via official Safe interface</p>
+                                                </div>
+                                            </div>
+                                            <span className="text-emerald-400">↗</span>
+                                        </a>
+                                    )}
+
+                                    {/* Info Card */}
+                                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                                        <p className="text-xs text-blue-400 font-medium mb-2">💡 About Your Wallet</p>
+                                        <p className="text-xs text-zinc-400">
+                                            Your Spritz Wallet is a Safe smart account. It&apos;s controlled by your passkey. 
+                                            Add a recovery signer to ensure you can always access your funds, even if you lose your passkey.
+                                        </p>
                                     </div>
                                 </div>
                             )}
