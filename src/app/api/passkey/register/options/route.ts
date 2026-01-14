@@ -138,9 +138,11 @@ export async function POST(request: NextRequest) {
                 authenticatorAttachment: "platform",
                 // Require user verification (biometric or PIN)
                 userVerification: "preferred",
-                // Request resident key (discoverable credential) for cross-device sync
-                residentKey: "preferred",
-                requireResidentKey: false,
+                // REQUIRE resident key (discoverable credential) so the passkey can be
+                // found during login without needing to know the user address ahead of time.
+                // This is essential for the rescue flow to work properly.
+                residentKey: "required",
+                requireResidentKey: true,
             },
             // Request attestation for additional security info (optional)
             attestationType: "none",
