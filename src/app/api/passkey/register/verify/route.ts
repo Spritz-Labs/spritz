@@ -350,10 +350,26 @@ export async function POST(request: NextRequest) {
 
         if (insertError) {
             console.error("[Passkey] Failed to store credential:", insertError);
+            console.error("[Passkey] Attempted to insert credential_id:", credentialId.slice(0, 30));
+            console.error("[Passkey] For user_address:", finalUserAddress);
             return NextResponse.json(
-                { error: "Failed to store credential" },
+                { error: "Failed to store credential: " + insertError.message },
                 { status: 500 }
             );
+        }
+
+        // Verify the credential was actually stored
+        const { data: verifyStored } = await supabase
+            .from("passkey_credentials")
+            .select("id, credential_id, user_address")
+            .eq("credential_id", credentialId)
+            .single();
+        
+        if (!verifyStored) {
+            console.error("[Passkey] CRITICAL: Credential insert succeeded but credential not found!");
+            console.error("[Passkey] credential_id:", credentialId.slice(0, 30));
+        } else {
+            console.log("[Passkey] Verified credential stored. DB id:", verifyStored.id);
         }
 
         console.log("[Passkey] Successfully registered credential for:", finalUserAddress);

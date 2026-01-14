@@ -160,11 +160,27 @@ export async function POST(request: NextRequest) {
 
         // Look up the credential by ID
         console.log("[Passkey] Looking up credential ID:", credential.id);
+        console.log("[Passkey] Full credential ID (first 50):", credential.id.slice(0, 50));
+        
         const { data: storedCredential, error: credError } = await supabase
             .from("passkey_credentials")
             .select("*")
             .eq("credential_id", credential.id)
             .single();
+
+        // Debug: also try a partial match to see if it's an encoding issue
+        if (!storedCredential) {
+            const { data: allCreds } = await supabase
+                .from("passkey_credentials")
+                .select("credential_id, user_address, created_at")
+                .order("created_at", { ascending: false })
+                .limit(5);
+            console.log("[Passkey] Recent credentials in DB:", allCreds?.map(c => ({
+                id_prefix: c.credential_id.slice(0, 30),
+                user: c.user_address.slice(0, 10),
+                created: c.created_at
+            })));
+        }
 
         if (credError || !storedCredential) {
             console.error("[Passkey] Credential not found. Sent ID:", credential.id);
