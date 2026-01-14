@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useAccount, useSignMessage, useSignTypedData, useWalletClient } from "wagmi";
+import { useAccount, useSignMessage, useSignTypedData, useWalletClient, useSwitchChain } from "wagmi";
 import { type Address, type Hex, parseEther, parseUnits, formatEther } from "viem";
 import {
     getSafeAddress,
@@ -90,6 +90,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
     const { signMessageAsync } = useSignMessage();
     const { signTypedDataAsync } = useSignTypedData();
     const { data: walletClient } = useWalletClient();
+    const { switchChainAsync } = useSwitchChain();
     
     const [safeAddress, setSafeAddress] = useState<Address | null>(null);
     const [isDeployed, setIsDeployed] = useState(false);
@@ -308,6 +309,19 @@ export function useSafeWallet(): UseSafeWalletReturn {
         setTxHash(null);
 
         try {
+            // Switch wallet to target chain if needed (required for EIP-712 signing)
+            if (connectedChainId !== targetChainId && signerType === "eoa") {
+                console.log(`[SafeWallet] Switching wallet from chain ${connectedChainId} to ${targetChainId}`);
+                try {
+                    await switchChainAsync({ chainId: targetChainId });
+                    console.log(`[SafeWallet] Successfully switched to chain ${targetChainId}`);
+                } catch (switchError) {
+                    console.error(`[SafeWallet] Failed to switch chain:`, switchError);
+                    setError(`Please switch your wallet to ${SAFE_SUPPORTED_CHAINS[targetChainId]?.name || `chain ${targetChainId}`}`);
+                    setStatus("error");
+                    return null;
+                }
+            }
             // For Mainnet without USDC approval:
             // - If useEOAForGas is true, allow transaction (EOA pays gas)
             // - Otherwise, block and guide user
