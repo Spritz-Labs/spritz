@@ -351,13 +351,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         reset: resetOnramp,
     } = useOnramp();
 
-    // Use Safe for sending or EOA
-    // Passkey users and email/digital_id users MUST use Safe (they have no EOA we control)
-    // Wallet users can choose (default to EOA as it's more reliable)
-    const [useSafeForSend, setUseSafeForSend] = useState(canUsePasskeySigning);
-    
-    // For Mainnet Safe transactions: use EOA to pay gas (required since no USDC paymaster)
-    const [useEOAForGas, setUseEOAForGas] = useState(false);
+    // Spritz Wallet always uses Safe - if users want EOA, they use their wallet app directly
+    const useSafeForSend = true;
     
     // Determine effective state based on auth method
     // canUsePasskeySigning includes passkey, email, alien_id, world_id users
@@ -405,16 +400,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         } else if (useSafeForSend && safeAddress) {
             // Send via Safe smart wallet (EOA signer)
             // Pass selectedChainId to ensure correct chain is used
-            // On Mainnet, pass useEOAForGas option to pay gas from connected wallet
             hash = await sendSafeTransaction(
                 resolvedRecipient,
                 sendAmount,
                 tokenAddress,
                 tokenDecimals,
-                { 
-                    chainId: selectedChainId,
-                    useEOAForGas: selectedChainId === 1 ? useEOAForGas : false 
-                }
+                { chainId: selectedChainId }
             );
         } else {
             // Send via connected EOA (only supports native ETH for now)
@@ -441,7 +432,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 refreshTx();
             }, 8000);
         }
-    }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, useEOAForGas, selectedChainId]);
+    }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId]);
 
     // Reset send form
     const resetSendForm = useCallback(() => {
@@ -449,7 +440,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         clearRecipient();
         setSendAmount("");
         setShowSendConfirm(false);
-        setUseEOAForGas(false);
         resetSend();
         resetSafe();
         resetPasskey();
@@ -1427,34 +1417,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Safe wallet indicator */}
-                                        {safeAddress && !canUsePasskeySigning && (
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-zinc-500">Send via</span>
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => setUseSafeForSend(!useSafeForSend)}
-                                                        className={`px-2 py-1 rounded-lg transition-colors ${
-                                                            useSafeForSend 
-                                                                ? "bg-emerald-500/20 text-emerald-400" 
-                                                                : "bg-zinc-700 text-zinc-400"
-                                                        }`}
-                                                    >
-                                                        Safe Wallet
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setUseSafeForSend(!useSafeForSend)}
-                                                        className={`px-2 py-1 rounded-lg transition-colors ${
-                                                            !useSafeForSend 
-                                                                ? "bg-purple-500/20 text-purple-400" 
-                                                                : "bg-zinc-700 text-zinc-400"
-                                                        }`}
-                                                    >
-                                                        EOA
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
 
                                         {/* Safe Wallet info for EOA users - different messaging per chain */}
                                         {useSafeForSend && !canUsePasskeySigning && safeAddress && (
@@ -1499,42 +1461,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             )
                                         )}
 
-                                        {/* Mainnet info for Safe wallet - need EOA to pay gas */}
-                                        {useSafeForSend && selectedChainId === 1 && (
-                                            <div className={`border rounded-xl p-3 ${useEOAForGas ? "bg-emerald-500/10 border-emerald-500/30" : "bg-amber-500/10 border-amber-500/30"}`}>
+                                        {/* Mainnet notice - recommend L2s for free transactions */}
+                                        {selectedChainId === 1 && (
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
                                                 <div className="flex gap-2">
-                                                    <span className={useEOAForGas ? "text-emerald-400" : "text-amber-400"}>{useEOAForGas ? "✓" : "⚠️"}</span>
-                                                    <div className="flex-1">
-                                                        <p className={`text-xs font-medium ${useEOAForGas ? "text-emerald-300" : "text-amber-300"}`}>
-                                                            {useEOAForGas ? "Ready to withdraw from Safe" : "Mainnet requires gas payment"}
-                                                        </p>
+                                                    <span className="text-amber-400">⚠️</span>
+                                                    <div>
+                                                        <p className="text-xs text-amber-300 font-medium">Mainnet has gas fees</p>
                                                         <p className="text-xs text-zinc-400 mt-1">
-                                                            {useEOAForGas 
-                                                                ? "Your connected wallet will pay ~$1-5 in ETH gas to withdraw from Safe."
-                                                                : "Enable the toggle below to pay gas from your connected wallet."
-                                                            }
+                                                            💡 Use <strong className="text-emerald-400">Base</strong> or <strong className="text-emerald-400">Arbitrum</strong> for free Safe transactions
                                                         </p>
-                                                        
-                                                        {/* Toggle for EOA gas payment */}
-                                                        <button
-                                                            onClick={() => setUseEOAForGas(!useEOAForGas)}
-                                                            className={`mt-3 w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
-                                                                useEOAForGas 
-                                                                    ? "bg-emerald-500/20 border border-emerald-500/30" 
-                                                                    : "bg-zinc-700/50 border border-zinc-600/50 hover:border-amber-500/50"
-                                                            }`}
-                                                        >
-                                                            <span className="text-xs text-zinc-300">Pay gas with wallet</span>
-                                                            <div className={`w-8 h-4 rounded-full transition-colors relative ${useEOAForGas ? "bg-emerald-500" : "bg-zinc-600"}`}>
-                                                                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${useEOAForGas ? "translate-x-4" : "translate-x-0.5"}`} />
-                                                            </div>
-                                                        </button>
-                                                        
-                                                        {!useEOAForGas && (
-                                                            <p className="text-xs text-zinc-500 mt-2">
-                                                                💡 Or use Base/Arbitrum for <strong className="text-emerald-400">free</strong> Safe transactions
-                                                            </p>
-                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1551,7 +1487,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         {effectiveTxHash && (
                                             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
                                                 <p className="text-xs text-emerald-400 mb-2">
-                                                    Transaction sent{useSafeForSend ? " via Safe" : ""}!
+                                                    Transaction sent!
                                                 </p>
                                                 <a
                                                     href={`https://etherscan.io/tx/${effectiveTxHash}`}
@@ -1587,16 +1523,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 }
                                                 className={`w-full py-3 rounded-xl font-medium transition-colors ${
                                                     sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0 && !effectiveIsSending && !isResolvingEns
-                                                        ? useSafeForSend ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-purple-500 text-white hover:bg-purple-600"
-                                                        : "bg-purple-500/20 text-purple-400 opacity-50 cursor-not-allowed"
+                                                        ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                                                        : "bg-emerald-500/20 text-emerald-400 opacity-50 cursor-not-allowed"
                                                 }`}
                                             >
                                                 {effectiveIsSending ? (
                                                     <span className="flex items-center justify-center gap-2">
                                                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                        {useSafeForSend 
-                                                            ? (safeStatus === "deploying" ? "Deploying Safe..." : "Signing...")
-                                                            : (sendStatus === "confirming" ? "Confirm in Wallet..." : "Sending...")}
+                                                        {safeStatus === "deploying" ? "Deploying Safe..." : "Signing..."}
                                                     </span>
                                                 ) : !sendToken ? (
                                                     "Select Token"
@@ -1616,9 +1550,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                                         {/* Note about send method */}
                                         <p className="text-xs text-zinc-600 text-center mt-2">
-                                            {useSafeForSend
-                                                ? "⚡ Safe Wallet (experimental, gasless)"
-                                                : "Sends from your connected wallet"}
+                                            ⚡ Sending via Safe Wallet
                                         </p>
                                     </div>
                                 </>
