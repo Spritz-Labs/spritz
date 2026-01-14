@@ -101,8 +101,8 @@ function TokenBalanceRow({ token, symbol }: { token: TokenBalance; symbol?: stri
     );
 }
 
-// Chain selector tabs component
-function ChainSelectorTabs({ 
+// Chain selector dropdown component
+function ChainSelectorDropdown({ 
     selectedChainId, 
     onSelectChain,
     balances 
@@ -111,40 +111,88 @@ function ChainSelectorTabs({
     onSelectChain: (chainId: number) => void;
     balances: ChainBalance[];
 }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const selectedInfo = CHAIN_INFO[selectedChainId];
+    const selectedBalance = balances.find(b => b.chain.id === selectedChainId);
+
     return (
         <div className="px-4 py-3 border-b border-zinc-800/50">
-            <div className="flex gap-2 overflow-x-auto pb-1 -mb-1 scrollbar-hide">
-                {SEND_ENABLED_CHAIN_IDS.map((chainId) => {
-                    const info = CHAIN_INFO[chainId];
-                    if (!info) return null;
-                    const chainBalance = balances.find(b => b.chain.id === chainId);
-                    const hasBalance = chainBalance && chainBalance.totalUsd > 0;
-                    const isSelected = selectedChainId === chainId;
-                    
-                    return (
-                        <button
-                            key={chainId}
-                            onClick={() => onSelectChain(chainId)}
-                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                                isSelected
-                                    ? "text-white shadow-lg"
-                                    : hasBalance
-                                        ? "bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800"
-                                        : "bg-zinc-800/30 text-zinc-500 hover:bg-zinc-800/50"
-                            }`}
-                            style={isSelected ? { 
-                                backgroundColor: `${info.color}30`,
-                                boxShadow: `0 0 20px ${info.color}20`
-                            } : undefined}
-                        >
-                            <span className="text-base">{info.icon}</span>
-                            <span>{info.name}</span>
-                            {hasBalance && !isSelected && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            )}
-                        </button>
-                    );
-                })}
+            <div className="relative">
+                {/* Selected chain button */}
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/70 hover:bg-zinc-800 transition-colors"
+                    style={{ 
+                        borderLeft: `3px solid ${selectedInfo?.color || '#666'}`,
+                    }}
+                >
+                    <div className="flex items-center gap-3">
+                        <span className="text-xl">{selectedInfo?.icon}</span>
+                        <div className="text-left">
+                            <div className="text-sm font-medium text-white">{selectedInfo?.name}</div>
+                            <div className="text-xs text-zinc-400">
+                                {selectedBalance?.totalUsd 
+                                    ? `$${selectedBalance.totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : "No balance"
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <svg 
+                        className={`w-5 h-5 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+
+                {/* Dropdown menu */}
+                {isOpen && (
+                    <div className="absolute z-50 w-full mt-2 py-1 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden">
+                        {SEND_ENABLED_CHAIN_IDS.map((chainId) => {
+                            const info = CHAIN_INFO[chainId];
+                            if (!info) return null;
+                            const chainBalance = balances.find(b => b.chain.id === chainId);
+                            const isSelected = selectedChainId === chainId;
+                            
+                            return (
+                                <button
+                                    key={chainId}
+                                    onClick={() => {
+                                        onSelectChain(chainId);
+                                        setIsOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
+                                        isSelected
+                                            ? "bg-zinc-800"
+                                            : "hover:bg-zinc-800/50"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">{info.icon}</span>
+                                        <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-zinc-300'}`}>
+                                            {info.name}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {chainBalance && chainBalance.totalUsd > 0 && (
+                                            <span className="text-xs text-zinc-400">
+                                                ${chainBalance.totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                        )}
+                                        {isSelected && (
+                                            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -624,11 +672,11 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             </div>
                         </div>
 
-                        {/* Total Balance for Selected Chain */}
+                        {/* Total Balance across all chains */}
                         <div className="px-4 py-4">
                             <div className="text-center">
                                 <p className="text-sm text-zinc-500 mb-1">
-                                    {selectedChainInfo.icon} {selectedChainInfo.name} Balance
+                                    Total Balance
                                 </p>
                                 {!isSmartWalletReady ? (
                                     <div className="h-9 w-32 mx-auto bg-zinc-800 rounded-lg animate-pulse" />
@@ -636,13 +684,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     <div className="h-9 w-32 mx-auto bg-zinc-800 rounded-lg animate-pulse" />
                                 ) : (
                                     <p className="text-3xl font-bold text-white">
-                                        {formatUsd(selectedChainBalance?.totalUsd || 0)}
+                                        {formatUsd(totalUsd)}
                                     </p>
                                 )}
-                                {/* Show total across all chains in smaller text */}
-                                {totalUsd > 0 && totalUsd !== (selectedChainBalance?.totalUsd || 0) && (
-                                    <p className="text-xs text-zinc-500 mt-1">
-                                        Total across all chains: {formatUsd(totalUsd)}
+                                {/* Show selected chain balance below */}
+                                {selectedChainBalance && selectedChainBalance.totalUsd > 0 && (
+                                    <p className="text-xs text-zinc-400 mt-1">
+                                        {selectedChainInfo.icon} {selectedChainInfo.name}: {formatUsd(selectedChainBalance.totalUsd)}
                                     </p>
                                 )}
                             </div>
@@ -708,8 +756,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         <div className="flex-1 overflow-y-auto border-t border-zinc-800/50">
                             {activeTab === "balances" && (
                                 <>
-                                    {/* Chain selector tabs */}
-                                    <ChainSelectorTabs
+                                    {/* Chain selector dropdown */}
+                                    <ChainSelectorDropdown
                                         selectedChainId={selectedChainId}
                                         onSelectChain={setSelectedChainId}
                                         balances={balances}

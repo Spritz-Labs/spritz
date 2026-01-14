@@ -75,12 +75,32 @@ const WHITELISTED_CONTRACTS = new Set([
     "0x4200000000000000000000000000000000000006", // Base/Optimism
 ]);
 
+// Patterns that indicate scam/spam tokens
+const SCAM_NAME_PATTERNS = [
+    /t\.me/i,           // Telegram links
+    /claim/i,           // "Claim" tokens
+    /airdrop/i,         // Airdrop scams
+    /visit/i,           // "Visit" instructions
+    /http/i,            // URL in name
+    /\.com/i,           // Domain in name
+    /\.org/i,           // Domain in name
+    /\.io/i,            // Domain in name
+    /\.xyz/i,           // Domain in name
+    /\.net/i,           // Domain in name
+    /reward/i,          // "Reward" tokens
+    /bonus/i,           // "Bonus" tokens
+    /free/i,            // "Free" tokens
+    /gift/i,            // "Gift" tokens
+    /voucher/i,         // "Voucher" tokens
+    /\*/,               // Asterisks often used in scam names
+];
+
 /**
  * Determines if a transaction is likely a scam/spam token
  * 
  * Criteria for filtering:
  * 1. Only filter RECEIVED transactions (never hide user's own sends)
- * 2. Token has no USD value (valueUsd is null or 0)
+ * 2. Token name/symbol contains scam patterns (URLs, "claim", etc.)
  * 3. Token is NOT in our whitelist
  * 
  * This filters out common airdrop scam coins while preserving legitimate transactions
@@ -103,15 +123,29 @@ function isLikelyScamToken(transfer: GraphTransfer, type: "send" | "receive"): b
         return false;
     }
 
-    // If the token has a USD value, it's likely legitimate
-    // (The Graph API provides market value for known tokens)
-    if (transfer.value && transfer.value > 0.001) {
-        return false;
+    // Check for scam patterns in name or symbol
+    const tokenName = transfer.name || "";
+    const tokenSymbol = transfer.symbol || "";
+    for (const pattern of SCAM_NAME_PATTERNS) {
+        if (pattern.test(tokenName) || pattern.test(tokenSymbol)) {
+            console.log(`[Transactions] Filtering scam token (pattern match): ${transfer.symbol} - ${transfer.name}`);
+            return true;
+        }
     }
 
-    // No USD value + not whitelisted + received = likely scam
-    console.log(`[Transactions] Filtering potential scam token: ${transfer.symbol} (${transfer.contract})`);
-    return true;
+    // If token name is very long (>50 chars), likely scam
+    if (tokenName.length > 50 || tokenSymbol.length > 20) {
+        console.log(`[Transactions] Filtering scam token (long name): ${transfer.symbol} - ${transfer.name}`);
+        return true;
+    }
+
+    // If the token has no USD value and isn't whitelisted, filter it
+    if (!transfer.value || transfer.value <= 0.001) {
+        console.log(`[Transactions] Filtering potential scam token (no value): ${transfer.symbol} (${transfer.contract})`);
+        return true;
+    }
+
+    return false;
 }
 
 async function fetchChainTransfers(
