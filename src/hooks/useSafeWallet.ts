@@ -278,8 +278,8 @@ export function useSafeWallet(): UseSafeWalletReturn {
         setTxHash(null);
 
         try {
-            // First, get the Safe address to check for USDC approval on mainnet
-            // We need to know the gas payment strategy BEFORE creating the client
+            // For Mainnet, check USDC approval status
+            // Note: Sponsorship policies don't cover Mainnet - if no USDC approval, guide user to EOA
             let sponsorBootstrap = false;
             const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId });
             
@@ -288,10 +288,12 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, chainId);
                 console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
                 if (!hasApproval) {
-                    // No USDC approval - sponsor this first transaction to bootstrap the user
-                    // This transaction will include the USDC approval, so future txs can use ERC-20 paymaster
-                    console.log(`[SafeWallet] No USDC approval - sponsoring bootstrap transaction`);
-                    sponsorBootstrap = true;
+                    // No USDC approval on Mainnet - can't use Smart Wallet
+                    // Sponsorship policies don't cover Mainnet (too expensive)
+                    console.log(`[SafeWallet] No USDC approval on Mainnet - guiding user to EOA mode`);
+                    setError("Mainnet requires USDC approval for gas. Please toggle to 'EOA' mode above to send directly from your connected wallet, or try a free L2 like Base.");
+                    setStatus("error");
+                    return null;
                 }
             }
             

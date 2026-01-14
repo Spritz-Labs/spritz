@@ -120,34 +120,31 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Calculate Safe address client-side immediately
+    // Don't calculate client-side - wait for API to return the correct address
+    // This prevents showing a potentially incorrect address before the API responds
+    // The server uses permissionless.js which produces the actual Safe address
     const clientSideWallet = useMemo<SmartWalletInfo | null>(() => {
         if (!userAddress) return null;
         
-        try {
-            const spritzId = userAddress.toLowerCase() as Address;
-            const smartWalletAddress = calculateSafeAddress(spritzId);
-            
-            return {
-                spritzId,
-                smartWalletAddress,
-                isDeployed: false,
-                walletType: "wallet",
-                canSign: true, // Assume wallet users can sign
-                signerType: "eoa",
-                supportedChains: [
-                    { chainId: 1, name: "Ethereum", sponsorship: "usdc" },
-                    { chainId: 8453, name: "Base", sponsorship: "free" },
-                    { chainId: 42161, name: "Arbitrum", sponsorship: "free" },
-                    { chainId: 10, name: "Optimism", sponsorship: "free" },
-                    { chainId: 137, name: "Polygon", sponsorship: "free" },
-                    { chainId: 56, name: "BNB Chain", sponsorship: "free" },
-                    { chainId: 130, name: "Unichain", sponsorship: "free" },
-                ],
-            };
-        } catch {
-            return null;
-        }
+        // Only provide spritzId client-side, not the Safe address
+        // The Safe address comes from the API to ensure consistency
+        return {
+            spritzId: userAddress.toLowerCase() as Address,
+            smartWalletAddress: null, // Wait for API
+            isDeployed: false,
+            walletType: "wallet",
+            canSign: true,
+            signerType: "eoa",
+            supportedChains: [
+                { chainId: 1, name: "Ethereum", sponsorship: "usdc" },
+                { chainId: 8453, name: "Base", sponsorship: "free" },
+                { chainId: 42161, name: "Arbitrum", sponsorship: "free" },
+                { chainId: 10, name: "Optimism", sponsorship: "free" },
+                { chainId: 137, name: "Polygon", sponsorship: "free" },
+                { chainId: 56, name: "BNB Chain", sponsorship: "free" },
+                { chainId: 130, name: "Unichain", sponsorship: "free" },
+            ],
+        };
     }, [userAddress]);
 
     const fetchSmartWallet = useCallback(async () => {

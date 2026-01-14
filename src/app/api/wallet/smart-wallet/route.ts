@@ -4,10 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 import { type Address } from "viem";
 import { 
     getSmartWalletAddress, 
-    calculateSmartWalletFromSpritzId,
     getSupportedChains,
-    calculateSafeAddress,
 } from "@/lib/smartAccount";
+import { getSafeAddress } from "@/lib/safeWallet";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -73,7 +72,8 @@ export async function GET(request: NextRequest) {
 
         if (!supabaseUrl || !supabaseServiceKey) {
             // No DB access - fallback for wallet users only
-            smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
+            // Use permissionless.js to calculate Safe address (matches transaction logic)
+            smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
             canSign = true;
             signerType = "eoa";
         } else {
@@ -107,7 +107,9 @@ export async function GET(request: NextRequest) {
                 if (user?.smart_wallet_address) {
                     smartWalletAddress = user.smart_wallet_address as Address;
                 } else {
-                    smartWalletAddress = calculateSmartWalletFromSpritzId(spritzId);
+                    // Use permissionless.js to calculate Safe address (matches transaction logic)
+                    // Use Base as default chain - address is same across all EVM chains
+                    smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
                     
                     // Store for future lookups
                     await supabase
@@ -144,8 +146,11 @@ export async function GET(request: NextRequest) {
                         smartWalletAddress = user.smart_wallet_address as Address;
                         console.log("[SmartWallet] Using stored passkey-based Safe:", smartWalletAddress.slice(0, 10));
                     } else {
-                        // Calculate Safe from passkey signer
-                        smartWalletAddress = calculateSafeAddress(credential.safe_signer_address as Address);
+                        // Calculate Safe from passkey signer using permissionless.js
+                        smartWalletAddress = await getSafeAddress({ 
+                            ownerAddress: credential.safe_signer_address as Address, 
+                            chainId: 8453 
+                        });
                         
                         // Store permanently - this passkey now controls this Safe
                         await supabase
