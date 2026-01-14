@@ -279,7 +279,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
 
         try {
             // For Mainnet, check USDC approval status
-            // Note: Sponsorship policies don't cover Mainnet - if no USDC approval, guide user to EOA
+            // If no approval, try sponsoring the first transaction to bootstrap the user
             let sponsorBootstrap = false;
             const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId });
             
@@ -288,12 +288,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, chainId);
                 console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
                 if (!hasApproval) {
-                    // No USDC approval on Mainnet - can't use Smart Wallet
-                    // Sponsorship policies don't cover Mainnet (too expensive)
-                    console.log(`[SafeWallet] No USDC approval on Mainnet - guiding user to EOA mode`);
-                    setError("Mainnet requires USDC approval for gas. Please toggle to 'EOA' mode above to send directly from your connected wallet, or try a free L2 like Base.");
-                    setStatus("error");
-                    return null;
+                    // No USDC approval - try sponsoring this first transaction
+                    // This will include USDC approval so future transactions can use ERC-20 paymaster
+                    console.log(`[SafeWallet] No USDC approval - attempting sponsored bootstrap transaction`);
+                    sponsorBootstrap = true;
                 }
             }
             
@@ -391,24 +389,23 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // This happens on Mainnet when user has no USDC approval and Safe can't pay ETH prefund
             if (errString.includes("AA21") || errString.includes("didn't pay prefund")) {
                 if (chainRequiresErc20Payment(chainId)) {
-                    // Mainnet: explain the chicken-and-egg problem
-                    setError("Mainnet requires USDC for gas, but your Safe hasn't approved USDC yet. First, toggle to 'EOA' mode to send from your connected wallet, or use a free L2 like Base first.");
+                    // Mainnet: explain the issue and provide options
+                    setError("Mainnet Safe Wallet requires USDC for gas fees. Options: 1) Toggle to 'EOA' mode above to send from your connected wallet, 2) Bridge your funds to Base (free transactions), or 3) Deposit ~$2 USDC to your Safe for gas.");
                 } else {
                     setError("Insufficient ETH in Safe for gas fees. Deposit ETH to your Safe wallet first.");
                 }
                 setStatus("error");
                 return null;
             }
-            
-            // Check for common UserOperation errors
-            if (errString.includes("UserOperation reverted") || 
+
+            // Check for common UserOperation errors (sponsorship may have failed)
+            if (errString.includes("UserOperation reverted") ||
                 errString.includes("reverted during simulation") ||
                 errString.includes("reason: 0x")) {
-                
+
                 if (chainRequiresErc20Payment(chainId)) {
-                    // Mainnet transaction failed - could be insufficient USDC or other issue
-                    // Note: USDC approval is now batched automatically, so this isn't an approval issue
-                    setError("Transaction failed on mainnet. Ensure your Safe has at least 2 USDC for gas fees plus ETH to send. Try a free L2 like Base for gasless transactions.");
+                    // Mainnet transaction failed - sponsorship may not be available
+                    setError("Mainnet transaction failed. Gas sponsorship may not be available. Options: 1) Toggle to 'EOA' mode to send from your connected wallet, 2) Use a bridge to move funds to Base (free transactions), or 3) Deposit ~$2 USDC to your Safe for gas fees.");
                 } else {
                     // L2s have sponsored gas but still need the token
                     setError("Insufficient funds in Safe. Deposit tokens to your Safe wallet address first.");

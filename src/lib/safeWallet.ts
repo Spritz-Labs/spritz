@@ -97,16 +97,19 @@ export const CHAIN_SPONSORSHIP_CONFIG: Record<number, { type: SponsorshipType; r
 /**
  * Check if Mainnet transaction should be sponsored (first-time bootstrap)
  * 
- * NOTE: Pimlico sponsorship policies typically DO NOT cover Mainnet due to high costs.
- * For Mainnet, users should use EOA mode (send directly from connected wallet).
+ * On Mainnet, if user has no USDC approval for the paymaster, we try to sponsor
+ * their first transaction. This includes the USDC approval so future transactions
+ * can use the ERC-20 paymaster.
  * 
- * This function returns false to prevent attempting sponsorship on Mainnet,
- * which would just result in an error.
+ * NOTE: Sponsorship policies may or may not cover Mainnet. If they don't,
+ * the transaction will fail gracefully with a helpful error message.
  */
 export function shouldSponsorMainnetBootstrap(chainId: number, hasUsdcApproval: boolean): boolean {
-    // Mainnet sponsorship is disabled - policies don't cover it (too expensive)
-    // Users should use EOA mode for Mainnet transactions
-    return false;
+    // Only applies to Mainnet
+    if (chainId !== 1) return false;
+    
+    // Sponsor if no USDC approval exists (first-time user)
+    return !hasUsdcApproval;
 }
 
 // USDC addresses for ERC-20 paymaster
