@@ -53,6 +53,7 @@ export function useMultiChainSafeStatus(
     const fetchStatus = useCallback(async () => {
         if (!safeAddress) {
             setStatus(null);
+            setIsLoading(false);
             return;
         }
 
@@ -65,9 +66,16 @@ export function useMultiChainSafeStatus(
                 params.set("primarySigner", primarySigner);
             }
 
+            // Add timeout to prevent hanging forever
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
             const response = await fetch(`/api/wallet/safe-status?${params}`, {
                 credentials: "include",
+                signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const data = await response.json();
@@ -78,7 +86,11 @@ export function useMultiChainSafeStatus(
             setStatus(data);
         } catch (err) {
             console.error("[MultiChainSafeStatus] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to fetch Safe status");
+            if (err instanceof Error && err.name === "AbortError") {
+                setError("Request timed out. Please try again.");
+            } else {
+                setError(err instanceof Error ? err.message : "Failed to fetch Safe status");
+            }
         } finally {
             setIsLoading(false);
         }

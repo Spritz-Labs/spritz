@@ -74,7 +74,15 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // Fetch status for all chains in parallel
+        // Helper to add timeout to promises
+        const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+            return Promise.race([
+                promise,
+                new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+            ]);
+        };
+
+        // Fetch status for all chains in parallel with timeout
         const statusPromises = SUPPORTED_CHAINS.map(async (chainInfo) => {
             const status: ChainSafeStatus = {
                 chainId: chainInfo.id,
@@ -96,23 +104,35 @@ export async function GET(request: NextRequest) {
                     transport: http(),
                 });
 
-                // Check if Safe is deployed (has code)
-                const code = await publicClient.getCode({ address: safeAddress as Address });
+                // Check if Safe is deployed (has code) with 10s timeout
+                const code = await withTimeout(
+                    publicClient.getCode({ address: safeAddress as Address }),
+                    10000,
+                    "0x" as `0x${string}`
+                );
                 status.isDeployed = !!code && code !== "0x";
 
                 if (status.isDeployed) {
-                    // Fetch owners and threshold
+                    // Fetch owners and threshold with 10s timeout each
                     const [owners, threshold] = await Promise.all([
-                        publicClient.readContract({
-                            address: safeAddress as Address,
-                            abi: SAFE_ABI,
-                            functionName: "getOwners",
-                        }),
-                        publicClient.readContract({
-                            address: safeAddress as Address,
-                            abi: SAFE_ABI,
-                            functionName: "getThreshold",
-                        }),
+                        withTimeout(
+                            publicClient.readContract({
+                                address: safeAddress as Address,
+                                abi: SAFE_ABI,
+                                functionName: "getOwners",
+                            }),
+                            10000,
+                            [] as readonly string[]
+                        ),
+                        withTimeout(
+                            publicClient.readContract({
+                                address: safeAddress as Address,
+                                abi: SAFE_ABI,
+                                functionName: "getThreshold",
+                            }),
+                            10000,
+                            BigInt(0)
+                        ),
                     ]);
 
                     status.owners = (owners as string[]).map((o: string) => o.toLowerCase());
@@ -126,8 +146,12 @@ export async function GET(request: NextRequest) {
                     status.safeAppUrl = `https://app.safe.global/home?safe=${prefix}:${safeAddress}`;
                 }
 
-                // Fetch native balance
-                const balance = await publicClient.getBalance({ address: safeAddress as Address });
+                // Fetch native balance with 5s timeout
+                const balance = await withTimeout(
+                    publicClient.getBalance({ address: safeAddress as Address }),
+                    5000,
+                    BigInt(0)
+                );
                 // Simple USD estimate (you'd want real prices in production)
                 const ethPrice = chainInfo.id === 137 ? 0.5 : chainInfo.id === 56 ? 300 : 3500;
                 status.balanceUsd = Number(balance) / 1e18 * ethPrice;
