@@ -12,7 +12,8 @@ type PasskeyCredential = {
     createdAt: string;
     lastUsedAt: string | null;
     backedUp: boolean;
-    isWalletKey?: boolean; // This passkey controls a wallet
+    isWalletKey?: boolean; // This passkey is an actual Safe owner
+    walletKeyStatus?: "active" | "not_owner" | "safe_not_deployed" | "no_signer";
 };
 
 type Props = {
@@ -334,13 +335,19 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                                         credential.isWalletKey
                                             ? "bg-amber-500/20 text-amber-400"
-                                            : credential.backedUp 
-                                                ? "bg-blue-500/20 text-blue-400" 
-                                                : "bg-zinc-700 text-zinc-400"
+                                            : credential.walletKeyStatus === "not_owner"
+                                                ? "bg-red-500/20 text-red-400"
+                                                : credential.backedUp 
+                                                    ? "bg-blue-500/20 text-blue-400" 
+                                                    : "bg-zinc-700 text-zinc-400"
                                     }`}>
                                         {credential.isWalletKey ? (
                                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            </svg>
+                                        ) : credential.walletKeyStatus === "not_owner" ? (
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                             </svg>
                                         ) : credential.backedUp ? (
                                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -358,6 +365,11 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                                                 <>
                                                     <span>Wallet Key</span>
                                                     <span className="text-amber-400 text-xs">🔐</span>
+                                                </>
+                                            ) : credential.walletKeyStatus === "not_owner" ? (
+                                                <>
+                                                    <span>Login Only</span>
+                                                    <span className="text-red-400 text-xs">⚠️</span>
                                                 </>
                                             ) : credential.backedUp ? (
                                                 "Synced Passkey"
@@ -399,6 +411,20 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                                     <p className="text-xs text-amber-300/90">
                                         🔒 This passkey controls your Spritz Wallet and cannot be deleted. 
                                         Deleting it would permanently lock you out of your funds.
+                                    </p>
+                                </div>
+                            )}
+                            
+                            {/* Warning for passkeys that have a signer but aren't Safe owners */}
+                            {credential.walletKeyStatus === "not_owner" && (
+                                <div className="mt-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                                    <p className="text-xs text-red-300/90">
+                                        ⚠️ This passkey cannot sign wallet transactions. It was created during recovery 
+                                        but is not an owner of your existing Safe wallet.
+                                    </p>
+                                    <p className="text-xs text-zinc-400 mt-1">
+                                        To use this passkey for transactions, add it as a recovery signer from another device 
+                                        that has your original passkey.
                                     </p>
                                 </div>
                             )}
