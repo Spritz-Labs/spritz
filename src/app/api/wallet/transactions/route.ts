@@ -47,6 +47,73 @@ interface GraphTransfer {
 // Native token contract address (used by The Graph to identify native transfers)
 const NATIVE_TOKEN_CONTRACT = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
+// Known legitimate tokens that should never be filtered (by symbol, case-insensitive)
+// These are well-known tokens that may temporarily show $0 value but are legit
+const WHITELISTED_SYMBOLS = new Set([
+    "eth", "weth", "usdc", "usdt", "dai", "wbtc", "matic", "wmatic",
+    "bnb", "wbnb", "avax", "wavax", "ftm", "wftm", "op", "arb",
+    "link", "uni", "aave", "mkr", "snx", "crv", "ldo", "rpl",
+    "cbeth", "reth", "steth", "wsteth", "frax", "lusd", "susd",
+]);
+
+// Known legitimate token contracts (lowercase) - add specific contracts here
+const WHITELISTED_CONTRACTS = new Set([
+    // Native token placeholder
+    "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    // USDC on various chains
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // Ethereum
+    "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // Base
+    "0xaf88d065e77c8cc2239327c5edb3a432268e5831", // Arbitrum
+    "0x0b2c639c533813f4aa9d7837caf62653d097ff85", // Optimism
+    // USDT
+    "0xdac17f958d2ee523a2206206994597c13d831ec7", // Ethereum
+    // DAI
+    "0x6b175474e89094c44da98b954eedeac495271d0f", // Ethereum
+    "0x50c5725949a6f0c72e6c4a641f24049a917db0cb", // Base
+    // WETH
+    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // Ethereum
+    "0x4200000000000000000000000000000000000006", // Base/Optimism
+]);
+
+/**
+ * Determines if a transaction is likely a scam/spam token
+ * 
+ * Criteria for filtering:
+ * 1. Only filter RECEIVED transactions (never hide user's own sends)
+ * 2. Token has no USD value (valueUsd is null or 0)
+ * 3. Token is NOT in our whitelist
+ * 
+ * This filters out common airdrop scam coins while preserving legitimate transactions
+ */
+function isLikelyScamToken(transfer: GraphTransfer, type: "send" | "receive"): boolean {
+    // Never filter outgoing transactions - user intentionally sent these
+    if (type === "send") {
+        return false;
+    }
+
+    // Check if token is whitelisted by symbol
+    const symbolLower = transfer.symbol?.toLowerCase() || "";
+    if (WHITELISTED_SYMBOLS.has(symbolLower)) {
+        return false;
+    }
+
+    // Check if token is whitelisted by contract
+    const contractLower = transfer.contract?.toLowerCase() || "";
+    if (WHITELISTED_CONTRACTS.has(contractLower)) {
+        return false;
+    }
+
+    // If the token has a USD value, it's likely legitimate
+    // (The Graph API provides market value for known tokens)
+    if (transfer.value && transfer.value > 0.001) {
+        return false;
+    }
+
+    // No USD value + not whitelisted + received = likely scam
+    console.log(`[Transactions] Filtering potential scam token: ${transfer.symbol} (${transfer.contract})`);
+    return true;
+}
+
 async function fetchChainTransfers(
     address: string,
     chain: SupportedChain
@@ -112,6 +179,11 @@ async function fetchChainTransfers(
             const transfers: GraphTransfer[] = data.data || [];
 
             for (const transfer of transfers) {
+                // Filter out likely scam/spam tokens
+                if (isLikelyScamToken(transfer, type)) {
+                    continue;
+                }
+
                 // Get token logo
                 const isNative = transfer.contract === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
                 const tokenLogo = isNative 
