@@ -607,7 +607,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.9, opacity: 0 }}
                         onClick={(e) => e.stopPropagation()}
-                        className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col"
+                        className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md min-h-[70vh] max-h-[90vh] overflow-hidden flex flex-col"
                     >
                         {/* Header */}
                         <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
