@@ -279,8 +279,8 @@ export function useSafeWallet(): UseSafeWalletReturn {
 
         try {
             // First, get the Safe address to check for USDC approval on mainnet
-            // We need to know if we should use native gas BEFORE creating the client
-            let forceNativeGas = false;
+            // We need to know the gas payment strategy BEFORE creating the client
+            let sponsorBootstrap = false;
             const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId });
             
             if (chainRequiresErc20Payment(chainId) && predictedSafeAddress) {
@@ -288,8 +288,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, chainId);
                 console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
                 if (!hasApproval) {
-                    console.log(`[SafeWallet] No USDC approval - will use native ETH for gas`);
-                    forceNativeGas = true;
+                    // No USDC approval - sponsor this first transaction to bootstrap the user
+                    // This transaction will include the USDC approval, so future txs can use ERC-20 paymaster
+                    console.log(`[SafeWallet] No USDC approval - sponsoring bootstrap transaction`);
+                    sponsorBootstrap = true;
                 }
             }
             
@@ -300,7 +302,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 safeClient = await createPasskeySafeAccountClient(
                     passkeyCredential,
                     chainId,
-                    { forceNativeGas }
+                    { sponsorBootstrap }
                 );
             } else {
                 // Create Safe account client with EOA signer
@@ -314,21 +316,22 @@ export function useSafeWallet(): UseSafeWalletReturn {
                     async (typedData: any) => {
                         return await signTypedDataAsync(typedData);
                     },
-                    { forceNativeGas }
+                    { sponsorBootstrap }
                 );
             }
 
             // Get the Safe address from the client (more reliable than state variable)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
-            console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, forceNativeGas: ${forceNativeGas}`);
+            console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, sponsorBootstrap: ${sponsorBootstrap}`);
 
             // Send the transaction - handle both native ETH and ERC20 tokens
-            // Pass chainId and safeAddress for automatic USDC approval batching on mainnet
+            // Pass sponsorBootstrap to batch USDC approval on Mainnet bootstrap
             const sendOptions = {
                 isWebAuthn: signerType === "passkey",
                 chainId,
                 safeAddress: safeAccountAddress,
+                sponsorBootstrap, // If true, will batch USDC approval for future transactions
             };
             
             let hash;
