@@ -36,6 +36,8 @@ export interface SafeWalletState {
 export interface SendOptions {
     /** If true, EOA pays gas in ETH instead of Safe paying via paymaster */
     useEOAForGas?: boolean;
+    /** Override the chain ID for this transaction */
+    chainId?: number;
 }
 
 export interface UseSafeWalletReturn {
@@ -278,7 +280,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
         tokenDecimals?: number,
         options?: SendOptions
     ): Promise<string | null> => {
-        const { useEOAForGas = false } = options || {};
+        const { useEOAForGas = false, chainId: overrideChainId } = options || {};
+        
+        // Use override chainId if provided, otherwise use hook's chainId
+        const targetChainId = overrideChainId || chainId;
         
         // Validate based on signer type
         if (signerType === "eoa") {
@@ -293,7 +298,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
             }
         }
 
-        if (!SAFE_SUPPORTED_CHAINS[chainId]) {
+        if (!SAFE_SUPPORTED_CHAINS[targetChainId]) {
             setError("Unsupported chain");
             return null;
         }
@@ -306,12 +311,12 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // For Mainnet without USDC approval:
             // - If useEOAForGas is true, allow transaction (EOA pays gas)
             // - Otherwise, block and guide user
-            const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId });
+            const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId: targetChainId });
             let forceNativeGas = useEOAForGas;
 
-            if (chainRequiresErc20Payment(chainId) && predictedSafeAddress && !useEOAForGas) {
+            if (chainRequiresErc20Payment(targetChainId) && predictedSafeAddress && !useEOAForGas) {
                 console.log(`[SafeWallet] Checking USDC approval for mainnet transaction...`);
-                const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, chainId);
+                const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, targetChainId);
                 console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
                 if (!hasApproval) {
                     // No USDC approval on Mainnet and user didn't opt for EOA gas
@@ -324,7 +329,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
 
             // If using EOA for gas on Mainnet, use DIRECT Safe execution (bypasses bundler)
             // This lets the EOA pay gas directly from their wallet
-            if (useEOAForGas && chainRequiresErc20Payment(chainId) && walletClient) {
+            if (useEOAForGas && chainRequiresErc20Payment(targetChainId) && walletClient) {
                 console.log(`[SafeWallet] Using DIRECT Safe execution - EOA pays gas`);
                 
                 // Create wallet client wrapper for direct execution
@@ -348,7 +353,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
                     console.log(`[SafeWallet] Direct ERC20 transfer: ${amount} (${tokenAmount} raw) to ${to}`);
                     hash = await execSafeERC20TransferDirect(
                         predictedSafeAddress,
-                        chainId,
+                        targetChainId,
                         tokenAddress,
                         to,
                         tokenAmount,
@@ -359,7 +364,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
                     console.log(`[SafeWallet] Direct ETH transfer: ${amount} to ${to}`);
                     hash = await execSafeTransactionDirect(
                         predictedSafeAddress,
-                        chainId,
+                        targetChainId,
                         to,
                         parseEther(amount),
                         "0x",
@@ -379,20 +384,33 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 // Create Safe account client with passkey signer
                 safeClient = await createPasskeySafeAccountClient(
                     passkeyCredential,
-                    chainId,
+                    targetChainId,
                     { forceNativeGas }
                 );
             } else {
                 // Create Safe account client with EOA signer
+                // Use walletClient directly to avoid wagmi chain validation
+                // Safe bundler signing is chain-agnostic
+                if (!walletClient) {
+                    throw new Error("Wallet client not available");
+                }
                 safeClient = await createSafeAccountClient(
                     ownerAddress!,
-                    chainId,
+                    targetChainId,
                     async (message: string) => {
-                        return await signMessageAsync({ message });
+                        // Sign message directly - chain agnostic for bundler transactions
+                        return await walletClient.signMessage({ 
+                            account: walletClient.account!, 
+                            message 
+                        });
                     },
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     async (typedData: any) => {
-                        return await signTypedDataAsync(typedData);
+                        // Sign typed data directly - chain agnostic for bundler transactions
+                        return await walletClient.signTypedData({
+                            account: walletClient.account!,
+                            ...typedData,
+                        });
                     },
                     { forceNativeGas }
                 );
@@ -401,12 +419,12 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // Get the Safe address from the client (more reliable than state variable)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
-            console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, forceNativeGas: ${forceNativeGas}`);
+            console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, forceNativeGas: ${forceNativeGas}, chainId: ${targetChainId}`);
 
             // Send the transaction - handle both native ETH and ERC20 tokens
             const sendOptions = {
                 isWebAuthn: signerType === "passkey",
-                chainId,
+                chainId: targetChainId,
                 safeAddress: safeAccountAddress,
                 forceNativeGas,
             };

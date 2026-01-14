@@ -404,13 +404,17 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             );
         } else if (useSafeForSend && safeAddress) {
             // Send via Safe smart wallet (EOA signer)
+            // Pass selectedChainId to ensure correct chain is used
             // On Mainnet, pass useEOAForGas option to pay gas from connected wallet
             hash = await sendSafeTransaction(
                 resolvedRecipient,
                 sendAmount,
                 tokenAddress,
                 tokenDecimals,
-                { useEOAForGas: selectedChainId === 1 ? useEOAForGas : false }
+                { 
+                    chainId: selectedChainId,
+                    useEOAForGas: selectedChainId === 1 ? useEOAForGas : false 
+                }
             );
         } else {
             // Send via connected EOA (only supports native ETH for now)
