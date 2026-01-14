@@ -980,12 +980,117 @@ const SAFE_ABI = [
     },
 ] as const;
 
+// Safe v1.4.1 Factory and Singleton addresses (same across all EVM chains)
+// See: https://github.com/safe-global/safe-deployments
+const SAFE_PROXY_FACTORY_141 = "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67" as Address;
+const SAFE_SINGLETON_141 = "0x41675C099F32341bf84BFc5382aF534df5C7461a" as Address;
+const SAFE_FALLBACK_HANDLER_141 = "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99" as Address;
+
+// Safe Proxy Factory ABI (minimal for createProxyWithNonce)
+const SAFE_PROXY_FACTORY_ABI = [
+    {
+        name: "createProxyWithNonce",
+        type: "function",
+        inputs: [
+            { name: "_singleton", type: "address" },
+            { name: "initializer", type: "bytes" },
+            { name: "saltNonce", type: "uint256" },
+        ],
+        outputs: [{ name: "proxy", type: "address" }],
+    },
+] as const;
+
+// Safe setup function ABI
+const SAFE_SETUP_ABI = [
+    {
+        name: "setup",
+        type: "function",
+        inputs: [
+            { name: "_owners", type: "address[]" },
+            { name: "_threshold", type: "uint256" },
+            { name: "to", type: "address" },
+            { name: "data", type: "bytes" },
+            { name: "fallbackHandler", type: "address" },
+            { name: "paymentToken", type: "address" },
+            { name: "payment", type: "uint256" },
+            { name: "paymentReceiver", type: "address" },
+        ],
+        outputs: [],
+    },
+] as const;
+
+/**
+ * Deploy a Safe wallet on a chain where EOA pays gas
+ * 
+ * This is used when the Safe hasn't been deployed yet on a chain
+ * and the user wants to withdraw funds (e.g., Mainnet without USDC).
+ * 
+ * @param ownerAddress - The owner of the Safe (EOA address)
+ * @param chainId - The chain ID
+ * @param walletClient - The wallet client for sending the deploy transaction
+ * @param saltNonce - Salt nonce (default 0 for deterministic address)
+ */
+export async function deploySafeWithEOA(
+    ownerAddress: Address,
+    chainId: number,
+    walletClient: {
+        account: { address: Address };
+        writeContract: (args: unknown) => Promise<Hex>;
+    },
+    saltNonce: bigint = BigInt(0)
+): Promise<{ txHash: Hex; safeAddress: Address }> {
+    const chain = SAFE_SUPPORTED_CHAINS[chainId];
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    log(`[SafeWallet] Deploying Safe for owner ${ownerAddress.slice(0, 10)}... on chain ${chainId}`);
+
+    // Encode the Safe setup call
+    // Single owner with threshold 1
+    const setupData = encodeFunctionData({
+        abi: SAFE_SETUP_ABI,
+        functionName: "setup",
+        args: [
+            [ownerAddress],  // owners array
+            BigInt(1),       // threshold
+            "0x0000000000000000000000000000000000000000" as Address,  // to (no module setup)
+            "0x" as Hex,     // data
+            SAFE_FALLBACK_HANDLER_141,  // fallbackHandler
+            "0x0000000000000000000000000000000000000000" as Address,  // paymentToken (native)
+            BigInt(0),       // payment
+            "0x0000000000000000000000000000000000000000" as Address,  // paymentReceiver
+        ],
+    });
+
+    log(`[SafeWallet] Setup data encoded, deploying via factory...`);
+
+    // Call the factory to deploy
+    const txHash = await walletClient.writeContract({
+        address: SAFE_PROXY_FACTORY_141,
+        abi: SAFE_PROXY_FACTORY_ABI,
+        functionName: "createProxyWithNonce",
+        args: [SAFE_SINGLETON_141, setupData, saltNonce],
+        chain,
+    });
+
+    // Calculate the expected Safe address (same as getSafeAddress)
+    const safeAddress = await getSafeAddress({ ownerAddress, chainId });
+
+    log(`[SafeWallet] Safe deployment tx: ${txHash}`);
+    log(`[SafeWallet] Expected Safe address: ${safeAddress}`);
+
+    return { txHash, safeAddress };
+}
+
 /**
  * Execute a Safe transaction directly (EOA pays gas)
  * 
  * This bypasses the ERC-4337 bundler system entirely.
  * The EOA signs the Safe transaction and calls execTransaction directly,
  * paying gas from the EOA's ETH balance.
+ * 
+ * If the Safe is not deployed, it will be deployed first (EOA pays gas).
  * 
  * @param safeAddress - The deployed Safe address
  * @param chainId - The chain ID
@@ -1018,9 +1123,34 @@ export async function execSafeTransactionDirect(
     log(`[SafeWallet] EOA paying gas: ${walletClient.account.address.slice(0, 10)}...`);
 
     // Check if Safe is deployed
-    const deployed = await isSafeDeployed(safeAddress, chainId);
+    let deployed = await isSafeDeployed(safeAddress, chainId);
+    
+    // If not deployed, deploy it first (EOA pays gas)
     if (!deployed) {
-        throw new Error("Safe is not deployed. Deploy it first with a sponsored L2 transaction.");
+        log(`[SafeWallet] Safe not deployed on chain ${chainId}, deploying first...`);
+        
+        const { txHash: deployTxHash } = await deploySafeWithEOA(
+            walletClient.account.address,
+            chainId,
+            walletClient,
+            BigInt(0)
+        );
+        
+        log(`[SafeWallet] Safe deployment tx submitted: ${deployTxHash}`);
+        
+        // Wait for deployment to be confirmed
+        log(`[SafeWallet] Waiting for deployment confirmation...`);
+        const receipt = await publicClient.waitForTransactionReceipt({ 
+            hash: deployTxHash,
+            confirmations: 1,
+        });
+        
+        if (receipt.status !== "success") {
+            throw new Error("Safe deployment failed");
+        }
+        
+        log(`[SafeWallet] Safe deployed successfully!`);
+        deployed = true;
     }
 
     // Verify the wallet is an owner of this Safe

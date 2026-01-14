@@ -343,6 +343,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
 
             // If using EOA for gas on Mainnet, use DIRECT Safe execution (bypasses bundler)
             // This lets the EOA pay gas directly from their wallet
+            // Note: If Safe isn't deployed yet, it will be deployed first (EOA pays gas)
             if (useEOAForGas && chainRequiresErc20Payment(targetChainId) && walletClient) {
                 console.log(`[SafeWallet] Using DIRECT Safe execution - EOA pays gas`);
                 
@@ -493,6 +494,13 @@ export function useSafeWallet(): UseSafeWalletReturn {
 
             // Handle transaction errors with helpful messages
             const errString = err instanceof Error ? err.message : String(err);
+            
+            // Check for Safe not deployed error
+            if (errString.includes("Safe is not deployed") || errString.includes("not deployed")) {
+                setError("Your Safe wallet isn't deployed on this network yet. First, send any transaction on Base (free gas) to deploy your Safe, then return here.");
+                setStatus("error");
+                return null;
+            }
             
             // Check for AA21 error (insufficient prefund for native gas)
             // This happens on Mainnet when user has no USDC approval and Safe can't pay ETH prefund
