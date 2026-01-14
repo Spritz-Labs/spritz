@@ -246,8 +246,9 @@ export function getChainUsdcAddress(chainId: number): Address | undefined {
 /**
  * Pimlico ERC-20 Paymaster address for approval checking
  * This is the contract that needs USDC approval to pay for gas
+ * EntryPoint v0.7 paymaster: https://docs.pimlico.io/infra/paymaster/erc20-paymaster/contract-addresses
  */
-export const PIMLICO_ERC20_PAYMASTER_ADDRESS: Address = "0x0000000000000039cd5e8aE05257CE51C473ddd1";
+export const PIMLICO_ERC20_PAYMASTER_ADDRESS: Address = "0x777777777777AeC03fd955926DbF81597e66834C";
 
 /**
  * Check if the paymaster has sufficient USDC allowance
@@ -545,12 +546,16 @@ export async function sendSafeTransaction(
     
     // Check if we need to batch USDC approval for mainnet ERC-20 paymaster
     let calls = mainCalls;
+    console.log(`[SafeWallet] Checking approval batch: chainId=${chainId}, safeAddress=${safeAddress?.slice(0, 10)}..., requiresErc20=${chainId ? chainRequiresErc20Payment(chainId) : 'N/A'}`);
+    
     if (chainId && safeAddress && chainRequiresErc20Payment(chainId)) {
         const usdcAddress = USDC_ADDRESSES[chainId];
+        console.log(`[SafeWallet] USDC address for chain ${chainId}: ${usdcAddress}`);
         if (usdcAddress) {
-            const { hasApproval } = await checkPaymasterAllowance(safeAddress, chainId);
+            const { hasApproval, allowance } = await checkPaymasterAllowance(safeAddress, chainId);
+            console.log(`[SafeWallet] Current paymaster allowance: ${allowance.toString()} (hasApproval: ${hasApproval})`);
             if (!hasApproval) {
-                console.log(`[SafeWallet] Batching USDC approval for paymaster`);
+                console.log(`[SafeWallet] Batching USDC approval for paymaster ${PIMLICO_ERC20_PAYMASTER_ADDRESS}`);
                 // Approve a generous amount (100 USDC) to avoid needing approval for future transactions
                 // This is similar to how Uniswap and other DeFi apps handle approvals
                 const approvalAmount = BigInt(100_000_000); // 100 USDC (6 decimals)
@@ -561,10 +566,14 @@ export async function sendSafeTransaction(
                 };
                 // Prepend approval to calls
                 calls = [approveCall, ...mainCalls];
-                console.log(`[SafeWallet] Will approve ${approvalAmount} USDC (100 USDC) for paymaster`);
+                console.log(`[SafeWallet] Will approve ${approvalAmount} USDC (100 USDC) to paymaster at ${PIMLICO_ERC20_PAYMASTER_ADDRESS}`);
+            } else {
+                console.log(`[SafeWallet] Paymaster already has sufficient USDC approval`);
             }
         }
     }
+    
+    console.log(`[SafeWallet] Sending transaction with ${calls.length} call(s)`);
     
     // Use sendUserOperation for ERC-4337 transactions
     // The SmartAccountClient handles wrapping this in a UserOperation

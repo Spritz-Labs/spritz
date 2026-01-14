@@ -12,7 +12,6 @@ import {
     estimateSafeGas,
     SAFE_SUPPORTED_CHAINS,
     chainRequiresErc20Payment,
-    checkPaymasterAllowance,
     type SendTransactionParams,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
@@ -365,20 +364,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 errString.includes("reverted during simulation") ||
                 errString.includes("reason: 0x")) {
                 
-                if (chainRequiresErc20Payment(chainId) && safeAddress) {
-                    // Check if the issue is USDC approval
-                    try {
-                        const { hasApproval } = await checkPaymasterAllowance(safeAddress, chainId);
-                        if (!hasApproval) {
-                            setError("USDC approval required. Your Safe needs to approve the gas paymaster to spend USDC. Try using a free L2 like Base instead, or contact support.");
-                            setStatus("error");
-                            return null;
-                        }
-                    } catch {
-                        // If approval check fails, continue with generic error
-                    }
-                    // Mainnet uses USDC paymaster
-                    setError("Transaction failed. Mainnet requires ETH (to send) + USDC (for gas). Ensure you have at least 2 USDC for gas fees, or try a free L2 like Base.");
+                if (chainRequiresErc20Payment(chainId)) {
+                    // Mainnet transaction failed - could be insufficient USDC or other issue
+                    // Note: USDC approval is now batched automatically, so this isn't an approval issue
+                    setError("Transaction failed on mainnet. Ensure your Safe has at least 2 USDC for gas fees plus ETH to send. Try a free L2 like Base for gasless transactions.");
                 } else {
                     // L2s have sponsored gas but still need the token
                     setError("Insufficient funds in Safe. Deposit tokens to your Safe wallet address first.");
