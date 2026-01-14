@@ -382,6 +382,19 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // Handle transaction errors with helpful messages
             const errString = err instanceof Error ? err.message : String(err);
             
+            // Check for AA21 error (insufficient prefund for native gas)
+            // This happens on Mainnet when user has no USDC approval and Safe can't pay ETH prefund
+            if (errString.includes("AA21") || errString.includes("didn't pay prefund")) {
+                if (chainRequiresErc20Payment(chainId)) {
+                    // Mainnet: explain the chicken-and-egg problem
+                    setError("Mainnet requires USDC for gas, but your Safe hasn't approved USDC yet. First, toggle to 'EOA' mode to send from your connected wallet, or use a free L2 like Base first.");
+                } else {
+                    setError("Insufficient ETH in Safe for gas fees. Deposit ETH to your Safe wallet first.");
+                }
+                setStatus("error");
+                return null;
+            }
+            
             // Check for common UserOperation errors
             if (errString.includes("UserOperation reverted") || 
                 errString.includes("reverted during simulation") ||

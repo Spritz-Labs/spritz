@@ -1391,9 +1391,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 <div className="flex gap-2">
                                                     <span className="text-amber-400">⚠️</span>
                                                     <div>
-                                                        <p className="text-xs text-amber-300 font-medium">Mainnet transactions are not free</p>
+                                                        <p className="text-xs text-amber-300 font-medium">Mainnet requires gas fees</p>
                                                         <p className="text-xs text-zinc-400 mt-1">
-                                                            Gas fees apply on Ethereum mainnet. Your Safe needs ETH for both the transfer and gas.
+                                                            Safe Wallet on mainnet needs USDC for gas. If this is your first mainnet transaction, toggle to <strong>EOA mode</strong> above to send directly from your connected wallet.
                                                         </p>
                                                         <p className="text-xs text-emerald-400 mt-1">
                                                             💡 <strong>Tip:</strong> Use Base or other L2s for <strong>free</strong> transactions!
