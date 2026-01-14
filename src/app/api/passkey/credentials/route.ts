@@ -22,14 +22,10 @@ export async function GET(request: NextRequest) {
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-        // Include public_key_x/y if requested (for signing operations)
-        const selectFields = includeKeys
-            ? "id, credential_id, display_name, created_at, last_used_at, backed_up, device_info, public_key_x, public_key_y, safe_signer_address"
-            : "id, credential_id, display_name, created_at, last_used_at, backed_up, device_info, public_key_x, safe_signer_address";
-
+        // Always select all fields we might need, filter in response
         const { data: credentials, error } = await supabase
             .from("passkey_credentials")
-            .select(selectFields)
+            .select("id, credential_id, display_name, created_at, last_used_at, backed_up, device_info, public_key_x, public_key_y, safe_signer_address")
             .eq("user_address", session.userAddress.toLowerCase())
             .order("created_at", { ascending: false });
 
@@ -44,7 +40,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             credentials: credentials?.map(c => ({
                 id: c.id,
-                credentialId: includeKeys ? c.credential_id : c.credential_id?.slice(0, 20) + "...",
+                credentialId: includeKeys ? c.credential_id : (c.credential_id?.slice(0, 20) + "..."),
                 deviceName: c.display_name || (c.device_info as { name?: string })?.name || "Passkey",
                 createdAt: c.created_at,
                 lastUsedAt: c.last_used_at,

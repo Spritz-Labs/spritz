@@ -1286,11 +1286,15 @@ export async function addRecoverySigner(
     const client = await createPasskeySafeAccountClient(passkeyCredential, chainId);
     
     // Send transaction to the Safe itself (self-call to add owner)
+    // Use 'calls' format which is the standard for Safe account client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const txHash = await client.sendTransaction({
-        to: safeAddress,
-        value: BigInt(0),
-        data: addOwnerData,
-    });
+        calls: [{
+            to: safeAddress,
+            value: BigInt(0),
+            data: addOwnerData,
+        }],
+    } as any);
     
     log(`[SafeWallet] Recovery signer added, tx: ${txHash}`);
     

@@ -945,11 +945,19 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </button>
                                         <button
                                             onClick={() => {
-                                                const safeUrl = `https://app.safe.global/home?safe=base:${smartWalletAddress}`;
-                                                window.open(safeUrl, "_blank");
+                                                if (isSafeDeployed) {
+                                                    const safeUrl = `https://app.safe.global/home?safe=base:${smartWalletAddress}`;
+                                                    window.open(safeUrl, "_blank");
+                                                } else {
+                                                    alert("Safe App will be available after your first transaction deploys the Safe contract.");
+                                                }
                                             }}
-                                            className="px-4 py-3 rounded-xl font-medium transition-all bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                                            title="View in Safe App - Access your wallet directly"
+                                            className={`px-4 py-3 rounded-xl font-medium transition-all ${
+                                                isSafeDeployed 
+                                                    ? "bg-zinc-700 text-zinc-300 hover:bg-zinc-600" 
+                                                    : "bg-zinc-800 text-zinc-500 cursor-help"
+                                            }`}
+                                            title={isSafeDeployed ? "View in Safe App" : "Safe not deployed yet - make a transaction first"}
                                         >
                                             🔐
                                         </button>
@@ -1444,26 +1452,47 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Safe Wallet warning for EOA users */}
+                                        {/* Safe Wallet info for EOA users - different messaging per chain */}
                                         {useSafeForSend && !canUsePasskeySigning && safeAddress && (
-                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-                                                <div className="flex gap-2">
-                                                    <span className="text-amber-400">⚠️</span>
-                                                    <div>
-                                                        <p className="text-xs text-amber-300 font-medium">Safe Wallet requires deposits first</p>
-                                                        <p className="text-xs text-zinc-400 mt-1">
-                                                            Your Safe is a <strong>separate address</strong> from your connected wallet. 
-                                                            Deposit funds to your Safe first:
-                                                        </p>
-                                                        <p className="text-xs text-amber-400/80 font-mono mt-1 break-all">
-                                                            {safeAddress.slice(0, 18)}...{safeAddress.slice(-8)}
-                                                        </p>
-                                                        <p className="text-xs text-zinc-500 mt-1">
-                                                            Or toggle to EOA to send directly from your wallet.
-                                                        </p>
+                                            selectedChainInfo.sponsorship === "free" ? (
+                                                // L2 with free gas - positive messaging
+                                                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+                                                    <div className="flex gap-2">
+                                                        <span className="text-emerald-400">✨</span>
+                                                        <div>
+                                                            <p className="text-xs text-emerald-300 font-medium">Free transactions on {selectedChainInfo.name}!</p>
+                                                            <p className="text-xs text-zinc-400 mt-1">
+                                                                Your Safe address (different from your connected wallet):
+                                                            </p>
+                                                            <p className="text-xs text-emerald-400/80 font-mono mt-1 break-all">
+                                                                {safeAddress.slice(0, 18)}...{safeAddress.slice(-8)}
+                                                            </p>
+                                                            <p className="text-xs text-zinc-500 mt-1">
+                                                                Deposit funds here, then send for free. Or use EOA mode above.
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            ) : (
+                                                // Mainnet or paid gas chains - warning messaging
+                                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                                                    <div className="flex gap-2">
+                                                        <span className="text-amber-400">⚠️</span>
+                                                        <div>
+                                                            <p className="text-xs text-amber-300 font-medium">Safe Wallet requires deposits first</p>
+                                                            <p className="text-xs text-zinc-400 mt-1">
+                                                                Your Safe is a <strong>separate address</strong> from your connected wallet:
+                                                            </p>
+                                                            <p className="text-xs text-amber-400/80 font-mono mt-1 break-all">
+                                                                {safeAddress.slice(0, 18)}...{safeAddress.slice(-8)}
+                                                            </p>
+                                                            <p className="text-xs text-zinc-500 mt-1">
+                                                                Or toggle to EOA above to send directly from your wallet.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
                                         )}
 
                                         {/* Mainnet info for Safe wallet - need EOA to pay gas */}
@@ -1653,16 +1682,21 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             View All on Explorer ↗
                                         </button>
                                         {smartWallet?.smartWalletAddress && (
-                                            <button
-                                                onClick={() => {
-                                                    // Safe app URL - use Base as default chain prefix
-                                                    const safeUrl = `https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`;
-                                                    window.open(safeUrl, "_blank");
-                                                }}
-                                                className="w-full py-2.5 rounded-xl font-medium text-sm bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2"
-                                            >
-                                                <span>🔐</span> View in Safe App ↗
-                                            </button>
+                                            isSafeDeployed ? (
+                                                <button
+                                                    onClick={() => {
+                                                        const safeUrl = `https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`;
+                                                        window.open(safeUrl, "_blank");
+                                                    }}
+                                                    className="w-full py-2.5 rounded-xl font-medium text-sm bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <span>🔐</span> View in Safe App ↗
+                                                </button>
+                                            ) : (
+                                                <div className="w-full py-2.5 rounded-xl text-sm bg-zinc-800/50 text-zinc-500 text-center">
+                                                    🔐 Safe App available after first transaction
+                                                </div>
+                                            )
                                         )}
                                     </div>
                                 </div>
@@ -1700,21 +1734,31 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                                     {/* View in Safe App */}
                                     {smartWallet?.smartWalletAddress && (
-                                        <a
-                                            href={`https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl p-4 transition-colors"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-2xl">🔐</span>
+                                        isSafeDeployed ? (
+                                            <a
+                                                href={`https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl p-4 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl">🔐</span>
+                                                    <div className="text-left">
+                                                        <p className="text-sm text-emerald-400 font-medium">Open in Safe App</p>
+                                                        <p className="text-xs text-zinc-500">Full control via official Safe interface</p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-emerald-400">↗</span>
+                                            </a>
+                                        ) : (
+                                            <div className="w-full flex items-center gap-3 bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-4">
+                                                <span className="text-2xl opacity-50">🔐</span>
                                                 <div className="text-left">
-                                                    <p className="text-sm text-emerald-400 font-medium">Open in Safe App</p>
-                                                    <p className="text-xs text-zinc-500">Full control via official Safe interface</p>
+                                                    <p className="text-sm text-zinc-500 font-medium">Safe App</p>
+                                                    <p className="text-xs text-zinc-600">Available after your first transaction deploys the Safe</p>
                                                 </div>
                                             </div>
-                                            <span className="text-emerald-400">↗</span>
-                                        </a>
+                                        )
                                     )}
 
                                     {/* Info Card */}
