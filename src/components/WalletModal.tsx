@@ -431,6 +431,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     } = useEnsResolver();
     const [showTokenSelector, setShowTokenSelector] = useState(false);
     const [showSendConfirm, setShowSendConfirm] = useState(false);
+    
+    // EOA gas payment toggle (for Mainnet when Safe has no USDC approval)
+    const [useEOAForGas, setUseEOAForGas] = useState(false);
 
     // Send transaction hook
     const {
@@ -538,12 +541,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         } else if (useSafeForSend && safeAddress) {
             // Send via Safe smart wallet (EOA signer)
             // Pass selectedChainId to ensure correct chain is used
+            // On Mainnet, useEOAForGas allows the connected wallet to pay gas directly
             hash = await sendSafeTransaction(
                 resolvedRecipient,
                 sendAmount,
                 tokenAddress,
                 tokenDecimals,
-                { chainId: selectedChainId }
+                { chainId: selectedChainId, useEOAForGas }
             );
         } else {
             // Send via connected EOA (only supports native ETH for now)
@@ -575,7 +579,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 refreshTx();
             }, 15000);
         }
-    }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId]);
+    }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId, useEOAForGas]);
 
     // Reset send form
     const resetSendForm = useCallback(() => {
@@ -583,6 +587,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         clearRecipient();
         setSendAmount("");
         setShowSendConfirm(false);
+        setUseEOAForGas(false);
         resetSend();
         resetSafe();
         resetPasskey();
@@ -1450,6 +1455,37 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                         : "bg-amber-500/20 text-amber-400"
                                                 }`}>
                                                     {selectedChainInfo.sponsorship === "free" ? "✓ FREE" : "💰 GAS"}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* EOA Gas Payment Toggle - Only for Mainnet */}
+                                        {sendToken && selectedChainId === 1 && !canUsePasskeySigning && (
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1 mr-3">
+                                                        <p className="text-xs font-medium text-amber-300">
+                                                            Pay gas with connected wallet
+                                                        </p>
+                                                        <p className="text-[10px] text-amber-400/70 mt-0.5">
+                                                            {useEOAForGas 
+                                                                ? "Your connected wallet will pay ETH gas fees"
+                                                                : "Enable to send from Safe on Mainnet"
+                                                            }
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setUseEOAForGas(!useEOAForGas)}
+                                                        className={`relative w-11 h-6 rounded-full transition-colors ${
+                                                            useEOAForGas 
+                                                                ? "bg-amber-500" 
+                                                                : "bg-zinc-700"
+                                                        }`}
+                                                    >
+                                                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
+                                                            useEOAForGas ? "left-6" : "left-1"
+                                                        }`} />
+                                                    </button>
                                                 </div>
                                             </div>
                                         )}
