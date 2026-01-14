@@ -300,12 +300,17 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 );
             }
 
+            // Get the Safe address from the client (more reliable than state variable)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
+            console.log(`[SafeWallet] Safe account address for approval batch: ${safeAccountAddress}`);
+
             // Send the transaction - handle both native ETH and ERC20 tokens
             // Pass chainId and safeAddress for automatic USDC approval batching on mainnet
             const sendOptions = {
-                isWebAuthn: false,
+                isWebAuthn: signerType === "passkey",
                 chainId,
-                safeAddress: safeAddress || undefined,
+                safeAddress: safeAccountAddress,
             };
             
             let hash;
