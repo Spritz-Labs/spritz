@@ -922,3 +922,190 @@ export async function estimateSafeGas(
         estimatedCostEth: formatEther(estimatedCostWei),
     };
 }
+
+// Safe contract ABI for direct execution (bypasses ERC-4337)
+const SAFE_ABI = [
+    {
+        name: "execTransaction",
+        type: "function",
+        inputs: [
+            { name: "to", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "data", type: "bytes" },
+            { name: "operation", type: "uint8" },
+            { name: "safeTxGas", type: "uint256" },
+            { name: "baseGas", type: "uint256" },
+            { name: "gasPrice", type: "uint256" },
+            { name: "gasToken", type: "address" },
+            { name: "refundReceiver", type: "address" },
+            { name: "signatures", type: "bytes" },
+        ],
+        outputs: [{ name: "success", type: "bool" }],
+    },
+    {
+        name: "getTransactionHash",
+        type: "function",
+        inputs: [
+            { name: "to", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "data", type: "bytes" },
+            { name: "operation", type: "uint8" },
+            { name: "safeTxGas", type: "uint256" },
+            { name: "baseGas", type: "uint256" },
+            { name: "gasPrice", type: "uint256" },
+            { name: "gasToken", type: "address" },
+            { name: "refundReceiver", type: "address" },
+            { name: "_nonce", type: "uint256" },
+        ],
+        outputs: [{ name: "", type: "bytes32" }],
+    },
+    {
+        name: "nonce",
+        type: "function",
+        inputs: [],
+        outputs: [{ name: "", type: "uint256" }],
+    },
+] as const;
+
+/**
+ * Execute a Safe transaction directly (EOA pays gas)
+ * 
+ * This bypasses the ERC-4337 bundler system entirely.
+ * The EOA signs the Safe transaction and calls execTransaction directly,
+ * paying gas from the EOA's ETH balance.
+ * 
+ * @param safeAddress - The deployed Safe address
+ * @param chainId - The chain ID
+ * @param to - Destination address
+ * @param value - ETH value to send (in wei)
+ * @param data - Transaction data (0x for simple ETH transfer)
+ * @param walletClient - The wallet client for signing and sending
+ */
+export async function execSafeTransactionDirect(
+    safeAddress: Address,
+    chainId: number,
+    to: Address,
+    value: bigint,
+    data: Hex = "0x",
+    walletClient: {
+        account: { address: Address };
+        signMessage: (args: { message: { raw: Hex } }) => Promise<Hex>;
+        writeContract: (args: unknown) => Promise<Hex>;
+    }
+): Promise<Hex> {
+    const publicClient = getPublicClient(chainId);
+    const chain = SAFE_SUPPORTED_CHAINS[chainId];
+    
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    log(`[SafeWallet] Direct execution from Safe ${safeAddress.slice(0, 10)}...`);
+    log(`[SafeWallet] To: ${to}, Value: ${formatEther(value)} ETH`);
+    log(`[SafeWallet] EOA paying gas: ${walletClient.account.address.slice(0, 10)}...`);
+
+    // Check if Safe is deployed
+    const deployed = await isSafeDeployed(safeAddress, chainId);
+    if (!deployed) {
+        throw new Error("Safe is not deployed. Deploy it first with a sponsored L2 transaction.");
+    }
+
+    // Get the Safe's current nonce
+    const nonce = await publicClient.readContract({
+        address: safeAddress,
+        abi: SAFE_ABI,
+        functionName: "nonce",
+    });
+    
+    log(`[SafeWallet] Safe nonce: ${nonce}`);
+
+    // Safe transaction parameters
+    const operation = 0; // Call (not delegatecall)
+    const safeTxGas = BigInt(0); // Let Safe estimate
+    const baseGas = BigInt(0);
+    const gasPrice = BigInt(0); // No refund
+    const gasToken = "0x0000000000000000000000000000000000000000" as Address;
+    const refundReceiver = "0x0000000000000000000000000000000000000000" as Address;
+
+    // Get the transaction hash from the Safe contract
+    const safeTxHash = await publicClient.readContract({
+        address: safeAddress,
+        abi: SAFE_ABI,
+        functionName: "getTransactionHash",
+        args: [to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, nonce],
+    });
+
+    log(`[SafeWallet] Safe tx hash: ${safeTxHash}`);
+
+    // Sign the hash with the owner's wallet
+    // Safe expects eth_sign format: sign the raw hash bytes
+    const signature = await walletClient.signMessage({
+        message: { raw: safeTxHash as Hex },
+    });
+
+    // Adjust v value for Safe's signature format
+    // Safe expects v to be 27 or 28, but eth_sign may return 0 or 1
+    let v = parseInt(signature.slice(-2), 16);
+    if (v < 27) {
+        v += 27;
+    }
+    // Safe also adds 4 to v for eth_sign signatures
+    v += 4;
+    
+    const adjustedSignature = (signature.slice(0, -2) + v.toString(16).padStart(2, "0")) as Hex;
+
+    log(`[SafeWallet] Signature ready, executing transaction...`);
+
+    // Execute the transaction - EOA pays gas
+    const txHash = await walletClient.writeContract({
+        address: safeAddress,
+        abi: SAFE_ABI,
+        functionName: "execTransaction",
+        args: [to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, adjustedSignature],
+        chain,
+    });
+
+    log(`[SafeWallet] Transaction sent: ${txHash}`);
+
+    return txHash as Hex;
+}
+
+/**
+ * Execute a Safe ERC20 transfer directly (EOA pays gas)
+ */
+export async function execSafeERC20TransferDirect(
+    safeAddress: Address,
+    chainId: number,
+    tokenAddress: Address,
+    to: Address,
+    amount: bigint,
+    walletClient: {
+        account: { address: Address };
+        signMessage: (args: { message: { raw: Hex } }) => Promise<Hex>;
+        writeContract: (args: unknown) => Promise<Hex>;
+    }
+): Promise<Hex> {
+    // Encode ERC20 transfer
+    const data = encodeFunctionData({
+        abi: [{
+            name: "transfer",
+            type: "function",
+            inputs: [
+                { name: "to", type: "address" },
+                { name: "amount", type: "uint256" },
+            ],
+            outputs: [{ name: "", type: "bool" }],
+        }],
+        functionName: "transfer",
+        args: [to, amount],
+    });
+
+    return execSafeTransactionDirect(
+        safeAddress,
+        chainId,
+        tokenAddress,
+        BigInt(0), // No ETH value for ERC20 transfer
+        data,
+        walletClient
+    );
+}

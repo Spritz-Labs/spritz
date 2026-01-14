@@ -10,6 +10,8 @@ import {
     createPasskeySafeAccountClient,
     sendSafeTransaction,
     estimateSafeGas,
+    execSafeTransactionDirect,
+    execSafeERC20TransferDirect,
     SAFE_SUPPORTED_CHAINS,
     chainRequiresErc20Payment,
     checkPaymasterAllowance,
@@ -305,12 +307,57 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 }
             }
 
-            // If using EOA for gas on Mainnet, force native gas payment
-            if (useEOAForGas && chainRequiresErc20Payment(chainId)) {
-                console.log(`[SafeWallet] Using EOA to pay gas on Mainnet`);
-                forceNativeGas = true;
+            // If using EOA for gas on Mainnet, use DIRECT Safe execution (bypasses bundler)
+            // This lets the EOA pay gas directly from their wallet
+            if (useEOAForGas && chainRequiresErc20Payment(chainId) && walletClient) {
+                console.log(`[SafeWallet] Using DIRECT Safe execution - EOA pays gas`);
+                
+                // Create wallet client wrapper for direct execution
+                const walletClientWrapper = {
+                    account: { address: ownerAddress! },
+                    signMessage: async (args: { message: { raw: Hex } }) => {
+                        // Use wagmi's signMessage for raw hash signing
+                        return await signMessageAsync({ message: { raw: args.message.raw } });
+                    },
+                    writeContract: async (args: unknown) => {
+                        // Use walletClient to write contract
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        return await walletClient.writeContract(args as any);
+                    },
+                };
+
+                let hash;
+                if (tokenAddress && tokenDecimals !== undefined) {
+                    // ERC20 token transfer
+                    const tokenAmount = parseUnits(amount, tokenDecimals);
+                    console.log(`[SafeWallet] Direct ERC20 transfer: ${amount} (${tokenAmount} raw) to ${to}`);
+                    hash = await execSafeERC20TransferDirect(
+                        predictedSafeAddress,
+                        chainId,
+                        tokenAddress,
+                        to,
+                        tokenAmount,
+                        walletClientWrapper
+                    );
+                } else {
+                    // Native ETH transfer
+                    console.log(`[SafeWallet] Direct ETH transfer: ${amount} to ${to}`);
+                    hash = await execSafeTransactionDirect(
+                        predictedSafeAddress,
+                        chainId,
+                        to,
+                        parseEther(amount),
+                        "0x",
+                        walletClientWrapper
+                    );
+                }
+
+                setTxHash(hash);
+                setStatus("success");
+                return hash;
             }
 
+            // Standard path: Use ERC-4337 bundler with paymaster
             let safeClient;
 
             if (signerType === "passkey" && passkeyCredential) {
@@ -346,7 +393,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 isWebAuthn: signerType === "passkey",
                 chainId,
                 safeAddress: safeAccountAddress,
-                forceNativeGas, // If true, EOA pays gas in ETH instead of paymaster
+                forceNativeGas,
             };
             
             let hash;
