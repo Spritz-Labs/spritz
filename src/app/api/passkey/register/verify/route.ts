@@ -11,7 +11,7 @@ import {
     calculateWebAuthnSignerAddress,
     type P256PublicKey,
 } from "@/lib/passkeySigner";
-import { calculateSafeAddress } from "@/lib/smartAccount";
+import { getSafeAddress } from "@/lib/safeWallet";
 import { type Address } from "viem";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -365,9 +365,13 @@ export async function POST(request: NextRequest) {
 
         // Calculate the Smart Wallet (Safe) address from the passkey signer
         // This is where the user's funds will be stored
+        // IMPORTANT: Must use getSafeAddress from safeWallet.ts for consistency with transactions
         let smartWalletAddress: string | null = null;
         if (safeSignerAddress) {
-            smartWalletAddress = calculateSafeAddress(safeSignerAddress as Address);
+            smartWalletAddress = await getSafeAddress({ 
+                ownerAddress: safeSignerAddress as Address, 
+                chainId: 8453 
+            });
             console.log("[Passkey] Smart Wallet (Safe) address:", smartWalletAddress.slice(0, 10) + "...");
         }
 

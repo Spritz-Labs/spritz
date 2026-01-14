@@ -145,6 +145,11 @@ function encodeSafeInitializer(ownerAddress: Address): Hex {
 /**
  * Calculate Safe counterfactual address using CREATE2
  * 
+ * @deprecated This calculates a BASIC Safe address without 4337 module.
+ * For actual Spritz wallets, use getSafeAddress() from safeWallet.ts instead,
+ * which uses permissionless.js and includes the 4337 module setup.
+ * The addresses produced by these two methods are DIFFERENT.
+ * 
  * This calculates where the Safe WILL be deployed, without actually deploying it.
  * The address is deterministic based on: factory, singleton, initializer, and salt.
  */
@@ -215,6 +220,9 @@ export function calculateSmartWalletAddress(
 /**
  * Get Smart Wallet info for a user.
  * 
+ * IMPORTANT: This now uses getSafeAddress from safeWallet.ts for consistency.
+ * The address calculation must match what permissionless.js uses for transactions.
+ * 
  * @param spritzId - The user's Spritz ID
  * @param authType - Authentication type
  * @returns Smart Wallet address and deployment status
@@ -229,8 +237,12 @@ export async function getSmartWalletAddress(
     canSign: boolean;
     signerType: "eoa" | "passkey" | "none";
 }> {
-    // Calculate the Safe counterfactual address
-    const smartWalletAddress = calculateSafeAddress(spritzId);
+    // Import getSafeAddress dynamically to avoid circular dependencies
+    const { getSafeAddress, isSafeDeployed } = await import("./safeWallet");
+    
+    // Calculate the Safe counterfactual address using permissionless.js
+    // This MUST match what's used in transactions
+    const smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
     
     // Determine signing capability based on auth type
     let canSign = false;
@@ -256,12 +268,10 @@ export async function getSmartWalletAddress(
             break;
     }
     
-    // Check if Safe is deployed
+    // Check if Safe is deployed using the same method as safeWallet.ts
     let isDeployed = false;
     try {
-        const publicClient = getPublicClient(8453); // Check on Base
-        const code = await publicClient.getCode({ address: smartWalletAddress });
-        isDeployed = code !== undefined && code !== "0x" && code.length > 2;
+        isDeployed = await isSafeDeployed(smartWalletAddress, 8453);
     } catch (error) {
         console.error("[SmartWallet] Error checking deployment:", error);
     }
