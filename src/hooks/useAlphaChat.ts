@@ -15,6 +15,9 @@ export type AlphaMessage = {
     is_pinned?: boolean;
     pinned_by?: string | null;
     pinned_at?: string | null;
+    is_deleted?: boolean;
+    deleted_by?: string | null;
+    deleted_at?: string | null;
 };
 
 export type AlphaReaction = {
