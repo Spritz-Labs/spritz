@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createPublicClient, http, normalize } from "viem";
+import { createPublicClient, http } from "viem";
+import { normalize } from "viem/ens";
 import { mainnet } from "viem/chains";
 
 const supabase = createClient(
