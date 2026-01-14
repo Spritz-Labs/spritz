@@ -19,17 +19,90 @@ import { RecoverySignerManager } from "./RecoverySignerManager";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
+// Official chain icon components
+function ChainIcon({ chainId, size = 20 }: { chainId: number; size?: number }) {
+    const iconProps = { width: size, height: size, className: "inline-block" };
+    
+    switch (chainId) {
+        case 1: // Ethereum
+            return (
+                <svg {...iconProps} viewBox="0 0 784 1277" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M392.07 0L383.5 29.11v873.79l8.57 8.55 392.06-231.75L392.07 0z" fill="#343434"/>
+                    <path d="M392.07 0L0 679.7l392.07 231.76V496.18V0z" fill="#8C8C8C"/>
+                    <path d="M392.07 981.17l-4.83 5.89v300.87l4.83 14.1 392.3-552.49-392.3 231.63z" fill="#3C3C3B"/>
+                    <path d="M392.07 1302.03V981.17L0 749.54l392.07 552.49z" fill="#8C8C8C"/>
+                    <path d="M392.07 911.46l392.06-231.76-392.06-178.21v409.97z" fill="#141414"/>
+                    <path d="M0 679.7l392.07 231.76V501.49L0 679.7z" fill="#393939"/>
+                </svg>
+            );
+        case 8453: // Base
+            return (
+                <svg {...iconProps} viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/>
+                    <path d="M55.5 95C77.3152 95 95 77.3152 95 55.5C95 33.6848 77.3152 16 55.5 16C34.5254 16 17.4116 32.2826 16.0596 52.875H67.625V58.125H16.0596C17.4116 78.7174 34.5254 95 55.5 95Z" fill="white"/>
+                </svg>
+            );
+        case 42161: // Arbitrum
+            return (
+                <svg {...iconProps} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="40" height="40" rx="20" fill="#213147"/>
+                    <path d="M22.3 22.0784L24.3784 26.9804L27.7941 25.6765L24.7549 18.251L22.3 22.0784Z" fill="#12AAFF"/>
+                    <path d="M14.7255 25.6765L18.1412 26.9804L20.2196 22.0784L17.7647 18.251L14.7255 25.6765Z" fill="#12AAFF"/>
+                    <path d="M21.251 10.8235L26.0784 20.4706L27.7941 25.6765L28.7843 25.2941L21.251 8.82353L21.251 10.8235Z" fill="#9DCCED"/>
+                    <path d="M21.251 10.8235V8.82353L13.7176 25.2941L14.7078 25.6765L16.4235 20.4706L21.251 10.8235Z" fill="#9DCCED"/>
+                    <path d="M21.251 15.6471L18.7961 20.4706L21.251 25.2941L23.7059 20.4706L21.251 15.6471Z" fill="white"/>
+                </svg>
+            );
+        case 10: // Optimism
+            return (
+                <svg {...iconProps} viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="28" height="28" rx="14" fill="#FF0420"/>
+                    <path d="M9.22 18.35c-.97 0-1.81-.2-2.51-.61-.7-.41-1.24-.99-1.61-1.73-.37-.75-.56-1.62-.56-2.61 0-1 .19-1.87.56-2.61.38-.75.92-1.33 1.62-1.74.7-.42 1.53-.62 2.5-.62.68 0 1.29.1 1.82.31.53.2.98.49 1.34.87l-1.09 1.15c-.5-.53-1.15-.79-1.96-.79-.55 0-1.03.13-1.44.38-.4.25-.72.61-.94 1.08-.22.46-.33 1.01-.33 1.65 0 .63.11 1.18.33 1.65.22.46.54.82.95 1.07.41.25.9.37 1.46.37.81 0 1.46-.27 1.96-.81l1.09 1.16c-.36.38-.81.68-1.35.88-.54.2-1.15.31-1.84.31zm7.08-.13l-2.7-7.87h1.75l1.92 5.85 1.93-5.85h1.66l-2.7 7.87h-1.86z" fill="white"/>
+                </svg>
+            );
+        case 137: // Polygon
+            return (
+                <svg {...iconProps} viewBox="0 0 38 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M28.8 10.075c-.65-.375-1.5-.375-2.25 0l-5.25 3.075-3.525 2.025-5.175 3.075c-.65.375-1.5.375-2.25 0l-4.05-2.4c-.65-.375-1.125-1.125-1.125-1.95V9.925c0-.75.375-1.5 1.125-1.95l4.05-2.325c.65-.375 1.5-.375 2.25 0l4.05 2.4c.65.375 1.125 1.125 1.125 1.95v3.075l3.525-2.1V7.9c0-.75-.375-1.5-1.125-1.95L13.8.8c-.65-.375-1.5-.375-2.25 0L5.1 5.95C4.35 6.4 3.975 7.15 3.975 7.9v10.35c0 .75.375 1.5 1.125 1.95l6.45 3.75c.65.375 1.5.375 2.25 0l5.175-3l3.525-2.1 5.175-3c.65-.375 1.5-.375 2.25 0l4.05 2.325c.65.375 1.125 1.125 1.125 1.95v3.975c0 .75-.375 1.5-1.125 1.95l-3.975 2.325c-.65.375-1.5.375-2.25 0l-4.05-2.325c-.65-.375-1.125-1.125-1.125-1.95v-3l-3.525 2.1v3.075c0 .75.375 1.5 1.125 1.95l6.45 3.75c.65.375 1.5.375 2.25 0l6.45-3.75c.65-.375 1.125-1.125 1.125-1.95V13.9c0-.75-.375-1.5-1.125-1.95l-6.525-3.875z" fill="#8247E5"/>
+                </svg>
+            );
+        case 56: // BNB Chain
+            return (
+                <svg {...iconProps} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="16" fill="#F3BA2F"/>
+                    <path d="M12.116 14.404L16 10.52l3.886 3.886 2.26-2.26L16 6l-6.144 6.144 2.26 2.26zM6 16l2.26-2.26L10.52 16l-2.26 2.26L6 16zm6.116 1.596L16 21.48l3.886-3.886 2.26 2.259L16 26l-6.144-6.144-.003-.003 2.263-2.257zM21.48 16l2.26-2.26L26 16l-2.26 2.26L21.48 16zm-3.188-.002h.002V16L16 18.294l-2.291-2.29-.004-.004.004-.003.401-.402.195-.195L16 13.706l2.293 2.293z" fill="white"/>
+                </svg>
+            );
+        case 130: // Unichain (Uniswap)
+            return (
+                <svg {...iconProps} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="40" height="40" rx="20" fill="#FF007A"/>
+                    <path d="M15.12 12.66c-.22-.04-.23-.05-.08-.08.28-.06.95.02 1.6.18 1.52.37 2.9 1.34 4.24 2.96l.35.43.5-.08c2.17-.33 4.38.24 6.06 1.56.46.36 1.19 1.13 1.19 1.25 0 .03-.15.1-.33.15-.65.18-1.38.13-1.91-.14-.14-.07-.26-.13-.28-.13-.01 0 .04.13.12.28.28.54.35.9.28 1.43-.1.67-.5 1.25-1.16 1.67l-.22.14.13.25c.36.7.45 1.5.24 2.25-.05.19-.1.35-.11.35-.01 0-.11-.08-.22-.18-.48-.44-.97-.66-1.66-.74l-.3-.04-.24.33c-.72 1-.72 2.31 0 3.5.15.25.26.47.24.49-.05.05-.8-.24-1.12-.44-.66-.4-1.12-1.02-1.35-1.8l-.08-.28-.2.16c-.44.35-.95.56-1.58.66-.35.05-.98.03-1.29-.05l-.14-.04.06.22c.1.4.37.8.7 1.06.13.1.22.2.2.22-.05.05-.78-.04-1.09-.14-.71-.23-1.26-.7-1.57-1.36-.1-.22-.24-.66-.24-.77 0-.04-.02-.08-.04-.08-.02 0-.23.08-.45.18-.82.36-1.58.5-2.23.42-.17-.02-.32-.05-.34-.07-.05-.05.44-.5.8-.74.67-.43 1.49-.68 2.78-.86l.35-.05-.16-.24c-.5-.72-.69-1.66-.5-2.5.03-.15.07-.3.08-.31.02-.02.13.04.26.12.48.31 1.05.45 1.48.38l.18-.03-.08-.22c-.22-.67-.1-1.45.32-2.08.09-.14.15-.26.13-.27-.02-.01-.2-.07-.4-.13-.67-.2-1.14-.5-1.52-.97-.26-.32-.55-.89-.55-1.08 0-.04.06-.03.15.03.53.35 1.33.52 2.12.45l.32-.03-.17-.22c-.55-.67-.77-1.58-.58-2.35.04-.15.08-.3.1-.31.02-.02.13.04.25.13.53.39 1.25.58 1.76.46l.14-.03-.2-.29c-.58-.88-.6-1.97-.04-2.9.12-.2.24-.38.25-.4.02-.02.16.08.31.22.62.58 1.38.87 2.14.81l.23-.02-.25-.26c-.76-.76-.95-1.9-.48-2.83.08-.17.17-.34.2-.37.04-.05.08-.04.27.08.9.56 2.31.65 3.15.2.1-.06.2-.1.21-.1.01 0 .03.08.03.18.04.6-.18 1.21-.62 1.71l-.14.16.3-.04c.73-.11 1.56.14 2.2.66.16.13.17.14.04.08-.5-.21-1.2-.24-1.73-.07-.69.23-1.25.75-1.6 1.5-.1.21-.2.38-.22.38-.02 0-.19-.08-.38-.18-.72-.36-1.31-.46-2.03-.35-.86.14-1.6.58-2.15 1.28l-.14.18.35-.1c.91-.25 2.14-.08 3 .42.23.14.67.5.67.55 0 .01-.14.09-.3.16-.84.36-1.42.94-1.73 1.7-.08.2-.15.35-.16.35 0 0-.18-.1-.38-.22-.7-.44-1.35-.6-2.17-.56-.81.04-1.48.32-2.09.86l-.23.2.3-.05c.64-.1 1.44.1 2.07.53.44.3.97.88 1.24 1.35.1.18.1.18-.08.12-1.19-.42-2.56-.12-3.42.76-.08.08-.14.16-.14.18 0 .02.13.1.28.18.64.33 1.12.85 1.36 1.49.05.14.07.26.04.26-.02 0-.2-.07-.39-.15-.75-.33-1.49-.37-2.2-.1-.3.1-.78.38-.78.44 0 .02.07.1.16.18.48.48.74 1.14.74 1.87 0 .22-.01.4-.03.4-.02 0-.2-.1-.4-.21-.95-.56-2.11-.59-3.1-.08-.07.04-.07.05 0 .12.22.22.58.42.9.5.14.03.42.05.7.04.4-.02.52 0 .85.13.48.19.86.52 1.12.96l.13.23-.07.34c-.1.49-.08 1.07.07 1.54.05.17.07.31.03.31-.03 0-.23-.08-.44-.18-.67-.31-1.18-.4-1.84-.34-.83.08-1.47.4-2.05 1.04-.12.13-.2.25-.18.27.02.02.18 0 .37-.04 1.32-.27 2.71.34 3.47 1.52.03.05-.02.06-.27.04-.56-.04-1.1.1-1.6.42-.5.3-.88.77-1.1 1.34-.04.1-.05.18-.03.18.02 0 .18-.06.35-.13.75-.31 1.6-.3 2.35.03.1.04.18.1.18.12 0 .02-.13.13-.3.25-.55.4-.89.9-1.04 1.53-.05.2-.05.63 0 .85.07.33.27.7.5.93.09.1.15.18.12.2-.02.01-.17.04-.32.07-.98.16-1.93-.2-2.5-.96-.17-.23-.37-.65-.43-.9l-.04-.16-.18.22c-.42.54-.97.88-1.68 1.05-.2.05-.34.05-.74.02-.54-.04-.89 0-1.28.14l-.16.06.02-.19c.03-.42.26-.83.63-1.1.12-.1.22-.18.22-.2 0-.06-.6.09-.88.22-.44.2-.73.52-.9.97l-.06.16-.1-.1c-.26-.27-.42-.6-.48-1.02-.05-.3-.02-.73.05-1.01.03-.1.04-.19.02-.2-.01-.01-.14.02-.27.08-.57.24-1.26.23-1.79-.04-.14-.07-.25-.14-.25-.16 0-.02.11-.12.24-.23.34-.28.57-.66.66-1.08.03-.14.05-.28.04-.3-.01-.03-.1.01-.21.08-.54.36-1.28.41-1.86.13-.18-.09-.47-.32-.47-.37 0-.02.1-.1.21-.19.38-.3.63-.73.73-1.22l.04-.18-.17.04c-.56.14-1.24.02-1.68-.29-.1-.07-.18-.14-.18-.17 0-.02.1-.11.23-.2.34-.24.6-.6.73-1.01.04-.13.06-.26.04-.28-.01-.02-.13.02-.25.08-.6.3-1.34.28-1.88-.05-.13-.08-.23-.16-.23-.18 0-.01.12-.12.26-.23.39-.31.63-.73.71-1.23l.03-.18-.18.08c-.5.21-1.06.22-1.54.01-.3-.12-.68-.42-.68-.53 0-.03.1-.13.22-.23.35-.29.56-.66.66-1.15.02-.1.02-.2 0-.22-.02-.02-.14.02-.27.1-.31.18-.58.25-.98.25-.5 0-.91-.15-1.31-.5-.1-.09-.17-.18-.15-.2.01-.02.15-.08.31-.13.83-.27 1.38-.94 1.47-1.78 0-.1 0-.18-.02-.18-.01 0-.15.06-.3.14-.74.38-1.66.29-2.28-.22-.08-.07-.14-.14-.12-.16.01-.01.16-.06.32-.1.9-.22 1.52-.87 1.66-1.74.01-.1.01-.19 0-.2-.02-.02-.14.04-.27.12-.55.32-1.16.4-1.76.21-.44-.13-.96-.47-.96-.62 0-.04.09-.15.2-.24.46-.4.7-.95.7-1.59 0-.17-.01-.31-.03-.31-.01 0-.16.07-.32.15-.79.41-1.77.36-2.45-.14l-.14-.1.26-.06c.77-.18 1.32-.71 1.5-1.45.04-.17.05-.32.02-.34-.02-.02-.17.05-.33.14-.63.37-1.47.37-2.1 0-.17-.1-.42-.31-.42-.36 0-.02.12-.1.27-.18.53-.3.88-.77 1.01-1.37.04-.16.06-.32.04-.34-.02-.02-.17.04-.33.14-.69.41-1.62.35-2.23-.14-.12-.1-.12-.1.05-.17.58-.23.99-.68 1.17-1.27.08-.26.1-.7.03-.96-.02-.08-.02-.08.16 0 .49.2.9.55 1.18 1 .09.14.18.26.2.26.02 0 .04-.09.04-.2 0-.5.19-1 .54-1.42.16-.2.54-.5.54-.44 0 .02.01.15.03.28.05.56.32 1.1.74 1.47.12.1.22.18.23.18 0 0 .03-.12.05-.27.07-.65.44-1.24 1.01-1.63.11-.08.22-.14.23-.14.01 0 .03.12.04.27.05.57.27 1.06.66 1.47l.19.2.17-.18c.36-.4.87-.66 1.42-.73.15-.02.27-.03.28-.01.01.01-.02.14-.07.28-.18.52-.14 1.1.13 1.6.1.2.38.54.47.57.02.01.11-.1.2-.23.36-.53.94-.9 1.56-1 .17-.03.31-.04.33-.02.01.02-.04.14-.1.27-.28.5-.33 1.1-.14 1.64.07.2.28.52.42.65l.1.08.15-.17c.43-.5 1.1-.8 1.78-.8h.22l-.12.22c-.29.52-.34 1.15-.13 1.72.06.17.25.48.38.61l.08.09.22-.21c.38-.34.75-.52 1.25-.61z" fill="white"/>
+                </svg>
+            );
+        case 43114: // Avalanche
+            return (
+                <svg {...iconProps} viewBox="0 0 254 254" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="127" cy="127" r="127" fill="#E84142"/>
+                    <path d="M171.8 130.3c4.4-7.6 11.5-7.6 15.9 0l27.4 48.1c4.4 7.6.8 13.9-8 13.9h-55.1c-8.7 0-12.3-6.2-8-13.9l27.8-48.1zm-42.6-73.5c4.4-7.6 11.4-7.6 15.8 0l7 12.2 16.4 28.7c3.5 7.1 3.5 15.5 0 22.6l-44 76.3c-4.4 7.6-12.3 12.4-21.2 12.4H57.5c-8.8 0-12.4-6.2-8-13.9l79.7-138.3z" fill="white"/>
+                </svg>
+            );
+        default:
+            return <span className="text-base">⬡</span>;
+    }
+}
+
 // Chain info for display (must include ALL chains from SUPPORTED_CHAINS in chains.ts)
 // safePrefix is the chain identifier used in Safe App URLs: https://app.safe.global/home?safe={safePrefix}:{address}
-const CHAIN_INFO: Record<number, { name: string; icon: string; color: string; sponsorship: "free" | "usdc" | "none"; safePrefix: string; symbol: string }> = {
-    1: { name: "Ethereum", icon: "🔷", color: "#627EEA", sponsorship: "usdc", safePrefix: "eth", symbol: "ETH" },
-    8453: { name: "Base", icon: "🔵", color: "#0052FF", sponsorship: "free", safePrefix: "base", symbol: "ETH" },
-    42161: { name: "Arbitrum", icon: "⬡", color: "#28A0F0", sponsorship: "free", safePrefix: "arb1", symbol: "ETH" },
-    10: { name: "Optimism", icon: "🔴", color: "#FF0420", sponsorship: "free", safePrefix: "oeth", symbol: "ETH" },
-    137: { name: "Polygon", icon: "🟣", color: "#8247E5", sponsorship: "free", safePrefix: "matic", symbol: "MATIC" },
-    56: { name: "BNB Chain", icon: "🔶", color: "#F3BA2F", sponsorship: "free", safePrefix: "bnb", symbol: "BNB" },
-    130: { name: "Unichain", icon: "🦄", color: "#FF007A", sponsorship: "free", safePrefix: "unichain", symbol: "ETH" },
-    43114: { name: "Avalanche", icon: "🔺", color: "#E84142", sponsorship: "none", safePrefix: "avax", symbol: "AVAX" }, // View only, send not yet enabled
+const CHAIN_INFO: Record<number, { name: string; color: string; sponsorship: "free" | "usdc" | "none"; safePrefix: string; symbol: string }> = {
+    1: { name: "Ethereum", color: "#627EEA", sponsorship: "usdc", safePrefix: "eth", symbol: "ETH" },
+    8453: { name: "Base", color: "#0052FF", sponsorship: "free", safePrefix: "base", symbol: "ETH" },
+    42161: { name: "Arbitrum", color: "#28A0F0", sponsorship: "free", safePrefix: "arb1", symbol: "ETH" },
+    10: { name: "Optimism", color: "#FF0420", sponsorship: "free", safePrefix: "oeth", symbol: "ETH" },
+    137: { name: "Polygon", color: "#8247E5", sponsorship: "free", safePrefix: "matic", symbol: "MATIC" },
+    56: { name: "BNB Chain", color: "#F3BA2F", sponsorship: "free", safePrefix: "bnb", symbol: "BNB" },
+    130: { name: "Unichain", color: "#FF007A", sponsorship: "free", safePrefix: "unichain", symbol: "ETH" },
+    43114: { name: "Avalanche", color: "#E84142", sponsorship: "none", safePrefix: "avax", symbol: "AVAX" }, // View only, send not yet enabled
 };
 
 // Helper to get Safe App URL for a specific chain
@@ -127,7 +200,7 @@ function ChainSelectorDropdown({
                     }}
                 >
                     <div className="flex items-center gap-3">
-                        <span className="text-xl">{selectedInfo?.icon}</span>
+                        <ChainIcon chainId={selectedChainId} size={24} />
                         <div className="text-left">
                             <div className="text-sm font-medium text-white">{selectedInfo?.name}</div>
                             <div className="text-xs text-zinc-400">
@@ -171,7 +244,7 @@ function ChainSelectorDropdown({
                                     }`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xl">{info.icon}</span>
+                                        <ChainIcon chainId={chainId} size={20} />
                                         <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-zinc-300'}`}>
                                             {info.name}
                                         </span>
@@ -263,7 +336,7 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
                     <span className="text-sm text-white font-medium">
                         {isOutgoing ? "Sent" : "Received"} {tx.tokenSymbol}
                     </span>
-                    <span className="text-xs text-zinc-600">{tx.chainIcon}</span>
+                    <span className="text-zinc-600"><ChainIcon chainId={tx.chainId} size={14} /></span>
                 </div>
                 <p className="text-xs text-zinc-500 truncate">
                     {isOutgoing ? "To: " : "From: "}
@@ -689,8 +762,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 )}
                                 {/* Show selected chain balance below */}
                                 {selectedChainBalance && selectedChainBalance.totalUsd > 0 && (
-                                    <p className="text-xs text-zinc-400 mt-1">
-                                        {selectedChainInfo.icon} {selectedChainInfo.name}: {formatUsd(selectedChainBalance.totalUsd)}
+                                    <p className="text-xs text-zinc-400 mt-1 flex items-center justify-center gap-1">
+                                        <ChainIcon chainId={selectedChainId} size={14} />
+                                        <span>{selectedChainInfo.name}: {formatUsd(selectedChainBalance.totalUsd)}</span>
                                     </p>
                                 )}
                             </div>
@@ -822,7 +896,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         ) : !selectedChainBalance ? (
                                             <div className="p-8 text-center">
                                                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800 flex items-center justify-center">
-                                                    <span className="text-2xl">{selectedChainInfo.icon}</span>
+                                                    <ChainIcon chainId={selectedChainId} size={28} />
                                                 </div>
                                                 <p className="text-zinc-400 text-sm mb-1">No assets on {selectedChainInfo.name}</p>
                                                 <p className="text-zinc-600 text-xs">
@@ -858,6 +932,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 {/* View in Safe App button */}
                                                 {smartWalletAddress && isSafeDeployed && (
                                                     <div className="p-4 border-t border-zinc-800/50">
+                                                        {/* Note: Safe deploys on first tx per chain */}
+                                                        {selectedChainId !== 8453 && (
+                                                            <p className="text-xs text-zinc-500 text-center mb-2">
+                                                                ℹ️ Safe deploys on each chain with your first transaction there
+                                                            </p>
+                                                        )}
                                                         <button
                                                             onClick={() => {
                                                                 const safeUrl = getSafeAppUrl(selectedChainId, smartWalletAddress);
@@ -931,13 +1011,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5 mb-2 w-full">
                                                 <p className="text-xs text-emerald-400 font-medium mb-1.5">✓ Deposit on these chains:</p>
                                                 <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-zinc-300">
-                                                    <span>🔷 Ethereum</span>
-                                                    <span>🔵 Base</span>
-                                                    <span>⬡ Arbitrum</span>
-                                                    <span>🔴 Optimism</span>
-                                                    <span>🟣 Polygon</span>
-                                                    <span>🔶 BNB</span>
-                                                    <span>🦄 Unichain</span>
+                                                    <span className="flex items-center gap-1"><ChainIcon chainId={1} size={14} /> Ethereum</span>
+                                                    <span className="flex items-center gap-1"><ChainIcon chainId={8453} size={14} /> Base</span>
+                                                    <span className="flex items-center gap-1"><ChainIcon chainId={42161} size={14} /> Arbitrum</span>
+                                                    <span className="flex items-center gap-1"><ChainIcon chainId={10} size={14} /> Optimism</span>
+                                                    <span className="flex items-center gap-1"><ChainIcon chainId={137} size={14} /> Polygon</span>
+                                                    <span className="flex items-center gap-1"><ChainIcon chainId={56} size={14} /> BNB</span>
+                                                    <span className="flex items-center gap-1"><ChainIcon chainId={130} size={14} /> Unichain</span>
                                                 </div>
                                             </div>
                                             
@@ -1096,7 +1176,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium"
                                                         style={{ backgroundColor: `${info.color}20`, color: info.color }}
                                                     >
-                                                        <span>{info.icon}</span>
+                                                        <ChainIcon chainId={chainId} size={14} />
                                                         <span>{info.name}</span>
                                                     </div>
                                                 );
@@ -1260,10 +1340,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                                     )}
                                                                     {/* Chain badge on token icon */}
                                                                     <div 
-                                                                        className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] border-2 border-zinc-900"
+                                                                        className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-zinc-900 overflow-hidden"
                                                                         style={{ backgroundColor: chainInfo?.color || "#666" }}
                                                                     >
-                                                                        {token.chainIcon}
+                                                                        <ChainIcon chainId={token.chainId} size={14} />
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex-1 min-w-0">
@@ -1351,7 +1431,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 }}
                                             >
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-lg">{selectedChainInfo.icon}</span>
+                                                    <ChainIcon chainId={selectedChainId} size={22} />
                                                     <div>
                                                         <p className="text-sm font-medium text-white">{selectedChainInfo.name}</p>
                                                         <p className="text-xs text-zinc-400">
@@ -1496,50 +1576,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     </span>
                                                 </div>
                                             </div>
-                                        )}
-
-
-                                        {/* Safe Wallet info for EOA users - different messaging per chain */}
-                                        {useSafeForSend && !canUsePasskeySigning && safeAddress && (
-                                            selectedChainInfo.sponsorship === "free" ? (
-                                                // L2 with free gas - positive messaging
-                                                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
-                                                    <div className="flex gap-2">
-                                                        <span className="text-emerald-400">✨</span>
-                                                        <div>
-                                                            <p className="text-xs text-emerald-300 font-medium">Free transactions on {selectedChainInfo.name}!</p>
-                                                            <p className="text-xs text-zinc-400 mt-1">
-                                                                Your Safe address (different from your connected wallet):
-                                                            </p>
-                                                            <p className="text-xs text-emerald-400/80 font-mono mt-1 break-all">
-                                                                {safeAddress.slice(0, 18)}...{safeAddress.slice(-8)}
-                                                            </p>
-                                                            <p className="text-xs text-zinc-500 mt-1">
-                                                                Deposit funds here, then send for free. Or use EOA mode above.
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                // Mainnet or paid gas chains - warning messaging
-                                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-                                                    <div className="flex gap-2">
-                                                        <span className="text-amber-400">⚠️</span>
-                                                        <div>
-                                                            <p className="text-xs text-amber-300 font-medium">Safe Wallet requires deposits first</p>
-                                                            <p className="text-xs text-zinc-400 mt-1">
-                                                                Your Safe is a <strong>separate address</strong> from your connected wallet:
-                                                            </p>
-                                                            <p className="text-xs text-amber-400/80 font-mono mt-1 break-all">
-                                                                {safeAddress.slice(0, 18)}...{safeAddress.slice(-8)}
-                                                            </p>
-                                                            <p className="text-xs text-zinc-500 mt-1">
-                                                                Or toggle to EOA above to send directly from your wallet.
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )
                                         )}
 
                                         {/* Error Message */}

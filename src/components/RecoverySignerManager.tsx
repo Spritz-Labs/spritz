@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAccount } from "wagmi";
 import { useRecoverySigner } from "@/hooks/useRecoverySigner";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
 import type { PasskeyCredential } from "@/lib/safeWallet";
@@ -10,6 +11,7 @@ interface RecoverySignerManagerProps {
 }
 
 export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
+    const { isConnected } = useAccount();
     const [passkeyCredential, setPasskeyCredential] = useState<PasskeyCredential | null>(null);
     const {
         recoveryInfo,
@@ -86,7 +88,8 @@ export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
     };
 
     // Check if user can add recovery (has valid signing method)
-    const canAddRecovery = recoveryInfo?.isWalletUser || !!passkeyCredential;
+    // Wallet users need their wallet connected, passkey users need a passkey credential
+    const canAddRecovery = (recoveryInfo?.isWalletUser && isConnected) || !!passkeyCredential;
 
     const truncateAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
@@ -127,7 +130,7 @@ export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
             )}
 
             {/* Safe Not Deployed */}
-            {recoveryInfo && !recoveryInfo.isDeployed && !recoveryInfo.isWalletUser && (
+            {recoveryInfo && !recoveryInfo.isDeployed && (
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
                     <p className="text-xs text-amber-400 font-medium">⚠️ Safe Not Yet Deployed</p>
                     <p className="text-xs text-zinc-400 mt-1">
@@ -157,6 +160,16 @@ export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
                     </div>
                     <p className="text-xs text-zinc-500 mt-2">
                         Threshold: {recoveryInfo.threshold} of {recoveryInfo.owners.length} required to sign
+                    </p>
+                </div>
+            )}
+
+            {/* Wallet not connected notice for wallet users */}
+            {recoveryInfo?.isDeployed && recoveryInfo?.isWalletUser && !isConnected && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                    <p className="text-xs text-amber-400 font-medium">⚠️ Wallet Not Connected</p>
+                    <p className="text-xs text-zinc-400 mt-1">
+                        Connect your wallet to add a recovery signer.
                     </p>
                 </div>
             )}
