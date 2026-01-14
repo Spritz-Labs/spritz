@@ -101,9 +101,18 @@ export function LegacySafeRecovery({ onClose }: LegacySafeRecoveryProps) {
                 </div>
                 <div className="flex justify-between text-sm">
                     <span className="text-zinc-400">Status:</span>
-                    <span className={legacySafe.isDeployed ? "text-emerald-400" : "text-amber-400"}>
-                        {legacySafe.isDeployed ? "Deployed ✓" : "Not Deployed"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className={legacySafe.isDeployed ? "text-emerald-400" : "text-amber-400"}>
+                            {legacySafe.isDeployed ? "Deployed ✓" : "Not Deployed"}
+                        </span>
+                        <button
+                            onClick={() => checkLegacySafe(chainId)}
+                            className="text-xs text-zinc-500 hover:text-blue-400 transition-colors"
+                            title="Refresh status"
+                        >
+                            🔄
+                        </button>
+                    </div>
                 </div>
                 <div className="flex justify-between text-sm">
                     <span className="text-zinc-400">Balance:</span>

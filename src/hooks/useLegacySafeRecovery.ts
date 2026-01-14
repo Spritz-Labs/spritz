@@ -99,11 +99,29 @@ export function useLegacySafeRecovery(): UseLegacySafeRecoveryReturn {
             const result = await deployLegacySafe(ownerAddress, chainId, walletClientWrapper);
             
             setTxHash(result.txHash);
-            setStatus("success");
             
-            // Update deployment status
-            if (legacySafe) {
-                setLegacySafe({ ...legacySafe, isDeployed: true });
+            // Wait for transaction to be mined, then verify deployment
+            console.log("[LegacyRecovery] Waiting for deployment confirmation...");
+            setError("Waiting for confirmation... (this may take 15-30 seconds)");
+            
+            // Poll for deployment status
+            let deployed = false;
+            for (let i = 0; i < 20; i++) { // Try for ~60 seconds
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                deployed = await isLegacySafeDeployed(result.safeAddress, chainId);
+                console.log(`[LegacyRecovery] Deployment check ${i + 1}: ${deployed}`);
+                if (deployed) break;
+            }
+            
+            if (deployed) {
+                setError(null);
+                setStatus("success");
+                if (legacySafe) {
+                    setLegacySafe({ ...legacySafe, isDeployed: true });
+                }
+            } else {
+                setError("Deployment transaction sent but not yet confirmed. Please refresh in a minute.");
+                setStatus("idle");
             }
             
             return result.txHash;
