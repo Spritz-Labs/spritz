@@ -31,6 +31,11 @@ export interface SafeWalletState {
     signerType: SignerType;
 }
 
+export interface SendOptions {
+    /** If true, EOA pays gas in ETH instead of Safe paying via paymaster */
+    useEOAForGas?: boolean;
+}
+
 export interface UseSafeWalletReturn {
     // State
     safeAddress: Address | null;
@@ -51,7 +56,7 @@ export interface UseSafeWalletReturn {
     // Actions
     initialize: (chainId?: number) => Promise<void>;
     initializeWithPasskey: (credential: PasskeyCredentialInput, chainId?: number) => Promise<void>;
-    sendTransaction: (to: Address, amountEth: string, tokenAddress?: Address, tokenDecimals?: number) => Promise<string | null>;
+    sendTransaction: (to: Address, amountEth: string, tokenAddress?: Address, tokenDecimals?: number, options?: SendOptions) => Promise<string | null>;
     estimateGas: (to: Address, amountEth: string) => Promise<void>;
     reset: () => void;
 }
@@ -253,8 +258,11 @@ export function useSafeWallet(): UseSafeWalletReturn {
         to: Address,
         amount: string,
         tokenAddress?: Address,
-        tokenDecimals?: number
+        tokenDecimals?: number,
+        options?: SendOptions
     ): Promise<string | null> => {
+        const { useEOAForGas = false } = options || {};
+        
         // Validate based on signer type
         if (signerType === "eoa") {
             if (!ownerAddress || !isConnected || !walletClient) {
@@ -278,28 +286,31 @@ export function useSafeWallet(): UseSafeWalletReturn {
         setTxHash(null);
 
         try {
-            // For Mainnet, check USDC approval status
-            // If no approval, Safe Wallet can't work - guide user to EOA mode
+            // For Mainnet without USDC approval:
+            // - If useEOAForGas is true, allow transaction (EOA pays gas)
+            // - Otherwise, block and guide user
             const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId });
-            
-            if (chainRequiresErc20Payment(chainId) && predictedSafeAddress) {
+            let forceNativeGas = useEOAForGas;
+
+            if (chainRequiresErc20Payment(chainId) && predictedSafeAddress && !useEOAForGas) {
                 console.log(`[SafeWallet] Checking USDC approval for mainnet transaction...`);
                 const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, chainId);
                 console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
                 if (!hasApproval) {
-                    // No USDC approval on Mainnet - Safe Wallet can't work
-                    // Pimlico sponsorship doesn't cover Mainnet (too expensive)
-                    // User must use EOA mode to send from their connected wallet
-                    console.log(`[SafeWallet] No USDC approval on Mainnet - Safe Wallet unavailable`);
-                    setError("Safe Wallet unavailable on Mainnet without USDC. Toggle to 'EOA' mode above to send from your connected wallet.");
+                    // No USDC approval on Mainnet and user didn't opt for EOA gas
+                    console.log(`[SafeWallet] No USDC approval on Mainnet - need EOA gas payment`);
+                    setError("Mainnet requires gas fees. Enable 'Pay gas with wallet' to withdraw from Safe.");
                     setStatus("error");
                     return null;
                 }
             }
-            
-            // sponsorBootstrap only used on L2s (Mainnet blocked above)
-            const sponsorBootstrap = false;
-            
+
+            // If using EOA for gas on Mainnet, force native gas payment
+            if (useEOAForGas && chainRequiresErc20Payment(chainId)) {
+                console.log(`[SafeWallet] Using EOA to pay gas on Mainnet`);
+                forceNativeGas = true;
+            }
+
             let safeClient;
 
             if (signerType === "passkey" && passkeyCredential) {
@@ -307,7 +318,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 safeClient = await createPasskeySafeAccountClient(
                     passkeyCredential,
                     chainId,
-                    { sponsorBootstrap }
+                    { forceNativeGas }
                 );
             } else {
                 // Create Safe account client with EOA signer
@@ -321,7 +332,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
                     async (typedData: any) => {
                         return await signTypedDataAsync(typedData);
                     },
-                    { sponsorBootstrap }
+                    { forceNativeGas }
                 );
             }
 
