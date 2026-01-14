@@ -1109,3 +1109,220 @@ export async function execSafeERC20TransferDirect(
         walletClient
     );
 }
+
+// ============================================================================
+// RECOVERY SIGNER MANAGEMENT
+// Functions to add/remove recovery signers on a Safe
+// ============================================================================
+
+const SAFE_OWNER_MANAGER_ABI = [
+    {
+        name: "getOwners",
+        type: "function",
+        inputs: [],
+        outputs: [{ name: "", type: "address[]" }],
+        stateMutability: "view",
+    },
+    {
+        name: "getThreshold",
+        type: "function",
+        inputs: [],
+        outputs: [{ name: "", type: "uint256" }],
+        stateMutability: "view",
+    },
+    {
+        name: "isOwner",
+        type: "function",
+        inputs: [{ name: "owner", type: "address" }],
+        outputs: [{ name: "", type: "bool" }],
+        stateMutability: "view",
+    },
+    {
+        name: "addOwnerWithThreshold",
+        type: "function",
+        inputs: [
+            { name: "owner", type: "address" },
+            { name: "_threshold", type: "uint256" },
+        ],
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        name: "removeOwner",
+        type: "function",
+        inputs: [
+            { name: "prevOwner", type: "address" },
+            { name: "owner", type: "address" },
+            { name: "_threshold", type: "uint256" },
+        ],
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+] as const;
+
+/**
+ * Get the current owners of a Safe
+ */
+export async function getSafeOwners(
+    safeAddress: Address,
+    chainId: number
+): Promise<Address[]> {
+    const publicClient = getPublicClient(chainId);
+    
+    try {
+        const owners = await publicClient.readContract({
+            address: safeAddress,
+            abi: SAFE_OWNER_MANAGER_ABI,
+            functionName: "getOwners",
+        });
+        return owners as Address[];
+    } catch (error) {
+        console.error("[SafeWallet] Error getting owners:", error);
+        return [];
+    }
+}
+
+/**
+ * Get the current threshold of a Safe
+ */
+export async function getSafeThreshold(
+    safeAddress: Address,
+    chainId: number
+): Promise<number> {
+    const publicClient = getPublicClient(chainId);
+    
+    try {
+        const threshold = await publicClient.readContract({
+            address: safeAddress,
+            abi: SAFE_OWNER_MANAGER_ABI,
+            functionName: "getThreshold",
+        });
+        return Number(threshold);
+    } catch (error) {
+        console.error("[SafeWallet] Error getting threshold:", error);
+        return 1;
+    }
+}
+
+/**
+ * Check if an address is an owner of a Safe
+ */
+export async function isSafeOwner(
+    safeAddress: Address,
+    ownerAddress: Address,
+    chainId: number
+): Promise<boolean> {
+    const publicClient = getPublicClient(chainId);
+    
+    try {
+        const isOwner = await publicClient.readContract({
+            address: safeAddress,
+            abi: SAFE_OWNER_MANAGER_ABI,
+            functionName: "isOwner",
+            args: [ownerAddress],
+        });
+        return isOwner as boolean;
+    } catch (error) {
+        console.error("[SafeWallet] Error checking owner:", error);
+        return false;
+    }
+}
+
+/**
+ * Add a recovery signer to a Safe via passkey-signed transaction
+ * 
+ * This adds a new EOA as an owner with threshold 1, allowing either
+ * the passkey OR the recovery EOA to sign transactions.
+ * 
+ * @param safeAddress - The Safe address
+ * @param recoveryAddress - The EOA address to add as recovery signer
+ * @param passkeyCredential - The passkey credential for signing
+ * @param chainId - The chain ID
+ * @returns Transaction hash
+ */
+export async function addRecoverySigner(
+    safeAddress: Address,
+    recoveryAddress: Address,
+    passkeyCredential: PasskeyCredential,
+    chainId: number
+): Promise<string> {
+    log(`[SafeWallet] Adding recovery signer ${recoveryAddress.slice(0, 10)}... to Safe ${safeAddress.slice(0, 10)}...`);
+    
+    // Check if Safe is deployed
+    const deployed = await isSafeDeployed(safeAddress, chainId);
+    if (!deployed) {
+        throw new Error("Safe must be deployed before adding recovery signer. Send a transaction first.");
+    }
+    
+    // Check if already an owner
+    const alreadyOwner = await isSafeOwner(safeAddress, recoveryAddress, chainId);
+    if (alreadyOwner) {
+        throw new Error("This address is already an owner of the Safe");
+    }
+    
+    // Encode the addOwnerWithThreshold call
+    // Keep threshold at 1 so either passkey OR recovery EOA can sign
+    const addOwnerData = encodeFunctionData({
+        abi: SAFE_OWNER_MANAGER_ABI,
+        functionName: "addOwnerWithThreshold",
+        args: [recoveryAddress, BigInt(1)],
+    });
+    
+    // Create passkey client and send the transaction
+    const client = await createPasskeySafeAccountClient(passkeyCredential, chainId);
+    
+    // Send transaction to the Safe itself (self-call to add owner)
+    const txHash = await client.sendTransaction({
+        to: safeAddress,
+        value: BigInt(0),
+        data: addOwnerData,
+    });
+    
+    log(`[SafeWallet] Recovery signer added, tx: ${txHash}`);
+    
+    return txHash;
+}
+
+/**
+ * Get recovery signer info for a Safe
+ * Returns info about whether recovery is set up and who the signers are
+ */
+export async function getRecoveryInfo(
+    safeAddress: Address,
+    primarySignerAddress: Address,
+    chainId: number
+): Promise<{
+    isDeployed: boolean;
+    owners: Address[];
+    threshold: number;
+    hasRecoverySigner: boolean;
+    recoverySigners: Address[];
+}> {
+    const isDeployed = await isSafeDeployed(safeAddress, chainId);
+    
+    if (!isDeployed) {
+        return {
+            isDeployed: false,
+            owners: [],
+            threshold: 1,
+            hasRecoverySigner: false,
+            recoverySigners: [],
+        };
+    }
+    
+    const owners = await getSafeOwners(safeAddress, chainId);
+    const threshold = await getSafeThreshold(safeAddress, chainId);
+    
+    // Recovery signers are any owners that aren't the primary signer
+    const recoverySigners = owners.filter(
+        owner => owner.toLowerCase() !== primarySignerAddress.toLowerCase()
+    );
+    
+    return {
+        isDeployed,
+        owners,
+        threshold,
+        hasRecoverySigner: recoverySigners.length > 0,
+        recoverySigners,
+    };
+}

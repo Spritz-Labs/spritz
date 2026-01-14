@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { startRegistration } from "@simplewebauthn/browser";
+import { RecoverySignerManager } from "./RecoverySignerManager";
 
 type PasskeyCredential = {
     id: string;
@@ -42,6 +43,7 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
     const [success, setSuccess] = useState<string | null>(null);
     const [showDeleteWarning, setShowDeleteWarning] = useState<string | null>(null);
     const [showBackupTips, setShowBackupTips] = useState(false);
+    const [showRecoverySigner, setShowRecoverySigner] = useState(false);
     
     const platform = detectPlatform();
     const hasSyncedPasskey = credentials.some(c => c.backedUp);
@@ -526,6 +528,51 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                     )}
                 </AnimatePresence>
             </div>
+
+            {/* Recovery Signer Section - for passkey wallet users */}
+            {passkeyIsWalletKey && smartWalletAddress && (
+                <div className="mt-4 pt-4 border-t border-zinc-800">
+                    <button
+                        onClick={() => setShowRecoverySigner(true)}
+                        className="w-full flex items-center justify-between bg-zinc-800/50 hover:bg-zinc-800 rounded-xl p-3 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-lg">🔐</span>
+                            <div className="text-left">
+                                <p className="text-sm text-zinc-300 font-medium">Recovery Signer</p>
+                                <p className="text-xs text-zinc-500">Add a backup wallet for emergencies</p>
+                            </div>
+                        </div>
+                        <span className="text-zinc-500">→</span>
+                    </button>
+                </div>
+            )}
+
+            {/* Recovery Signer Modal */}
+            <AnimatePresence>
+                {showRecoverySigner && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+                        onClick={() => setShowRecoverySigner(false)}
+                    >
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="relative z-10 w-full max-w-md"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <RecoverySignerManager
+                                onClose={() => setShowRecoverySigner(false)}
+                            />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 }

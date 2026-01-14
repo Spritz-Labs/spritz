@@ -17,12 +17,19 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        const { searchParams } = new URL(request.url);
+        const includeKeys = searchParams.get("includeKeys") === "true";
+
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-        // Include public_key_x to determine if this passkey controls a wallet
+        // Include public_key_x/y if requested (for signing operations)
+        const selectFields = includeKeys
+            ? "id, credential_id, display_name, created_at, last_used_at, backed_up, device_info, public_key_x, public_key_y, safe_signer_address"
+            : "id, credential_id, display_name, created_at, last_used_at, backed_up, device_info, public_key_x, safe_signer_address";
+
         const { data: credentials, error } = await supabase
             .from("passkey_credentials")
-            .select("id, credential_id, display_name, created_at, last_used_at, backed_up, device_info, public_key_x, safe_signer_address")
+            .select(selectFields)
             .eq("user_address", session.userAddress.toLowerCase())
             .order("created_at", { ascending: false });
 
@@ -37,13 +44,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             credentials: credentials?.map(c => ({
                 id: c.id,
-                credentialId: c.credential_id?.slice(0, 20) + "...",
+                credentialId: includeKeys ? c.credential_id : c.credential_id?.slice(0, 20) + "...",
                 deviceName: c.display_name || (c.device_info as { name?: string })?.name || "Passkey",
                 createdAt: c.created_at,
                 lastUsedAt: c.last_used_at,
                 backedUp: c.backed_up,
                 // A passkey controls a wallet if it has public key coordinates and a safe signer address
                 isWalletKey: !!(c.public_key_x && c.safe_signer_address),
+                // Include full public key if requested (for signing)
+                ...(includeKeys && c.public_key_x && c.public_key_y && {
+                    publicKeyX: c.public_key_x,
+                    publicKeyY: c.public_key_y,
+                }),
             })) || [],
         });
     } catch (error) {
