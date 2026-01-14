@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useMultiChainSafeStatus, type ChainSafeStatus } from "@/hooks/useMultiChainSafeStatus";
+import { useState, useMemo } from "react";
+import { useMultiChainSafeStatus, type ChainSafeStatus, type DeploymentGasEstimate } from "@/hooks/useMultiChainSafeStatus";
 import { useRecoverySigner } from "@/hooks/useRecoverySigner";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useAccount } from "wagmi";
@@ -59,6 +59,23 @@ function ChainIcon({ chainId, size = 20 }: { chainId: number; size?: number }) {
         default:
             return <span className="text-base">⬡</span>;
     }
+}
+
+// Gas Estimate Display for a single chain
+function DeploymentCostBadge({ estimate, chainName }: { estimate: DeploymentGasEstimate; chainName: string }) {
+    if (estimate.isSponsored) {
+        return (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
+                FREE (Sponsored)
+            </span>
+        );
+    }
+    
+    return (
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
+            ~${estimate.estimatedCostUsd.toFixed(0)}
+        </span>
+    );
 }
 
 interface ChainStatusRowProps {
@@ -173,11 +190,38 @@ function ChainStatusRow({ chain, onAddRecovery, isAddingRecovery, selectedChainF
                 </div>
             )}
 
-            {/* Info for non-deployed chains with funds */}
-            {!chain.isDeployed && chain.balanceUsd > 0 && (
-                <p className="text-[10px] text-zinc-500 mt-2 pt-2 border-t border-zinc-700/30">
-                    Safe will deploy with your first transaction on this chain
-                </p>
+            {/* Info for non-deployed chains */}
+            {!chain.isDeployed && (
+                <div className="mt-2 pt-2 border-t border-zinc-700/30 space-y-2">
+                    <p className="text-[10px] text-zinc-500">
+                        Safe will deploy with your first transaction on this chain
+                    </p>
+                    
+                    {/* Show deployment cost estimate */}
+                    {chain.deploymentEstimate && (
+                        <div className={`rounded-lg p-2 ${
+                            chain.deploymentEstimate.isSponsored 
+                                ? "bg-emerald-500/10 border border-emerald-500/20" 
+                                : "bg-amber-500/10 border border-amber-500/20"
+                        }`}>
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-zinc-400">Deployment Cost:</span>
+                                {chain.deploymentEstimate.isSponsored ? (
+                                    <span className="text-[11px] font-semibold text-emerald-400">FREE</span>
+                                ) : (
+                                    <span className="text-[11px] font-semibold text-amber-400">
+                                        ~${chain.deploymentEstimate.estimatedCostUsd.toFixed(2)}
+                                    </span>
+                                )}
+                            </div>
+                            {!chain.deploymentEstimate.isSponsored && (
+                                <p className="text-[9px] text-zinc-500 mt-1">
+                                    {chain.deploymentEstimate.estimatedCostEth} {chain.symbol} @ {parseFloat(chain.deploymentEstimate.gasPriceGwei).toFixed(1)} gwei
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );
@@ -255,6 +299,21 @@ export function MultiChainSecurity({ safeAddress, primarySigner, balances }: Mul
 
     // Sort by balance
     chainsWithBalances.sort((a, b) => b.balanceUsd - a.balanceUsd);
+
+    // Calculate deployment cost summary
+    const deploymentCosts = useMemo(() => {
+        const undeployedChains = chainsWithBalances.filter(c => !c.isDeployed && c.deploymentEstimate);
+        const ethereumChain = undeployedChains.find(c => c.chainId === 1);
+        const sponsoredChains = undeployedChains.filter(c => c.deploymentEstimate?.isSponsored);
+        const paidChains = undeployedChains.filter(c => !c.deploymentEstimate?.isSponsored);
+        
+        return {
+            ethereumEstimate: ethereumChain?.deploymentEstimate || null,
+            sponsoredCount: sponsoredChains.length,
+            paidChains,
+            totalPaidCost: paidChains.reduce((sum, c) => sum + (c.deploymentEstimate?.estimatedCostUsd || 0), 0),
+        };
+    }, [chainsWithBalances]);
 
     const handleAddRecovery = (chainId: number) => {
         setSelectedChainForRecovery(chainId);
@@ -360,6 +419,56 @@ export function MultiChainSecurity({ safeAddress, primarySigner, balances }: Mul
                     </div>
                 )}
             </div>
+
+            {/* Deployment Costs Section - Prominent display */}
+            {deploymentCosts.ethereumEstimate && !deploymentCosts.ethereumEstimate.isSponsored && (
+                <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                        <ChainIcon chainId={1} size={24} />
+                        <div>
+                            <h4 className="text-sm font-bold text-amber-400">Ethereum Mainnet Deployment</h4>
+                            <p className="text-[10px] text-zinc-400">Smart Account not yet deployed</p>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-amber-500/20 rounded-xl p-3 text-center">
+                        <p className="text-xs text-amber-300/80 mb-1">Estimated Deployment Cost</p>
+                        <p className="text-2xl font-bold text-amber-300">
+                            ${deploymentCosts.ethereumEstimate.estimatedCostUsd.toFixed(2)}
+                        </p>
+                        <p className="text-[10px] text-amber-400/60 mt-1">
+                            {deploymentCosts.ethereumEstimate.estimatedCostEth} ETH @ {parseFloat(deploymentCosts.ethereumEstimate.gasPriceGwei).toFixed(1)} gwei
+                        </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <p className="text-[11px] text-zinc-300">
+                            <strong>What is this?</strong> Your first transaction on Ethereum requires deploying your 
+                            Smart Account contract, which uses ~{Number(deploymentCosts.ethereumEstimate.gasUnits).toLocaleString()} gas.
+                        </p>
+                        <p className="text-[10px] text-amber-400/80">
+                            💡 <strong>Tip:</strong> Use sponsored L2 networks (Base, Arbitrum, Optimism, etc.) 
+                            for free deployments and transactions.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Sponsored Networks Info */}
+            {deploymentCosts.sponsoredCount > 0 && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-emerald-400">✓</span>
+                        <p className="text-xs font-medium text-emerald-400">
+                            {deploymentCosts.sponsoredCount} networks with FREE deployment
+                        </p>
+                    </div>
+                    <p className="text-[10px] text-zinc-400">
+                        Base, Arbitrum, Optimism, Polygon, and BNB Chain have sponsored gas. 
+                        Your first transaction deploys your wallet for free.
+                    </p>
+                </div>
+            )}
 
             {/* Add Recovery Form */}
             {showAddRecoveryForm && selectedChainForRecovery && (

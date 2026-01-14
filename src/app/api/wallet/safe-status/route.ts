@@ -1,17 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/session";
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, http, type Address, formatEther, formatGwei } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 
-// Supported chains for Safe
+// Supported chains for Safe with gas sponsorship info
 const SUPPORTED_CHAINS = [
-    { id: 1, chain: mainnet, name: "Ethereum", symbol: "ETH", explorer: "https://etherscan.io" },
-    { id: 8453, chain: base, name: "Base", symbol: "ETH", explorer: "https://basescan.org" },
-    { id: 42161, chain: arbitrum, name: "Arbitrum", symbol: "ETH", explorer: "https://arbiscan.io" },
-    { id: 10, chain: optimism, name: "Optimism", symbol: "ETH", explorer: "https://optimistic.etherscan.io" },
-    { id: 137, chain: polygon, name: "Polygon", symbol: "MATIC", explorer: "https://polygonscan.com" },
-    { id: 56, chain: bsc, name: "BNB Chain", symbol: "BNB", explorer: "https://bscscan.com" },
+    { id: 1, chain: mainnet, name: "Ethereum", symbol: "ETH", explorer: "https://etherscan.io", sponsored: false },
+    { id: 8453, chain: base, name: "Base", symbol: "ETH", explorer: "https://basescan.org", sponsored: true },
+    { id: 42161, chain: arbitrum, name: "Arbitrum", symbol: "ETH", explorer: "https://arbiscan.io", sponsored: true },
+    { id: 10, chain: optimism, name: "Optimism", symbol: "ETH", explorer: "https://optimistic.etherscan.io", sponsored: true },
+    { id: 137, chain: polygon, name: "Polygon", symbol: "MATIC", explorer: "https://polygonscan.com", sponsored: true },
+    { id: 56, chain: bsc, name: "BNB Chain", symbol: "BNB", explorer: "https://bscscan.com", sponsored: true },
 ];
+
+// Approximate gas units for Safe deployment (SafeProxyFactory.createProxyWithNonce)
+// This includes ~300k for Safe deployment + ~100k for 4337 module setup
+const SAFE_DEPLOYMENT_GAS = BigInt(450000);
+
+// Native token prices (hardcoded fallback - in production use a price feed)
+const TOKEN_PRICES: Record<number, number> = {
+    1: 3500,     // ETH
+    8453: 3500,  // ETH on Base
+    42161: 3500, // ETH on Arbitrum  
+    10: 3500,    // ETH on Optimism
+    137: 0.5,    // MATIC
+    56: 300,     // BNB
+};
 
 // Safe ABI for reading owners and threshold
 const SAFE_ABI = [
@@ -39,6 +53,14 @@ const SAFE_PREFIXES: Record<number, string> = {
     56: "bnb",
 };
 
+export interface DeploymentGasEstimate {
+    gasUnits: string;
+    gasPriceGwei: string;
+    estimatedCostEth: string;
+    estimatedCostUsd: number;
+    isSponsored: boolean;
+}
+
 export interface ChainSafeStatus {
     chainId: number;
     chainName: string;
@@ -51,6 +73,7 @@ export interface ChainSafeStatus {
     primarySigner: string | null;
     balanceUsd: number;
     safeAppUrl: string | null;
+    deploymentEstimate: DeploymentGasEstimate | null;
 }
 
 /**
@@ -96,6 +119,7 @@ export async function GET(request: NextRequest) {
                 primarySigner: primarySigner?.toLowerCase() || null,
                 balanceUsd: 0,
                 safeAppUrl: null,
+                deploymentEstimate: null,
             };
 
             try {
@@ -144,6 +168,31 @@ export async function GET(request: NextRequest) {
                     // Build Safe App URL
                     const prefix = SAFE_PREFIXES[chainInfo.id] || "eth";
                     status.safeAppUrl = `https://app.safe.global/home?safe=${prefix}:${safeAddress}`;
+                } else {
+                    // Not deployed - estimate deployment cost
+                    try {
+                        const gasPrice = await withTimeout(
+                            publicClient.getGasPrice(),
+                            5000,
+                            BigInt(0)
+                        );
+                        
+                        if (gasPrice > BigInt(0)) {
+                            const estimatedCostWei = SAFE_DEPLOYMENT_GAS * gasPrice;
+                            const estimatedCostEth = Number(formatEther(estimatedCostWei));
+                            const tokenPrice = TOKEN_PRICES[chainInfo.id] || 3500;
+                            
+                            status.deploymentEstimate = {
+                                gasUnits: SAFE_DEPLOYMENT_GAS.toString(),
+                                gasPriceGwei: formatGwei(gasPrice),
+                                estimatedCostEth: estimatedCostEth.toFixed(6),
+                                estimatedCostUsd: estimatedCostEth * tokenPrice,
+                                isSponsored: chainInfo.sponsored,
+                            };
+                        }
+                    } catch (gasErr) {
+                        console.error(`[SafeStatus] Error estimating gas for ${chainInfo.name}:`, gasErr);
+                    }
                 }
 
                 // Fetch native balance with 5s timeout
@@ -152,9 +201,9 @@ export async function GET(request: NextRequest) {
                     5000,
                     BigInt(0)
                 );
-                // Simple USD estimate (you'd want real prices in production)
-                const ethPrice = chainInfo.id === 137 ? 0.5 : chainInfo.id === 56 ? 300 : 3500;
-                status.balanceUsd = Number(balance) / 1e18 * ethPrice;
+                // Use token prices
+                const tokenPrice = TOKEN_PRICES[chainInfo.id] || 3500;
+                status.balanceUsd = Number(balance) / 1e18 * tokenPrice;
 
             } catch (err) {
                 console.error(`[SafeStatus] Error fetching ${chainInfo.name}:`, err);

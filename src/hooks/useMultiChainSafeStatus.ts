@@ -2,6 +2,14 @@
 
 import { useState, useCallback, useEffect } from "react";
 
+export interface DeploymentGasEstimate {
+    gasUnits: string;
+    gasPriceGwei: string;
+    estimatedCostEth: string;
+    estimatedCostUsd: number;
+    isSponsored: boolean;
+}
+
 export interface ChainSafeStatus {
     chainId: number;
     chainName: string;
@@ -14,6 +22,7 @@ export interface ChainSafeStatus {
     primarySigner: string | null;
     balanceUsd: number;
     safeAppUrl: string | null;
+    deploymentEstimate: DeploymentGasEstimate | null;
 }
 
 export interface SafeStatusSummary {
