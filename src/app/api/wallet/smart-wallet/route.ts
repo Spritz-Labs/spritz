@@ -104,22 +104,26 @@ export async function GET(request: NextRequest) {
                 // WALLET USERS: Safe owned by their connected wallet
                 // They can sign with their connected wallet, no passkey needed
                 
-                if (user?.smart_wallet_address) {
-                    smartWalletAddress = user.smart_wallet_address as Address;
-                } else {
-                    // Use permissionless.js to calculate Safe address (matches transaction logic)
-                    // Use Base as default chain - address is same across all EVM chains
-                    smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
-                    
-                    // Store for future lookups
-                    await supabase
-                        .from("shout_users")
-                        .update({ 
-                            smart_wallet_address: smartWalletAddress,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("wallet_address", spritzId);
+                // Always calculate the correct address using permissionless.js
+                // This ensures consistency with transaction logic
+                const calculatedAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
+                
+                // Check if stored address matches (may be old/wrong calculation)
+                if (user?.smart_wallet_address && user.smart_wallet_address.toLowerCase() !== calculatedAddress.toLowerCase()) {
+                    console.log("[SmartWallet] Stored address mismatch - updating to correct address");
+                    console.log("[SmartWallet] Old:", user.smart_wallet_address.slice(0, 10), "New:", calculatedAddress.slice(0, 10));
                 }
+                
+                smartWalletAddress = calculatedAddress;
+                
+                // Always update to ensure correct address is stored
+                await supabase
+                    .from("shout_users")
+                    .update({ 
+                        smart_wallet_address: smartWalletAddress,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("wallet_address", spritzId);
                 
                 canSign = true;
                 signerType = "eoa";

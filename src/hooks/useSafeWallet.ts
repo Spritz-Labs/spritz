@@ -279,8 +279,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
 
         try {
             // For Mainnet, check USDC approval status
-            // If no approval, try sponsoring the first transaction to bootstrap the user
-            let sponsorBootstrap = false;
+            // If no approval, Safe Wallet can't work - guide user to EOA mode
             const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId });
             
             if (chainRequiresErc20Payment(chainId) && predictedSafeAddress) {
@@ -288,12 +287,18 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 const { hasApproval, allowance } = await checkPaymasterAllowance(predictedSafeAddress, chainId);
                 console.log(`[SafeWallet] USDC approval: ${hasApproval}, allowance: ${allowance.toString()}`);
                 if (!hasApproval) {
-                    // No USDC approval - try sponsoring this first transaction
-                    // This will include USDC approval so future transactions can use ERC-20 paymaster
-                    console.log(`[SafeWallet] No USDC approval - attempting sponsored bootstrap transaction`);
-                    sponsorBootstrap = true;
+                    // No USDC approval on Mainnet - Safe Wallet can't work
+                    // Pimlico sponsorship doesn't cover Mainnet (too expensive)
+                    // User must use EOA mode to send from their connected wallet
+                    console.log(`[SafeWallet] No USDC approval on Mainnet - Safe Wallet unavailable`);
+                    setError("Safe Wallet unavailable on Mainnet without USDC. Toggle to 'EOA' mode above to send from your connected wallet.");
+                    setStatus("error");
+                    return null;
                 }
             }
+            
+            // sponsorBootstrap only used on L2s (Mainnet blocked above)
+            const sponsorBootstrap = false;
             
             let safeClient;
 

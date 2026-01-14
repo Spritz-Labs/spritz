@@ -1385,24 +1385,22 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Mainnet info for Safe wallet */}
+                                        {/* Mainnet info for Safe wallet - auto-suggest EOA mode */}
                                         {useSafeForSend && selectedChainId === 1 && (
-                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
                                                 <div className="flex gap-2">
-                                                    <span className="text-amber-400">⚠️</span>
+                                                    <span className="text-red-400">⛔</span>
                                                     <div>
-                                                        <p className="text-xs text-amber-300 font-medium">Mainnet requires gas fees</p>
+                                                        <p className="text-xs text-red-300 font-medium">Safe Wallet unavailable on Mainnet</p>
                                                         <p className="text-xs text-zinc-400 mt-1">
-                                                            Safe Wallet on Mainnet needs USDC for gas (~$1-3 per tx).
+                                                            Mainnet requires USDC gas fees that aren&apos;t set up yet.
                                                         </p>
-                                                        <p className="text-xs text-zinc-400 mt-2">
-                                                            <strong>Options to withdraw funds:</strong>
+                                                        <p className="text-xs text-emerald-400 mt-2 font-medium">
+                                                            👆 Toggle to &quot;EOA&quot; above to send from your connected wallet
                                                         </p>
-                                                        <ul className="text-xs text-zinc-400 mt-1 list-disc list-inside space-y-0.5">
-                                                            <li>Toggle to <strong className="text-white">EOA mode</strong> (sends from connected wallet)</li>
-                                                            <li>Bridge funds to Base for <strong className="text-emerald-400">free</strong> transactions</li>
-                                                            <li>Deposit ~$2 USDC to Safe for gas</li>
-                                                        </ul>
+                                                        <p className="text-xs text-zinc-500 mt-2">
+                                                            💡 Or use Base/Arbitrum for <strong className="text-emerald-400">free</strong> Safe transactions
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
