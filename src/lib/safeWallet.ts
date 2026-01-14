@@ -406,19 +406,20 @@ export async function createSafeAccountClient(
             saltNonce: BigInt(0),
         });
 
-        console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
+        console.log(`[SafeWallet] Safe account address: ${safeAccount.address}, forceNativeGas: ${options?.forceNativeGas}`);
 
         // Get sponsorship context if configured (chain-aware)
         // If forceNativeGas is true, user pays in ETH instead of USDC (for mainnet when no approval)
-        const paymasterContext = getPaymasterContext(chainId, options?.forceNativeGas);
+        const useNativeGas = options?.forceNativeGas === true;
+        const paymasterContext = useNativeGas ? undefined : getPaymasterContext(chainId, false);
 
-        // Create smart account client with Pimlico as bundler and paymaster
-        const smartAccountClient = createSmartAccountClient({
+        // Create smart account client with Pimlico as bundler
+        // IMPORTANT: Only include paymaster if we're NOT using native gas
+        // When using native gas, the user pays in ETH and we don't need a paymaster
+        const clientConfig: Parameters<typeof createSmartAccountClient>[0] = {
             account: safeAccount,
             chain,
             bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-            paymaster: pimlicoClient,
-            paymasterContext, // Include sponsorship policy if set (or ERC-20 for mainnet)
             userOperation: {
                 estimateFeesPerGas: async () => {
                     const prices = await pimlicoClient.getUserOperationGasPrice();
@@ -426,7 +427,18 @@ export async function createSafeAccountClient(
                     return prices.fast;
                 },
             },
-        });
+        };
+
+        // Only add paymaster if NOT using native gas
+        if (!useNativeGas) {
+            log(`[SafeWallet] Using paymaster for gas sponsorship/ERC-20 payment`);
+            (clientConfig as any).paymaster = pimlicoClient;
+            (clientConfig as any).paymasterContext = paymasterContext;
+        } else {
+            log(`[SafeWallet] No paymaster - user pays gas in native ETH`);
+        }
+
+        const smartAccountClient = createSmartAccountClient(clientConfig);
 
         return smartAccountClient as SmartAccountClient;
     } catch (err) {
@@ -789,22 +801,21 @@ export async function createPasskeySafeAccountClient(
         safeP256VerifierAddress: "0xA86e0054C51E4894D88762a017ECc5E5235f5DBA" as Address,
     });
 
-    console.log(`[SafeWallet] Safe account address: ${safeAccount.address}`);
+    console.log(`[SafeWallet] Safe account address: ${safeAccount.address}, forceNativeGas: ${options?.forceNativeGas}`);
 
     // Get sponsorship context if configured (chain-aware)
     // If forceNativeGas is true, user pays in ETH instead of USDC (for mainnet when user has no USDC)
-    const paymasterContext = getPaymasterContext(chainId, options?.forceNativeGas);
+    const useNativeGas = options?.forceNativeGas === true;
+    const paymasterContext = useNativeGas ? undefined : getPaymasterContext(chainId, false);
 
     log(`[SafeWallet] Creating smart account client...`);
-    console.log(`[SafeWallet] Paymaster context:`, paymasterContext);
 
-    // Use Pimlico client directly as paymaster - it handles sponsorship
-    const smartAccountClient = createSmartAccountClient({
+    // Create smart account client with Pimlico as bundler
+    // IMPORTANT: Only include paymaster if we're NOT using native gas
+    const clientConfig: Parameters<typeof createSmartAccountClient>[0] = {
         account: safeAccount,
         chain,
         bundlerTransport: http(getPimlicoBundlerUrl(chainId)),
-        paymaster: pimlicoClient,
-        paymasterContext: paymasterContext,
         userOperation: {
             estimateFeesPerGas: async () => {
                 const prices = await pimlicoClient.getUserOperationGasPrice();
@@ -812,7 +823,18 @@ export async function createPasskeySafeAccountClient(
                 return prices.fast;
             },
         },
-    });
+    };
+
+    // Only add paymaster if NOT using native gas
+    if (!useNativeGas) {
+        log(`[SafeWallet] Using paymaster for gas sponsorship/ERC-20 payment`);
+        (clientConfig as any).paymaster = pimlicoClient;
+        (clientConfig as any).paymasterContext = paymasterContext;
+    } else {
+        log(`[SafeWallet] No paymaster - user pays gas in native ETH`);
+    }
+
+    const smartAccountClient = createSmartAccountClient(clientConfig);
 
     return smartAccountClient as SmartAccountClient;
 }
