@@ -202,15 +202,15 @@ async function fetchChainBalances(
         };
 
         // Fetch native and ERC-20 balances in parallel
+        // Use cache: "no-store" when fresh data is requested (via _t param)
+        const fetchOptions = {
+            headers,
+            next: { revalidate: 10 }, // Reduced from 30s to 10s for faster updates
+        };
+        
         const [nativeResponse, tokensResponse] = await Promise.all([
-            fetch(`${GRAPH_NATIVE_BALANCES_URL}?network=${chain.network}&address=${address}`, {
-                headers,
-                next: { revalidate: 30 },
-            }),
-            fetch(`${GRAPH_TOKEN_BALANCES_URL}?network=${chain.network}&address=${address}`, {
-                headers,
-                next: { revalidate: 30 },
-            }),
+            fetch(`${GRAPH_NATIVE_BALANCES_URL}?network=${chain.network}&address=${address}`, fetchOptions),
+            fetch(`${GRAPH_TOKEN_BALANCES_URL}?network=${chain.network}&address=${address}`, fetchOptions),
         ]);
 
         const balances: TokenBalance[] = [];

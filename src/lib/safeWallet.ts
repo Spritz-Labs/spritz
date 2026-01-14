@@ -1302,6 +1302,79 @@ export async function addRecoverySigner(
 }
 
 /**
+ * Add a recovery signer to a Safe via EOA wallet-signed transaction
+ * 
+ * This is for users who connected with a wallet (MetaMask, etc.) rather than passkey.
+ * The connected wallet signs the transaction to add the recovery address as an owner.
+ * 
+ * @param safeAddress - The Safe address
+ * @param recoveryAddress - The EOA address to add as recovery signer
+ * @param signerAddress - The current owner's address (connected wallet)
+ * @param signMessage - Function to sign messages (from wagmi)
+ * @param signTypedData - Function to sign typed data (from wagmi)
+ * @param chainId - The chain ID
+ * @returns Transaction hash
+ */
+export async function addRecoverySignerWithWallet(
+    safeAddress: Address,
+    recoveryAddress: Address,
+    signerAddress: Address,
+    signMessage: (message: string) => Promise<`0x${string}`>,
+    signTypedData: (data: unknown) => Promise<`0x${string}`>,
+    chainId: number
+): Promise<string> {
+    log(`[SafeWallet] Adding recovery signer ${recoveryAddress.slice(0, 10)}... to Safe ${safeAddress.slice(0, 10)}... (wallet signing)`);
+    
+    // Check if Safe is deployed
+    const deployed = await isSafeDeployed(safeAddress, chainId);
+    if (!deployed) {
+        throw new Error("Safe must be deployed before adding recovery signer. Send a transaction first.");
+    }
+    
+    // Check if already an owner
+    const alreadyOwner = await isSafeOwner(safeAddress, recoveryAddress, chainId);
+    if (alreadyOwner) {
+        throw new Error("This address is already an owner of the Safe");
+    }
+
+    // Verify the signer is an owner of this Safe
+    const isOwner = await isSafeOwner(safeAddress, signerAddress, chainId);
+    if (!isOwner) {
+        throw new Error("Your wallet is not an owner of this Safe. Cannot add recovery signer.");
+    }
+    
+    // Encode the addOwnerWithThreshold call
+    // Keep threshold at 1 so either original owner OR recovery EOA can sign
+    const addOwnerData = encodeFunctionData({
+        abi: SAFE_OWNER_MANAGER_ABI,
+        functionName: "addOwnerWithThreshold",
+        args: [recoveryAddress, BigInt(1)],
+    });
+    
+    // Create Safe account client with wallet signing
+    const client = await createSafeAccountClient(
+        signerAddress,
+        chainId,
+        signMessage,
+        signTypedData
+    );
+    
+    // Send transaction to the Safe itself (self-call to add owner)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const txHash = await client.sendTransaction({
+        calls: [{
+            to: safeAddress,
+            value: BigInt(0),
+            data: addOwnerData,
+        }],
+    } as any);
+    
+    log(`[SafeWallet] Recovery signer added (wallet), tx: ${txHash}`);
+    
+    return txHash;
+}
+
+/**
  * Get recovery signer info for a Safe
  * Returns info about whether recovery is set up and who the signers are
  */

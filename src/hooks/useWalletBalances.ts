@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { WalletBalancesResponse, ChainBalance } from "@/app/api/wallet/balances/route";
 
 type UseWalletBalancesReturn = {
@@ -9,7 +9,7 @@ type UseWalletBalancesReturn = {
     isLoading: boolean;
     error: string | null;
     lastUpdated: string | null;
-    refresh: () => Promise<void>;
+    refresh: (forceRefresh?: boolean) => Promise<void>;
 };
 
 export function useWalletBalances(
@@ -21,8 +21,11 @@ export function useWalletBalances(
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+    
+    // Track fetch count to force fresh data
+    const fetchCountRef = useRef(0);
 
-    const fetchBalances = useCallback(async () => {
+    const fetchBalances = useCallback(async (forceRefresh = false) => {
         if (!userAddress) {
             setBalances([]);
             setTotalUsd(0);
@@ -33,9 +36,19 @@ export function useWalletBalances(
         setError(null);
 
         try {
-            const response = await fetch(`/api/wallet/balances?address=${encodeURIComponent(userAddress)}`, {
-                credentials: "include",
-            });
+            // Add cache-busting parameter when force refreshing
+            // This bypasses Next.js revalidation cache
+            fetchCountRef.current += 1;
+            const cacheBuster = forceRefresh ? `&_t=${Date.now()}&_n=${fetchCountRef.current}` : "";
+            
+            const response = await fetch(
+                `/api/wallet/balances?address=${encodeURIComponent(userAddress)}${cacheBuster}`, 
+                {
+                    credentials: "include",
+                    // Force fresh fetch from server (skip browser cache)
+                    cache: forceRefresh ? "no-store" : "default",
+                }
+            );
 
             if (!response.ok) {
                 const data = await response.json();
@@ -47,6 +60,10 @@ export function useWalletBalances(
             setBalances(data.balances);
             setTotalUsd(data.totalUsd);
             setLastUpdated(data.lastUpdated);
+            
+            if (forceRefresh) {
+                console.log("[useWalletBalances] Force refreshed balances:", data.totalUsd);
+            }
         } catch (err) {
             console.error("[useWalletBalances] Error:", err);
             setError(err instanceof Error ? err.message : "Failed to fetch balances");
@@ -58,7 +75,7 @@ export function useWalletBalances(
     // Auto-fetch on mount if enabled
     useEffect(() => {
         if (autoFetch && userAddress) {
-            fetchBalances();
+            fetchBalances(false);
         }
     }, [autoFetch, userAddress, fetchBalances]);
 

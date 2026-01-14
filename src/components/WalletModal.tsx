@@ -20,16 +20,31 @@ import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
 // Chain info for display (must include ALL chains from SUPPORTED_CHAINS in chains.ts)
-const CHAIN_INFO: Record<number, { name: string; icon: string; color: string; sponsorship: "free" | "usdc" | "none" }> = {
-    1: { name: "Ethereum", icon: "🔷", color: "#627EEA", sponsorship: "usdc" },
-    8453: { name: "Base", icon: "🔵", color: "#0052FF", sponsorship: "free" },
-    42161: { name: "Arbitrum", icon: "⬡", color: "#28A0F0", sponsorship: "free" },
-    10: { name: "Optimism", icon: "🔴", color: "#FF0420", sponsorship: "free" },
-    137: { name: "Polygon", icon: "🟣", color: "#8247E5", sponsorship: "free" },
-    56: { name: "BNB Chain", icon: "🔶", color: "#F3BA2F", sponsorship: "free" },
-    130: { name: "Unichain", icon: "🦄", color: "#FF007A", sponsorship: "free" },
-    43114: { name: "Avalanche", icon: "🔺", color: "#E84142", sponsorship: "none" }, // View only, send not yet enabled
+// safePrefix is the chain identifier used in Safe App URLs: https://app.safe.global/home?safe={safePrefix}:{address}
+const CHAIN_INFO: Record<number, { name: string; icon: string; color: string; sponsorship: "free" | "usdc" | "none"; safePrefix: string; symbol: string }> = {
+    1: { name: "Ethereum", icon: "🔷", color: "#627EEA", sponsorship: "usdc", safePrefix: "eth", symbol: "ETH" },
+    8453: { name: "Base", icon: "🔵", color: "#0052FF", sponsorship: "free", safePrefix: "base", symbol: "ETH" },
+    42161: { name: "Arbitrum", icon: "⬡", color: "#28A0F0", sponsorship: "free", safePrefix: "arb1", symbol: "ETH" },
+    10: { name: "Optimism", icon: "🔴", color: "#FF0420", sponsorship: "free", safePrefix: "oeth", symbol: "ETH" },
+    137: { name: "Polygon", icon: "🟣", color: "#8247E5", sponsorship: "free", safePrefix: "matic", symbol: "MATIC" },
+    56: { name: "BNB Chain", icon: "🔶", color: "#F3BA2F", sponsorship: "free", safePrefix: "bnb", symbol: "BNB" },
+    130: { name: "Unichain", icon: "🦄", color: "#FF007A", sponsorship: "free", safePrefix: "unichain", symbol: "ETH" },
+    43114: { name: "Avalanche", icon: "🔺", color: "#E84142", sponsorship: "none", safePrefix: "avax", symbol: "AVAX" }, // View only, send not yet enabled
 };
+
+// Helper to get Safe App URL for a specific chain
+// Uses /transactions/history which works better with ERC-4337 Safes than /home
+function getSafeAppUrl(chainId: number, address: string, page: "home" | "transactions" = "transactions"): string {
+    const chainInfo = CHAIN_INFO[chainId];
+    const prefix = chainInfo?.safePrefix || "base";
+    
+    // Use transactions/history page as it's more compatible with 4337 Safes
+    // The home page sometimes shows "contract not supported" for 4337 module configs
+    if (page === "transactions") {
+        return `https://app.safe.global/transactions/history?safe=${prefix}:${address}`;
+    }
+    return `https://app.safe.global/home?safe=${prefix}:${address}`;
+}
 
 type WalletModalProps = {
     isOpen: boolean;
@@ -49,85 +64,88 @@ function truncateAddress(address: string): string {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-// Chain balance row component
-function ChainBalanceRow({ chainBalance }: { chainBalance: ChainBalance }) {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const { chain, nativeBalance, tokens, totalUsd, error } = chainBalance;
-    
-    const hasTokens = tokens.length > 0;
-
+// Single token row component for the new flat list view
+function TokenBalanceRow({ token, symbol }: { token: TokenBalance; symbol?: string }) {
+    const displaySymbol = symbol || token.symbol;
     return (
-        <div className="border-b border-zinc-800/50 last:border-b-0">
-            <button
-                onClick={() => hasTokens && setIsExpanded(!isExpanded)}
-                className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/30 transition-colors ${
-                    hasTokens ? "cursor-pointer" : "cursor-default"
-                }`}
-            >
-                {/* Chain icon */}
-                <div 
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
-                    style={{ backgroundColor: `${chain.color}20` }}
-                >
-                    {chain.icon}
+        <div className="px-4 py-3 flex items-center gap-3 border-b border-zinc-800/30 last:border-b-0 hover:bg-zinc-800/20 transition-colors">
+            {/* Token logo or fallback */}
+            {token.logoUrl ? (
+                <img src={token.logoUrl} alt={displaySymbol} className="w-10 h-10 rounded-full" />
+            ) : (
+                <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium text-zinc-300">
+                    {displaySymbol.slice(0, 3)}
                 </div>
+            )}
 
-                {/* Chain name and native balance */}
-                <div className="flex-1 text-left min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">{chain.name}</span>
-                        {hasTokens && (
-                            <span className="text-xs text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
-                                +{tokens.length}
-                            </span>
-                        )}
-                    </div>
-                    {error ? (
-                        <span className="text-xs text-red-400">{error}</span>
-                    ) : nativeBalance ? (
-                        <span className="text-sm text-zinc-400">
-                            {formatTokenBalance(nativeBalance.balance, nativeBalance.decimals, nativeBalance.balanceFormatted)} {chain.symbol}
-                        </span>
-                    ) : (
-                        <span className="text-sm text-zinc-500">0 {chain.symbol}</span>
+            {/* Token name and balance */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <span className="font-medium text-white">{displaySymbol}</span>
+                    {token.name && token.name !== displaySymbol && (
+                        <span className="text-xs text-zinc-500">{token.name}</span>
                     )}
                 </div>
+                <span className="text-sm text-zinc-400">
+                    {formatTokenBalance(token.balance, token.decimals, token.balanceFormatted)}
+                </span>
+            </div>
 
-                {/* USD value */}
-                <div className="text-right">
-                    <span className={`font-medium ${totalUsd > 0 ? "text-white" : "text-zinc-500"}`}>
-                        {formatUsd(totalUsd)}
-                    </span>
-                </div>
+            {/* USD value */}
+            <div className="text-right">
+                <span className={`font-medium ${(token.balanceUsd || 0) > 0 ? "text-white" : "text-zinc-500"}`}>
+                    {formatUsd(token.balanceUsd || 0)}
+                </span>
+            </div>
+        </div>
+    );
+}
 
-                {/* Expand indicator */}
-                {hasTokens && (
-                    <svg
-                        className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                )}
-            </button>
-
-            {/* Expanded token list */}
-            <AnimatePresence>
-                {isExpanded && hasTokens && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden bg-zinc-900/50"
-                    >
-                        {tokens.map((token, idx) => (
-                            <TokenRow key={`${token.contractAddress}-${idx}`} token={token} />
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+// Chain selector tabs component
+function ChainSelectorTabs({ 
+    selectedChainId, 
+    onSelectChain,
+    balances 
+}: { 
+    selectedChainId: number; 
+    onSelectChain: (chainId: number) => void;
+    balances: ChainBalance[];
+}) {
+    return (
+        <div className="px-4 py-3 border-b border-zinc-800/50">
+            <div className="flex gap-2 overflow-x-auto pb-1 -mb-1 scrollbar-hide">
+                {SEND_ENABLED_CHAIN_IDS.map((chainId) => {
+                    const info = CHAIN_INFO[chainId];
+                    if (!info) return null;
+                    const chainBalance = balances.find(b => b.chain.id === chainId);
+                    const hasBalance = chainBalance && chainBalance.totalUsd > 0;
+                    const isSelected = selectedChainId === chainId;
+                    
+                    return (
+                        <button
+                            key={chainId}
+                            onClick={() => onSelectChain(chainId)}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
+                                isSelected
+                                    ? "text-white shadow-lg"
+                                    : hasBalance
+                                        ? "bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800"
+                                        : "bg-zinc-800/30 text-zinc-500 hover:bg-zinc-800/50"
+                            }`}
+                            style={isSelected ? { 
+                                backgroundColor: `${info.color}30`,
+                                boxShadow: `0 0 20px ${info.color}20`
+                            } : undefined}
+                        >
+                            <span className="text-base">{info.icon}</span>
+                            <span>{info.name}</span>
+                            {hasBalance && !isSelected && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -271,9 +289,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const [showPasskeyManager, setShowPasskeyManager] = useState(false);
     const [hasAcknowledgedChainWarning, setHasAcknowledgedChainWarning] = useState(false);
     
-    // Selected chain for sending (default to Base)
+    // Selected chain for viewing balances and sending (default to Base)
     const [selectedChainId, setSelectedChainId] = useState<number>(8453);
-    const [showChainSelector, setShowChainSelector] = useState(false);
     const selectedChainInfo = CHAIN_INFO[selectedChainId] || CHAIN_INFO[8453];
 
     // Send form state
@@ -421,16 +438,21 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
         if (hash) {
             // Success - refresh balances after delays to catch blockchain indexing
-            // First refresh after 3 seconds
+            // First refresh after 3 seconds (force fresh data)
             setTimeout(() => {
-                refresh();
+                refresh(true);
                 refreshTx();
             }, 3000);
             // Second refresh after 8 seconds to catch any indexing lag
             setTimeout(() => {
-                refresh();
+                refresh(true);
                 refreshTx();
             }, 8000);
+            // Third refresh after 15 seconds for slow indexing
+            setTimeout(() => {
+                refresh(true);
+                refreshTx();
+            }, 15000);
         }
     }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId]);
 
@@ -475,11 +497,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         return tokens.sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0));
     }, [balances]);
 
-    // Show ALL chains in balances view (not just send-enabled)
-    // This ensures users can see their full portfolio across all supported chains
-    // Send token selector is separately filtered to only send-enabled chains
-    const filteredBalances = balances;
-    
     // Get selected chain balance for display
     const selectedChainBalance = balances.find(b => b.chain.id === selectedChainId);
 
@@ -607,20 +624,27 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             </div>
                         </div>
 
-                        {/* Total Balance */}
+                        {/* Total Balance for Selected Chain */}
                         <div className="px-4 py-4">
                             <div className="text-center">
-                                <p className="text-sm text-zinc-500 mb-1">Spritz Wallet Balance</p>
+                                <p className="text-sm text-zinc-500 mb-1">
+                                    {selectedChainInfo.icon} {selectedChainInfo.name} Balance
+                                </p>
                                 {!isSmartWalletReady ? (
                                     <div className="h-9 w-32 mx-auto bg-zinc-800 rounded-lg animate-pulse" />
                                 ) : isLoading && balances.length === 0 ? (
                                     <div className="h-9 w-32 mx-auto bg-zinc-800 rounded-lg animate-pulse" />
                                 ) : (
-                                    <p className="text-3xl font-bold text-white">{formatUsd(totalUsd)}</p>
+                                    <p className="text-3xl font-bold text-white">
+                                        {formatUsd(selectedChainBalance?.totalUsd || 0)}
+                                    </p>
                                 )}
-                                <p className="text-xs text-zinc-600 mt-1">
-                                    {selectedChainInfo.icon} {selectedChainInfo.name}
-                                </p>
+                                {/* Show total across all chains in smaller text */}
+                                {totalUsd > 0 && totalUsd !== (selectedChainBalance?.totalUsd || 0) && (
+                                    <p className="text-xs text-zinc-500 mt-1">
+                                        Total across all chains: {formatUsd(totalUsd)}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -684,83 +708,50 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         <div className="flex-1 overflow-y-auto border-t border-zinc-800/50">
                             {activeTab === "balances" && (
                                 <>
-                                    {/* Filter and Refresh bar */}
-                                    <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
-                                        {/* Chain selector */}
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => setShowChainSelector(!showChainSelector)}
-                                                className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 hover:bg-zinc-700 transition-colors"
-                                            >
-                                                <span className="text-xs">{selectedChainInfo.icon}</span>
-                                                <span className="text-xs text-zinc-300">{selectedChainInfo.name}</span>
-                                                <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </button>
-                                            
-                                            {/* Chain dropdown */}
-                                            <AnimatePresence>
-                                                {showChainSelector && (
-                                                    <motion.div
-                                                        initial={{ opacity: 0, y: -5 }}
-                                                        animate={{ opacity: 1, y: 0 }}
-                                                        exit={{ opacity: 0, y: -5 }}
-                                                        className="absolute top-full left-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 min-w-[160px]"
-                                                    >
-                                                        {SEND_ENABLED_CHAIN_IDS.map((chainId) => {
-                                                            const info = CHAIN_INFO[chainId];
-                                                            if (!info) return null;
-                                                            return (
-                                                                <button
-                                                                    key={chainId}
-                                                                    onClick={() => {
-                                                                        setSelectedChainId(chainId);
-                                                                        setShowChainSelector(false);
-                                                                    }}
-                                                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-700 transition-colors first:rounded-t-lg last:rounded-b-lg ${
-                                                                        selectedChainId === chainId ? "bg-zinc-700" : ""
-                                                                    }`}
-                                                                >
-                                                                    <span className="text-sm">{info.icon}</span>
-                                                                    <span className="text-sm text-zinc-300 flex-1">{info.name}</span>
-                                                                    {info.sponsorship === "free" ? (
-                                                                        <span className="text-[10px] text-green-400 bg-green-900/30 px-1 rounded">Free</span>
-                                                                    ) : (
-                                                                        <span className="text-[10px] text-yellow-400 bg-yellow-900/30 px-1 rounded">USDC</span>
-                                                                    )}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-                                        </div>
+                                    {/* Chain selector tabs */}
+                                    <ChainSelectorTabs
+                                        selectedChainId={selectedChainId}
+                                        onSelectChain={setSelectedChainId}
+                                        balances={balances}
+                                    />
 
+                                    {/* Refresh bar */}
+                                    <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
                                         <div className="flex items-center gap-2">
-                                        <span className="text-xs text-zinc-500">
-                                            {lastUpdated 
+                                            {selectedChainInfo.sponsorship === "free" ? (
+                                                <span className="text-[10px] text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                    <span>✓</span> Free Gas
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">
+                                                    Gas paid in USDC
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-zinc-500">
+                                                {lastUpdated 
                                                     ? new Date(lastUpdated).toLocaleTimeString()
                                                     : "..."
-                                            }
-                                        </span>
-                                        <button
-                                            onClick={refresh}
-                                            disabled={isLoading}
-                                            className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
-                                        >
-                                            {isLoading ? (
-                                                <div className="w-4 h-4 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
-                                            ) : (
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                            )}
-                                        </button>
+                                                }
+                                            </span>
+                                            <button
+                                                onClick={() => refresh(true)}
+                                                disabled={isLoading}
+                                                className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+                                            >
+                                                {isLoading ? (
+                                                    <div className="w-4 h-4 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
+                                                ) : (
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
 
-                                    {/* Chain balances */}
+                                    {/* Token balances for selected chain */}
                                     <div>
                                         {error ? (
                                             <div className="p-8 text-center">
@@ -769,7 +760,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 </div>
                                                 <p className="text-red-400 mb-2">{error}</p>
                                                 <button
-                                                    onClick={refresh}
+                                                    onClick={() => refresh(true)}
                                                     className="text-sm text-emerald-400 hover:underline"
                                                 >
                                                     Try again
@@ -780,17 +771,59 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 <div className="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
                                                 <p className="text-sm text-zinc-500">Fetching balances...</p>
                                             </div>
-                                        ) : filteredBalances.length === 0 ? (
+                                        ) : !selectedChainBalance ? (
                                             <div className="p-8 text-center">
-                                                <p className="text-zinc-500 text-sm">No balances on this chain</p>
+                                                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800 flex items-center justify-center">
+                                                    <span className="text-2xl">{selectedChainInfo.icon}</span>
+                                                </div>
+                                                <p className="text-zinc-400 text-sm mb-1">No assets on {selectedChainInfo.name}</p>
+                                                <p className="text-zinc-600 text-xs">
+                                                    Deposit {selectedChainInfo.symbol} or tokens to get started
+                                                </p>
                                             </div>
                                         ) : (
-                                            filteredBalances.map((chainBalance) => (
-                                                <ChainBalanceRow
-                                                    key={chainBalance.chain.id}
-                                                    chainBalance={chainBalance}
-                                                />
-                                            ))
+                                            <div>
+                                                {/* Native token (ETH, MATIC, etc.) */}
+                                                {selectedChainBalance.nativeBalance && (
+                                                    <TokenBalanceRow 
+                                                        token={selectedChainBalance.nativeBalance} 
+                                                        symbol={selectedChainInfo.symbol}
+                                                    />
+                                                )}
+                                                
+                                                {/* ERC20 tokens */}
+                                                {selectedChainBalance.tokens.length > 0 ? (
+                                                    selectedChainBalance.tokens.map((token, idx) => (
+                                                        <TokenBalanceRow 
+                                                            key={`${token.contractAddress}-${idx}`} 
+                                                            token={token}
+                                                        />
+                                                    ))
+                                                ) : (
+                                                    !selectedChainBalance.nativeBalance && (
+                                                        <div className="p-6 text-center">
+                                                            <p className="text-zinc-500 text-sm">No tokens on {selectedChainInfo.name}</p>
+                                                        </div>
+                                                    )
+                                                )}
+                                                
+                                                {/* View in Safe App button */}
+                                                {smartWalletAddress && isSafeDeployed && (
+                                                    <div className="p-4 border-t border-zinc-800/50">
+                                                        <button
+                                                            onClick={() => {
+                                                                const safeUrl = getSafeAppUrl(selectedChainId, smartWalletAddress);
+                                                                window.open(safeUrl, "_blank");
+                                                            }}
+                                                            className="w-full py-2.5 rounded-xl text-sm font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2"
+                                                        >
+                                                            <span>🔐</span>
+                                                            <span>View on {selectedChainInfo.name} Safe App</span>
+                                                            <span className="text-zinc-500">↗</span>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </>
@@ -939,8 +972,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </button>
                                         <button
                                             onClick={() => {
-                                                if (isSafeDeployed) {
-                                                    const safeUrl = `https://app.safe.global/home?safe=base:${smartWalletAddress}`;
+                                                if (isSafeDeployed && smartWalletAddress) {
+                                                    const safeUrl = getSafeAppUrl(selectedChainId, smartWalletAddress);
                                                     window.open(safeUrl, "_blank");
                                                 } else {
                                                     alert("Safe App will be available after your first transaction deploys the Safe contract.");
@@ -951,7 +984,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     ? "bg-zinc-700 text-zinc-300 hover:bg-zinc-600" 
                                                     : "bg-zinc-800 text-zinc-500 cursor-help"
                                             }`}
-                                            title={isSafeDeployed ? "View in Safe App" : "Safe not deployed yet - make a transaction first"}
+                                            title={isSafeDeployed ? `View on ${selectedChainInfo.name} Safe App` : "Safe not deployed yet - make a transaction first"}
                                         >
                                             🔐
                                         </button>
@@ -1621,12 +1654,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             isSafeDeployed ? (
                                                 <button
                                                     onClick={() => {
-                                                        const safeUrl = `https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`;
+                                                        if (!smartWallet.smartWalletAddress) return;
+                                                        const safeUrl = getSafeAppUrl(selectedChainId, smartWallet.smartWalletAddress);
                                                         window.open(safeUrl, "_blank");
                                                     }}
                                                     className="w-full py-2.5 rounded-xl font-medium text-sm bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-2"
                                                 >
-                                                    <span>🔐</span> View in Safe App ↗
+                                                    <span>🔐</span> View on {selectedChainInfo.name} Safe ↗
                                                 </button>
                                             ) : (
                                                 <div className="w-full py-2.5 rounded-xl text-sm bg-zinc-800/50 text-zinc-500 text-center">
@@ -1672,7 +1706,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     {smartWallet?.smartWalletAddress && (
                                         isSafeDeployed ? (
                                             <a
-                                                href={`https://app.safe.global/home?safe=base:${smartWallet.smartWalletAddress}`}
+                                                href={getSafeAppUrl(selectedChainId, smartWallet.smartWalletAddress)}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl p-4 transition-colors"
@@ -1680,7 +1714,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-2xl">🔐</span>
                                                     <div className="text-left">
-                                                        <p className="text-sm text-emerald-400 font-medium">Open in Safe App</p>
+                                                        <p className="text-sm text-emerald-400 font-medium">Open in Safe App ({selectedChainInfo.name})</p>
                                                         <p className="text-xs text-zinc-500">Full control via official Safe interface</p>
                                                     </div>
                                                 </div>

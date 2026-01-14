@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useAccount, useSignMessage, useSignTypedData } from "wagmi";
 import { type Address, isAddress } from "viem";
-import { addRecoverySigner } from "@/lib/safeWallet";
+import { addRecoverySigner, addRecoverySignerWithWallet } from "@/lib/safeWallet";
 import type { PasskeyCredential } from "@/lib/safeWallet";
 
 export type RecoveryInfo = {
@@ -24,10 +25,15 @@ type UseRecoverySignerReturn = {
     txHash: string | null;
     status: "idle" | "loading" | "adding" | "success" | "error";
     fetchRecoveryInfo: () => Promise<void>;
-    addRecovery: (recoveryAddress: string, passkeyCredential: PasskeyCredential, chainId?: number) => Promise<string | null>;
+    addRecoveryWithPasskey: (recoveryAddress: string, passkeyCredential: PasskeyCredential, chainId?: number) => Promise<string | null>;
+    addRecoveryWithWallet: (recoveryAddress: string, chainId?: number) => Promise<string | null>;
 };
 
 export function useRecoverySigner(): UseRecoverySignerReturn {
+    const { address: walletAddress } = useAccount();
+    const { signMessageAsync } = useSignMessage();
+    const { signTypedDataAsync } = useSignTypedData();
+    
     const [recoveryInfo, setRecoveryInfo] = useState<RecoveryInfo | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -61,7 +67,8 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
         }
     }, []);
 
-    const addRecovery = useCallback(async (
+    // Add recovery signer using passkey
+    const addRecoveryWithPasskey = useCallback(async (
         recoveryAddress: string,
         passkeyCredential: PasskeyCredential,
         chainId: number = 8453
@@ -81,7 +88,6 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
         setTxHash(null);
 
         try {
-            // Call the safeWallet function to add recovery signer
             const hash = await addRecoverySigner(
                 recoveryInfo.safeAddress,
                 recoveryAddress as Address,
@@ -99,12 +105,74 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
 
             return hash;
         } catch (err) {
-            console.error("[useRecoverySigner] Add error:", err);
+            console.error("[useRecoverySigner] Add error (passkey):", err);
             setError(err instanceof Error ? err.message : "Failed to add recovery signer");
             setStatus("error");
             return null;
         }
     }, [recoveryInfo?.safeAddress, fetchRecoveryInfo]);
+
+    // Add recovery signer using connected wallet
+    const addRecoveryWithWallet = useCallback(async (
+        recoveryAddress: string,
+        chainId: number = 8453
+    ): Promise<string | null> => {
+        if (!recoveryInfo?.safeAddress) {
+            setError("No Safe address found");
+            return null;
+        }
+
+        if (!walletAddress) {
+            setError("No wallet connected");
+            return null;
+        }
+
+        if (!isAddress(recoveryAddress)) {
+            setError("Invalid recovery address format");
+            return null;
+        }
+
+        setStatus("adding");
+        setError(null);
+        setTxHash(null);
+
+        try {
+            const hash = await addRecoverySignerWithWallet(
+                recoveryInfo.safeAddress,
+                recoveryAddress as Address,
+                walletAddress,
+                async (message: string) => {
+                    return signMessageAsync({ message }) as Promise<`0x${string}`>;
+                },
+                async (typedData: unknown) => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const data = typedData as any;
+                    return signTypedDataAsync({
+                        domain: data.domain,
+                        types: data.types,
+                        primaryType: data.primaryType,
+                        message: data.message,
+                    }) as Promise<`0x${string}`>;
+                },
+                chainId
+            );
+
+            setTxHash(hash);
+            setStatus("success");
+
+            // Refresh recovery info after successful addition
+            setTimeout(() => {
+                fetchRecoveryInfo();
+            }, 5000);
+
+            return hash;
+        } catch (err) {
+            console.error("[useRecoverySigner] Add error (wallet):", err);
+            setError(err instanceof Error ? err.message : "Failed to add recovery signer");
+            setStatus("error");
+            return null;
+        }
+    }, [recoveryInfo?.safeAddress, walletAddress, signMessageAsync, signTypedDataAsync, fetchRecoveryInfo]);
 
     return {
         recoveryInfo,
@@ -113,6 +181,7 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
         txHash,
         status,
         fetchRecoveryInfo,
-        addRecovery,
+        addRecoveryWithPasskey,
+        addRecoveryWithWallet,
     };
 }
