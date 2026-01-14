@@ -16,6 +16,7 @@ import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import { useOnramp } from "@/hooks/useOnramp";
 import { PasskeyManager } from "./PasskeyManager";
 import { RecoverySignerManager } from "./RecoverySignerManager";
+import { MultiChainSecurity } from "./MultiChainSecurity";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
@@ -772,6 +773,51 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     </p>
                                 )}
                             </div>
+                            
+                            {/* Quick Actions - Buy button */}
+                            {smartWalletAddress && (
+                                <div className="flex justify-center mt-3">
+                                    <button
+                                        onClick={async () => {
+                                            // Initialize and open in one go
+                                            const url = await initializeOnramp(smartWalletAddress, {
+                                                presetFiatAmount: 50,
+                                                defaultNetwork: "base",
+                                                defaultAsset: "ETH",
+                                            });
+                                            if (url) {
+                                                // Open directly with the URL
+                                                const width = 450;
+                                                const height = 700;
+                                                const left = Math.max(0, (window.innerWidth - width) / 2 + window.screenX);
+                                                const top = Math.max(0, (window.innerHeight - height) / 2 + window.screenY);
+                                                const popup = window.open(
+                                                    url,
+                                                    "coinbase-onramp",
+                                                    `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+                                                );
+                                                if (!popup || popup.closed) {
+                                                    window.location.href = url;
+                                                }
+                                            }
+                                        }}
+                                        disabled={onrampStatus === "loading"}
+                                        className="px-4 py-2 rounded-xl text-sm font-medium transition-all bg-[#0052FF] text-white hover:bg-[#0052FF]/90 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {onrampStatus === "loading" ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                Loading...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>💳</span>
+                                                Buy Crypto
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Tab Navigation */}
@@ -1133,43 +1179,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </button>
                                     </div>
 
-                                    {/* Buy Crypto with Coinbase */}
-                                    <button
-                                        onClick={async () => {
-                                            if (onrampStatus === "ready") {
-                                                openOnramp();
-                                            } else if (smartWalletAddress) {
-                                                const url = await initializeOnramp(smartWalletAddress, {
-                                                    presetFiatAmount: 50,
-                                                    defaultNetwork: "base",
-                                                    defaultAsset: "USDC",
-                                                });
-                                                if (url) {
-                                                    openOnramp();
-                                                }
-                                            }
-                                        }}
-                                        disabled={onrampStatus === "loading" || !smartWalletAddress}
-                                        className="w-full py-3 rounded-xl font-medium transition-all mb-4 bg-[#0052FF]/20 text-[#0052FF] hover:bg-[#0052FF]/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        {onrampStatus === "loading" ? (
-                                            <>
-                                                <div className="w-4 h-4 border-2 border-[#0052FF]/30 border-t-[#0052FF] rounded-full animate-spin" />
-                                                Initializing...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-5 h-5" viewBox="0 0 32 32" fill="none">
-                                                    <rect width="32" height="32" rx="16" fill="currentColor" fillOpacity="0.15"/>
-                                                    <path d="M16 8C11.582 8 8 11.582 8 16s3.582 8 8 8 8-3.582 8-8-3.582-8-8-8zm0 12.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9z" fill="currentColor"/>
-                                                </svg>
-                                                Buy with Coinbase
-                                            </>
-                                        )}
-                                    </button>
-                                    {onrampError && (
-                                        <p className="text-xs text-red-400 text-center mb-4">{onrampError}</p>
-                                    )}
                                         </>
                                     )}
 
@@ -1781,16 +1790,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "security" && (
-                                <div className="p-4 space-y-4">
-                                    {/* Header */}
-                                    <div className="text-center mb-2">
-                                        <h3 className="text-lg font-semibold text-white">Wallet Security</h3>
-                                        <p className="text-sm text-zinc-500">Manage access and recovery options</p>
-                                    </div>
-
-                                    {/* Recovery Signer Manager - for passkey wallets */}
+                                <div className="p-4 space-y-4 overflow-y-auto">
+                                    {/* Multi-Chain Security - shows Safe status across all chains */}
                                     {smartWallet?.smartWalletAddress && (
-                                        <RecoverySignerManager />
+                                        <MultiChainSecurity
+                                            safeAddress={smartWallet.smartWalletAddress}
+                                            primarySigner={smartWallet.spritzId}
+                                            balances={balances}
+                                        />
                                     )}
 
                                     {/* Passkey Manager Access */}
@@ -1809,44 +1816,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                         </svg>
                                     </button>
-
-                                    {/* View in Safe App */}
-                                    {smartWallet?.smartWalletAddress && (
-                                        isSafeDeployed ? (
-                                            <a
-                                                href={getSafeAppUrl(selectedChainId, smartWallet.smartWalletAddress)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="w-full flex items-center justify-between bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl p-4 transition-colors"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-2xl">🔐</span>
-                                                    <div className="text-left">
-                                                        <p className="text-sm text-emerald-400 font-medium">Open in Safe App ({selectedChainInfo.name})</p>
-                                                        <p className="text-xs text-zinc-500">Full control via official Safe interface</p>
-                                                    </div>
-                                                </div>
-                                                <span className="text-emerald-400">↗</span>
-                                            </a>
-                                        ) : (
-                                            <div className="w-full flex items-center gap-3 bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-4">
-                                                <span className="text-2xl opacity-50">🔐</span>
-                                                <div className="text-left">
-                                                    <p className="text-sm text-zinc-500 font-medium">Safe App</p>
-                                                    <p className="text-xs text-zinc-600">Available after your first transaction deploys the Safe</p>
-                                                </div>
-                                            </div>
-                                        )
-                                    )}
-
-                                    {/* Info Card */}
-                                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-                                        <p className="text-xs text-blue-400 font-medium mb-2">💡 About Your Wallet</p>
-                                        <p className="text-xs text-zinc-400">
-                                            Your Spritz Wallet is a Safe smart account. It&apos;s controlled by your passkey. 
-                                            Add a recovery signer to ensure you can always access your funds, even if you lose your passkey.
-                                        </p>
-                                    </div>
                                 </div>
                             )}
 
