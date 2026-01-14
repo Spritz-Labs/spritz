@@ -207,8 +207,9 @@ export function SettingsModal({
     };
     
     const copySchedulingLink = () => {
-        const link = schedulingSlug 
-            ? `${window.location.origin}/schedule/${schedulingSlug}`
+        // Custom slugs use /book/, usernames/addresses use /schedule/
+        const link = schedulingSlug
+            ? `${window.location.origin}/book/${schedulingSlug}`
             : `${window.location.origin}/schedule/${userAddress}`;
         navigator.clipboard.writeText(link);
         setLinkCopied(true);
@@ -903,7 +904,7 @@ export function SettingsModal({
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-xs text-zinc-500 mb-1">Your booking link</p>
                                                         <p className="text-sm text-orange-400 font-mono truncate">
-                                                            spritz.chat/schedule/{schedulingSlug || (userAddress ? `${userAddress.slice(0, 6)}...` : "you")}
+                                                            spritz.chat/{schedulingSlug ? `book/${schedulingSlug}` : `schedule/${userAddress ? `${userAddress.slice(0, 6)}...` : "you"}`}
                                                         </p>
                                                     </div>
                                                     <button

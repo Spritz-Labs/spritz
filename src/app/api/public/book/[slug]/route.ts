@@ -1,72 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createPublicClient, http, normalize } from "viem";
-import { mainnet } from "viem/chains";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Viem client for ENS resolution
-const viemClient = createPublicClient({
-    chain: mainnet,
-    transport: http(`https://eth-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`),
-});
-
-/**
- * Resolve a slug to a wallet address
- * Supports: wallet addresses, ENS names, Spritz usernames
- * 
- * NOTE: Custom booking slugs are handled by /api/public/book/[slug] instead
- * to avoid collisions with usernames
- */
-async function resolveSlugToWalletAddress(slug: string): Promise<string | null> {
-    const normalizedSlug = slug.toLowerCase();
-    
-    // 1. Direct wallet address
-    if (normalizedSlug.startsWith("0x") && normalizedSlug.length === 42) {
-        console.log(`[Schedule] Slug is a wallet address: ${normalizedSlug}`);
-        return normalizedSlug;
-    }
-    
-    // 2. ENS name (ends with .eth)
-    if (normalizedSlug.endsWith(".eth")) {
-        try {
-            console.log(`[Schedule] Resolving ENS name: ${slug}`);
-            const address = await viemClient.getEnsAddress({
-                name: normalize(slug),
-            });
-            if (address) {
-                console.log(`[Schedule] ENS resolved to: ${address}`);
-                return address.toLowerCase();
-            }
-        } catch (err) {
-            console.log(`[Schedule] ENS resolution failed for ${slug}:`, err);
-        }
-        // ENS name didn't resolve, don't fall through - return null
-        return null;
-    }
-    
-    // 3. Spritz username (lookup in shout_usernames)
-    const { data: usernameRecord } = await supabase
-        .from("shout_usernames")
-        .select("wallet_address")
-        .eq("username", normalizedSlug)
-        .maybeSingle();
-    
-    if (usernameRecord?.wallet_address) {
-        console.log(`[Schedule] Username "${slug}" resolved to: ${usernameRecord.wallet_address}`);
-        return usernameRecord.wallet_address.toLowerCase();
-    }
-    
-    // Custom scheduling slugs are NOT supported here
-    // Use /book/[slug] for custom booking URLs to avoid username collisions
-    console.log(`[Schedule] Could not resolve slug: ${slug}`);
-    return null;
-}
-
-// GET /api/public/schedule/[slug] - Get public scheduling profile
+// GET /api/public/book/[slug] - Get scheduling profile by custom booking slug only
+// This is separate from /schedule/[slug] to avoid collisions with usernames/ENS
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ slug: string }> }
@@ -81,17 +22,7 @@ export async function GET(
             );
         }
 
-        // Resolve slug to wallet address (supports addresses, ENS, usernames, custom slugs)
-        const walletAddress = await resolveSlugToWalletAddress(slug);
-        
-        if (!walletAddress) {
-            return NextResponse.json(
-                { error: "User not found" },
-                { status: 404 }
-            );
-        }
-
-        // Fetch settings by resolved wallet address
+        // Only look up by custom scheduling_slug (not usernames, ENS, or addresses)
         const { data: settings, error } = await supabase
             .from("shout_user_settings")
             .select(`
@@ -110,12 +41,12 @@ export async function GET(
                 scheduling_buffer_minutes,
                 scheduling_advance_notice_hours
             `)
-            .eq("wallet_address", walletAddress)
+            .eq("scheduling_slug", slug.toLowerCase())
             .single();
 
         if (error || !settings) {
             return NextResponse.json(
-                { error: "User not found" },
+                { error: "Booking link not found" },
                 { status: 404 }
             );
         }
@@ -188,11 +119,10 @@ export async function GET(
             },
         });
     } catch (error) {
-        console.error("[Schedule] Profile error:", error);
+        console.error("[Book] Profile error:", error);
         return NextResponse.json(
-            { error: "Failed to fetch scheduling profile" },
+            { error: "Failed to fetch booking profile" },
             { status: 500 }
         );
     }
 }
-
