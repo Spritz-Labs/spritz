@@ -325,50 +325,81 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                             key={credential.id}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
-                            className="bg-zinc-800/50 rounded-xl p-4 flex items-center justify-between"
+                            className="bg-zinc-800/50 rounded-xl p-4"
                         >
-                            <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                    credential.backedUp 
-                                        ? "bg-blue-500/20 text-blue-400" 
-                                        : "bg-zinc-700 text-zinc-400"
-                                }`}>
-                                    {credential.backedUp ? (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-                                        </svg>
-                                    ) : (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                        </svg>
-                                    )}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                        credential.isWalletKey
+                                            ? "bg-amber-500/20 text-amber-400"
+                                            : credential.backedUp 
+                                                ? "bg-blue-500/20 text-blue-400" 
+                                                : "bg-zinc-700 text-zinc-400"
+                                    }`}>
+                                        {credential.isWalletKey ? (
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            </svg>
+                                        ) : credential.backedUp ? (
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="text-white text-sm font-medium flex items-center gap-1.5">
+                                            {credential.isWalletKey ? (
+                                                <>
+                                                    <span>Wallet Key</span>
+                                                    <span className="text-amber-400 text-xs">🔐</span>
+                                                </>
+                                            ) : credential.backedUp ? (
+                                                "Synced Passkey"
+                                            ) : (
+                                                "Device Passkey"
+                                            )}
+                                        </p>
+                                        <p className="text-zinc-500 text-xs">
+                                            Added {formatDate(credential.createdAt)}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-white text-sm font-medium">
-                                        {credential.backedUp ? "Synced Passkey" : "Device Passkey"}
-                                    </p>
-                                    <p className="text-zinc-500 text-xs">
-                                        Added {formatDate(credential.createdAt)}
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => handleDeleteClick(credential.id)}
-                                disabled={deletingId === credential.id}
-                                className="text-red-400 hover:text-red-300 transition-colors p-2 hover:bg-red-500/10 rounded-lg disabled:opacity-50"
-                                title="Remove passkey"
-                            >
-                                {deletingId === credential.id ? (
-                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                ) : (
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
+                                
+                                {/* Only show delete button for non-wallet passkeys */}
+                                {!credential.isWalletKey && (
+                                    <button
+                                        onClick={() => handleDeleteClick(credential.id)}
+                                        disabled={deletingId === credential.id}
+                                        className="text-red-400 hover:text-red-300 transition-colors p-2 hover:bg-red-500/10 rounded-lg disabled:opacity-50"
+                                        title="Remove passkey"
+                                    >
+                                        {deletingId === credential.id ? (
+                                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        )}
+                                    </button>
                                 )}
-                            </button>
+                            </div>
+                            
+                            {/* Explanation for wallet-controlling passkeys */}
+                            {credential.isWalletKey && (
+                                <div className="mt-2 bg-amber-500/10 rounded-lg px-3 py-2">
+                                    <p className="text-xs text-amber-300/90">
+                                        🔒 This passkey controls your Spritz Wallet and cannot be deleted. 
+                                        Deleting it would permanently lock you out of your funds.
+                                    </p>
+                                </div>
+                            )}
                         </motion.div>
                     ))
                 )}

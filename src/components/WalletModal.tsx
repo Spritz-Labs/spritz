@@ -15,6 +15,7 @@ import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import { useOnramp } from "@/hooks/useOnramp";
 import { PasskeyManager } from "./PasskeyManager";
+import { LegacySafeRecovery } from "./LegacySafeRecovery";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
 import { SEND_ENABLED_CHAIN_IDS, SUPPORTED_CHAINS, getChainById } from "@/config/chains";
 
@@ -292,6 +293,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     } = useEnsResolver();
     const [showTokenSelector, setShowTokenSelector] = useState(false);
     const [showSendConfirm, setShowSendConfirm] = useState(false);
+    const [showLegacyRecovery, setShowLegacyRecovery] = useState(false);
 
     // Send transaction hook
     const {
@@ -1432,6 +1434,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
+                                        {/* Legacy Safe Recovery Link - for Mainnet */}
+                                        {selectedChainId === 1 && !canUsePasskeySigning && (
+                                            <button
+                                                onClick={() => setShowLegacyRecovery(true)}
+                                                className="w-full text-xs text-zinc-500 hover:text-amber-400 transition-colors py-2"
+                                            >
+                                                🔧 Recover funds from old Safe address?
+                                            </button>
+                                        )}
+
                                         {/* Error Message */}
                                         {effectiveError && (
                                             <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
@@ -1696,6 +1708,28 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                     passkeyIsWalletKey={needsPasskeyForSend}
                     smartWalletAddress={smartWalletAddress}
                 />
+            )}
+
+            {/* Legacy Safe Recovery Modal */}
+            {showLegacyRecovery && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                    onClick={() => setShowLegacyRecovery(false)}
+                >
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                    <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.95, opacity: 0 }}
+                        className="relative z-10 w-full max-w-md"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <LegacySafeRecovery onClose={() => setShowLegacyRecovery(false)} />
+                    </motion.div>
+                </motion.div>
             )}
         </AnimatePresence>
     );

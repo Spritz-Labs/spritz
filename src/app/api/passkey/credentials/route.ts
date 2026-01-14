@@ -19,9 +19,10 @@ export async function GET(request: NextRequest) {
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+        // Include public_key_x to determine if this passkey controls a wallet
         const { data: credentials, error } = await supabase
             .from("passkey_credentials")
-            .select("id, credential_id, display_name, created_at, last_used_at, backed_up, device_info")
+            .select("id, credential_id, display_name, created_at, last_used_at, backed_up, device_info, public_key_x, safe_signer_address")
             .eq("user_address", session.userAddress.toLowerCase())
             .order("created_at", { ascending: false });
 
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
                 createdAt: c.created_at,
                 lastUsedAt: c.last_used_at,
                 backedUp: c.backed_up,
+                // A passkey controls a wallet if it has public key coordinates and a safe signer address
+                isWalletKey: !!(c.public_key_x && c.safe_signer_address),
             })) || [],
         });
     } catch (error) {
@@ -76,7 +79,32 @@ export async function DELETE(request: NextRequest) {
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-        // Delete the credential - but only if it belongs to the authenticated user
+        // First, check if this passkey controls a wallet
+        const { data: credential } = await supabase
+            .from("passkey_credentials")
+            .select("id, public_key_x, safe_signer_address")
+            .eq("id", credentialId)
+            .eq("user_address", session.userAddress.toLowerCase())
+            .single();
+
+        if (!credential) {
+            return NextResponse.json(
+                { error: "Passkey not found or not authorized" },
+                { status: 404 }
+            );
+        }
+
+        // Block deletion of passkeys that control a wallet
+        const isWalletKey = !!(credential.public_key_x && credential.safe_signer_address);
+        if (isWalletKey) {
+            console.log("[Passkey] Blocked deletion of wallet-controlling passkey:", credentialId);
+            return NextResponse.json(
+                { error: "Cannot delete passkey that controls your Spritz Wallet. This passkey is required to access your funds." },
+                { status: 403 }
+            );
+        }
+
+        // Delete the credential
         const { error, count } = await supabase
             .from("passkey_credentials")
             .delete({ count: "exact" })
