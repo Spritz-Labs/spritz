@@ -409,7 +409,7 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                             {credential.isWalletKey && (
                                 <div className="mt-2 bg-amber-500/10 rounded-lg px-3 py-2">
                                     <p className="text-xs text-amber-300/90">
-                                        🔒 This passkey controls your Spritz Wallet and cannot be deleted. 
+                                        🔒 This passkey controls your Spritz Smart Account and cannot be deleted. 
                                         Deleting it would permanently lock you out of your funds.
                                     </p>
                                 </div>

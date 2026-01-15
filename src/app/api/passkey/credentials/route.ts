@@ -181,7 +181,7 @@ export async function DELETE(request: NextRequest) {
                     if (isActualOwner) {
                         console.log("[Passkey] Blocked deletion of Safe owner passkey:", credentialId);
                         return NextResponse.json(
-                            { error: "Cannot delete this passkey - it controls your Spritz Wallet. Deleting it would lock you out of your funds." },
+                            { error: "Cannot delete this passkey - it controls your Spritz Smart Account. Deleting it would lock you out of your funds." },
                             { status: 403 }
                         );
                     }
