@@ -683,8 +683,77 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     // Determine effective state based on auth method
     // canUsePasskeySigning includes passkey, email, alien_id, world_id users
     const effectiveTxHash = canUsePasskeySigning ? passkeyTxHash : (useSafeForSend ? safeTxHash : txHash);
-    const effectiveError = canUsePasskeySigning ? passkeyError : (useSafeForSend ? safeError : sendError);
+    const rawError = canUsePasskeySigning ? passkeyError : (useSafeForSend ? safeError : sendError);
     const effectiveIsSending = canUsePasskeySigning ? isPasskeySending : (useSafeForSend ? isSafeSending : isSending);
+
+    // State for dismissable error display
+    const [displayError, setDisplayError] = useState<string | null>(null);
+
+    // Convert technical errors to user-friendly messages
+    const formatUserFriendlyError = useCallback((error: string | null): string | null => {
+        if (!error) return null;
+        
+        const lowerError = error.toLowerCase();
+        
+        // User rejected/cancelled
+        if (lowerError.includes("user rejected") || lowerError.includes("user denied") || lowerError.includes("cancelled") || lowerError.includes("canceled")) {
+            return "Transaction was cancelled";
+        }
+        
+        // Insufficient funds
+        if (lowerError.includes("insufficient funds") || lowerError.includes("insufficient balance")) {
+            return "Insufficient funds for this transaction";
+        }
+        
+        // Gas estimation failed
+        if (lowerError.includes("gas") && (lowerError.includes("estimate") || lowerError.includes("limit"))) {
+            return "Unable to estimate gas. The transaction may fail.";
+        }
+        
+        // Network/RPC errors
+        if (lowerError.includes("network") || lowerError.includes("rpc") || lowerError.includes("timeout") || lowerError.includes("connection")) {
+            return "Network error. Please try again.";
+        }
+        
+        // Passkey errors
+        if (lowerError.includes("passkey") || lowerError.includes("credential") || lowerError.includes("webauthn")) {
+            return "Passkey verification failed. Please try again.";
+        }
+        
+        // Safe/bundler errors
+        if (lowerError.includes("bundler") || lowerError.includes("useroperation")) {
+            return "Transaction failed. Please try again or use a different network.";
+        }
+        
+        // Nonce errors
+        if (lowerError.includes("nonce")) {
+            return "Transaction conflict. Please wait and try again.";
+        }
+        
+        // If error is already short (less than 80 chars), show as-is
+        if (error.length < 80) {
+            return error;
+        }
+        
+        // For long unknown errors, truncate and add generic message
+        return "Transaction failed. Please try again.";
+    }, []);
+
+    // Format the error for display
+    const effectiveError = formatUserFriendlyError(rawError);
+
+    // Auto-dismiss error after 8 seconds
+    useEffect(() => {
+        if (effectiveError) {
+            setDisplayError(effectiveError);
+            const timer = setTimeout(() => {
+                setDisplayError(null);
+            }, 8000);
+            return () => clearTimeout(timer);
+        } else {
+            setDisplayError(null);
+        }
+    }, [effectiveError]);
 
     // Estimate gas when recipient and amount are valid
     const handleEstimateGas = useCallback(async () => {
@@ -1802,10 +1871,18 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Error Message */}
-                                        {effectiveError && (
-                                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
-                                                <p className="text-xs text-red-400">{effectiveError}</p>
+                                        {/* Error Message - auto-dismisses after 8 seconds */}
+                                        {displayError && (
+                                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-start justify-between gap-2">
+                                                <p className="text-xs text-red-400 flex-1">{displayError}</p>
+                                                <button 
+                                                    onClick={() => setDisplayError(null)}
+                                                    className="text-red-400/60 hover:text-red-400 transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
                                             </div>
                                         )}
 
