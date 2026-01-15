@@ -40,14 +40,20 @@ function isEd25519Key(key: string): boolean {
 /**
  * Generate a JWT for CDP API authentication
  * Supports both Ed25519 (new default) and ECDSA (legacy) keys
+ * 
+ * The JWT must include a 'uri' claim with the format: "METHOD HOST PATH"
+ * e.g., "POST api.developer.coinbase.com /onramp/v1/token"
  */
-async function generateCdpJwt(): Promise<string> {
+async function generateCdpJwt(method: string, host: string, path: string): Promise<string> {
     if (!CDP_API_KEY_NAME || !CDP_API_KEY_PRIVATE_KEY) {
         throw new Error("CDP API keys not configured");
     }
 
     const now = Math.floor(Date.now() / 1000);
     const nonce = crypto.randomUUID();
+    
+    // Construct the URI claim required by CDP
+    const uri = `${method} ${host}${path}`;
     
     // Determine key type and import accordingly
     const isEd25519 = isEd25519Key(CDP_API_KEY_PRIVATE_KEY);
@@ -96,10 +102,12 @@ async function generateCdpJwt(): Promise<string> {
 
     // Create JWT with CDP-required claims
     // See: https://docs.cdp.coinbase.com/get-started/authentication/jwt-authentication
+    // The 'uri' claim is required for REST API authentication
     const jwt = await new SignJWT({
         sub: CDP_API_KEY_NAME,
         iss: "cdp",
         aud: ["cdp_service"],
+        uri: uri,
         nonce: nonce,
     })
         .setProtectedHeader({ 
@@ -113,6 +121,7 @@ async function generateCdpJwt(): Promise<string> {
         .setNotBefore(now)
         .sign(privateKey);
 
+    console.log("[Onramp] Generated JWT for URI:", uri);
     return jwt;
 }
 
@@ -164,21 +173,28 @@ export async function POST(request: NextRequest) {
 
         // Check if CDP keys are configured
         if (!CDP_API_KEY_NAME || !CDP_API_KEY_PRIVATE_KEY) {
-            console.error("[Onramp] CDP API keys not configured");
+            console.error("[Onramp] CDP API keys not configured - CDP_API_KEY_NAME:", !!CDP_API_KEY_NAME, "CDP_API_KEY_PRIVATE_KEY:", !!CDP_API_KEY_PRIVATE_KEY);
             return NextResponse.json(
                 { error: "Onramp not configured" },
                 { status: 503 }
             );
         }
+        
+        console.log("[Onramp] CDP API Key configured:", CDP_API_KEY_NAME?.slice(0, 8) + "...", "Key type:", isEd25519Key(CDP_API_KEY_PRIVATE_KEY) ? "Ed25519" : "ECDSA");
+
+        // API endpoint details for JWT
+        const apiHost = "api.developer.coinbase.com";
+        const apiPath = "/onramp/v1/token";
+        const apiMethod = "POST";
 
         // Generate CDP JWT for API authentication
-        const cdpJwt = await generateCdpJwt();
+        const cdpJwt = await generateCdpJwt(apiMethod, apiHost, apiPath);
 
         // Get client IP for security validation
         const clientIp = getClientIp(request);
 
         // Request session token from Coinbase
-        const tokenResponse = await fetch("https://api.developer.coinbase.com/onramp/v1/token", {
+        const tokenResponse = await fetch(`https://${apiHost}${apiPath}`, {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${cdpJwt}`,
