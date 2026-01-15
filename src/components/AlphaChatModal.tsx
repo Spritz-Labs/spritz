@@ -880,20 +880,7 @@ export function AlphaChatModal({
                                                                             )
                                                                         )}
                                                                         
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                navigator.clipboard.writeText(msg.sender_address);
-                                                                                setSelectedUser(null);
-                                                                            }}
-                                                                            className="w-full flex items-center gap-2 px-3 py-2 mt-2 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
-                                                                        >
-                                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                                            </svg>
-                                                                            Copy Address
-                                                                        </button>
-                                                                        
-                                                                        {/* Mute Button - Moderators only */}
+                                                                        {/* Mute Button - Moderators only - placed higher to avoid accidental clicks */}
                                                                         {moderation.permissions.canMute && (
                                                                             moderation.isUserMuted(msg.sender_address) ? (
                                                                                 <button
@@ -901,7 +888,7 @@ export function AlphaChatModal({
                                                                                         await moderation.unmuteUser(msg.sender_address);
                                                                                         setSelectedUser(null);
                                                                                     }}
-                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm transition-colors"
+                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm transition-colors"
                                                                                 >
                                                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -917,7 +904,7 @@ export function AlphaChatModal({
                                                                                         });
                                                                                         setSelectedUser(null);
                                                                                     }}
-                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
+                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
                                                                                 >
                                                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -927,6 +914,20 @@ export function AlphaChatModal({
                                                                                 </button>
                                                                             )
                                                                         )}
+
+                                                                        {/* Copy Address - at bottom, safe for accidental clicks */}
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                navigator.clipboard.writeText(msg.sender_address);
+                                                                                setSelectedUser(null);
+                                                                            }}
+                                                                            className="w-full flex items-center gap-2 px-3 py-2 mt-1 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                            </svg>
+                                                                            Copy Address
+                                                                        </button>
                                                                     </div>
                                                                 )}
                                                             </div>

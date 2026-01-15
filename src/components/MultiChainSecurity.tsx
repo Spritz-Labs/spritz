@@ -302,13 +302,14 @@ export function MultiChainSecurity({ safeAddress, primarySigner, balances }: Mul
     };
 
     const handleSubmitRecovery = async () => {
-        if (!resolvedRecoveryAddress || !selectedChainForRecovery) return;
+        if (!resolvedRecoveryAddress || !selectedChainForRecovery || !safeAddress) return;
 
         // Determine signing method based on whether passkey exists
+        // Pass safeAddress explicitly since we're in a multi-chain context
         if (passkeyCredential) {
-            await addRecoveryWithPasskey(resolvedRecoveryAddress, passkeyCredential, selectedChainForRecovery);
+            await addRecoveryWithPasskey(resolvedRecoveryAddress, passkeyCredential, selectedChainForRecovery, safeAddress);
         } else if (isConnected) {
-            await addRecoveryWithWallet(resolvedRecoveryAddress, selectedChainForRecovery);
+            await addRecoveryWithWallet(resolvedRecoveryAddress, selectedChainForRecovery, safeAddress);
         }
 
         // Refresh status after adding

@@ -25,8 +25,8 @@ type UseRecoverySignerReturn = {
     txHash: string | null;
     status: "idle" | "loading" | "adding" | "success" | "error";
     fetchRecoveryInfo: () => Promise<void>;
-    addRecoveryWithPasskey: (recoveryAddress: string, passkeyCredential: PasskeyCredential, chainId?: number) => Promise<string | null>;
-    addRecoveryWithWallet: (recoveryAddress: string, chainId?: number) => Promise<string | null>;
+    addRecoveryWithPasskey: (recoveryAddress: string, passkeyCredential: PasskeyCredential, chainId?: number, safeAddressOverride?: string) => Promise<string | null>;
+    addRecoveryWithWallet: (recoveryAddress: string, chainId?: number, safeAddressOverride?: string) => Promise<string | null>;
 };
 
 export function useRecoverySigner(): UseRecoverySignerReturn {
@@ -68,12 +68,15 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
     }, []);
 
     // Add recovery signer using passkey
+    // safeAddressOverride allows passing Safe address directly (for multi-chain use)
     const addRecoveryWithPasskey = useCallback(async (
         recoveryAddress: string,
         passkeyCredential: PasskeyCredential,
-        chainId: number = 8453
+        chainId: number = 8453,
+        safeAddressOverride?: string
     ): Promise<string | null> => {
-        if (!recoveryInfo?.safeAddress) {
+        const safeAddr = safeAddressOverride || recoveryInfo?.safeAddress;
+        if (!safeAddr) {
             setError("No Safe address found");
             return null;
         }
@@ -89,7 +92,7 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
 
         try {
             const hash = await addRecoverySigner(
-                recoveryInfo.safeAddress,
+                safeAddr as Address,
                 recoveryAddress as Address,
                 passkeyCredential,
                 chainId
@@ -113,11 +116,14 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
     }, [recoveryInfo?.safeAddress, fetchRecoveryInfo]);
 
     // Add recovery signer using connected wallet
+    // safeAddressOverride allows passing Safe address directly (for multi-chain use)
     const addRecoveryWithWallet = useCallback(async (
         recoveryAddress: string,
-        chainId: number = 8453
+        chainId: number = 8453,
+        safeAddressOverride?: string
     ): Promise<string | null> => {
-        if (!recoveryInfo?.safeAddress) {
+        const safeAddr = safeAddressOverride || recoveryInfo?.safeAddress;
+        if (!safeAddr) {
             setError("No Safe address found");
             return null;
         }
@@ -138,7 +144,7 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
 
         try {
             const hash = await addRecoverySignerWithWallet(
-                recoveryInfo.safeAddress,
+                safeAddr as Address,
                 recoveryAddress as Address,
                 walletAddress,
                 async (message: string) => {
