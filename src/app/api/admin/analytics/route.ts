@@ -254,6 +254,48 @@ export async function GET(request: NextRequest) {
         const totalSchedulesCreated = allUsers?.reduce((sum, u) => sum + (u.schedules_created || 0), 0) || 0;
         const totalSchedulesJoined = allUsers?.reduce((sum, u) => sum + (u.schedules_joined || 0), 0) || 0;
 
+        // Wallet stats
+        const usersWithSmartWallet = allUsers?.filter(u => u.smart_wallet_address).length || 0;
+        const walletTypeBreakdown = {
+            wallet: allUsers?.filter(u => u.wallet_type === "wallet" || !u.wallet_type).length || 0,
+            passkey: allUsers?.filter(u => u.wallet_type === "passkey").length || 0,
+            email: allUsers?.filter(u => u.wallet_type === "email").length || 0,
+            worldId: allUsers?.filter(u => u.wallet_type?.includes("world") || u.wallet_type?.includes("alien")).length || 0,
+            solana: allUsers?.filter(u => u.wallet_type === "solana").length || 0,
+        };
+
+        // Fetch passkey credentials stats
+        const { data: allPasskeys } = await supabase
+            .from("passkey_credentials")
+            .select("id, user_address, created_at, safe_signer_address");
+
+        const totalPasskeys = allPasskeys?.length || 0;
+        const passkeysWithSafeSigners = allPasskeys?.filter(p => p.safe_signer_address).length || 0;
+        const passkeysInPeriod = allPasskeys?.filter(p => 
+            new Date(p.created_at) >= startDate
+        ).length || 0;
+
+        // Fetch shout_wallets table for embedded wallet stats
+        const { data: allWallets } = await supabase
+            .from("shout_wallets")
+            .select("id, wallet_type, is_smart_wallet, smart_wallet_deployed, created_at");
+
+        const embeddedWallets = allWallets?.filter(w => w.wallet_type === "embedded").length || 0;
+        const deployedSmartWallets = allWallets?.filter(w => w.smart_wallet_deployed).length || 0;
+        const walletsCreatedInPeriod = allWallets?.filter(w => 
+            new Date(w.created_at) >= startDate
+        ).length || 0;
+
+        // Beta access stats for wallet
+        const { data: betaApplicants } = await supabase
+            .from("shout_users")
+            .select("beta_access_applied, has_beta_access")
+            .not("beta_access_applied", "is", null);
+
+        const betaApplicantsCount = betaApplicants?.length || 0;
+        const betaApprovedCount = betaApplicants?.filter(u => u.has_beta_access).length || 0;
+        const betaPendingCount = betaApplicantsCount - betaApprovedCount;
+
         // Generate time series data
         const timeSeriesData = generateTimeSeries(
             startDate,
@@ -316,6 +358,20 @@ export async function GET(request: NextRequest) {
                 value: a.message_count || 0,
             }));
 
+        // Recent smart wallet users
+        const recentSmartWalletUsers = [...(allUsers || [])]
+            .filter(u => u.smart_wallet_address)
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+            .slice(0, 10)
+            .map(u => ({
+                address: u.wallet_address,
+                username: u.username,
+                ensName: u.ens_name,
+                walletType: u.wallet_type || "wallet",
+                smartWalletAddress: u.smart_wallet_address,
+                createdAt: u.created_at,
+            }));
+
         // Agent visibility breakdown
         const agentVisibilityBreakdown = [
             { visibility: "Private", count: privateAgents },
@@ -375,6 +431,19 @@ export async function GET(request: NextRequest) {
                 schedulesJoined,
                 totalSchedulesCreated,
                 totalSchedulesJoined,
+                // Wallet stats
+                usersWithSmartWallet,
+                walletTypeBreakdown,
+                totalPasskeys,
+                passkeysWithSafeSigners,
+                passkeysInPeriod,
+                embeddedWallets,
+                deployedSmartWallets,
+                walletsCreatedInPeriod,
+                // Beta access stats
+                betaApplicantsCount,
+                betaApprovedCount,
+                betaPendingCount,
             },
             timeSeries: timeSeriesData,
             topUsers: {
@@ -390,6 +459,14 @@ export async function GET(request: NextRequest) {
                 reason,
                 points,
             })),
+            walletTypeBreakdown: [
+                { type: "EOA Wallet", count: walletTypeBreakdown.wallet },
+                { type: "Passkey", count: walletTypeBreakdown.passkey },
+                { type: "Email", count: walletTypeBreakdown.email },
+                { type: "World ID", count: walletTypeBreakdown.worldId },
+                { type: "Solana", count: walletTypeBreakdown.solana },
+            ].filter(w => w.count > 0),
+            recentSmartWalletUsers,
             period,
             startDate: startDate.toISOString(),
             endDate: now.toISOString(),

@@ -64,6 +64,20 @@ type AgentVisibility = {
     count: number;
 };
 
+type WalletTypeBreakdown = {
+    type: string;
+    count: number;
+};
+
+type SmartWalletUser = {
+    address: string;
+    username: string | null;
+    ensName: string | null;
+    walletType: string;
+    smartWalletAddress: string;
+    createdAt: string;
+};
+
 type AnalyticsData = {
     summary: {
         totalUsers: number;
@@ -105,10 +119,29 @@ type AnalyticsData = {
         totalRoomsCreated: number;
         totalRoomsJoined: number;
         // Scheduling stats
-        schedulesCreated: number;
-        schedulesJoined: number;
-        totalSchedulesCreated: number;
-        totalSchedulesJoined: number;
+                schedulesCreated: number;
+                schedulesJoined: number;
+                totalSchedulesCreated: number;
+                totalSchedulesJoined: number;
+                // Wallet stats
+                usersWithSmartWallet: number;
+                walletTypeBreakdown: {
+                    wallet: number;
+                    passkey: number;
+                    email: number;
+                    worldId: number;
+                    solana: number;
+                };
+                totalPasskeys: number;
+                passkeysWithSafeSigners: number;
+                passkeysInPeriod: number;
+                embeddedWallets: number;
+                deployedSmartWallets: number;
+                walletsCreatedInPeriod: number;
+                // Beta access stats
+                betaApplicantsCount: number;
+                betaApprovedCount: number;
+                betaPendingCount: number;
     };
     timeSeries: TimeSeriesItem[];
     topUsers: {
@@ -121,6 +154,8 @@ type AnalyticsData = {
     };
     agentVisibilityBreakdown: AgentVisibility[];
     pointsBreakdown: PointsBreakdown[];
+    walletTypeBreakdown: WalletTypeBreakdown[];
+    recentSmartWalletUsers: SmartWalletUser[];
     period: string;
     startDate: string;
     endDate: string;
@@ -169,7 +204,7 @@ export default function AnalyticsPage() {
     const [data, setData] = useState<AnalyticsData | null>(null);
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [selectedPeriod, setSelectedPeriod] = useState<Period>("7d");
-    const [activeChart, setActiveChart] = useState<"users" | "engagement" | "points" | "agents">("users");
+    const [activeChart, setActiveChart] = useState<"users" | "engagement" | "points" | "agents" | "wallets">("users");
 
     const formatAddress = (addr: string) =>
         `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -555,6 +590,92 @@ export default function AnalyticsPage() {
                         </div>
                     </section>
 
+                    {/* Wallet & Smart Accounts Section */}
+                    <section>
+                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                            <span>💳</span>
+                            Wallets & Smart Accounts
+                        </h2>
+                        <div className="space-y-4">
+                            {/* Smart Wallet Overview */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Smart Wallet Overview</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                    <SummaryCard
+                                        label="Smart Wallets"
+                                        value={data.summary.usersWithSmartWallet}
+                                        subtext={`of ${data.summary.totalUsers} users`}
+                                        icon="💳"
+                                        color="from-emerald-500/20 to-emerald-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Deployed"
+                                        value={data.summary.deployedSmartWallets}
+                                        subtext="on-chain"
+                                        icon="✅"
+                                        color="from-green-500/20 to-green-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="New Wallets"
+                                        value={data.summary.walletsCreatedInPeriod}
+                                        subtext={`in ${selectedPeriod}`}
+                                        icon="✨"
+                                        color="from-blue-500/20 to-blue-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Total Passkeys"
+                                        value={data.summary.totalPasskeys}
+                                        subtext={`${data.summary.passkeysWithSafeSigners} with signers`}
+                                        icon="🔑"
+                                        color="from-purple-500/20 to-purple-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="New Passkeys"
+                                        value={data.summary.passkeysInPeriod}
+                                        subtext={`in ${selectedPeriod}`}
+                                        icon="🆕"
+                                        color="from-indigo-500/20 to-indigo-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Embedded"
+                                        value={data.summary.embeddedWallets}
+                                        subtext="wallets"
+                                        icon="🔐"
+                                        color="from-cyan-500/20 to-cyan-600/10"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Beta Access Stats */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Wallet Beta Access</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    <SummaryCard
+                                        label="Beta Applications"
+                                        value={data.summary.betaApplicantsCount}
+                                        subtext="total applicants"
+                                        icon="📝"
+                                        color="from-amber-500/20 to-amber-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Approved"
+                                        value={data.summary.betaApprovedCount}
+                                        subtext="beta users"
+                                        icon="✅"
+                                        color="from-green-500/20 to-green-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Pending"
+                                        value={data.summary.betaPendingCount}
+                                        subtext="awaiting review"
+                                        icon="⏳"
+                                        color="from-orange-500/20 to-orange-600/10"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     {/* AI Agents Section */}
                     <section>
                         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -640,6 +761,16 @@ export default function AnalyticsPage() {
                             }`}
                         >
                             🤖 AI Agents
+                        </button>
+                        <button
+                            onClick={() => setActiveChart("wallets")}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeChart === "wallets"
+                                    ? "bg-[#FF5500] text-white"
+                                    : "bg-zinc-800 text-zinc-400 hover:text-white"
+                            }`}
+                        >
+                            💳 Wallets
                         </button>
                     </div>
 
@@ -994,6 +1125,105 @@ export default function AnalyticsPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Wallet Analytics */}
+                    {data.summary.usersWithSmartWallet > 0 && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Wallet Type Breakdown */}
+                            {data.walletTypeBreakdown && data.walletTypeBreakdown.length > 0 && (
+                                <div className="bg-zinc-900/50 rounded-2xl p-6 border border-zinc-800">
+                                    <h3 className="text-lg font-semibold mb-4">💳 Auth Method Breakdown</h3>
+                                    <div className="h-64">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={data.walletTypeBreakdown}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    labelLine={false}
+                                                    label={(props) => {
+                                                        const { name, percent } = props as { name?: string; percent?: number };
+                                                        const displayPercent = ((percent || 0) * 100).toFixed(0);
+                                                        return `${name} (${displayPercent}%)`;
+                                                    }}
+                                                    outerRadius={80}
+                                                    fill="#8884d8"
+                                                    dataKey="count"
+                                                    nameKey="type"
+                                                >
+                                                    {data.walletTypeBreakdown.map((_, index) => (
+                                                        <Cell
+                                                            key={`cell-${index}`}
+                                                            fill={["#10B981", "#8B5CF6", "#3B82F6", "#F59E0B", "#EC4899"][index % 5]}
+                                                        />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        backgroundColor: "#18181b",
+                                                        border: "1px solid #333",
+                                                        borderRadius: "8px",
+                                                    }}
+                                                    formatter={(value) => [`${value} users`, "Count"]}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="mt-4 space-y-2">
+                                        {data.walletTypeBreakdown.map((item, index) => (
+                                            <div key={item.type} className="flex items-center justify-between text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <div
+                                                        className="w-3 h-3 rounded-full"
+                                                        style={{ backgroundColor: ["#10B981", "#8B5CF6", "#3B82F6", "#F59E0B", "#EC4899"][index % 5] }}
+                                                    />
+                                                    <span className="text-zinc-400">
+                                                        {item.type === "EOA Wallet" ? "🔗" : item.type === "Passkey" ? "🔑" : item.type === "Email" ? "📧" : item.type === "World ID" ? "🌍" : "☀️"} {item.type}
+                                                    </span>
+                                                </div>
+                                                <span className="font-medium">{item.count}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recent Smart Wallet Users */}
+                            <div className="bg-zinc-900/50 rounded-2xl p-6 border border-zinc-800">
+                                <h3 className="text-lg font-semibold mb-4">🆕 Recent Smart Wallet Users</h3>
+                                <div className="space-y-3">
+                                    {!data.recentSmartWalletUsers || data.recentSmartWalletUsers.length === 0 ? (
+                                        <p className="text-zinc-500 text-center py-8">No smart wallet users yet</p>
+                                    ) : (
+                                        data.recentSmartWalletUsers.slice(0, 10).map((user, index) => (
+                                            <div
+                                                key={user.address}
+                                                className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-4 py-3"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-zinc-500 w-5 text-sm">{index + 1}.</span>
+                                                    <span className="text-lg">
+                                                        {user.walletType === "passkey" ? "🔑" : user.walletType === "email" ? "📧" : user.walletType?.includes("world") ? "🌍" : "🔗"}
+                                                    </span>
+                                                    <div>
+                                                        <p className="font-medium">
+                                                            {user.username ? `@${user.username}` : user.ensName || `${user.address.slice(0, 6)}...${user.address.slice(-4)}`}
+                                                        </p>
+                                                        <p className="text-xs text-zinc-500 font-mono">
+                                                            Safe: {user.smartWalletAddress.slice(0, 6)}...{user.smartWalletAddress.slice(-4)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs text-zinc-400">
+                                                    {new Date(user.createdAt).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Agent Analytics */}
                     {data.summary.totalAgents > 0 && (
