@@ -296,6 +296,16 @@ function DashboardContent({
         }
     }, [dailyBonusAvailable, dailyBonusClaimed]);
 
+    // Prevent body scroll when PasskeyManager modal is open (fixes PWA scroll bleed-through)
+    useEffect(() => {
+        if (isPasskeyManagerOpen) {
+            document.body.style.overflow = "hidden";
+        }
+        return () => {
+            document.body.style.overflow = "";
+        };
+    }, [isPasskeyManagerOpen]);
+
     // Handle claiming daily bonus
     const handleClaimDailyBonus = async () => {
         const success = await claimDailyBonus();

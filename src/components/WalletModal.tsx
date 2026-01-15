@@ -853,6 +853,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         return () => document.removeEventListener("keydown", handleEscape);
     }, [isOpen, onClose]);
 
+    // Prevent body scroll when modal is open (fixes PWA scroll bleed-through)
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = "hidden";
+        }
+        return () => {
+            document.body.style.overflow = "";
+        };
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (
@@ -870,7 +880,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.9, opacity: 0 }}
                         onClick={(e) => e.stopPropagation()}
-                        className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md min-h-[70vh] max-h-[90vh] overflow-hidden flex flex-col"
+                        className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md min-h-[85vh] max-h-[95vh] overflow-hidden flex flex-col"
                     >
                         {/* Network Warning Overlay - shown when receive tab active and not acknowledged */}
                         {activeTab === "receive" && !hasAcknowledgedChainWarning && !isSmartWalletLoading && !(smartWallet?.needsPasskey || (needsPasskeyForSend && passkeyStatus === "error")) && !(needsPasskeyForSend && passkeyStatus === "loading") && (

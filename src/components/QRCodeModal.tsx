@@ -36,6 +36,16 @@ export function QRCodeModal({
         return () => document.removeEventListener("keydown", handleEscape);
     }, [isOpen, onClose]);
 
+    // Prevent body scroll when modal is open (fixes PWA scroll bleed-through)
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = "hidden";
+        }
+        return () => {
+            document.body.style.overflow = "";
+        };
+    }, [isOpen]);
+
     const displayName =
         reachUsername ||
         ensName ||
