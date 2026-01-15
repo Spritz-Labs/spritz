@@ -23,10 +23,11 @@ const CDP_API_KEY_NAME = process.env.CDP_API_KEY_NAME;
 const CDP_API_KEY_PRIVATE_KEY = process.env.CDP_API_KEY_PRIVATE_KEY;
 
 // Supported chains for onramp (must match Coinbase's supported networks)
-const SUPPORTED_BLOCKCHAINS = ["base", "ethereum", "polygon", "arbitrum", "optimism", "avalanche"];
+// Note: Avalanche removed - Coinbase doesn't accept standard EVM addresses for AVAX onramp
+const SUPPORTED_BLOCKCHAINS = ["base", "ethereum", "polygon", "arbitrum", "optimism"];
 
 // Supported assets for onramp
-const SUPPORTED_ASSETS = ["ETH", "USDC", "USDT", "DAI", "AVAX"];
+const SUPPORTED_ASSETS = ["ETH", "USDC", "USDT", "DAI"];
 
 /**
  * Detect if the key is Ed25519 (base64) or EC (PEM format)
