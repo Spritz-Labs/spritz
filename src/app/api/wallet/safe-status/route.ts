@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/session";
 import { createPublicClient, http, type Address, formatEther, formatGwei } from "viem";
-import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
+import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from "viem/chains";
 
 // Supported chains for Safe with gas sponsorship info
 const SUPPORTED_CHAINS = [
@@ -11,6 +11,7 @@ const SUPPORTED_CHAINS = [
     { id: 10, chain: optimism, name: "Optimism", symbol: "ETH", explorer: "https://optimistic.etherscan.io", sponsored: true },
     { id: 137, chain: polygon, name: "Polygon", symbol: "MATIC", explorer: "https://polygonscan.com", sponsored: true },
     { id: 56, chain: bsc, name: "BNB Chain", symbol: "BNB", explorer: "https://bscscan.com", sponsored: true },
+    { id: 43114, chain: avalanche, name: "Avalanche", symbol: "AVAX", explorer: "https://snowtrace.io", sponsored: true },
 ];
 
 // Approximate gas units for Safe deployment (SafeProxyFactory.createProxyWithNonce)
@@ -25,6 +26,7 @@ const TOKEN_PRICES: Record<number, number> = {
     10: 3500,    // ETH on Optimism
     137: 0.5,    // MATIC
     56: 300,     // BNB
+    43114: 35,   // AVAX
 };
 
 // Minimum gas prices in gwei (fallback when RPC returns unrealistic values)
@@ -36,6 +38,7 @@ const MIN_GAS_PRICES_GWEI: Record<number, number> = {
     10: 0.01,    // Optimism: very low  
     137: 30,     // Polygon: typically 30-100+ gwei
     56: 3,       // BNB: typically 3-5 gwei
+    43114: 25,   // Avalanche: typically 25-30 nAVAX
 };
 
 // Convert gwei to wei
@@ -65,6 +68,7 @@ const SAFE_PREFIXES: Record<number, string> = {
     10: "oeth",
     137: "matic",
     56: "bnb",
+    43114: "avax",
 };
 
 export interface DeploymentGasEstimate {

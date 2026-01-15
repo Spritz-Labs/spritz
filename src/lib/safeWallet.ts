@@ -31,7 +31,7 @@ import {
     custom,
     bytesToHex,
 } from "viem";
-import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
+import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from "viem/chains";
 
 // Unichain mainnet (not in viem yet, define manually)
 const unichain: Chain = {
@@ -74,6 +74,7 @@ export const SAFE_SUPPORTED_CHAINS: Record<number, Chain> = {
     137: polygon,      // Polygon
     56: bsc,           // BSC (BNB Chain)
     130: unichain,     // Unichain
+    43114: avalanche,  // Avalanche C-Chain
 };
 
 // Chain sponsorship configuration
@@ -92,6 +93,7 @@ export const CHAIN_SPONSORSHIP_CONFIG: Record<number, { type: SponsorshipType; r
     137: { type: "sponsor", reason: "Polygon - cheap, sponsor freely" },
     56: { type: "sponsor", reason: "BSC - cheap, sponsor freely" },
     130: { type: "sponsor", reason: "Unichain L2 - cheap, sponsor freely" },
+    43114: { type: "sponsor", reason: "Avalanche - cheap, sponsor freely" },
 };
 
 /**
@@ -120,6 +122,7 @@ export const USDC_ADDRESSES: Record<number, Address> = {
     10: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",   // Optimism USDC
     137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",  // Polygon USDC
     56: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",   // BSC USDC
+    43114: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", // Avalanche USDC
     // Unichain USDC - TBD
 };
 
@@ -156,6 +159,7 @@ function getPimlicoBundlerUrl(chainId: number): string {
         137: "polygon",
         56: "binance",
         130: "unichain",
+        43114: "avalanche",
     };
     
     const chainName = chainNames[chainId];
@@ -177,6 +181,7 @@ const CHAIN_RPC_URLS: Record<number, string> = {
     137: "https://polygon-rpc.com",           // Polygon
     56: "https://bsc-dataseed.binance.org",   // BSC
     130: "https://mainnet.unichain.org",      // Unichain
+    43114: "https://api.avax.network/ext/bc/C/rpc", // Avalanche
 };
 
 // Create a public client for a chain

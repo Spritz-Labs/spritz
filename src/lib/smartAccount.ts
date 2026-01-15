@@ -19,7 +19,7 @@ import {
     http, 
     type Address, 
 } from "viem";
-import { base, mainnet, arbitrum, optimism, polygon, bsc, type Chain } from "viem/chains";
+import { base, mainnet, arbitrum, optimism, polygon, bsc, avalanche, type Chain } from "viem/chains";
 
 // Unichain mainnet (not in viem yet)
 const unichain: Chain = {
@@ -43,6 +43,7 @@ export const SAFE_CHAINS = {
     137: polygon,
     56: bsc,
     130: unichain,
+    43114: avalanche,
 } as const;
 
 /**
@@ -136,6 +137,7 @@ export function getSupportedChains(): { chainId: number; name: string; sponsorsh
         { chainId: 137, name: "Polygon", sponsorship: "free" },     // Sponsored
         { chainId: 56, name: "BNB Chain", sponsorship: "free" },    // Sponsored
         { chainId: 130, name: "Unichain", sponsorship: "free" },    // Sponsored
+        { chainId: 43114, name: "Avalanche", sponsorship: "free" }, // Sponsored
     ];
 }
 

@@ -103,7 +103,7 @@ const CHAIN_INFO: Record<number, { name: string; color: string; sponsorship: "fr
     137: { name: "Polygon", color: "#8247E5", sponsorship: "free", safePrefix: "matic", symbol: "MATIC" },
     56: { name: "BNB Chain", color: "#F3BA2F", sponsorship: "free", safePrefix: "bnb", symbol: "BNB" },
     130: { name: "Unichain", color: "#FF007A", sponsorship: "free", safePrefix: "unichain", symbol: "ETH" },
-    43114: { name: "Avalanche", color: "#E84142", sponsorship: "none", safePrefix: "avax", symbol: "AVAX" }, // View only, send not yet enabled
+    43114: { name: "Avalanche", color: "#E84142", sponsorship: "free", safePrefix: "avax", symbol: "AVAX" },
 };
 
 // Supported Networks Info Component (collapsible on balance tab)
@@ -181,7 +181,7 @@ function SupportedNetworksInfo({ isExpanded, onToggle }: { isExpanded: boolean; 
                     {/* Warning about unsupported chains */}
                     <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
                         <p className="text-xs text-red-400">
-                            <strong>⚠️ Not Supported:</strong> Solana, Avalanche C-Chain, and other networks. 
+                            <strong>⚠️ Not Supported:</strong> Solana and other non-EVM networks.
                             Sending from unsupported chains will result in <strong>permanent loss of funds</strong>.
                         </p>
                     </div>
@@ -274,8 +274,7 @@ function NetworkWarningModal({ isOpen, onAcknowledge }: { isOpen: boolean; onAck
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                     <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[10px] rounded">Solana</span>
-                    <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[10px] rounded">Avalanche</span>
-                    <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[10px] rounded">Others</span>
+                    <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[10px] rounded">Other non-EVM</span>
                 </div>
             </div>
             
@@ -1369,8 +1368,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                         Do NOT deposit from other chains
                                                     </p>
                                                     <p className="text-xs text-zinc-400">
-                                                        This is a Smart Wallet. Sending funds from unsupported chains 
-                                                        (Avalanche, Solana, etc.) may result in <strong className="text-orange-300">permanent loss</strong>.
+                                                        This is a Smart Wallet. Sending funds from unsupported chains
+                                                        (Solana, etc.) may result in <strong className="text-orange-300">permanent loss</strong>.
                                                     </p>
                                                 </div>
                                             </div>

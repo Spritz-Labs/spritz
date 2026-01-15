@@ -104,6 +104,7 @@ export const SEND_ENABLED_CHAIN_IDS = [
     137,    // Polygon (sponsored)
     56,     // BNB Chain (sponsored)
     130,    // Unichain (sponsored)
+    43114,  // Avalanche (sponsored)
 ];
 
 // Check if a chain supports sending
