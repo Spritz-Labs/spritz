@@ -296,6 +296,49 @@ export async function GET(request: NextRequest) {
         const betaApprovedCount = betaApplicants?.filter(u => u.has_beta_access).length || 0;
         const betaPendingCount = betaApplicantsCount - betaApprovedCount;
 
+        // Wallet transaction stats
+        const { data: walletTransactions } = await supabase
+            .from("shout_wallet_transactions")
+            .select("id, chain_id, chain_name, amount_usd, tx_type, status, created_at, user_address")
+            .order("created_at", { ascending: false });
+
+        const totalWalletTransactions = walletTransactions?.length || 0;
+        const walletTxInPeriod = walletTransactions?.filter(tx => 
+            new Date(tx.created_at) >= startDate
+        ).length || 0;
+        const confirmedTransactions = walletTransactions?.filter(tx => tx.status === "confirmed").length || 0;
+        const totalVolumeUsd = walletTransactions?.reduce((sum, tx) => sum + (Number(tx.amount_usd) || 0), 0) || 0;
+        const volumeInPeriod = walletTransactions?.filter(tx => 
+            new Date(tx.created_at) >= startDate
+        ).reduce((sum, tx) => sum + (Number(tx.amount_usd) || 0), 0) || 0;
+        const uniqueTxUsers = new Set(walletTransactions?.map(tx => tx.user_address) || []).size;
+
+        // Network stats from transactions
+        const networkTxCounts: Record<string, { chainId: number; chainName: string; count: number; volume: number }> = {};
+        for (const tx of walletTransactions || []) {
+            const key = String(tx.chain_id);
+            if (!networkTxCounts[key]) {
+                networkTxCounts[key] = { 
+                    chainId: tx.chain_id, 
+                    chainName: tx.chain_name, 
+                    count: 0, 
+                    volume: 0 
+                };
+            }
+            networkTxCounts[key].count++;
+            networkTxCounts[key].volume += Number(tx.amount_usd) || 0;
+        }
+
+        // Fetch network stats table (for historical data)
+        const { data: networkStats } = await supabase
+            .from("shout_wallet_network_stats")
+            .select("*")
+            .order("total_transactions", { ascending: false });
+
+        // Calculate user wallet stats from shout_users
+        const usersWithTxHistory = allUsers?.filter(u => (u.wallet_tx_count || 0) > 0).length || 0;
+        const totalUserVolumeUsd = allUsers?.reduce((sum, u) => sum + (Number(u.wallet_volume_usd) || 0), 0) || 0;
+
         // Generate time series data
         const timeSeriesData = generateTimeSeries(
             startDate,
@@ -444,6 +487,15 @@ export async function GET(request: NextRequest) {
                 betaApplicantsCount,
                 betaApprovedCount,
                 betaPendingCount,
+                // Wallet transaction stats
+                totalWalletTransactions,
+                walletTxInPeriod,
+                confirmedTransactions,
+                totalVolumeUsd,
+                volumeInPeriod,
+                uniqueTxUsers,
+                usersWithTxHistory,
+                totalUserVolumeUsd,
             },
             timeSeries: timeSeriesData,
             topUsers: {
@@ -466,6 +518,14 @@ export async function GET(request: NextRequest) {
                 { type: "World ID", count: walletTypeBreakdown.worldId },
                 { type: "Solana", count: walletTypeBreakdown.solana },
             ].filter(w => w.count > 0),
+            networkStats: Object.values(networkTxCounts)
+                .sort((a, b) => b.count - a.count)
+                .map(n => ({
+                    chainId: n.chainId,
+                    chainName: n.chainName,
+                    transactions: n.count,
+                    volumeUsd: n.volume,
+                })),
             recentSmartWalletUsers,
             period,
             startDate: startDate.toISOString(),

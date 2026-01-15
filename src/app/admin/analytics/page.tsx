@@ -78,6 +78,13 @@ type SmartWalletUser = {
     createdAt: string;
 };
 
+type NetworkStat = {
+    chainId: number;
+    chainName: string;
+    transactions: number;
+    volumeUsd: number;
+};
+
 type AnalyticsData = {
     summary: {
         totalUsers: number;
@@ -142,6 +149,15 @@ type AnalyticsData = {
                 betaApplicantsCount: number;
                 betaApprovedCount: number;
                 betaPendingCount: number;
+                // Wallet transaction stats
+                totalWalletTransactions: number;
+                walletTxInPeriod: number;
+                confirmedTransactions: number;
+                totalVolumeUsd: number;
+                volumeInPeriod: number;
+                uniqueTxUsers: number;
+                usersWithTxHistory: number;
+                totalUserVolumeUsd: number;
     };
     timeSeries: TimeSeriesItem[];
     topUsers: {
@@ -155,6 +171,7 @@ type AnalyticsData = {
     agentVisibilityBreakdown: AgentVisibility[];
     pointsBreakdown: PointsBreakdown[];
     walletTypeBreakdown: WalletTypeBreakdown[];
+    networkStats: NetworkStat[];
     recentSmartWalletUsers: SmartWalletUser[];
     period: string;
     startDate: string;
@@ -646,6 +663,55 @@ export default function AnalyticsPage() {
                                 </div>
                             </div>
 
+                            {/* Transaction Stats */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Transactions</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                    <SummaryCard
+                                        label="Total Transactions"
+                                        value={data.summary.totalWalletTransactions}
+                                        subtext={`${data.summary.confirmedTransactions} confirmed`}
+                                        icon="📊"
+                                        color="from-blue-500/20 to-blue-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Tx in Period"
+                                        value={data.summary.walletTxInPeriod}
+                                        subtext={`in ${selectedPeriod}`}
+                                        icon="📈"
+                                        color="from-green-500/20 to-green-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Total Volume"
+                                        value={Math.round(data.summary.totalVolumeUsd)}
+                                        subtext="USD"
+                                        icon="💰"
+                                        color="from-yellow-500/20 to-yellow-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Volume in Period"
+                                        value={Math.round(data.summary.volumeInPeriod)}
+                                        subtext={`USD in ${selectedPeriod}`}
+                                        icon="💵"
+                                        color="from-emerald-500/20 to-emerald-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Unique Tx Users"
+                                        value={data.summary.uniqueTxUsers}
+                                        subtext="users with transactions"
+                                        icon="👥"
+                                        color="from-purple-500/20 to-purple-600/10"
+                                    />
+                                    <SummaryCard
+                                        label="Active Wallets"
+                                        value={data.summary.usersWithTxHistory}
+                                        subtext="with tx history"
+                                        icon="🔥"
+                                        color="from-orange-500/20 to-orange-600/10"
+                                    />
+                                </div>
+                            </div>
+
                             {/* Beta Access Stats */}
                             <div>
                                 <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Wallet Beta Access</h3>
@@ -1127,12 +1193,12 @@ export default function AnalyticsPage() {
                     </div>
 
                     {/* Wallet Analytics */}
-                    {data.summary.usersWithSmartWallet > 0 && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Wallet Type Breakdown */}
-                            {data.walletTypeBreakdown && data.walletTypeBreakdown.length > 0 && (
-                                <div className="bg-zinc-900/50 rounded-2xl p-6 border border-zinc-800">
-                                    <h3 className="text-lg font-semibold mb-4">💳 Auth Method Breakdown</h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Wallet Type Breakdown */}
+                        <div className="bg-zinc-900/50 rounded-2xl p-6 border border-zinc-800">
+                            <h3 className="text-lg font-semibold mb-4">💳 Auth Method Breakdown</h3>
+                            {data.walletTypeBreakdown && data.walletTypeBreakdown.length > 0 ? (
+                                <>
                                     <div className="h-64">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
@@ -1185,45 +1251,96 @@ export default function AnalyticsPage() {
                                             </div>
                                         ))}
                                     </div>
-                                </div>
+                                </>
+                            ) : (
+                                <p className="text-zinc-500 text-center py-16">No wallet data yet</p>
                             )}
-
-                            {/* Recent Smart Wallet Users */}
-                            <div className="bg-zinc-900/50 rounded-2xl p-6 border border-zinc-800">
-                                <h3 className="text-lg font-semibold mb-4">🆕 Recent Smart Wallet Users</h3>
-                                <div className="space-y-3">
-                                    {!data.recentSmartWalletUsers || data.recentSmartWalletUsers.length === 0 ? (
-                                        <p className="text-zinc-500 text-center py-8">No smart wallet users yet</p>
-                                    ) : (
-                                        data.recentSmartWalletUsers.slice(0, 10).map((user, index) => (
-                                            <div
-                                                key={user.address}
-                                                className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-4 py-3"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-zinc-500 w-5 text-sm">{index + 1}.</span>
-                                                    <span className="text-lg">
-                                                        {user.walletType === "passkey" ? "🔑" : user.walletType === "email" ? "📧" : user.walletType?.includes("world") ? "🌍" : "🔗"}
-                                                    </span>
-                                                    <div>
-                                                        <p className="font-medium">
-                                                            {user.username ? `@${user.username}` : user.ensName || `${user.address.slice(0, 6)}...${user.address.slice(-4)}`}
-                                                        </p>
-                                                        <p className="text-xs text-zinc-500 font-mono">
-                                                            Safe: {user.smartWalletAddress.slice(0, 6)}...{user.smartWalletAddress.slice(-4)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <span className="text-xs text-zinc-400">
-                                                    {new Date(user.createdAt).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            </div>
                         </div>
-                    )}
+
+                        {/* Network Usage Breakdown */}
+                        <div className="bg-zinc-900/50 rounded-2xl p-6 border border-zinc-800">
+                            <h3 className="text-lg font-semibold mb-4">🌐 Network Usage</h3>
+                            {data.networkStats && data.networkStats.length > 0 ? (
+                                <>
+                                    <div className="h-64">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={data.networkStats} layout="vertical">
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                                                <XAxis type="number" stroke="#666" tick={{ fill: "#999", fontSize: 12 }} />
+                                                <YAxis 
+                                                    type="category" 
+                                                    dataKey="chainName" 
+                                                    stroke="#666" 
+                                                    tick={{ fill: "#999", fontSize: 12 }}
+                                                    width={80}
+                                                />
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        backgroundColor: "#18181b",
+                                                        border: "1px solid #333",
+                                                        borderRadius: "8px",
+                                                    }}
+                                                    formatter={(value, name) => [
+                                                        name === "transactions" ? `${value} txs` : `$${Number(value).toLocaleString()}`,
+                                                        name === "transactions" ? "Transactions" : "Volume"
+                                                    ]}
+                                                />
+                                                <Bar dataKey="transactions" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="mt-4 space-y-2">
+                                        {data.networkStats.map((network) => (
+                                            <div key={network.chainId} className="flex items-center justify-between text-sm">
+                                                <span className="text-zinc-400">{network.chainName}</span>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-blue-400">{network.transactions} txs</span>
+                                                    <span className="text-green-400">${network.volumeUsd.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-zinc-500 text-center py-16">No transaction data yet</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Recent Smart Wallet Users */}
+                    <div className="bg-zinc-900/50 rounded-2xl p-6 border border-zinc-800">
+                        <h3 className="text-lg font-semibold mb-4">🆕 Recent Smart Wallet Users</h3>
+                        <div className="space-y-3">
+                            {!data.recentSmartWalletUsers || data.recentSmartWalletUsers.length === 0 ? (
+                                <p className="text-zinc-500 text-center py-8">No smart wallet users yet</p>
+                            ) : (
+                                data.recentSmartWalletUsers.slice(0, 10).map((user, index) => (
+                                    <div
+                                        key={user.address}
+                                        className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-4 py-3"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-zinc-500 w-5 text-sm">{index + 1}.</span>
+                                            <span className="text-lg">
+                                                {user.walletType === "passkey" ? "🔑" : user.walletType === "email" ? "📧" : user.walletType?.includes("world") ? "🌍" : "🔗"}
+                                            </span>
+                                            <div>
+                                                <p className="font-medium">
+                                                    {user.username ? `@${user.username}` : user.ensName || `${user.address.slice(0, 6)}...${user.address.slice(-4)}`}
+                                                </p>
+                                                <p className="text-xs text-zinc-500 font-mono">
+                                                    Safe: {user.smartWalletAddress.slice(0, 6)}...{user.smartWalletAddress.slice(-4)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <span className="text-xs text-zinc-400">
+                                            {new Date(user.createdAt).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
 
                     {/* Agent Analytics */}
                     {data.summary.totalAgents > 0 && (
