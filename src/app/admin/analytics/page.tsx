@@ -209,18 +209,50 @@ export default function AnalyticsPage() {
         }
     }, [isAuthenticated, isAdmin, fetchAnalytics]);
 
-    // Not connected
-    if (!isConnected) {
+    // Loading
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-zinc-400">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Not authenticated - need to connect wallet or sign
+    if (!isAuthenticated) {
+        const needsWalletConnection = !isConnected;
+        
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
                     <h1 className="text-2xl font-bold mb-4">Analytics Dashboard</h1>
-                    <p className="text-zinc-400 mb-6">
-                        Connect your wallet to view analytics.
-                    </p>
-                    <div className="mb-4">
-                        <appkit-button />
-                    </div>
+                    
+                    {needsWalletConnection ? (
+                        <>
+                            <p className="text-zinc-400 mb-6">
+                                Connect your wallet and sign to view analytics.
+                            </p>
+                            <div className="mb-4">
+                                <appkit-button />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-zinc-400 mb-6">
+                                Sign in to view analytics.
+                            </p>
+                            <button
+                                onClick={signIn}
+                                className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4"
+                            >
+                                Sign In with Ethereum
+                            </button>
+                        </>
+                    )}
+                    
                     <Link
                         href="/"
                         className="text-zinc-500 hover:text-zinc-300 text-sm"
@@ -232,20 +264,8 @@ export default function AnalyticsPage() {
         );
     }
 
-    // Loading
-    if (isLoading || !isReady) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
-                    <p className="text-zinc-400">Loading...</p>
-                </div>
-            </div>
-        );
-    }
-
-    // Not authenticated
-    if (!isAuthenticated) {
+    // Still loading after auth
+    if (!isReady) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">

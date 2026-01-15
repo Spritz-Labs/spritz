@@ -194,20 +194,44 @@ export default function BugReportsPage() {
     }
 
     if (!isAuthenticated || !isAdmin) {
+        const needsWalletConnection = !isConnected;
+        
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="text-center">
+                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
                     <h1 className="text-2xl font-bold text-white mb-4">
                         Admin Access Required
                     </h1>
-                    {!isConnected && (
-                        <button
-                            onClick={signIn}
-                            className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl transition-colors"
-                        >
-                            Connect Wallet
-                        </button>
+                    
+                    {needsWalletConnection ? (
+                        <>
+                            <p className="text-zinc-400 mb-6">
+                                Connect your wallet and sign to view bug reports.
+                            </p>
+                            <div className="mb-4">
+                                <appkit-button />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-zinc-400 mb-6">
+                                Sign in to view bug reports.
+                            </p>
+                            <button
+                                onClick={signIn}
+                                className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl transition-colors mb-4"
+                            >
+                                Sign In with Ethereum
+                            </button>
+                        </>
                     )}
+                    
+                    <Link
+                        href="/admin"
+                        className="text-zinc-500 hover:text-zinc-300 text-sm"
+                    >
+                        ← Back to Admin
+                    </Link>
                 </div>
             </div>
         );

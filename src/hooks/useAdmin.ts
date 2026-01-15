@@ -21,9 +21,12 @@ type AdminCredentials = {
     address: string;
     signature: string;
     message: string;
+    timestamp?: number;
 };
 
 const ADMIN_CREDENTIALS_KEY_LOCAL = "spritz_admin_credentials";
+// Admin credentials last 30 days (longer than main app)
+const ADMIN_TTL = 30 * 24 * 60 * 60 * 1000;
 
 export function useAdmin() {
     const { address, isConnected, isReconnecting } = useAccount();
@@ -49,7 +52,7 @@ export function useAdmin() {
         return !!(credentials?.address && credentials?.signature && credentials?.message);
     }, [credentials]);
 
-    // Load saved credentials on mount - try main app credentials first, then admin-specific
+    // Load saved credentials on mount - try admin-specific first (longer TTL), then main app
     useEffect(() => {
         if (typeof window === "undefined" || credentialsLoaded.current) return;
         credentialsLoaded.current = true;
@@ -58,21 +61,7 @@ export function useAdmin() {
             setState(prev => ({ ...prev, isLoading: true }));
             
             try {
-                // First, try to load credentials from main app auth (robust storage)
-                const mainAppCreds = await authStorage.load(AUTH_CREDENTIALS_KEY);
-                
-                if (mainAppCreds && !authStorage.isExpired(mainAppCreds, AUTH_TTL)) {
-                    console.log("[Admin] Using main app credentials");
-                    setCredentials({
-                        address: mainAppCreds.address,
-                        signature: mainAppCreds.signature,
-                        message: mainAppCreds.message,
-                    });
-                    setCredentialsSource("main");
-                    return;
-                }
-                
-                // Fallback: try admin-specific credentials from localStorage
+                // First, try admin-specific credentials (30-day TTL)
                 const savedAdmin = localStorage.getItem(ADMIN_CREDENTIALS_KEY_LOCAL);
                 if (savedAdmin) {
                     const parsed = JSON.parse(savedAdmin);
@@ -83,14 +72,36 @@ export function useAdmin() {
                         typeof parsed.signature === 'string' && parsed.signature.trim() &&
                         typeof parsed.message === 'string' && parsed.message.trim()
                     ) {
-                        console.log("[Admin] Loaded admin-specific credentials from localStorage");
-                        setCredentials(parsed as AdminCredentials);
-                        setCredentialsSource("admin");
-                        return;
+                        // Check if admin credentials are expired (30 days)
+                        const timestamp = parsed.timestamp || 0;
+                        if (Date.now() - timestamp < ADMIN_TTL) {
+                            console.log("[Admin] Loaded admin-specific credentials from localStorage");
+                            setCredentials(parsed as AdminCredentials);
+                            setCredentialsSource("admin");
+                            return;
+                        } else {
+                            console.log("[Admin] Admin credentials expired, clearing");
+                            localStorage.removeItem(ADMIN_CREDENTIALS_KEY_LOCAL);
+                        }
                     } else {
                         console.log("[Admin] Invalid admin credentials in localStorage, clearing");
                         localStorage.removeItem(ADMIN_CREDENTIALS_KEY_LOCAL);
                     }
+                }
+                
+                // Fallback: try to load credentials from main app auth (7-day TTL)
+                const mainAppCreds = await authStorage.load(AUTH_CREDENTIALS_KEY);
+                
+                if (mainAppCreds && !authStorage.isExpired(mainAppCreds, AUTH_TTL)) {
+                    console.log("[Admin] Using main app credentials");
+                    setCredentials({
+                        address: mainAppCreds.address,
+                        signature: mainAppCreds.signature,
+                        message: mainAppCreds.message,
+                        timestamp: mainAppCreds.timestamp,
+                    });
+                    setCredentialsSource("main");
+                    return;
                 }
                 
                 // No valid credentials found
@@ -106,7 +117,7 @@ export function useAdmin() {
         loadCredentials();
     }, []);
 
-    // Verify credentials when they change or wallet address changes
+    // Verify credentials when they change
     useEffect(() => {
         if (!credentials) {
             setState(prev => ({ 
@@ -124,21 +135,21 @@ export function useAdmin() {
             return;
         }
 
-        // If wallet is connected and credentials are from a different address,
-        // don't use them - user needs to sign in with the connected wallet
-        if (address && credentials.address.toLowerCase() !== address.toLowerCase()) {
-            console.log("[Admin] Credentials address doesn't match connected wallet, clearing");
-            // Clear credentials so user can sign in with correct wallet
-            setCredentials(null);
+        // If wallet IS connected and credentials are from a different address,
+        // show a warning but don't immediately clear - let them sign with the connected wallet
+        // Only clear if they try to sign in with a different wallet
+        if (isConnected && address && credentials.address.toLowerCase() !== address.toLowerCase()) {
+            console.log("[Admin] Credentials address doesn't match connected wallet");
+            // Don't clear credentials - just show they need to sign with current wallet
+            // They can still use the admin panel with cached credentials until they sign out
+            // or the credentials expire
             setState(prev => ({ 
                 ...prev, 
-                isAdmin: false, 
-                isSuperAdmin: false, 
-                isAuthenticated: false,
                 isLoading: false,
-                error: "Please sign in with your connected wallet"
+                // Only show error if not already authenticated
+                error: prev.isAuthenticated ? null : "Sign in with your connected wallet to continue"
             }));
-            return;
+            // Allow verification to proceed - server will validate the signature
         }
 
         // Skip if we've already verified these credentials
@@ -191,7 +202,7 @@ export function useAdmin() {
         };
 
         verifyCredentials();
-    }, [credentials, isReconnecting, state.isAuthenticated, credentialsSource, address]);
+    }, [credentials, isReconnecting, state.isAuthenticated, credentialsSource, address, isConnected]);
 
     // Sign in as admin
     const signIn = useCallback(async () => {
@@ -215,9 +226,10 @@ export function useAdmin() {
                 address: address.toLowerCase(),
                 signature,
                 message,
+                timestamp: Date.now(), // Add timestamp for TTL checking
             };
 
-            // Save admin-specific credentials
+            // Save admin-specific credentials with timestamp
             localStorage.setItem(ADMIN_CREDENTIALS_KEY_LOCAL, JSON.stringify(newCredentials));
             setCredentials(newCredentials);
             setCredentialsSource("admin");

@@ -482,34 +482,6 @@ export default function UsersPage() {
         URL.revokeObjectURL(url);
     }, [generateCSV]);
 
-    // Not connected
-    if (!isConnected) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold text-white mb-4">
-                        Admin Access
-                    </h1>
-                    <p className="text-zinc-400 mb-6">
-                        Connect your wallet to view users.
-                    </p>
-
-                    {/* AppKit Button - renders the WalletConnect modal */}
-                    <div className="mb-4">
-                        <appkit-button />
-                    </div>
-
-                    <Link
-                        href="/"
-                        className="text-zinc-500 hover:text-zinc-300 text-sm"
-                    >
-                        ← Back to Home
-                    </Link>
-                </div>
-            </div>
-        );
-    }
-
     // Loading
     if (isLoading) {
         return (
@@ -519,35 +491,43 @@ export default function UsersPage() {
         );
     }
 
-    // Not authenticated
+    // Not authenticated - need to connect wallet or sign
     if (!isAuthenticated) {
+        const needsWalletConnection = !isConnected;
+        
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
                     <h1 className="text-2xl font-bold text-white mb-4">
                         Admin Access
                     </h1>
-                    <p className="text-zinc-400 mb-2">Connected as:</p>
-                    <p className="text-white font-mono mb-6">
-                        {formatAddress(address || "")}
-                    </p>
-
-                    {error && (
-                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-6">
-                            <p className="text-red-400 text-sm">{error}</p>
-                        </div>
+                    
+                    {needsWalletConnection ? (
+                        <>
+                            <p className="text-zinc-400 mb-6">
+                                Connect your wallet and sign to view users.
+                            </p>
+                            <div className="mb-4">
+                                <appkit-button />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-zinc-400 mb-6">
+                                Sign in to view users.
+                            </p>
+                            <button
+                                onClick={signIn}
+                                className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4"
+                            >
+                                Sign In with Ethereum
+                            </button>
+                        </>
                     )}
-
-                    <button
-                        onClick={signIn}
-                        className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors"
-                    >
-                        Sign In with Ethereum
-                    </button>
 
                     <Link
                         href="/"
-                        className="block mt-4 text-zinc-500 hover:text-zinc-300 text-sm"
+                        className="text-zinc-500 hover:text-zinc-300 text-sm"
                     >
                         ← Back to Home
                     </Link>
