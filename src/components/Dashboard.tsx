@@ -2395,104 +2395,28 @@ function DashboardContent({
                                                     </a>
                                                 )}
 
-                                                {/* 7. Points */}
-                                                {(() => {
-                                                    const hasNameService =
-                                                        userENS.ensName ||
-                                                        isSolanaUser; // Solana users can have SNS
-                                                    const isPointsVerified =
-                                                        userPoints > 0 &&
-                                                        hasNameService;
-                                                    return (
-                                                        <div className="px-4 py-3 flex items-center gap-3 border-t border-zinc-800">
-                                                            <div
-                                                                className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                                                    isPointsVerified
-                                                                        ? "bg-emerald-500/20"
-                                                                        : "bg-amber-500/20"
-                                                                }`}
-                                                            >
-                                                                <svg
-                                                                    className={`w-4 h-4 ${
-                                                                        isPointsVerified
-                                                                            ? "text-emerald-400"
-                                                                            : "text-amber-400"
-                                                                    }`}
-                                                                    fill="none"
-                                                                    viewBox="0 0 24 24"
-                                                                    stroke="currentColor"
-                                                                >
-                                                                    <path
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                        strokeWidth={
-                                                                            2
-                                                                        }
-                                                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                                                    />
-                                                                </svg>
-                                                            </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-white text-sm font-medium">
-                                                                    Points
-                                                                </p>
-                                                                <p
-                                                                    className={`text-xs ${
-                                                                        isPointsVerified
-                                                                            ? "text-emerald-400"
-                                                                            : "text-amber-400"
-                                                                    }`}
-                                                                >
-                                                                    {userPoints.toLocaleString()}{" "}
-                                                                    pts
-                                                                </p>
-                                                            </div>
-                                                            <div
-                                                                className={`px-2 py-0.5 rounded-full ${
-                                                                    isPointsVerified
-                                                                        ? "bg-emerald-500/20"
-                                                                        : "bg-amber-500/20"
-                                                                }`}
-                                                            >
-                                                                <span
-                                                                    className={`text-xs font-medium ${
-                                                                        isPointsVerified
-                                                                            ? "text-emerald-400"
-                                                                            : "text-amber-400"
-                                                                    }`}
-                                                                >
-                                                                    {userPoints.toLocaleString()}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()}
-
-                                                {/* 8. Ranks */}
+                                                {/* 7. Points & Ranks - Combined */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setActiveNavTab(
-                                                            "leaderboard"
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setActiveNavTab("leaderboard");
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                 >
-                                                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
-                                                        <span className="text-lg">
-                                                            🏆
-                                                        </span>
+                                                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                                                        <span className="text-lg">🏆</span>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-white text-sm font-medium">
-                                                            Ranks
+                                                            Points & Ranks
                                                         </p>
-                                                        <p className="text-zinc-500 text-xs">
-                                                            View leaderboard
+                                                        <p className="text-amber-400 text-xs">
+                                                            {userPoints.toLocaleString()} pts · View leaderboard
                                                         </p>
                                                     </div>
+                                                    <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                    </svg>
                                                 </button>
 
                                                 {/* Admin Panel - Only shown to admins */}
