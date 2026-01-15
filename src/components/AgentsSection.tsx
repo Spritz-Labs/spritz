@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAgents, useFavoriteAgents, Agent, DiscoveredAgent, MCPServer, APITool } from "@/hooks/useAgents";
 import { CreateAgentModal } from "./CreateAgentModal";
@@ -28,6 +28,36 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
     const [embedTabForAgent, setEmbedTabForAgent] = useState<Record<string, "iframe" | "js" | "react" | "nextjs">>({});
     const [isApplying, setIsApplying] = useState(false);
     const [hasApplied, setHasApplied] = useState(false);
+    const [appliedAt, setAppliedAt] = useState<string | null>(null);
+    const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(false);
+
+    // Check beta status on mount if user doesn't have access
+    useEffect(() => {
+        if (!hasBetaAccess && !hasApplied && !isCheckingBetaStatus) {
+            setIsCheckingBetaStatus(true);
+            fetch("/api/beta-access/apply", {
+                method: "GET",
+                credentials: "include",
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data.hasApplied) {
+                        setHasApplied(true);
+                        setAppliedAt(data.appliedAt);
+                    }
+                    // If user already has beta access, reload to show agents
+                    if (data.hasBetaAccess) {
+                        window.location.reload();
+                    }
+                })
+                .catch((err) => {
+                    console.error("[AgentsSection] Error checking beta status:", err);
+                })
+                .finally(() => {
+                    setIsCheckingBetaStatus(false);
+                });
+        }
+    }, [hasBetaAccess, hasApplied, isCheckingBetaStatus]);
 
     const handleCreateAgent = async (
         name: string,
@@ -105,11 +135,13 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
             const response = await fetch("/api/beta-access/apply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify({ walletAddress: userAddress }),
             });
             const data = await response.json();
             if (response.ok && data.success) {
                 setHasApplied(true);
+                setAppliedAt(new Date().toISOString());
                 if (data.hasBetaAccess) {
                     // User already had access, refresh the page to show agents
                     window.location.reload();
@@ -216,15 +248,39 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                 className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-center"
                             >
                                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                                    <span className="text-2xl">✨</span>
+                                    <span className="text-2xl">{hasApplied ? "⏳" : "✨"}</span>
                                 </div>
-                                <h3 className="text-white font-medium mb-1">AI Agents (Beta)</h3>
-                                <p className="text-sm text-zinc-400 mb-4">
-                                    {hasApplied
-                                        ? "Your application has been submitted! We'll review it and grant you access soon."
-                                        : "Apply for beta access to create and interact with AI agents"}
-                                </p>
-                                {!hasApplied && (
+                                <h3 className="text-white font-medium mb-1">
+                                    {hasApplied ? "Application Pending" : "AI Agents (Beta)"}
+                                </h3>
+                                {isCheckingBetaStatus ? (
+                                    <div className="flex items-center justify-center py-4">
+                                        <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                                    </div>
+                                ) : hasApplied ? (
+                                    <div className="space-y-3 mb-4">
+                                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+                                            <p className="text-amber-400 text-sm font-medium mb-1">Application Submitted</p>
+                                            <p className="text-zinc-400 text-xs">
+                                                {appliedAt
+                                                    ? `Applied on ${new Date(appliedAt).toLocaleDateString("en-US", {
+                                                          month: "long",
+                                                          day: "numeric",
+                                                          year: "numeric",
+                                                      })}`
+                                                    : "Your application is being reviewed"}
+                                            </p>
+                                        </div>
+                                        <p className="text-sm text-zinc-400">
+                                            We&apos;re reviewing applications and granting access in batches. You&apos;ll be notified when your access is approved!
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-zinc-400 mb-4">
+                                        Apply for beta access to create and interact with AI agents
+                                    </p>
+                                )}
+                                {!hasApplied && !isCheckingBetaStatus && (
                                     <button
                                         onClick={handleApplyForBetaAccess}
                                         disabled={isApplying}
