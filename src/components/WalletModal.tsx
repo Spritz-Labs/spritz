@@ -1203,7 +1203,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "receive" && (
-                                <div className="relative flex-1 flex flex-col">
+                                <div className="relative flex-1 flex flex-col overflow-y-auto">
                                     {/* Email/Digital ID users without passkey - must create one to unlock wallet */}
                                     {(smartWallet?.needsPasskey || (needsPasskeyForSend && passkeyStatus === "error")) ? (
                                         <div className="flex flex-col items-center justify-center text-center p-6">
@@ -1385,7 +1385,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "send" && (
-                                <div className="flex flex-col h-full relative">
+                                <div className="flex-1 flex flex-col overflow-y-auto relative">
                                     {/* Loading state */}
                                     {((canUsePasskeySigning && passkeyStatus === "loading") || isSmartWalletLoading) ? (
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
@@ -1875,7 +1875,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "history" && (
-                                <div className="flex flex-col h-full">
+                                <div className="flex-1 flex flex-col overflow-y-auto">
                                     {/* Header with refresh */}
                                     <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
                                         <span className="text-xs text-zinc-500">
@@ -1956,7 +1956,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "security" && (
-                                <div className="p-4 space-y-4 overflow-y-auto">
+                                <div className="flex-1 p-4 space-y-4 overflow-y-auto">
                                     {/* Multi-Chain Security - shows Safe status across all chains */}
                                     {smartWallet?.smartWalletAddress && (
                                         <MultiChainSecurity

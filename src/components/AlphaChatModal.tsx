@@ -474,34 +474,6 @@ export function AlphaChatModal({
                                     </p>
                                 </div>
 
-                                {/* Refresh Button */}
-                                {isMember && refreshMessages && (
-                                    <button
-                                        onClick={async () => {
-                                            setIsRefreshing(true);
-                                            await refreshMessages();
-                                            setIsRefreshing(false);
-                                        }}
-                                        disabled={isRefreshing}
-                                        className="p-2 rounded-lg transition-colors bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-50"
-                                        title="Refresh messages"
-                                    >
-                                        <svg
-                                            className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`}
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                            />
-                                        </svg>
-                                    </button>
-                                )}
-
                                 {/* Pinned Messages Button */}
                                 {pinnedMessages.length > 0 && (
                                     <button
