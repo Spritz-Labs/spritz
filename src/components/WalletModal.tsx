@@ -214,30 +214,30 @@ function NetworkWarningContent({ onAcknowledge }: { onAcknowledge: () => void })
                         <span>✅</span>
                         <span className="text-sm font-bold text-emerald-400">Recommended - FREE Gas</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                         <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={8453} size={14} />
                             <span className="text-xs text-white">Base</span>
                         </div>
                         <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={42161} size={14} />
-                            <span className="text-xs text-white">Arb</span>
+                            <span className="text-xs text-white">Arbitrum</span>
                         </div>
                         <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={10} size={14} />
-                            <span className="text-xs text-white">OP</span>
+                            <span className="text-xs text-white">Optimism</span>
                         </div>
                         <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={137} size={14} />
-                            <span className="text-xs text-white">Poly</span>
+                            <span className="text-xs text-white">Polygon</span>
                         </div>
                         <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={56} size={14} />
-                            <span className="text-xs text-white">BNB</span>
+                            <span className="text-xs text-white">BNB Chain</span>
                         </div>
                         <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={130} size={14} />
-                            <span className="text-xs text-white">Uni</span>
+                            <span className="text-xs text-white">Unichain</span>
                         </div>
                         <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg col-span-2">
                             <ChainIcon chainId={43114} size={14} />
