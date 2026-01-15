@@ -141,6 +141,9 @@ function DashboardContent({
     type NavTab = "wallet" | "agents" | "friends" | "chats" | "calls" | "leaderboard";
     const [activeNavTab, setActiveNavTab] = useState<NavTab>("chats");
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+    const [showWalletBetaPrompt, setShowWalletBetaPrompt] = useState(false);
+    const [isApplyingWalletBeta, setIsApplyingWalletBeta] = useState(false);
+    const [walletBetaApplied, setWalletBetaApplied] = useState(false);
     const [currentCallFriend, setCurrentCallFriend] =
         useState<FriendsListFriend | null>(null);
     const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(
@@ -3964,22 +3967,26 @@ function DashboardContent({
                 <nav className="fixed bottom-0 left-0 right-0 z-50 pb-[env(safe-area-inset-bottom)]">
                     <div className="bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 shadow-2xl shadow-black/50">
                         <div className="flex items-center justify-around py-1.5 px-1 max-w-lg mx-auto">
-                            {/* Wallet Tab - Beta testers only */}
-                            {hasBetaAccess && (
-                                <button
-                                    onClick={() => setIsWalletModalOpen(true)}
-                                    className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
-                                        isWalletModalOpen
-                                            ? "text-emerald-400 bg-emerald-500/20"
-                                            : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
-                                    }`}
-                                >
-                                    <span className="text-xl">💳</span>
-                                    <span className="text-[9px] font-medium mt-0.5">
-                                        Wallet
-                                    </span>
-                                </button>
-                            )}
+                            {/* Wallet Tab - Shows for all, beta prompt for non-beta users */}
+                            <button
+                                onClick={() => {
+                                    if (hasBetaAccess) {
+                                        setIsWalletModalOpen(true);
+                                    } else {
+                                        setShowWalletBetaPrompt(true);
+                                    }
+                                }}
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
+                                    isWalletModalOpen || showWalletBetaPrompt
+                                        ? "text-emerald-400 bg-emerald-500/20"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
+                                }`}
+                            >
+                                <span className="text-xl">💳</span>
+                                <span className="text-[9px] font-medium mt-0.5">
+                                    Wallet
+                                </span>
+                            </button>
 
                             {/* Agents Tab */}
                             <button
@@ -4801,6 +4808,78 @@ function DashboardContent({
                 emailVerified={siweUser?.emailVerified}
                 authMethod={isPasskeyUser ? "passkey" : isEmailUser ? "email" : walletType === "solana" ? "solana" : "wallet"}
             />
+
+            {/* Wallet Beta Access Prompt Modal */}
+            <AnimatePresence>
+                {showWalletBetaPrompt && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                        onClick={() => setShowWalletBetaPrompt(false)}
+                    >
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="relative z-10 w-full max-w-sm bg-zinc-900 rounded-2xl p-6 border border-zinc-800"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <button
+                                onClick={() => setShowWalletBetaPrompt(false)}
+                                className="absolute top-4 right-4 text-zinc-400 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                            <div className="text-center">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
+                                    <span className="text-3xl">💳</span>
+                                </div>
+                                <h3 className="text-xl text-white font-semibold mb-2">Spritz Smart Wallets (Beta)</h3>
+                                <p className="text-sm text-zinc-400 mb-6">
+                                    {walletBetaApplied
+                                        ? "Your application has been submitted! We'll review it and grant you access soon."
+                                        : "Apply for beta access to use Spritz Smart Wallets - send crypto with free gas, passkey signing, and multi-chain support."}
+                                </p>
+                                {!walletBetaApplied && (
+                                    <button
+                                        onClick={async () => {
+                                            setIsApplyingWalletBeta(true);
+                                            try {
+                                                const response = await fetch("/api/beta-access/apply", {
+                                                    method: "POST",
+                                                    credentials: "include",
+                                                });
+                                                const data = await response.json();
+                                                if (response.ok) {
+                                                    if (data.hasBetaAccess) {
+                                                        // User already has access, refresh and open wallet
+                                                        refreshBetaAccess();
+                                                        setShowWalletBetaPrompt(false);
+                                                        setIsWalletModalOpen(true);
+                                                    } else {
+                                                        setWalletBetaApplied(true);
+                                                    }
+                                                }
+                                            } catch (error) {
+                                                console.error("[Dashboard] Error applying for wallet beta:", error);
+                                            } finally {
+                                                setIsApplyingWalletBeta(false);
+                                            }
+                                        }}
+                                        disabled={isApplyingWalletBeta}
+                                        className="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isApplyingWalletBeta ? "Applying..." : "Apply for Beta Access"}
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Live Stream Player removed - now using /live/[id] page */}
         </>

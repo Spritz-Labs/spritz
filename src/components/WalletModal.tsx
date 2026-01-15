@@ -1531,19 +1531,27 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                                 </svg>
                                             </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Connect Wallet to Send</h3>
-                                            <p className="text-sm text-zinc-400 mb-6 max-w-xs">
-                                                To send tokens, you need to connect an Ethereum wallet to sign transactions.
+                                            <h3 className="text-lg font-semibold text-white mb-2">Reconnect to Send</h3>
+                                            <p className="text-sm text-zinc-400 mb-4 max-w-xs">
+                                                Your wallet session expired. Reconnect to sign transactions.
                                             </p>
                                             <button
                                                 onClick={() => openConnectModal?.()}
-                                                className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
+                                                className="w-full max-w-[200px] px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
                                             >
-                                                Connect Wallet
+                                                Reconnect Wallet
                                             </button>
-                                            <p className="text-xs text-zinc-600 mt-4">
-                                                Your Spritz wallet address will stay the same
-                                            </p>
+                                            <div className="mt-6 pt-4 border-t border-zinc-800 w-full max-w-xs">
+                                                <p className="text-xs text-zinc-500 mb-3">
+                                                    💡 Set up a passkey to send without reconnecting
+                                                </p>
+                                                <button
+                                                    onClick={() => setActiveTab("security")}
+                                                    className="text-xs text-purple-400 hover:text-purple-300 font-medium"
+                                                >
+                                                    Go to Security →
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                     <>
