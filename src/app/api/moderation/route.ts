@@ -69,11 +69,18 @@ export async function GET(request: NextRequest) {
             }
 
             case "moderators": {
-                const { data: moderators, error } = await supabase
+                const query = supabase
                     .from("shout_moderators")
-                    .select("*")
-                    .eq("channel_id", channelId)
-                    .order("granted_at", { ascending: false });
+                    .select("*");
+
+                // Handle null channel_id properly (global chat vs specific channel)
+                if (channelId) {
+                    query.eq("channel_id", channelId);
+                } else {
+                    query.is("channel_id", null);
+                }
+
+                const { data: moderators, error } = await query.order("granted_at", { ascending: false });
 
                 if (error) throw error;
                 return NextResponse.json({ moderators: moderators || [] });
