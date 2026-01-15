@@ -23,10 +23,10 @@ const CDP_API_KEY_NAME = process.env.CDP_API_KEY_NAME;
 const CDP_API_KEY_PRIVATE_KEY = process.env.CDP_API_KEY_PRIVATE_KEY;
 
 // Supported chains for onramp (must match Coinbase's supported networks)
-const SUPPORTED_BLOCKCHAINS = ["base", "ethereum", "polygon", "arbitrum", "optimism"];
+const SUPPORTED_BLOCKCHAINS = ["base", "ethereum", "polygon", "arbitrum", "optimism", "avalanche"];
 
 // Supported assets for onramp
-const SUPPORTED_ASSETS = ["ETH", "USDC", "USDT", "DAI"];
+const SUPPORTED_ASSETS = ["ETH", "USDC", "USDT", "DAI", "AVAX"];
 
 /**
  * Detect if the key is Ed25519 (base64) or EC (PEM format)
@@ -197,8 +197,30 @@ export async function POST(request: NextRequest) {
         if (!tokenResponse.ok) {
             const errorText = await tokenResponse.text();
             console.error("[Onramp] Failed to get session token:", tokenResponse.status, errorText);
+            console.error("[Onramp] Request payload:", JSON.stringify({
+                addresses: [{
+                    address: targetAddress.slice(0, 10) + "...",
+                    blockchains: SUPPORTED_BLOCKCHAINS,
+                }],
+                assets: SUPPORTED_ASSETS,
+                clientIp: clientIp,
+            }));
+            
+            // Parse error for more details
+            let errorMessage = "Failed to initialize onramp";
+            try {
+                const errorJson = JSON.parse(errorText);
+                if (errorJson.message) {
+                    errorMessage = errorJson.message;
+                } else if (errorJson.error) {
+                    errorMessage = errorJson.error;
+                }
+            } catch {
+                // Use default error message
+            }
+            
             return NextResponse.json(
-                { error: "Failed to initialize onramp" },
+                { error: errorMessage, details: errorText },
                 { status: 500 }
             );
         }

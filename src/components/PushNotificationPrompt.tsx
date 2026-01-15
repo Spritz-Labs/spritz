@@ -1,11 +1,55 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useUsername } from "@/hooks/useUsername";
 
 const PUSH_PROMPTED_KEY = "spritz_push_prompted";
 const PUSH_NEVER_ASK_KEY = "spritz_push_never_ask"; // User clicked "Don't Ask Again"
+
+// Helper to check if user has set "never ask" - checks all possible key formats
+function hasNeverAskFlag(userAddress: string): boolean {
+    if (!userAddress) return false;
+    
+    const normalizedAddress = userAddress.toLowerCase();
+    const key = `${PUSH_NEVER_ASK_KEY}_${normalizedAddress}`;
+    
+    try {
+        const value = localStorage.getItem(key);
+        if (value === "true") {
+            console.log("[PushNotificationPrompt] Found neverAsk flag for:", normalizedAddress.slice(0, 10));
+            return true;
+        }
+        
+        // Also check without address suffix (legacy)
+        const legacyValue = localStorage.getItem(PUSH_NEVER_ASK_KEY);
+        if (legacyValue === "true") {
+            console.log("[PushNotificationPrompt] Found legacy neverAsk flag");
+            return true;
+        }
+    } catch (e) {
+        console.error("[PushNotificationPrompt] Error reading localStorage:", e);
+    }
+    
+    return false;
+}
+
+// Helper to set the "never ask" flag
+function setNeverAskFlag(userAddress: string): void {
+    if (!userAddress) return;
+    
+    const normalizedAddress = userAddress.toLowerCase();
+    const key = `${PUSH_NEVER_ASK_KEY}_${normalizedAddress}`;
+    
+    try {
+        localStorage.setItem(key, "true");
+        // Also set the prompted flag for consistency
+        localStorage.setItem(`${PUSH_PROMPTED_KEY}_${normalizedAddress}`, "true");
+        console.log("[PushNotificationPrompt] Set neverAsk flag for:", normalizedAddress.slice(0, 10));
+    } catch (e) {
+        console.error("[PushNotificationPrompt] Error writing localStorage:", e);
+    }
+}
 
 type PushNotificationPromptProps = {
     userAddress: string | null;
@@ -35,8 +79,17 @@ export function PushNotificationPrompt({
     // Use ref to track if we've already shown the prompt in this session
     const hasShownRef = useRef(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+    // Track if we've done the initial neverAsk check
+    const initialCheckDoneRef = useRef(false);
     
     const { username: currentUsername, claimUsername, checkAvailability } = useUsername(userAddress);
+
+    // SYNCHRONOUS CHECK: Run immediately when userAddress becomes available
+    // This prevents any race conditions with the async effect
+    const shouldNeverShow = useCallback(() => {
+        if (!userAddress) return false;
+        return hasNeverAskFlag(userAddress);
+    }, [userAddress]);
 
     // Check if we should show the prompt
     useEffect(() => {
@@ -59,13 +112,14 @@ export function PushNotificationPrompt({
 
         // PRIORITY CHECK: If user clicked "Don't Ask Again" - NEVER show again
         // This check must happen first and be absolute
-        const neverAskKey = `${PUSH_NEVER_ASK_KEY}_${userAddress.toLowerCase()}`;
-        const neverAsk = localStorage.getItem(neverAskKey);
-        if (neverAsk === "true") {
+        if (shouldNeverShow()) {
             console.log("[PushNotificationPrompt] User clicked 'Don't Ask Again' - never showing");
             hasShownRef.current = true; // Prevent any future attempts this session
+            initialCheckDoneRef.current = true;
             return;
         }
+        
+        initialCheckDoneRef.current = true;
 
         if (!isSupported) {
             console.log("[PushNotificationPrompt] Push notifications not supported");
@@ -109,9 +163,9 @@ export function PushNotificationPrompt({
                 return;
             }
             // Re-check neverAsk in case it was set during the timeout
-            const neverAskRecheck = localStorage.getItem(neverAskKey);
-            if (neverAskRecheck === "true") {
+            if (shouldNeverShow()) {
                 console.log("[PushNotificationPrompt] neverAsk was set during timeout - not showing");
+                hasShownRef.current = true;
                 return;
             }
             hasShownRef.current = true;
@@ -131,7 +185,7 @@ export function PushNotificationPrompt({
                 timerRef.current = null;
             }
         };
-    }, [userAddress, isSupported, isSubscribed, permission, currentUsername]);
+    }, [userAddress, isSupported, isSubscribed, permission, currentUsername, shouldNeverShow]);
 
     // Debounced username availability check
     useEffect(() => {
@@ -198,12 +252,7 @@ export function PushNotificationPrompt({
     const handleSkip = () => {
         // Store PERMANENT "never ask again" flag - user explicitly doesn't want this
         if (userAddress) {
-            const neverAskKey = `${PUSH_NEVER_ASK_KEY}_${userAddress.toLowerCase()}`;
-            localStorage.setItem(neverAskKey, "true");
-            console.log("[PushNotificationPrompt] Set neverAsk flag for:", userAddress.slice(0, 10));
-            // Also set prompted flag for consistency
-            const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
-            localStorage.setItem(promptedKey, "true");
+            setNeverAskFlag(userAddress);
         }
         hasShownRef.current = true; // Mark as shown
         setIsOpen(false);

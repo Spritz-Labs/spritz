@@ -86,32 +86,11 @@ export function useOnramp(): UseOnrampReturn {
                 url = `${COINBASE_PAY_BASE_URL}?${params.toString()}`;
                 console.log("[Onramp] Initialized with session token for:", walletAddress.slice(0, 10) + "...");
             } else {
-                // Fallback: Use direct Coinbase Pay URL without session token
-                // This works but with fewer security features
-                console.log("[Onramp] Session token unavailable, using direct URL");
-                
-                const params = new URLSearchParams({
-                    destinationWallets: JSON.stringify([{
-                        address: walletAddress,
-                        blockchains: ["base", "ethereum", "polygon", "arbitrum", "optimism"],
-                    }]),
-                });
-
-                if (options.presetFiatAmount) {
-                    params.set("presetFiatAmount", options.presetFiatAmount.toString());
-                }
-                if (options.fiatCurrency) {
-                    params.set("fiatCurrency", options.fiatCurrency || "USD");
-                }
-                if (options.defaultAsset) {
-                    params.set("defaultAsset", options.defaultAsset);
-                }
-                if (options.defaultNetwork) {
-                    params.set("defaultNetwork", options.defaultNetwork);
-                }
-
-                url = `${COINBASE_PAY_BASE_URL}?${params.toString()}`;
-                console.log("[Onramp] Using fallback URL for:", walletAddress.slice(0, 10) + "...");
+                // Session token is required for this project's secure initialization
+                // If we can't get one, throw an error instead of using a fallback
+                const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+                console.error("[Onramp] Failed to get session token:", errorData);
+                throw new Error(errorData.error || "Failed to get session token - onramp requires secure initialization");
             }
 
             setOnrampUrl(url);
