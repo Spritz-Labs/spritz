@@ -520,8 +520,8 @@ export function AlphaChatModal({
                                     </button>
                                 )}
 
-                                {/* Moderation Button - For mods/admins */}
-                                {(moderation.permissions.isModerator || isAdmin) && (
+                                {/* Moderation Button - Admins only */}
+                                {isAdmin && (
                                     <button
                                         onClick={() => setShowModerationPanel(true)}
                                         className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-amber-400 hover:bg-zinc-700 transition-colors"

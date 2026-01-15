@@ -191,91 +191,100 @@ function SupportedNetworksInfo({ isExpanded, onToggle }: { isExpanded: boolean; 
     );
 }
 
-// Network Warning Modal - Fills the receive tab content area without scrolling
-function NetworkWarningModal({ onAcknowledge }: { onAcknowledge: () => void }) {
+// Network Warning Content - Full overlay that covers the wallet modal content
+function NetworkWarningContent({ onAcknowledge }: { onAcknowledge: () => void }) {
     return (
-        <div className="flex-1 flex flex-col p-4 justify-between">
-            {/* Content */}
-            <div>
-                {/* Header - compact */}
-                <div className="text-center mb-3">
-                    <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center mx-auto mb-2">
-                        <span className="text-xl">⚠️</span>
-                    </div>
-                    <h3 className="text-lg font-bold text-white">Before You Deposit</h3>
+        <div className="absolute inset-0 z-20 bg-zinc-900 flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-zinc-800 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                    <span className="text-xl">⚠️</span>
                 </div>
-                
+                <div>
+                    <h2 className="text-lg font-semibold text-white">Before You Deposit</h2>
+                    <p className="text-xs text-zinc-400">Please read carefully</p>
+                </div>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {/* Recommended Networks - FREE */}
-                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mb-2">
-                    <div className="flex items-center gap-1.5 mb-2">
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-2">
                         <span>✅</span>
-                        <span className="text-xs font-bold text-emerald-400">Recommended - FREE Gas</span>
+                        <span className="text-sm font-bold text-emerald-400">Recommended - FREE Gas</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-1.5">
-                        <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1.5 rounded">
+                    <div className="grid grid-cols-4 gap-2">
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={8453} size={14} />
                             <span className="text-xs text-white">Base</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1.5 rounded">
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={42161} size={14} />
                             <span className="text-xs text-white">Arb</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1.5 rounded">
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={10} size={14} />
                             <span className="text-xs text-white">OP</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1.5 rounded">
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={137} size={14} />
                             <span className="text-xs text-white">Poly</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1.5 rounded">
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={56} size={14} />
                             <span className="text-xs text-white">BNB</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1.5 rounded">
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
                             <ChainIcon chainId={130} size={14} />
                             <span className="text-xs text-white">Uni</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-1.5 rounded col-span-2">
+                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg col-span-2">
                             <ChainIcon chainId={43114} size={14} />
                             <span className="text-xs text-white">Avalanche</span>
                         </div>
                     </div>
+                    <p className="text-xs text-emerald-300/80 mt-2">Send and receive for free on these networks!</p>
                 </div>
                 
                 {/* Ethereum Mainnet - HIGH FEES */}
-                <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg p-2.5 mb-2">
-                    <div className="flex items-center gap-2">
-                        <ChainIcon chainId={1} size={18} />
-                        <span className="text-xs font-bold text-amber-400 flex-1">Ethereum Mainnet</span>
-                        <span className="text-sm font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded">$50-200+</span>
+                <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                        <ChainIcon chainId={1} size={20} />
+                        <span className="text-sm font-bold text-amber-400 flex-1">Ethereum Mainnet</span>
+                        <span className="text-base font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-lg">$50-200+</span>
                     </div>
-                    <p className="text-[11px] text-amber-200/70 mt-1">
-                        First tx deploys Smart Account. Use L2s for free.
+                    <p className="text-xs text-amber-200/70">
+                        First transaction deploys Smart Account. Use L2s above for free.
                     </p>
                 </div>
                 
                 {/* NOT SUPPORTED - DANGER */}
-                <div className="bg-red-500/10 border border-red-500/40 rounded-lg p-2.5">
-                    <div className="flex items-center gap-1.5 mb-1">
+                <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-2">
                         <span>🚫</span>
-                        <span className="text-xs font-bold text-red-400">NOT SUPPORTED - Funds Lost</span>
+                        <span className="text-sm font-bold text-red-400">NOT SUPPORTED - Funds Will Be Lost</span>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                        <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[11px] rounded">Solana</span>
-                        <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[11px] rounded">Bitcoin</span>
-                        <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[11px] rounded">Other non-EVM</span>
+                    <p className="text-xs text-red-300/80 mb-2">
+                        Sending from these networks results in permanent loss:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-lg">Solana</span>
+                        <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-lg">Bitcoin</span>
+                        <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-lg">Other non-EVM</span>
                     </div>
                 </div>
             </div>
             
-            {/* CTA Button - always at bottom */}
-            <button
-                onClick={onAcknowledge}
-                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition-colors mt-3"
-            >
-                I Understand, Show My Address
-            </button>
+            {/* Fixed CTA Button at bottom */}
+            <div className="p-4 border-t border-zinc-800">
+                <button
+                    onClick={onAcknowledge}
+                    className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors"
+                >
+                    I Understand, Show My Address
+                </button>
+            </div>
         </div>
     );
 }
@@ -861,8 +870,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.9, opacity: 0 }}
                         onClick={(e) => e.stopPropagation()}
-                        className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md min-h-[70vh] max-h-[90vh] overflow-hidden flex flex-col"
+                        className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md min-h-[70vh] max-h-[90vh] overflow-hidden flex flex-col"
                     >
+                        {/* Network Warning Overlay - shown when receive tab active and not acknowledged */}
+                        {activeTab === "receive" && !hasAcknowledgedChainWarning && !isSmartWalletLoading && !(smartWallet?.needsPasskey || (needsPasskeyForSend && passkeyStatus === "error")) && !(needsPasskeyForSend && passkeyStatus === "loading") && (
+                            <NetworkWarningContent onAcknowledge={() => setHasAcknowledgedChainWarning(true)} />
+                        )}
+                        
                         {/* Header */}
                         <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -1233,10 +1247,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             <p className="text-sm text-zinc-400">Loading wallet...</p>
                                         </div>
                                     ) : !hasAcknowledgedChainWarning ? (
-                                        /* Network warning - fills the tab content */
-                                        <NetworkWarningModal
-                                            onAcknowledge={() => setHasAcknowledgedChainWarning(true)}
-                                        />
+                                        /* Network warning is rendered as overlay at modal level */
+                                        <div className="flex-1 flex items-center justify-center p-6">
+                                            <p className="text-zinc-400 text-sm">Loading...</p>
+                                        </div>
                                     ) : (
                                         /* Normal receive flow - user has acknowledged warning */
                                         <div className="p-6 overflow-y-auto h-full">

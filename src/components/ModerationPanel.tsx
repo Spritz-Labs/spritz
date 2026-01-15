@@ -177,8 +177,8 @@ export function ModerationPanel({
                             </div>
                         ) : activeTab === "moderators" ? (
                             <>
-                                {/* Add Moderator Button */}
-                                {permissions.canManageMods && (
+                                {/* Add Moderator Button - Admins only */}
+                                {permissions.isAdmin && (
                                     <div className="mb-4">
                                         {!showAddMod ? (
                                             <button
@@ -306,7 +306,7 @@ export function ModerationPanel({
                                             </svg>
                                         </div>
                                         <p className="text-zinc-400 text-sm">No moderators yet</p>
-                                        {permissions.canManageMods && (
+                                        {permissions.isAdmin && (
                                             <p className="text-zinc-500 text-xs mt-1">Add trusted community members above</p>
                                         )}
                                     </div>
@@ -350,7 +350,7 @@ export function ModerationPanel({
                                                         Added {formatTime(mod.granted_at)}
                                                     </p>
                                                 </div>
-                                                {permissions.canManageMods && (
+                                                {permissions.isAdmin && (
                                                     <button
                                                         onClick={() => handleRemoveMod(mod)}
                                                         disabled={actionLoading === `demote-${mod.user_address}`}
