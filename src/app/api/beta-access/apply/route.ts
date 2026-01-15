@@ -17,6 +17,53 @@ function isSolanaAddress(address: string): boolean {
     return !address.startsWith("0x") && address.length >= 32 && address.length <= 44;
 }
 
+// GET - Check beta access status
+export async function GET(request: NextRequest) {
+    try {
+        // Get authenticated user from session
+        const session = await getAuthenticatedUser(request);
+
+        if (!session?.userAddress) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 }
+            );
+        }
+
+        // Normalize address
+        const normalizedAddress = isSolanaAddress(session.userAddress)
+            ? session.userAddress
+            : session.userAddress.toLowerCase();
+
+        // Fetch user's beta status
+        const { data: user, error } = await supabase
+            .from("shout_users")
+            .select("beta_access, beta_access_applied, beta_access_applied_at")
+            .eq("wallet_address", normalizedAddress)
+            .single();
+
+        if (error && error.code !== "PGRST116") {
+            console.error("[Beta Access Check] Error:", error);
+            return NextResponse.json(
+                { error: "Failed to check status" },
+                { status: 500 }
+            );
+        }
+
+        return NextResponse.json({
+            hasBetaAccess: user?.beta_access || false,
+            hasApplied: user?.beta_access_applied || false,
+            appliedAt: user?.beta_access_applied_at || null,
+        });
+    } catch (error) {
+        console.error("[Beta Access Check] Error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
+    }
+}
+
 export async function POST(request: NextRequest) {
     // Rate limit - strict to prevent spam applications
     const rateLimitResponse = await checkRateLimit(request, "strict");

@@ -144,6 +144,8 @@ function DashboardContent({
     const [showWalletBetaPrompt, setShowWalletBetaPrompt] = useState(false);
     const [isApplyingWalletBeta, setIsApplyingWalletBeta] = useState(false);
     const [walletBetaApplied, setWalletBetaApplied] = useState(false);
+    const [betaAppliedAt, setBetaAppliedAt] = useState<string | null>(null);
+    const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(false);
     const [currentCallFriend, setCurrentCallFriend] =
         useState<FriendsListFriend | null>(null);
     const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(
@@ -339,6 +341,36 @@ function DashboardContent({
     // Use || so if EITHER source says true, access is granted (more forgiving for cache issues)
     const { hasBetaAccess: hookBetaAccess, refresh: refreshBetaAccess } = useBetaAccess(userAddress);
     const hasBetaAccess = isBetaTester || hookBetaAccess;
+
+    // Check beta status when wallet beta prompt opens
+    useEffect(() => {
+        if (showWalletBetaPrompt && !walletBetaApplied && !isCheckingBetaStatus) {
+            setIsCheckingBetaStatus(true);
+            fetch("/api/beta-access/apply", {
+                method: "GET",
+                credentials: "include",
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data.hasApplied) {
+                        setWalletBetaApplied(true);
+                        setBetaAppliedAt(data.appliedAt);
+                    }
+                    // If user already has beta access, close prompt and open wallet
+                    if (data.hasBetaAccess) {
+                        refreshBetaAccess();
+                        setShowWalletBetaPrompt(false);
+                        setIsWalletModalOpen(true);
+                    }
+                })
+                .catch((err) => {
+                    console.error("[Dashboard] Error checking beta status:", err);
+                })
+                .finally(() => {
+                    setIsCheckingBetaStatus(false);
+                });
+        }
+    }, [showWalletBetaPrompt, walletBetaApplied, isCheckingBetaStatus, refreshBetaAccess]);
 
     // Email verification
     const {
@@ -4759,15 +4791,39 @@ function DashboardContent({
                             </button>
                             <div className="text-center">
                                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
-                                    <span className="text-3xl">💳</span>
+                                    <span className="text-3xl">{walletBetaApplied ? "⏳" : "💳"}</span>
                                 </div>
-                                <h3 className="text-xl text-white font-semibold mb-2">Spritz Smart Wallets (Beta)</h3>
-                                <p className="text-sm text-zinc-400 mb-6">
-                                    {walletBetaApplied
-                                        ? "Your application has been submitted! We'll review it and grant you access soon."
-                                        : "Apply for beta access to use Spritz Smart Wallets - send crypto with free gas, passkey signing, and multi-chain support."}
-                                </p>
-                                {!walletBetaApplied && (
+                                <h3 className="text-xl text-white font-semibold mb-2">
+                                    {walletBetaApplied ? "Application Pending" : "Spritz Smart Wallets (Beta)"}
+                                </h3>
+                                {isCheckingBetaStatus ? (
+                                    <div className="flex items-center justify-center py-4">
+                                        <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                                    </div>
+                                ) : walletBetaApplied ? (
+                                    <div className="space-y-3 mb-6">
+                                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+                                            <p className="text-amber-400 text-sm font-medium mb-1">Application Submitted</p>
+                                            <p className="text-zinc-400 text-xs">
+                                                {betaAppliedAt
+                                                    ? `Applied on ${new Date(betaAppliedAt).toLocaleDateString("en-US", {
+                                                          month: "long",
+                                                          day: "numeric",
+                                                          year: "numeric",
+                                                      })}`
+                                                    : "Your application is being reviewed"}
+                                            </p>
+                                        </div>
+                                        <p className="text-sm text-zinc-400">
+                                            We&apos;re reviewing applications and granting access in batches. You&apos;ll be notified when your access is approved!
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-zinc-400 mb-6">
+                                        Apply for beta access to use Spritz Smart Wallets - send crypto with free gas, passkey signing, and multi-chain support.
+                                    </p>
+                                )}
+                                {!walletBetaApplied && !isCheckingBetaStatus && (
                                     <button
                                         onClick={async () => {
                                             setIsApplyingWalletBeta(true);
@@ -4785,6 +4841,7 @@ function DashboardContent({
                                                         setIsWalletModalOpen(true);
                                                     } else {
                                                         setWalletBetaApplied(true);
+                                                        setBetaAppliedAt(new Date().toISOString());
                                                     }
                                                 }
                                             } catch (error) {
