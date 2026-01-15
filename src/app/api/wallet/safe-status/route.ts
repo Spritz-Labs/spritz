@@ -27,6 +27,20 @@ const TOKEN_PRICES: Record<number, number> = {
     56: 300,     // BNB
 };
 
+// Minimum gas prices in gwei (fallback when RPC returns unrealistic values)
+// These are conservative estimates based on typical network conditions
+const MIN_GAS_PRICES_GWEI: Record<number, number> = {
+    1: 15,       // Ethereum mainnet: typically 10-50+ gwei
+    8453: 0.01,  // Base: very low
+    42161: 0.1,  // Arbitrum: very low
+    10: 0.01,    // Optimism: very low  
+    137: 30,     // Polygon: typically 30-100+ gwei
+    56: 3,       // BNB: typically 3-5 gwei
+};
+
+// Convert gwei to wei
+const gweiToWei = (gwei: number) => BigInt(Math.floor(gwei * 1e9));
+
 // Safe ABI for reading owners and threshold
 const SAFE_ABI = [
     {
@@ -171,11 +185,18 @@ export async function GET(request: NextRequest) {
                 } else {
                     // Not deployed - estimate deployment cost
                     try {
-                        const gasPrice = await withTimeout(
+                        let gasPrice = await withTimeout(
                             publicClient.getGasPrice(),
                             5000,
                             BigInt(0)
                         );
+                        
+                        // Apply minimum gas price threshold to avoid unrealistic estimates
+                        const minGasPrice = gweiToWei(MIN_GAS_PRICES_GWEI[chainInfo.id] || 1);
+                        if (gasPrice < minGasPrice) {
+                            console.log(`[SafeStatus] Gas price for ${chainInfo.name} too low (${formatGwei(gasPrice)} gwei), using minimum ${MIN_GAS_PRICES_GWEI[chainInfo.id]} gwei`);
+                            gasPrice = minGasPrice;
+                        }
                         
                         if (gasPrice > BigInt(0)) {
                             const estimatedCostWei = SAFE_DEPLOYMENT_GAS * gasPrice;
@@ -192,6 +213,20 @@ export async function GET(request: NextRequest) {
                         }
                     } catch (gasErr) {
                         console.error(`[SafeStatus] Error estimating gas for ${chainInfo.name}:`, gasErr);
+                        
+                        // Use fallback minimum gas price on error
+                        const fallbackGasPrice = gweiToWei(MIN_GAS_PRICES_GWEI[chainInfo.id] || 15);
+                        const estimatedCostWei = SAFE_DEPLOYMENT_GAS * fallbackGasPrice;
+                        const estimatedCostEth = Number(formatEther(estimatedCostWei));
+                        const tokenPrice = TOKEN_PRICES[chainInfo.id] || 3500;
+                        
+                        status.deploymentEstimate = {
+                            gasUnits: SAFE_DEPLOYMENT_GAS.toString(),
+                            gasPriceGwei: formatGwei(fallbackGasPrice),
+                            estimatedCostEth: estimatedCostEth.toFixed(6),
+                            estimatedCostUsd: estimatedCostEth * tokenPrice,
+                            isSponsored: chainInfo.sponsored,
+                        };
                     }
                 }
 

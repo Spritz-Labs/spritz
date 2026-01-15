@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useModeration, MUTE_DURATION_OPTIONS } from "@/hooks/useModeration";
+import { useUserResolver } from "@/hooks/useUserResolver";
 import type { Moderator, MutedUser } from "@/app/api/moderation/route";
 
 interface ModerationPanelProps {
@@ -36,7 +37,6 @@ export function ModerationPanel({
 
     const [activeTab, setActiveTab] = useState<"moderators" | "muted">("moderators");
     const [showAddMod, setShowAddMod] = useState(false);
-    const [newModAddress, setNewModAddress] = useState("");
     const [newModPermissions, setNewModPermissions] = useState({
         canPin: true,
         canDelete: true,
@@ -44,6 +44,19 @@ export function ModerationPanel({
         canManageMods: false,
     });
     const [addingMod, setAddingMod] = useState(false);
+
+    // User resolver for adding moderators (supports address, ENS, Spritz username)
+    const {
+        input: modInput,
+        resolvedAddress: modResolvedAddress,
+        displayName: modDisplayName,
+        resolvedType: modResolvedType,
+        isResolving: isResolvingMod,
+        error: modResolveError,
+        isValid: isModInputValid,
+        setInput: setModInput,
+        clear: clearModInput,
+    } = useUserResolver();
 
     const formatAddress = (address: string) => {
         const info = getUserInfo?.(address);
@@ -57,12 +70,12 @@ export function ModerationPanel({
     };
 
     const handleAddMod = async () => {
-        if (!newModAddress.trim()) return;
+        if (!modResolvedAddress) return;
 
         setAddingMod(true);
-        const success = await promoteMod(newModAddress.trim(), newModPermissions);
+        const success = await promoteMod(modResolvedAddress, newModPermissions);
         if (success) {
-            setNewModAddress("");
+            clearModInput();
             setShowAddMod(false);
             setNewModPermissions({
                 canPin: true,
@@ -179,13 +192,60 @@ export function ModerationPanel({
                                             </button>
                                         ) : (
                                             <div className="bg-zinc-800/50 rounded-xl p-4 space-y-3">
-                                                <input
-                                                    type="text"
-                                                    value={newModAddress}
-                                                    onChange={(e) => setNewModAddress(e.target.value)}
-                                                    placeholder="Wallet address (0x...)"
-                                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
-                                                />
+                                                <div>
+                                                    <input
+                                                        type="text"
+                                                        value={modInput}
+                                                        onChange={(e) => setModInput(e.target.value)}
+                                                        placeholder="Address, ENS, or @username"
+                                                        className={`w-full bg-zinc-900 border rounded-lg px-4 py-3 text-white placeholder:text-zinc-500 focus:outline-none transition-colors ${
+                                                            modResolveError 
+                                                                ? "border-red-500/50 focus:border-red-500" 
+                                                                : isModInputValid 
+                                                                    ? "border-emerald-500/50 focus:border-emerald-500" 
+                                                                    : "border-zinc-700 focus:border-amber-500"
+                                                        }`}
+                                                    />
+                                                    
+                                                    {/* Resolution feedback */}
+                                                    <div className="mt-2 min-h-[20px]">
+                                                        {isResolvingMod && (
+                                                            <div className="flex items-center gap-2 text-xs text-zinc-400">
+                                                                <div className="w-3 h-3 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+                                                                Resolving...
+                                                            </div>
+                                                        )}
+                                                        {!isResolvingMod && modResolveError && (
+                                                            <p className="text-xs text-red-400">
+                                                                {modResolveError}
+                                                            </p>
+                                                        )}
+                                                        {!isResolvingMod && isModInputValid && modResolvedAddress && (
+                                                            <div className="flex items-center gap-2 text-xs text-emerald-400">
+                                                                <span>✓</span>
+                                                                <span>
+                                                                    {modDisplayName && (
+                                                                        <span className="font-medium">{modDisplayName} • </span>
+                                                                    )}
+                                                                    <code className="text-emerald-400/70">
+                                                                        {modResolvedAddress.slice(0, 6)}...{modResolvedAddress.slice(-4)}
+                                                                    </code>
+                                                                </span>
+                                                                {modResolvedType === "ens" && (
+                                                                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px]">ENS</span>
+                                                                )}
+                                                                {modResolvedType === "username" && (
+                                                                    <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded text-[10px]">Spritz</span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Help text */}
+                                                <p className="text-[10px] text-zinc-500">
+                                                    Enter a wallet address (0x...), ENS name (vitalik.eth), or Spritz username (@username)
+                                                </p>
 
                                                 <div className="space-y-2">
                                                     <p className="text-xs text-zinc-500 font-medium">Permissions:</p>
@@ -216,17 +276,20 @@ export function ModerationPanel({
 
                                                 <div className="flex gap-2">
                                                     <button
-                                                        onClick={() => setShowAddMod(false)}
+                                                        onClick={() => {
+                                                            setShowAddMod(false);
+                                                            clearModInput();
+                                                        }}
                                                         className="flex-1 py-2 px-4 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors"
                                                     >
                                                         Cancel
                                                     </button>
                                                     <button
                                                         onClick={handleAddMod}
-                                                        disabled={!newModAddress.trim() || addingMod}
+                                                        disabled={!isModInputValid || isResolvingMod || addingMod}
                                                         className="flex-1 py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                                                     >
-                                                        {addingMod ? "Adding..." : "Add"}
+                                                        {addingMod ? "Adding..." : isResolvingMod ? "Resolving..." : "Add"}
                                                     </button>
                                                 </div>
                                             </div>
