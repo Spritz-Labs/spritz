@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMultiChainSafeStatus, type ChainSafeStatus } from "@/hooks/useMultiChainSafeStatus";
 import { useRecoverySigner } from "@/hooks/useRecoverySigner";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
@@ -222,6 +222,18 @@ export function MultiChainSecurity({ safeAddress, primarySigner, balances }: Mul
     const [selectedChainForRecovery, setSelectedChainForRecovery] = useState<number | null>(null);
     const [showAddRecoveryForm, setShowAddRecoveryForm] = useState(false);
     const [passkeyCredential, setPasskeyCredential] = useState<PasskeyCredential | null>(null);
+    const recoveryFormRef = useRef<HTMLDivElement>(null);
+    const recoveryInputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-scroll to form and focus input when it opens
+    useEffect(() => {
+        if (showAddRecoveryForm) {
+            setTimeout(() => {
+                recoveryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                recoveryInputRef.current?.focus();
+            }, 100);
+        }
+    }, [showAddRecoveryForm]);
 
     // Recovery signer hook
     const {
@@ -392,7 +404,7 @@ export function MultiChainSecurity({ safeAddress, primarySigner, balances }: Mul
 
             {/* Add Recovery Form */}
             {showAddRecoveryForm && selectedChainForRecovery && (
-                <div className="bg-zinc-900 rounded-xl p-4 space-y-3">
+                <div ref={recoveryFormRef} className="bg-zinc-900 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <ChainIcon chainId={selectedChainForRecovery} size={20} />
@@ -421,6 +433,7 @@ export function MultiChainSecurity({ safeAddress, primarySigner, balances }: Mul
                     <div>
                         <label className="text-xs text-zinc-400 block mb-1">Recovery Wallet Address</label>
                         <input
+                            ref={recoveryInputRef}
                             type="text"
                             value={recoveryInput}
                             onChange={(e) => setRecoveryInput(e.target.value)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAccount } from "wagmi";
 import { useRecoverySigner } from "@/hooks/useRecoverySigner";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
@@ -37,6 +37,19 @@ export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
     } = useEnsResolver();
 
     const [showAddForm, setShowAddForm] = useState(false);
+    const formRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-scroll to form and focus input when it opens
+    useEffect(() => {
+        if (showAddForm) {
+            // Small delay to ensure DOM is updated
+            setTimeout(() => {
+                formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                inputRef.current?.focus();
+            }, 100);
+        }
+    }, [showAddForm]);
 
     // Fetch recovery info and passkey credential on mount
     useEffect(() => {
@@ -186,7 +199,7 @@ export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
                             + Add Recovery Signer
                         </button>
                     ) : (
-                        <div className="space-y-3">
+                        <div ref={formRef} className="space-y-3">
                             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
                                 <p className="text-xs text-blue-400 font-medium">💡 How Recovery Works</p>
                                 <p className="text-xs text-zinc-400 mt-1">
@@ -203,6 +216,7 @@ export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
                                 </label>
                                 <div className="relative">
                                     <input
+                                        ref={inputRef}
                                         type="text"
                                         value={recoveryInput}
                                         onChange={(e) => setRecoveryInput(e.target.value)}
