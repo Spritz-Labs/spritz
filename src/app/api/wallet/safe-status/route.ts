@@ -14,9 +14,24 @@ const SUPPORTED_CHAINS = [
     { id: 43114, chain: avalanche, name: "Avalanche", symbol: "AVAX", explorer: "https://snowtrace.io", sponsored: true },
 ];
 
-// Approximate gas units for Safe deployment (SafeProxyFactory.createProxyWithNonce)
-// This includes ~300k for Safe deployment + ~100k for 4337 module setup
-const SAFE_DEPLOYMENT_GAS = BigInt(450000);
+// Approximate gas units for Safe deployment via ERC-4337 UserOperation
+// This is MUCH higher than a simple contract deployment because 4337 includes:
+// - preVerificationGas: ~100k (bundler overhead, calldata)
+// - verificationGasLimit: ~600k (EntryPoint validation, signature verification, Safe setup)
+// - callGasLimit: ~400k (Safe proxy deployment + initialization)
+// Total: ~1.1M gas units for mainnet, lower for L2s
+const SAFE_DEPLOYMENT_GAS: Record<number, bigint> = {
+    1: BigInt(1100000),     // Ethereum mainnet - highest due to 4337 overhead
+    8453: BigInt(600000),   // Base - L2, lower overhead
+    42161: BigInt(600000),  // Arbitrum - L2
+    10: BigInt(600000),     // Optimism - L2
+    137: BigInt(800000),    // Polygon - similar to mainnet but cheaper gas
+    56: BigInt(800000),     // BNB Chain
+    43114: BigInt(800000),  // Avalanche
+};
+
+// Default gas for chains not in the map
+const DEFAULT_DEPLOYMENT_GAS = BigInt(1000000);
 
 // Native token prices (hardcoded fallback - in production use a price feed)
 const TOKEN_PRICES: Record<number, number> = {
@@ -188,6 +203,9 @@ export async function GET(request: NextRequest) {
                     status.safeAppUrl = `https://app.safe.global/home?safe=${prefix}:${safeAddress}`;
                 } else {
                     // Not deployed - estimate deployment cost
+                    // Use chain-specific gas estimate (4337 deployments are expensive)
+                    const deploymentGas = SAFE_DEPLOYMENT_GAS[chainInfo.id] || DEFAULT_DEPLOYMENT_GAS;
+                    
                     try {
                         let gasPrice = await withTimeout(
                             publicClient.getGasPrice(),
@@ -202,14 +220,17 @@ export async function GET(request: NextRequest) {
                             gasPrice = minGasPrice;
                         }
                         
-                        if (gasPrice > BigInt(0)) {
-                            const estimatedCostWei = SAFE_DEPLOYMENT_GAS * gasPrice;
+                        // Add 20% buffer for bundler markup and priority fees
+                        const adjustedGasPrice = (gasPrice * BigInt(120)) / BigInt(100);
+                        
+                        if (adjustedGasPrice > BigInt(0)) {
+                            const estimatedCostWei = deploymentGas * adjustedGasPrice;
                             const estimatedCostEth = Number(formatEther(estimatedCostWei));
                             const tokenPrice = TOKEN_PRICES[chainInfo.id] || 3500;
                             
                             status.deploymentEstimate = {
-                                gasUnits: SAFE_DEPLOYMENT_GAS.toString(),
-                                gasPriceGwei: formatGwei(gasPrice),
+                                gasUnits: deploymentGas.toString(),
+                                gasPriceGwei: formatGwei(adjustedGasPrice),
                                 estimatedCostEth: estimatedCostEth.toFixed(6),
                                 estimatedCostUsd: estimatedCostEth * tokenPrice,
                                 isSponsored: chainInfo.sponsored,
@@ -218,14 +239,15 @@ export async function GET(request: NextRequest) {
                     } catch (gasErr) {
                         console.error(`[SafeStatus] Error estimating gas for ${chainInfo.name}:`, gasErr);
                         
-                        // Use fallback minimum gas price on error
-                        const fallbackGasPrice = gweiToWei(MIN_GAS_PRICES_GWEI[chainInfo.id] || 15);
-                        const estimatedCostWei = SAFE_DEPLOYMENT_GAS * fallbackGasPrice;
+                        // Use fallback minimum gas price on error (with 20% buffer)
+                        const baseGasPrice = gweiToWei(MIN_GAS_PRICES_GWEI[chainInfo.id] || 15);
+                        const fallbackGasPrice = (baseGasPrice * BigInt(120)) / BigInt(100);
+                        const estimatedCostWei = deploymentGas * fallbackGasPrice;
                         const estimatedCostEth = Number(formatEther(estimatedCostWei));
                         const tokenPrice = TOKEN_PRICES[chainInfo.id] || 3500;
                         
                         status.deploymentEstimate = {
-                            gasUnits: SAFE_DEPLOYMENT_GAS.toString(),
+                            gasUnits: deploymentGas.toString(),
                             gasPriceGwei: formatGwei(fallbackGasPrice),
                             estimatedCostEth: estimatedCostEth.toFixed(6),
                             estimatedCostUsd: estimatedCostEth * tokenPrice,
