@@ -1,6 +1,7 @@
 "use client";
 
 import { CurrentlyWidgetConfig } from "../ProfileWidgetTypes";
+import { sanitizeUrl, sanitizeImageUrl } from "@/lib/urlSecurity";
 
 interface CurrentlyWidgetProps {
     config: CurrentlyWidgetConfig;
@@ -28,6 +29,10 @@ const TYPE_LABELS: Record<string, string> = {
 export function CurrentlyWidget({ config, size }: CurrentlyWidgetProps) {
     const { type, title, subtitle, imageUrl, link } = config;
     
+    // Sanitize URLs
+    const safeImageUrl = sanitizeImageUrl(imageUrl);
+    const safeLink = sanitizeUrl(link);
+    
     const isSmall = size === '1x1';
     const icon = TYPE_ICONS[type] || '🎯';
     const label = TYPE_LABELS[type] || 'Currently';
@@ -35,9 +40,9 @@ export function CurrentlyWidget({ config, size }: CurrentlyWidgetProps) {
     const content = (
         <div className={`w-full h-full flex ${isSmall ? 'flex-col items-center justify-center text-center' : 'items-center gap-4'} p-4 sm:p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all group`}>
             {/* Image or Icon */}
-            {imageUrl && !isSmall ? (
+            {safeImageUrl && !isSmall ? (
                 <img
-                    src={imageUrl}
+                    src={safeImageUrl}
                     alt={title}
                     className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover flex-shrink-0"
                 />
@@ -61,7 +66,7 @@ export function CurrentlyWidget({ config, size }: CurrentlyWidgetProps) {
             </div>
             
             {/* Link indicator */}
-            {link && !isSmall && (
+            {safeLink && !isSmall && (
                 <svg className="w-5 h-5 text-zinc-500 group-hover:text-white group-hover:translate-x-1 transition-all flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
@@ -69,9 +74,9 @@ export function CurrentlyWidget({ config, size }: CurrentlyWidgetProps) {
         </div>
     );
     
-    if (link) {
+    if (safeLink) {
         return (
-            <a href={link} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
+            <a href={safeLink} target="_blank" rel="noopener noreferrer nofollow" className="block w-full h-full">
                 {content}
             </a>
         );

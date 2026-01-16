@@ -1,6 +1,7 @@
 "use client";
 
 import { WidgetSize, SocialLinkWidgetConfig } from "../ProfileWidgetTypes";
+import { validateSocialUrl, sanitizeUrl } from "@/lib/urlSecurity";
 
 interface SocialLinkWidgetProps {
     config: SocialLinkWidgetConfig;
@@ -29,11 +30,29 @@ export function SocialLinkWidget({ config, size }: SocialLinkWidgetProps) {
     
     const platformName = platform === 'x' ? 'Twitter' : platform.charAt(0).toUpperCase() + platform.slice(1);
     
+    // Validate URL matches expected platform domain (or is safe for 'website')
+    const isValidUrl = validateSocialUrl(platform, url);
+    const safeUrl = isValidUrl ? sanitizeUrl(url) : null;
+    
+    // If URL doesn't match platform, don't render as clickable
+    if (!safeUrl) {
+        return (
+            <div className="flex flex-col items-center justify-center w-full h-full p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800">
+                <div className={`${isCompact ? 'w-10 h-10' : 'w-14 h-14'} rounded-xl ${style.bg} flex items-center justify-center mb-2`}>
+                    <span className={`${isCompact ? 'text-lg' : 'text-2xl'} ${style.color} font-bold`}>
+                        {style.icon}
+                    </span>
+                </div>
+                <p className="text-zinc-500 text-xs">Invalid link</p>
+            </div>
+        );
+    }
+    
     return (
         <a
-            href={url}
+            href={safeUrl}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noopener noreferrer nofollow"
             className={`flex flex-col items-center justify-center w-full h-full p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:scale-[1.05] hover:shadow-lg transition-all group`}
         >
             <div className={`${isCompact ? 'w-10 h-10' : 'w-14 h-14'} rounded-xl ${style.bg} ${style.hoverBg} flex items-center justify-center mb-2 group-hover:scale-110 transition-transform`}>

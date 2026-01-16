@@ -1,6 +1,7 @@
 "use client";
 
 import { LinkWidgetConfig } from "../ProfileWidgetTypes";
+import { sanitizeUrl, sanitizeImageUrl } from "@/lib/urlSecurity";
 
 interface LinkWidgetProps {
     config: LinkWidgetConfig;
@@ -13,6 +14,10 @@ export function LinkWidget({ config, size }: LinkWidgetProps) {
     const isSmall = size === '1x1';
     const isEmoji = icon && /\p{Emoji}/u.test(icon);
     
+    // Sanitize the URL
+    const safeUrl = sanitizeUrl(url);
+    const safeIconUrl = icon && !isEmoji ? sanitizeImageUrl(icon) : null;
+    
     // Extract domain for display
     const domain = (() => {
         try {
@@ -22,11 +27,20 @@ export function LinkWidget({ config, size }: LinkWidgetProps) {
         }
     })();
     
+    // If URL is unsafe, render without link
+    if (!safeUrl) {
+        return (
+            <div className="w-full h-full flex flex-col justify-center p-5 sm:p-6 rounded-2xl bg-zinc-900 border border-zinc-800">
+                <p className="text-zinc-500 text-sm">Invalid link</p>
+            </div>
+        );
+    }
+    
     return (
         <a
-            href={url}
+            href={safeUrl}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noopener noreferrer nofollow"
             className="w-full h-full flex flex-col justify-center p-5 sm:p-6 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50 transition-all group"
         >
             <div className={`flex ${isSmall ? 'flex-col items-center text-center' : 'items-start gap-4'}`}>
@@ -38,8 +52,8 @@ export function LinkWidget({ config, size }: LinkWidgetProps) {
                 `}>
                     {isEmoji ? (
                         <span className="text-2xl">{icon}</span>
-                    ) : icon ? (
-                        <img src={icon} alt="" className="w-8 h-8 rounded" />
+                    ) : safeIconUrl ? (
+                        <img src={safeIconUrl} alt="" className="w-8 h-8 rounded" />
                     ) : (
                         <svg className="w-6 h-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />

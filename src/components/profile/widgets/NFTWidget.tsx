@@ -1,6 +1,7 @@
 "use client";
 
 import { NFTWidgetConfig } from "../ProfileWidgetTypes";
+import { isValidContractAddress, sanitizeImageUrl } from "@/lib/urlSecurity";
 
 interface NFTWidgetProps {
     config: NFTWidgetConfig;
@@ -12,9 +13,16 @@ export function NFTWidget({ config, size }: NFTWidgetProps) {
     
     const isSmall = size === '1x1';
     
-    // Generate OpenSea link
+    // Validate contract address and sanitize image URL
+    const safeImageUrl = sanitizeImageUrl(imageUrl);
+    const validContract = isValidContractAddress(contractAddress);
+    const validTokenId = /^\d+$/.test(tokenId); // Token IDs should be numeric
+    
+    // Only generate OpenSea link if contract address is valid
     const chainSlug = chain === 'ethereum' ? 'ethereum' : chain;
-    const openSeaUrl = `https://opensea.io/assets/${chainSlug}/${contractAddress}/${tokenId}`;
+    const openSeaUrl = validContract && validTokenId 
+        ? `https://opensea.io/assets/${chainSlug}/${contractAddress}/${tokenId}`
+        : null;
     
     // Chain icons
     const chainIcons: Record<string, string> = {
@@ -24,17 +32,12 @@ export function NFTWidget({ config, size }: NFTWidgetProps) {
         optimism: '🔴',
     };
     
-    return (
-        <a
-            href={openSeaUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full h-full relative overflow-hidden rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-purple-500/50 transition-all group"
-        >
+    const content = (
+        <>
             {/* NFT Image */}
-            {imageUrl ? (
+            {safeImageUrl ? (
                 <img
-                    src={imageUrl}
+                    src={safeImageUrl}
                     alt={name || 'NFT'}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
@@ -66,13 +69,34 @@ export function NFTWidget({ config, size }: NFTWidgetProps) {
             )}
             
             {/* Hover indicator */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
+            {openSeaUrl && (
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                    </div>
                 </div>
-            </div>
-        </a>
+            )}
+        </>
+    );
+    
+    if (openSeaUrl) {
+        return (
+            <a
+                href={openSeaUrl}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="w-full h-full relative overflow-hidden rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-purple-500/50 transition-all group"
+            >
+                {content}
+            </a>
+        );
+    }
+    
+    return (
+        <div className="w-full h-full relative overflow-hidden rounded-2xl bg-zinc-900 border border-zinc-800 group">
+            {content}
+        </div>
     );
 }
