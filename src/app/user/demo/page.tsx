@@ -226,9 +226,9 @@ const DEMO_WIDGETS: BaseWidget[] = [
         widget_type: "vinyl_record",
         config: {
             albumArt: "https://i.scdn.co/image/ab67616d0000b273d9985092cd88bffd97653b58",
-            songTitle: "Blinding Lights",
+            albumName: "After Hours",
             artistName: "The Weeknd",
-            isPlaying: true,
+            isSpinning: true,
         },
         size: "2x2",
         position: 15,

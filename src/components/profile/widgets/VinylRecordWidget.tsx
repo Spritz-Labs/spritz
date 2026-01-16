@@ -23,7 +23,7 @@ export function VinylRecordWidget({ config, size }: VinylRecordWidgetProps) {
     
     return (
         <div 
-            className={`w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl overflow-hidden ${spotifyUrl ? 'cursor-pointer' : ''}`}
+            className={`w-full h-full relative flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl overflow-hidden ${spotifyUrl ? 'cursor-pointer' : ''}`}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             onClick={handleClick}
