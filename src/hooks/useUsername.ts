@@ -11,6 +11,56 @@ type UsernameData = {
     created_at: string;
 };
 
+// Reserved usernames to prevent impersonation (must match server-side list)
+const RESERVED_USERNAMES = new Set([
+    // Company/Brand names
+    "spritz", "spritzapp", "spritzchat", "spritzlabs", "spritz_labs", "spritz_app",
+    "spritz_chat", "spritz_team", "spritz_support", "spritz_official", "spritz_help",
+    "spritz_admin", "spritz_mod", "spritz_bot", "spritzbot", "spritz_dao",
+    // Official roles
+    "admin", "administrator", "support", "help", "helpdesk", "moderator", "mod",
+    "staff", "team", "official", "verified", "system", "operator", "manager",
+    // Security-sensitive
+    "security", "secure", "root", "sysadmin", "webmaster", "superuser", "sudo",
+    // Financial/Trust
+    "wallet", "vault", "treasury", "finance", "payment", "billing", "account",
+    "accounts", "bank", "crypto", "token", "tokens", "nft", "nfts",
+    // Communication
+    "announcement", "announcements", "news", "update", "updates", "alert", "alerts",
+    "notification", "notifications", "info", "information", "notice", "broadcast",
+    // Authority titles
+    "ceo", "cto", "cfo", "coo", "founder", "cofounder", "co_founder", "owner",
+    "developer", "dev", "engineer", "president", "director", "lead", "head",
+    // Support variations
+    "customer_support", "customersupport", "tech_support", "techsupport",
+    "official_support", "support_team", "helpteam", "help_team", "service",
+    // Generic reserved
+    "null", "undefined", "anonymous", "guest", "test", "testing", "demo",
+    "example", "user", "username", "me", "self", "api", "www", "mail", "email",
+    // Scam prevention
+    "giveaway", "airdrop", "free", "winner", "prize", "reward", "claim",
+    "verify", "verification", "recovery", "restore", "unlock", "bonus",
+]);
+
+// Check if username is reserved
+function isReservedUsername(username: string): boolean {
+    const normalized = username.toLowerCase();
+    if (RESERVED_USERNAMES.has(normalized)) return true;
+    
+    // Check patterns
+    const reservedPrefixes = ["spritz_", "official_", "support_", "admin_", "mod_", "team_"];
+    const reservedSuffixes = ["_official", "_support", "_admin", "_mod", "_team", "_staff", "_verified"];
+    
+    for (const prefix of reservedPrefixes) {
+        if (normalized.startsWith(prefix)) return true;
+    }
+    for (const suffix of reservedSuffixes) {
+        if (normalized.endsWith(suffix)) return true;
+    }
+    
+    return false;
+}
+
 export function useUsername(userAddress: string | null) {
     const [username, setUsername] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -46,6 +96,12 @@ export function useUsername(userAddress: string | null) {
             if (!name || name.length < 3) return false;
 
             const normalizedName = name.toLowerCase().trim();
+            
+            // Check reserved usernames first (no server call needed)
+            if (isReservedUsername(normalizedName)) {
+                return false;
+            }
+            
             const client = supabase; // TypeScript narrowing
 
             const { data } = await client
@@ -84,6 +140,12 @@ export function useUsername(userAddress: string | null) {
                 setError(
                     "Username can only contain letters, numbers, and underscores"
                 );
+                return false;
+            }
+
+            // Check reserved usernames
+            if (isReservedUsername(normalizedName)) {
+                setError("Username not available");
                 return false;
             }
 

@@ -6,6 +6,79 @@ import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+// Reserved usernames to prevent impersonation and scams
+const RESERVED_USERNAMES = new Set([
+    // Company/Brand names
+    "spritz", "spritzapp", "spritzchat", "spritzlabs", "spritz_labs", "spritz_app",
+    "spritz_chat", "spritz_team", "spritz_support", "spritz_official", "spritz_help",
+    "spritz_admin", "spritz_mod", "spritz_bot", "spritzbot", "spritz_dao",
+    
+    // Official roles
+    "admin", "administrator", "support", "help", "helpdesk", "moderator", "mod",
+    "staff", "team", "official", "verified", "system", "operator", "manager",
+    
+    // Security-sensitive
+    "security", "secure", "root", "sysadmin", "webmaster", "superuser", "sudo",
+    
+    // Financial/Trust terms
+    "wallet", "vault", "treasury", "finance", "payment", "billing", "account",
+    "accounts", "bank", "crypto", "token", "tokens", "nft", "nfts",
+    
+    // Communication/Announcements  
+    "announcement", "announcements", "news", "update", "updates", "alert", "alerts",
+    "notification", "notifications", "info", "information", "notice", "broadcast",
+    
+    // Authority titles
+    "ceo", "cto", "cfo", "coo", "founder", "cofounder", "co_founder", "owner",
+    "developer", "dev", "engineer", "president", "director", "lead", "head",
+    
+    // Support variations
+    "customer_support", "customersupport", "tech_support", "techsupport",
+    "official_support", "support_team", "helpteam", "help_team", "service",
+    "customer_service", "customerservice",
+    
+    // Generic reserved
+    "null", "undefined", "anonymous", "guest", "test", "testing", "demo",
+    "example", "user", "username", "me", "self", "api", "www", "mail", "email",
+    "ftp", "http", "https", "localhost", "server", "bot", "robot",
+    
+    // Scam prevention terms
+    "giveaway", "airdrop", "free", "winner", "prize", "reward", "claim",
+    "verify", "verification", "recovery", "restore", "unlock", "bonus",
+    "promo", "promotion", "contest", "lottery", "jackpot",
+    
+    // Common impersonation targets
+    "vitalik", "satoshi", "elon", "elonmusk", "cz", "sbf",
+]);
+
+// Check if username is reserved (also checks common patterns)
+function isReservedUsername(username: string): boolean {
+    const normalized = username.toLowerCase();
+    
+    // Direct match
+    if (RESERVED_USERNAMES.has(normalized)) {
+        return true;
+    }
+    
+    // Check for patterns like "spritz_anything", "official_anything", "support_anything"
+    const reservedPrefixes = ["spritz_", "official_", "support_", "admin_", "mod_", "team_"];
+    for (const prefix of reservedPrefixes) {
+        if (normalized.startsWith(prefix)) {
+            return true;
+        }
+    }
+    
+    // Check for patterns like "anything_official", "anything_support", "anything_admin"
+    const reservedSuffixes = ["_official", "_support", "_admin", "_mod", "_team", "_staff", "_verified"];
+    for (const suffix of reservedSuffixes) {
+        if (normalized.endsWith(suffix)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 // Normalize address (lowercase for EVM, as-is for Solana)
 function normalizeAddress(address: string): string {
     if (address.startsWith("0x")) {
@@ -99,6 +172,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
                 { error: "Username can only contain letters, numbers, and underscores" },
                 { status: 400 }
+            );
+        }
+
+        // Check for reserved usernames (security)
+        if (isReservedUsername(normalizedName)) {
+            return NextResponse.json(
+                { error: "Username not available" },
+                { status: 409 }
             );
         }
 
