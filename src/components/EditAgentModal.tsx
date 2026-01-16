@@ -89,6 +89,55 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
             setTags(tags.slice(0, -1));
         }
     };
+
+    // Resize image for avatar (ensure high quality)
+    const resizeImageForAvatar = (file: File, maxSize: number = 512): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            img.onload = () => {
+                if (!ctx) {
+                    reject(new Error('Could not get canvas context'));
+                    return;
+                }
+                
+                // Calculate dimensions (crop to square, then resize)
+                const size = Math.min(img.width, img.height);
+                const sx = (img.width - size) / 2;
+                const sy = (img.height - size) / 2;
+                
+                // Set canvas to target size
+                const targetSize = Math.min(size, maxSize);
+                canvas.width = targetSize;
+                canvas.height = targetSize;
+                
+                // Enable high-quality image smoothing
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                
+                // Draw cropped and resized image
+                ctx.drawImage(img, sx, sy, size, size, 0, 0, targetSize, targetSize);
+                
+                // Convert to blob
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(new Error('Failed to create image blob'));
+                        }
+                    },
+                    'image/jpeg',
+                    0.9 // High quality
+                );
+            };
+            
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = URL.createObjectURL(file);
+        });
+    };
     
     // Capabilities
     const [webSearchEnabled, setWebSearchEnabled] = useState(true);
@@ -592,8 +641,12 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                                             setError(null);
 
                                                             try {
+                                                                // Resize image for better quality (512x512)
+                                                                const resizedBlob = await resizeImageForAvatar(file, 512);
+                                                                const resizedFile = new File([resizedBlob], 'avatar.jpg', { type: 'image/jpeg' });
+                                                                
                                                                 const formData = new FormData();
-                                                                formData.append('file', file);
+                                                                formData.append('file', resizedFile);
 
                                                                 const res = await fetch('/api/upload?type=avatar', {
                                                                     method: 'POST',

@@ -541,18 +541,15 @@ function DashboardContent({
         refresh: refreshFriends,
     } = useFriendRequests(userAddress);
 
-    // Fetch user info for all unique senders in alpha chat messages
+    // Fetch user info for all unique senders in alpha chat messages (including friends for effective avatar)
     useEffect(() => {
         if (!alphaChat.messages || alphaChat.messages.length === 0) return;
 
         const uniqueSenders = new Set<string>();
         alphaChat.messages.forEach((msg) => {
             const sender = msg.sender_address.toLowerCase();
-            // Skip current user and friends (already handled)
-            if (
-                sender !== userAddress.toLowerCase() &&
-                !friends.some((f) => f.friend_address.toLowerCase() === sender)
-            ) {
+            // Skip only current user - include friends to get their effective avatar
+            if (sender !== userAddress.toLowerCase()) {
                 uniqueSenders.add(sender);
             }
         });
@@ -634,6 +631,14 @@ function DashboardContent({
             isMounted = false;
         };
     }, [userAddress, resolveAddressOrENS]);
+
+    // Effective avatar - uses custom avatar when selected, otherwise ENS avatar
+    const effectiveAvatar = useMemo(() => {
+        if (userSettings.useCustomAvatar && userSettings.customAvatarUrl) {
+            return userSettings.customAvatarUrl;
+        }
+        return userENS.avatar;
+    }, [userSettings.useCustomAvatar, userSettings.customAvatarUrl, userENS.avatar]);
 
     // Separate effect to award ENS points - only runs when hasClaimed state is ready
     useEffect(() => {
@@ -936,7 +941,7 @@ function DashboardContent({
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 
-    // Get user info for Alpha chat - checks friends list and returns name/avatar
+    // Get user info for Alpha chat - checks cache first for effective avatar, then friends list
     const getAlphaUserInfo = useCallback(
         (address: string) => {
             const normalizedAddress = address.toLowerCase();
@@ -945,15 +950,28 @@ function DashboardContent({
             if (normalizedAddress === userAddress.toLowerCase()) {
                 return {
                     name: reachUsername || userENS?.ensName || null,
-                    avatar: userENS?.avatar || null,
+                    avatar: effectiveAvatar || null,
                 };
             }
 
-            // Check friends list
+            // Check cache first - has effective avatar from public API
+            const cached = userInfoCache.get(normalizedAddress);
+            
+            // Check friends list for name info
             const friend = friends.find(
                 (f) => f.friend_address.toLowerCase() === normalizedAddress
             );
 
+            // If we have cached info (with effective avatar), use it but prefer friend's nickname for name
+            if (cached) {
+                const friendName = friend?.nickname || friend?.reachUsername || friend?.ensName;
+                return {
+                    name: friendName || cached.name,
+                    avatar: cached.avatar, // Use cached effective avatar
+                };
+            }
+
+            // Fallback to friend data if no cache (avatar may not be effective)
             if (friend) {
                 return {
                     name:
@@ -965,16 +983,10 @@ function DashboardContent({
                 };
             }
 
-            // Check cache
-            const cached = userInfoCache.get(normalizedAddress);
-            if (cached) {
-                return cached;
-            }
-
             // Return null if not found (will be fetched by useEffect)
             return null;
         },
-        [userAddress, friends, reachUsername, userENS, userInfoCache]
+        [userAddress, friends, reachUsername, userENS, effectiveAvatar, userInfoCache]
     );
 
     // Convert friends to the format FriendsList expects - memoized to prevent unnecessary re-renders
@@ -2037,9 +2049,9 @@ function DashboardContent({
                                             : "Go Live"
                                     }
                                 >
-                                    {userENS.avatar ? (
+                                    {effectiveAvatar ? (
                                         <img
-                                            src={userENS.avatar}
+                                            src={effectiveAvatar}
                                             alt="Avatar"
                                             className={`w-10 h-10 rounded-xl object-cover ring-2 transition-all ${
                                                 currentStream?.status === "live"
@@ -4310,7 +4322,7 @@ function DashboardContent({
                 address={userAddress as `0x${string}`}
                 ensName={userENS.ensName}
                 reachUsername={reachUsername || null}
-                avatar={userENS.avatar}
+                avatar={effectiveAvatar}
             />
 
             {/* New Scheduled Call Modal */}

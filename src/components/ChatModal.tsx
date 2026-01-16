@@ -114,6 +114,7 @@ export function ChatModal({
         toggleReaction: toggleMsgReaction,
     } = useMessageReactions(userAddress, conversationId);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const isInitialLoadRef = useRef(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef = useRef<any>(null);
 
@@ -142,7 +143,14 @@ export function ChatModal({
 
     // Scroll to bottom when messages change
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (messages.length > 0) {
+            // Use instant scroll for initial load, smooth for new messages
+            const behavior = isInitialLoadRef.current ? "instant" : "smooth";
+            messagesEndRef.current?.scrollIntoView({ behavior });
+            if (isInitialLoadRef.current) {
+                isInitialLoadRef.current = false;
+            }
+        }
     }, [messages]);
 
     // Initialize Waku when modal opens
@@ -155,6 +163,8 @@ export function ChatModal({
     // Reset state when modal closes
     useEffect(() => {
         if (isOpen) {
+            // Reset initial load flag for instant scroll
+            isInitialLoadRef.current = true;
             // Set this chat as active to prevent unread count increments
             // This also calls markAsRead internally
             setActiveChatPeer(peerAddress);
@@ -1077,14 +1087,30 @@ export function ChatModal({
                                             key={msg.id}
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className={`flex ${
+                                            className={`flex items-end gap-2 ${
                                                 isOwn
                                                     ? "justify-end"
                                                     : "justify-start"
                                             }`}
                                         >
+                                            {/* Peer avatar for incoming messages */}
+                                            {!isOwn && (
+                                                <div className="flex-shrink-0 mb-1">
+                                                    {peerAvatar ? (
+                                                        <img
+                                                            src={peerAvatar}
+                                                            alt=""
+                                                            className="w-7 h-7 rounded-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-bold">
+                                                            {peerName?.[0]?.toUpperCase() || peerAddress.slice(2, 4).toUpperCase()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                             <div
-                                                className={`${isFullscreen ? "max-w-[90%]" : "max-w-[75%]"} rounded-2xl px-4 py-2 ${
+                                                className={`${isFullscreen ? "max-w-[85%]" : "max-w-[70%]"} rounded-2xl px-4 py-2 ${
                                                     isOwn
                                                         ? msg.status === "failed"
                                                             ? "bg-red-500/80 text-white rounded-br-md"

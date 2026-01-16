@@ -17,6 +17,16 @@ import {
     TechStackWidgetConfig,
     CurrentlyWidgetConfig,
     StatsWidgetConfig,
+    WeatherWidgetConfig,
+    GitHubWidgetConfig,
+    SocialEmbedWidgetConfig,
+    TipJarWidgetConfig,
+    // Spritz widget configs
+    MessageMeWidgetConfig,
+    WalletWidgetConfig,
+    ScheduleWidgetConfig,
+    AgentWidgetConfig,
+    SocialLinkWidgetConfig,
 } from "./ProfileWidgetTypes";
 
 // Widget components
@@ -32,6 +42,16 @@ import { ClockWidget } from "./widgets/ClockWidget";
 import { TechStackWidget } from "./widgets/TechStackWidget";
 import { CurrentlyWidget } from "./widgets/CurrentlyWidget";
 import { StatsWidget } from "./widgets/StatsWidget";
+import { WeatherWidget } from "./widgets/WeatherWidget";
+import { GitHubWidget } from "./widgets/GitHubWidget";
+import { SocialEmbedWidget } from "./widgets/SocialEmbedWidget";
+import { TipJarWidget } from "./widgets/TipJarWidget";
+// Spritz feature widgets
+import { MessageMeWidget } from "./widgets/MessageMeWidget";
+import { WalletWidget } from "./widgets/WalletWidget";
+import { ScheduleWidget } from "./widgets/ScheduleWidget";
+import { AgentWidget } from "./widgets/AgentWidget";
+import { SocialLinkWidget } from "./widgets/SocialLinkWidget";
 
 interface ProfileWidgetRendererProps {
     widgets: BaseWidget[];
@@ -67,6 +87,25 @@ function renderWidget(widget: BaseWidget): React.ReactNode {
             return <CurrentlyWidget config={config as unknown as CurrentlyWidgetConfig} size={size} />;
         case 'stats':
             return <StatsWidget config={config as unknown as StatsWidgetConfig} size={size} />;
+        case 'weather':
+            return <WeatherWidget config={config as unknown as WeatherWidgetConfig} size={size} />;
+        case 'github':
+            return <GitHubWidget config={config as unknown as GitHubWidgetConfig} size={size} />;
+        case 'social_embed':
+            return <SocialEmbedWidget config={config as unknown as SocialEmbedWidgetConfig} size={size} />;
+        case 'tip_jar':
+            return <TipJarWidget config={config as unknown as TipJarWidgetConfig} size={size} />;
+        // Spritz feature widgets
+        case 'message_me':
+            return <MessageMeWidget config={config as unknown as MessageMeWidgetConfig} size={size} />;
+        case 'wallet':
+            return <WalletWidget config={config as unknown as WalletWidgetConfig} size={size} />;
+        case 'schedule':
+            return <ScheduleWidget config={config as unknown as ScheduleWidgetConfig} size={size} />;
+        case 'agent':
+            return <AgentWidget config={config as unknown as AgentWidgetConfig} size={size} />;
+        case 'social_link':
+            return <SocialLinkWidget config={config as unknown as SocialLinkWidgetConfig} size={size} />;
         default:
             // Fallback for unknown widget types
             return (

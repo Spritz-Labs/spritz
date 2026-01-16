@@ -86,6 +86,55 @@ export function SettingsModal({
     const [avatarError, setAvatarError] = useState<string | null>(null);
     const avatarInputRef = useRef<HTMLInputElement>(null);
 
+    // Resize image for avatar (ensure high quality)
+    const resizeImageForAvatar = (file: File, maxSize: number = 512): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            img.onload = () => {
+                if (!ctx) {
+                    reject(new Error('Could not get canvas context'));
+                    return;
+                }
+                
+                // Calculate dimensions (crop to square, then resize)
+                const size = Math.min(img.width, img.height);
+                const sx = (img.width - size) / 2;
+                const sy = (img.height - size) / 2;
+                
+                // Set canvas to target size
+                const targetSize = Math.min(size, maxSize);
+                canvas.width = targetSize;
+                canvas.height = targetSize;
+                
+                // Enable high-quality image smoothing
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                
+                // Draw cropped and resized image
+                ctx.drawImage(img, sx, sy, size, size, 0, 0, targetSize, targetSize);
+                
+                // Convert to blob
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(new Error('Failed to create image blob'));
+                        }
+                    },
+                    'image/jpeg',
+                    0.9 // High quality
+                );
+            };
+            
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = URL.createObjectURL(file);
+        });
+    };
+
     // Handle avatar file upload
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -105,8 +154,12 @@ export function SettingsModal({
         setAvatarError(null);
 
         try {
+            // Resize image for better quality (512x512, high quality JPEG)
+            const resizedBlob = await resizeImageForAvatar(file, 512);
+            const resizedFile = new File([resizedBlob], 'avatar.jpg', { type: 'image/jpeg' });
+            
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', resizedFile);
 
             const res = await fetch('/api/upload?type=avatar', {
                 method: 'POST',
@@ -130,6 +183,7 @@ export function SettingsModal({
             }
         }
     };
+
     const handlePushToggle = async () => {
         // Prevent double-clicks by checking loading state
         if (pushLoading) return;
@@ -660,6 +714,53 @@ export function SettingsModal({
                                                 </p>
                                             </div>
 
+                                            {/* Profile Action Buttons */}
+                                            <div className="flex gap-2">
+                                                {/* Edit Profile Button */}
+                                                <a
+                                                    href={`/user/${userAddress?.toLowerCase()}/edit`}
+                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500/10 border border-orange-500/30 rounded-xl hover:bg-orange-500/20 transition-colors text-orange-400"
+                                                >
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                                        />
+                                                    </svg>
+                                                    <span className="text-sm font-medium">Edit</span>
+                                                </a>
+
+                                                {/* View Profile Button */}
+                                                <a
+                                                    href={`/user/${userAddress?.toLowerCase()}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-700/50 border border-zinc-600 rounded-xl hover:bg-zinc-700 transition-colors text-zinc-300"
+                                                >
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                                        />
+                                                    </svg>
+                                                    <span className="text-sm font-medium">View</span>
+                                                </a>
+                                            </div>
+
                                             {/* Copy Profile Link Button */}
                                             <button
                                                 type="button"
@@ -704,7 +805,7 @@ export function SettingsModal({
                                                                 d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                                                             />
                                                         </svg>
-                                                        <span className="text-sm font-medium">Copy Profile Link</span>
+                                                        <span className="text-sm font-medium">Copy Link</span>
                                                     </>
                                                 )}
                                             </button>

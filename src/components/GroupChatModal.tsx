@@ -103,6 +103,7 @@ export function GroupChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const isInitialLoadRef = useRef(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef = useRef<any>(null);
 
@@ -152,18 +153,22 @@ export function GroupChatModal({
 
     // Scroll to bottom when messages change
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (messages.length > 0) {
+            // Use instant scroll for initial load, smooth for new messages
+            const behavior = isInitialLoadRef.current ? "instant" : "smooth";
+            messagesEndRef.current?.scrollIntoView({ behavior });
+            if (isInitialLoadRef.current) {
+                isInitialLoadRef.current = false;
+            }
+        }
     }, [messages]);
 
-    // Scroll to bottom immediately when modal opens
+    // Reset initial load flag when modal opens
     useEffect(() => {
-        if (isOpen && messages.length > 0) {
-            // Use setTimeout to ensure DOM is rendered
-            setTimeout(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-            }, 100);
+        if (isOpen) {
+            isInitialLoadRef.current = true;
         }
-    }, [isOpen, messages.length]);
+    }, [isOpen]);
 
     // Fetch reactions for all messages
     useEffect(() => {

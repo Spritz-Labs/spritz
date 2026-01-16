@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { PixelArtShare } from "./PixelArtShare";
 
 // IPFS gateway fallback order (fastest/most reliable first)
@@ -11,6 +11,9 @@ const IPFS_GATEWAYS = [
     "dweb.link",
     "w3s.link",
 ];
+
+// Upscale factor for high-res pixel art
+const UPSCALE_FACTOR = 16; // 16x upscale (32px -> 512px)
 
 // Extract CID from any IPFS URL
 export function extractCID(url: string): string | null {
@@ -36,6 +39,40 @@ function buildGatewayUrl(cid: string, gatewayIndex: number): string {
     return `https://${gateway}/ipfs/${cid}`;
 }
 
+// Upscale pixel art image using canvas (nearest-neighbor)
+export function upscalePixelArt(
+    img: HTMLImageElement,
+    scale: number = UPSCALE_FACTOR
+): string {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return img.src;
+    
+    const newWidth = img.naturalWidth * scale;
+    const newHeight = img.naturalHeight * scale;
+    
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    
+    // Disable image smoothing for crisp pixel art
+    ctx.imageSmoothingEnabled = false;
+    
+    // Draw the image scaled up
+    ctx.drawImage(img, 0, 0, newWidth, newHeight);
+    
+    return canvas.toDataURL("image/png");
+}
+
+// Download high-res pixel art
+export function downloadPixelArt(dataUrl: string, filename: string = "pixel-art.png") {
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 type PixelArtImageProps = {
     src: string;
     alt?: string;
@@ -43,7 +80,9 @@ type PixelArtImageProps = {
     onClick?: () => void;
     size?: "sm" | "md" | "lg";
     showShareButton?: boolean; // Show persistent share button
+    showDownloadButton?: boolean; // Show download button
     hideOverlay?: boolean; // Hide all overlays (for lightbox view)
+    useUpscaled?: boolean; // Use upscaled version for display
 };
 
 export function PixelArtImage({
@@ -53,13 +92,18 @@ export function PixelArtImage({
     onClick,
     size = "md",
     showShareButton = false,
+    showDownloadButton = false,
     hideOverlay = false,
+    useUpscaled = false,
 }: PixelArtImageProps) {
     const [currentSrc, setCurrentSrc] = useState(src);
+    const [displaySrc, setDisplaySrc] = useState(src);
+    const [upscaledSrc, setUpscaledSrc] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
     const [gatewayIndex, setGatewayIndex] = useState(0);
     const [retryCount, setRetryCount] = useState(0);
+    const imgRef = useRef<HTMLImageElement>(null);
 
     const cid = extractCID(src);
     const maxRetries = IPFS_GATEWAYS.length * 2; // Try each gateway twice
@@ -74,6 +118,8 @@ export function PixelArtImage({
     // Reset state when src changes
     useEffect(() => {
         setCurrentSrc(src);
+        setDisplaySrc(src);
+        setUpscaledSrc(null);
         setIsLoading(true);
         setHasError(false);
         setGatewayIndex(0);
@@ -99,10 +145,24 @@ export function PixelArtImage({
         setCurrentSrc(nextUrl);
     }, [cid, gatewayIndex, retryCount, maxRetries]);
 
-    const handleLoad = useCallback(() => {
+    const handleLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
         setIsLoading(false);
         setHasError(false);
-    }, []);
+        
+        // Generate upscaled version for display and download
+        const img = e.currentTarget;
+        if (img.naturalWidth && img.naturalHeight) {
+            try {
+                const upscaled = upscalePixelArt(img, UPSCALE_FACTOR);
+                setUpscaledSrc(upscaled);
+                if (useUpscaled) {
+                    setDisplaySrc(upscaled);
+                }
+            } catch (err) {
+                console.warn("[PixelArt] Failed to upscale:", err);
+            }
+        }
+    }, [useUpscaled]);
 
     // Retry button handler
     const handleRetry = useCallback(() => {
@@ -113,6 +173,14 @@ export function PixelArtImage({
         setRetryCount(0);
         setCurrentSrc(buildGatewayUrl(cid, 0));
     }, [cid]);
+
+    // Download handler
+    const handleDownload = useCallback(() => {
+        if (upscaledSrc) {
+            const filename = cid ? `pixel-art-${cid.slice(0, 8)}.png` : "pixel-art.png";
+            downloadPixelArt(upscaledSrc, filename);
+        }
+    }, [upscaledSrc, cid]);
 
     const containerClasses = `${sizeClasses[size]} rounded-lg overflow-hidden ${className}`;
 
@@ -189,28 +257,49 @@ export function PixelArtImage({
                 </div>
             )}
 
-            {/* Actual image */}
+            {/* Actual image - hidden, used for loading */}
             <img
+                ref={imgRef}
                 src={currentSrc}
                 alt={alt}
-                className={`w-full h-full object-cover transition-opacity duration-300 ${
-                    isLoading ? "opacity-0" : "opacity-100"
-                } ${onClick ? "cursor-zoom-in hover:opacity-90" : ""}`}
-                style={{ imageRendering: "pixelated" }}
+                className="hidden"
+                crossOrigin="anonymous"
                 onLoad={handleLoad}
                 onError={handleError}
-                onClick={onClick}
-                loading="lazy"
             />
+            
+            {/* Display image - either upscaled or original with CSS pixelation */}
+            {!isLoading && (
+                <img
+                    src={displaySrc}
+                    alt={alt}
+                    className={`w-full h-full object-cover ${onClick ? "cursor-zoom-in hover:opacity-90" : ""}`}
+                    style={{ imageRendering: useUpscaled && upscaledSrc ? "auto" : "pixelated" }}
+                    onClick={onClick}
+                />
+            )}
 
-            {/* Share button overlay - always visible or on hover based on prop */}
+            {/* Overlay buttons - share and download */}
             {!hideOverlay && !isLoading && !hasError && (
                 <div 
-                    className={`absolute bottom-1 right-1 ${
-                        showShareButton ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    className={`absolute bottom-1 right-1 flex items-center gap-1 ${
+                        showShareButton || showDownloadButton ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                     } transition-opacity z-10`}
                     onClick={(e) => e.stopPropagation()}
                 >
+                    {/* Download button */}
+                    {upscaledSrc && (
+                        <button
+                            onClick={handleDownload}
+                            className="w-6 h-6 rounded-md bg-black/60 hover:bg-black/80 flex items-center justify-center text-white transition-colors"
+                            title="Download HD"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                        </button>
+                    )}
+                    {/* Share button */}
                     <PixelArtShare imageUrl={src} compact />
                 </div>
             )}

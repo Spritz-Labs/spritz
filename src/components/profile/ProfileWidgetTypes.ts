@@ -18,7 +18,13 @@ export type WidgetType =
     | 'clock'
     | 'tech_stack'
     | 'currently'
-    | 'tip_jar';
+    | 'tip_jar'
+    // Spritz feature widgets
+    | 'message_me'
+    | 'wallet'
+    | 'schedule'
+    | 'agent'
+    | 'social_link';
 
 // Base widget interface
 export interface BaseWidget {
@@ -70,7 +76,7 @@ export interface LinkWidgetConfig {
 
 // Social Embed Widget - Embed tweets, posts, etc.
 export interface SocialEmbedWidgetConfig {
-    platform: 'twitter' | 'instagram' | 'tiktok' | 'linkedin' | 'mastodon';
+    platform: 'twitter' | 'x' | 'instagram' | 'tiktok' | 'linkedin' | 'mastodon';
     embedUrl: string;
     postId?: string;
 }
@@ -169,6 +175,48 @@ export interface TipJarWidgetConfig {
     amounts?: number[]; // Suggested amounts
 }
 
+// ====== SPRITZ FEATURE WIDGETS ======
+
+// Message Me Widget - Quick chat link
+export interface MessageMeWidgetConfig {
+    address: string; // User's wallet address
+    title?: string; // Custom title, defaults to "Message me"
+    subtitle?: string; // Custom subtitle
+    showAvatar?: boolean;
+}
+
+// Wallet Widget - Show wallet address with copy
+export interface WalletWidgetConfig {
+    address: string;
+    label?: string; // e.g., "Main Wallet", "ETH Address"
+    showBalance?: boolean;
+    copyEnabled?: boolean;
+}
+
+// Schedule Widget - Book a call
+export interface ScheduleWidgetConfig {
+    slug: string; // Scheduling link slug
+    title?: string; // e.g., "Book a call", "Let's meet"
+    subtitle?: string; // e.g., "30 min", "Schedule a meeting"
+    avatarUrl?: string;
+}
+
+// Agent Widget - AI Agent card
+export interface AgentWidgetConfig {
+    agentId: string;
+    name: string;
+    personality?: string;
+    avatarEmoji?: string;
+    avatarUrl?: string;
+}
+
+// Social Link Widget - Single social platform link
+export interface SocialLinkWidgetConfig {
+    platform: 'twitter' | 'x' | 'github' | 'linkedin' | 'instagram' | 'youtube' | 'tiktok' | 'discord' | 'telegram' | 'farcaster' | 'website';
+    handle: string;
+    url: string;
+}
+
 // Profile Theme
 export interface ProfileTheme {
     background_type: 'solid' | 'gradient' | 'image' | 'mesh';
@@ -184,6 +232,9 @@ export interface ProfileTheme {
     custom_css?: string;
 }
 
+// Widget category type
+export type WidgetCategory = 'spritz' | 'location' | 'social' | 'media' | 'personal' | 'web3' | 'utility';
+
 // Widget metadata for editor
 export const WIDGET_METADATA: Record<WidgetType, {
     name: string;
@@ -191,7 +242,7 @@ export const WIDGET_METADATA: Record<WidgetType, {
     icon: string;
     defaultSize: WidgetSize;
     allowedSizes: WidgetSize[];
-    category: 'location' | 'social' | 'media' | 'personal' | 'web3' | 'utility';
+    category: WidgetCategory;
 }> = {
     map: {
         name: 'Map',
@@ -320,6 +371,47 @@ export const WIDGET_METADATA: Record<WidgetType, {
         defaultSize: '2x1',
         allowedSizes: ['1x1', '2x1', '2x2'],
         category: 'web3',
+    },
+    // Spritz feature widgets
+    message_me: {
+        name: 'Message Me',
+        description: 'Quick link to chat with you on Spritz',
+        icon: '💬',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'spritz',
+    },
+    wallet: {
+        name: 'Wallet',
+        description: 'Display your wallet address',
+        icon: '💎',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'spritz',
+    },
+    schedule: {
+        name: "Let's Meet",
+        description: 'Book a call scheduling link',
+        icon: '📅',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'spritz',
+    },
+    agent: {
+        name: 'AI Agent',
+        description: 'Showcase your AI agent',
+        icon: '🤖',
+        defaultSize: '1x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'spritz',
+    },
+    social_link: {
+        name: 'Social Link',
+        description: 'Link to a social profile',
+        icon: '🔗',
+        defaultSize: '1x1',
+        allowedSizes: ['1x1', '2x1'],
+        category: 'spritz',
     },
 };
 

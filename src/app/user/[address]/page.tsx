@@ -18,8 +18,11 @@ function useIsProfileOwner(profileAddress: string | null) {
         fetch('/api/auth/session', { credentials: 'include' })
             .then(res => res.ok ? res.json() : null)
             .then(data => {
-                if (data?.user?.address) {
-                    setIsOwner(data.user.address.toLowerCase() === profileAddress.toLowerCase());
+                // Session API returns userAddress in data.session.userAddress
+                // or wallet_address in data.user.wallet_address
+                const sessionAddress = data?.session?.userAddress || data?.user?.wallet_address;
+                if (sessionAddress) {
+                    setIsOwner(sessionAddress.toLowerCase() === profileAddress.toLowerCase());
                 }
             })
             .catch(() => setIsOwner(false));
@@ -47,6 +50,7 @@ type PublicProfile = {
         name: string;
         personality: string | null;
         avatar_emoji: string;
+        avatar_url?: string | null;
     }>;
     scheduling: {
         slug: string;
@@ -447,11 +451,19 @@ export default function PublicUserPage() {
                                         borderColor: activeTheme.card_border || 'transparent',
                                     }}
                                 >
-                                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-purple-500/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                                        <span className="text-2xl sm:text-3xl">
-                                            {agent.avatar_emoji || "🤖"}
-                                        </span>
-                                    </div>
+                                    {agent.avatar_url ? (
+                                        <img
+                                            src={agent.avatar_url}
+                                            alt={agent.name}
+                                            className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover mb-2 group-hover:scale-110 transition-transform"
+                                        />
+                                    ) : (
+                                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-purple-500/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                            <span className="text-2xl sm:text-3xl">
+                                                {agent.avatar_emoji || "🤖"}
+                                            </span>
+                                        </div>
+                                    )}
                                     <p className="text-sm font-medium text-center line-clamp-1" style={{ color: activeTheme.text_color }}>
                                         {agent.name}
                                     </p>

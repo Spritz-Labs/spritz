@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getSession } from "@/lib/session";
+import { getAuthenticatedUser } from "@/lib/session";
 
 function getSupabaseClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_KEY;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
     if (!url || !key) {
         throw new Error("Supabase not configured");
@@ -33,18 +33,18 @@ export async function GET(request: NextRequest) {
             
             if (error) throw error;
             
-            // Also fetch theme
+            // Also fetch theme (use maybeSingle to avoid error when no theme exists)
             const { data: theme } = await supabase
                 .from("profile_themes")
                 .select("*")
                 .eq("user_address", userAddress.toLowerCase())
-                .single();
+                .maybeSingle();
             
-            return NextResponse.json({ widgets: widgets || [], theme });
+            return NextResponse.json({ widgets: widgets || [], theme: theme || null });
         }
         
         // Private view - fetch current user's widgets
-        const session = await getSession();
+        const session = await getAuthenticatedUser(request);
         
         if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -58,14 +58,14 @@ export async function GET(request: NextRequest) {
         
         if (error) throw error;
         
-        // Also fetch theme
+        // Also fetch theme (use maybeSingle to avoid error when no theme exists)
         const { data: theme } = await supabase
             .from("profile_themes")
             .select("*")
             .eq("user_address", session.userAddress.toLowerCase())
-            .single();
+            .maybeSingle();
         
-        return NextResponse.json({ widgets: widgets || [], theme });
+        return NextResponse.json({ widgets: widgets || [], theme: theme || null });
     } catch (error) {
         console.error("[Profile Widgets GET] Error:", error);
         return NextResponse.json(
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 // POST - Create a new widget
 export async function POST(request: NextRequest) {
     try {
-        const session = await getSession();
+        const session = await getAuthenticatedUser(request);
         
         if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 // PUT - Update widgets (bulk update for reordering)
 export async function PUT(request: NextRequest) {
     try {
-        const session = await getSession();
+        const session = await getAuthenticatedUser(request);
         
         if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -178,7 +178,7 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete a widget
 export async function DELETE(request: NextRequest) {
     try {
-        const session = await getSession();
+        const session = await getAuthenticatedUser(request);
         
         if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

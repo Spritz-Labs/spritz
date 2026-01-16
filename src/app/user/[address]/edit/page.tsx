@@ -1,49 +1,85 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ProfileWidgetEditor } from "@/components/profile/ProfileWidgetEditor";
-import { BaseWidget, ProfileTheme } from "@/components/profile/ProfileWidgetTypes";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { ProfileGridEditor } from "@/components/profile/ProfileGridEditor";
+import { BaseWidget, ProfileTheme, DEFAULT_THEMES } from "@/components/profile/ProfileWidgetTypes";
+
+type ProfileData = {
+    address: string;
+    scheduling?: { slug: string; title?: string; bio?: string } | null;
+    socials?: Array<{ platform: string; handle: string; url: string }>;
+    agents?: Array<{ id: string; name: string; avatar_emoji?: string; avatar_url?: string }>;
+};
 
 export default function EditProfilePage() {
     const params = useParams();
-    const router = useRouter();
     const address = params.address as string;
     
     const [widgets, setWidgets] = useState<BaseWidget[]>([]);
     const [theme, setTheme] = useState<ProfileTheme | null>(null);
+    const [profileData, setProfileData] = useState<ProfileData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isAuthorized, setIsAuthorized] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-    // Check authorization and fetch data
+    // Fetch profile data and verify authorization
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
             setError(null);
 
             try {
-                // First check if user is authorized (fetch their own widgets)
-                const res = await fetch('/api/profile/widgets', {
-                    credentials: 'include',
-                });
+                // First check if user is authorized
+                const sessionRes = await fetch('/api/auth/session', { credentials: 'include' });
+                if (!sessionRes.ok) {
+                    setError("Please sign in to edit your profile");
+                    setIsAuthorized(false);
+                    setIsLoading(false);
+                    return;
+                }
+                
+                const sessionData = await sessionRes.json();
+                const sessionAddress = sessionData?.session?.userAddress || sessionData?.user?.wallet_address;
+                
+                if (!sessionAddress || sessionAddress.toLowerCase() !== address.toLowerCase()) {
+                    setError("You can only edit your own profile");
+                    setIsAuthorized(false);
+                    setIsLoading(false);
+                    return;
+                }
+                
+                setIsAuthorized(true);
 
-                if (!res.ok) {
-                    if (res.status === 401) {
-                        setError("Please sign in to edit your profile");
-                        return;
-                    }
-                    throw new Error("Failed to load profile");
+                // Fetch profile data, widgets, and theme in parallel
+                const [profileRes, widgetsRes] = await Promise.all([
+                    fetch(`/api/public/user/${address}`),
+                    fetch(`/api/profile/widgets`, { credentials: 'include' }),
+                ]);
+
+                // Profile data for pre-filling configs
+                if (profileRes.ok) {
+                    const profile = await profileRes.json();
+                    setProfileData({
+                        address: profile.user.address,
+                        scheduling: profile.scheduling,
+                        socials: profile.socials,
+                        agents: profile.agents,
+                    });
+                } else {
+                    // User may not have a public profile yet, but that's ok
+                    setProfileData({ address });
                 }
 
-                const data = await res.json();
-                
-                // Check if the logged-in user matches the profile being edited
-                // The API returns widgets for the authenticated user
-                setWidgets(data.widgets || []);
-                setTheme(data.theme || null);
-                setIsAuthorized(true);
+                // Widgets and theme
+                if (widgetsRes.ok) {
+                    const data = await widgetsRes.json();
+                    setWidgets(data.widgets || []);
+                    setTheme(data.theme || null);
+                }
             } catch (err) {
                 console.error("[Edit Profile] Error:", err);
                 setError("Failed to load profile data");
@@ -52,104 +88,117 @@ export default function EditProfilePage() {
             }
         };
 
-        fetchData();
+        if (address) {
+            fetchData();
+        }
     }, [address]);
 
+    // Track unsaved changes
+    const handleWidgetsChange = useCallback((newWidgets: BaseWidget[]) => {
+        setWidgets(newWidgets);
+        setHasUnsavedChanges(true);
+    }, []);
+
+    const handleThemeChange = useCallback((themeUpdate: Partial<ProfileTheme>) => {
+        setTheme(prev => ({
+            ...(prev || DEFAULT_THEMES.dark as ProfileTheme),
+            ...themeUpdate,
+        } as ProfileTheme));
+        setHasUnsavedChanges(true);
+    }, []);
+
     // Save all changes
-    const handleSave = useCallback(async () => {
+    const handleSave = async () => {
         setIsSaving(true);
-        setError(null);
 
         try {
-            // Save widgets (bulk update)
-            if (widgets.length > 0) {
-                const widgetsToSave = widgets.map((w, i) => ({
-                    id: w.id,
-                    position: i,
-                    size: w.size,
-                    config: w.config,
-                    is_visible: w.is_visible,
-                }));
+            // Save widgets
+            const widgetsToSave = widgets.map((w, index) => ({
+                id: w.id.startsWith('temp-') || w.id.startsWith('widget-') ? undefined : w.id,
+                widget_type: w.widget_type,
+                size: w.size,
+                position: index,
+                config: w.config,
+                is_visible: w.is_visible,
+            }));
 
-                // For new widgets (temp IDs), create them
-                const newWidgets = widgets.filter(w => w.id.startsWith('widget-') || w.id.startsWith('temp-'));
-                const existingWidgets = widgets.filter(w => !w.id.startsWith('widget-') && !w.id.startsWith('temp-'));
+            // Delete removed widgets (those with real IDs that are no longer in the list)
+            // For now, we'll just update/create - the API can handle this
 
-                // Create new widgets
-                for (const widget of newWidgets) {
-                    await fetch('/api/profile/widgets', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({
-                            widget_type: widget.widget_type,
-                            size: widget.size,
-                            position: widget.position,
-                            config: widget.config,
-                        }),
-                    });
-                }
-
-                // Update existing widgets
-                if (existingWidgets.length > 0) {
-                    await fetch('/api/profile/widgets', {
+            // Batch upsert widgets
+            const widgetPromises = widgetsToSave.map(async (w, index) => {
+                if (w.id) {
+                    // Update existing
+                    return fetch('/api/profile/widgets', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
                         body: JSON.stringify({
-                            widgets: existingWidgets.map((w, i) => ({
+                            widgets: [{
                                 id: w.id,
-                                position: i,
+                                position: index,
                                 size: w.size,
                                 config: w.config,
                                 is_visible: w.is_visible,
-                            })),
+                            }],
+                        }),
+                    });
+                } else {
+                    // Create new
+                    return fetch('/api/profile/widgets', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            widget_type: w.widget_type,
+                            size: w.size,
+                            position: index,
+                            config: w.config,
                         }),
                     });
                 }
-            }
+            });
+
+            await Promise.all(widgetPromises);
 
             // Save theme
             if (theme) {
                 await fetch('/api/profile/theme', {
-                    method: 'POST',
+                    method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
                     body: JSON.stringify(theme),
                 });
             }
 
-            // Redirect back to profile
-            router.push(`/user/${address}`);
+            setHasUnsavedChanges(false);
+            
+            // Refetch to get server-generated IDs
+            const widgetsRes = await fetch('/api/profile/widgets', { credentials: 'include' });
+            if (widgetsRes.ok) {
+                const data = await widgetsRes.json();
+                setWidgets(data.widgets || []);
+            }
         } catch (err) {
             console.error("[Edit Profile] Save error:", err);
-            setError("Failed to save changes");
+            alert("Failed to save changes. Please try again.");
         } finally {
             setIsSaving(false);
         }
-    }, [widgets, theme, address, router]);
+    };
 
-    // Handle widget deletion
-    const handleWidgetsChange = useCallback(async (newWidgets: BaseWidget[]) => {
-        // Check if any widgets were removed
-        const removedWidgets = widgets.filter(
-            w => !newWidgets.find(nw => nw.id === w.id) && !w.id.startsWith('temp-') && !w.id.startsWith('widget-')
-        );
-
-        // Delete removed widgets from server
-        for (const widget of removedWidgets) {
-            try {
-                await fetch(`/api/profile/widgets?id=${widget.id}`, {
-                    method: 'DELETE',
-                    credentials: 'include',
-                });
-            } catch (err) {
-                console.error("[Edit Profile] Failed to delete widget:", err);
+    // Warn about unsaved changes
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = '';
             }
-        }
+        };
 
-        setWidgets(newWidgets);
-    }, [widgets]);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasUnsavedChanges]);
 
     if (isLoading) {
         return (
@@ -162,31 +211,42 @@ export default function EditProfilePage() {
     if (error || !isAuthorized) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 flex items-center justify-center">
-                        <span className="text-3xl">🔒</span>
+                <div className="text-center max-w-md">
+                    <div className="w-20 h-20 rounded-full bg-zinc-900 flex items-center justify-center mx-auto mb-6">
+                        <span className="text-4xl">🔒</span>
                     </div>
-                    <h1 className="text-xl font-bold text-white mb-2">Access Denied</h1>
-                    <p className="text-zinc-400 mb-6">{error || "You can only edit your own profile"}</p>
-                    <button
-                        onClick={() => router.back()}
-                        className="px-4 py-2 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors"
-                    >
-                        Go Back
-                    </button>
+                    <h1 className="text-2xl font-bold text-white mb-4">
+                        {error || "Not Authorized"}
+                    </h1>
+                    <div className="flex gap-3 justify-center">
+                        <Link
+                            href={`/user/${address}`}
+                            className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors"
+                        >
+                            View Profile
+                        </Link>
+                        <Link
+                            href="/"
+                            className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl transition-colors"
+                        >
+                            Go Home
+                        </Link>
+                    </div>
                 </div>
             </div>
         );
     }
 
     return (
-        <ProfileWidgetEditor
+        <ProfileGridEditor
             widgets={widgets}
             theme={theme}
             onWidgetsChange={handleWidgetsChange}
-            onThemeChange={(updates) => setTheme(prev => prev ? { ...prev, ...updates } : updates as ProfileTheme)}
+            onThemeChange={handleThemeChange}
             onSave={handleSave}
             isSaving={isSaving}
+            profileData={profileData || undefined}
+            backUrl={`/user/${address}`}
         />
     );
 }

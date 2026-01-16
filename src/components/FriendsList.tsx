@@ -90,9 +90,19 @@ const getSecondaryText = (friend: Friend) => {
     return parts.length > 0 ? parts.join(" · ") : null;
 };
 
+// Get effective avatar - custom avatar if enabled, otherwise ENS avatar
+const getEffectiveAvatar = (friend: Friend, customAvatars: Record<string, string | null>) => {
+    const customAvatar = customAvatars[friend.address.toLowerCase()];
+    if (customAvatar) {
+        return customAvatar;
+    }
+    return friend.avatar;
+};
+
 // Memoized Friend Card Component
 type FriendCardProps = {
     friend: Friend;
+    effectiveAvatar: string | null;
     index: number;
     isExpanded: boolean;
     isFavorite: boolean;
@@ -119,6 +129,7 @@ type FriendCardProps = {
 
 const FriendCard = memo(function FriendCard({
     friend,
+    effectiveAvatar,
     index,
     isExpanded,
     isFavorite,
@@ -196,9 +207,9 @@ const FriendCard = memo(function FriendCard({
                     >
                         {/* Avatar */}
                         <div className="relative flex-shrink-0">
-                            {friend.avatar ? (
+                            {effectiveAvatar ? (
                                 <img
-                                    src={friend.avatar}
+                                    src={effectiveAvatar}
                                     alt={getDisplayName(friend)}
                                     className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover ${
                                         unreadCount > 0
@@ -744,6 +755,9 @@ export function FriendsList({
     const [friendScheduling, setFriendScheduling] = useState<Record<string, boolean>>(
         {}
     );
+    const [friendCustomAvatars, setFriendCustomAvatars] = useState<Record<string, string | null>>(
+        {}
+    );
 
     // Friend tags hook
     const { getTag, setTag, getAllTags } = useFriendTags(userAddress || null);
@@ -794,11 +808,11 @@ export function FriendsList({
                 phonesResult,
                 favoritesResult,
             ] = await Promise.all([
-                // Combined query for statuses + online + scheduling (was 2 separate queries!)
+                // Combined query for statuses + online + scheduling + avatar preferences
                 client
                     .from("shout_user_settings")
                     .select(
-                        "wallet_address, status_emoji, status_text, is_dnd, last_seen, scheduling_enabled, scheduling_slug"
+                        "wallet_address, status_emoji, status_text, is_dnd, last_seen, scheduling_enabled, scheduling_slug, custom_avatar_url, use_custom_avatar"
                     )
                     .in("wallet_address", addresses),
                 // Socials
@@ -821,15 +835,16 @@ export function FriendsList({
                     : Promise.resolve({ data: null, error: null }),
             ]);
 
-            // Process user settings (statuses + online + scheduling)
+            // Process user settings (statuses + online + scheduling + avatars)
             if (userSettingsResult.data) {
                 const statuses: Record<string, FriendStatus> = {};
                 const online: Record<string, boolean> = {};
                 const scheduling: Record<string, boolean> = {};
+                const customAvatars: Record<string, string | null> = {};
                 const now = Date.now();
                 const ONLINE_THRESHOLD = 120000; // 2 minutes
 
-                userSettingsResult.data.forEach((row) => {
+                userSettingsResult.data.forEach((row: any) => {
                     statuses[row.wallet_address] = {
                         emoji: row.status_emoji || "💬",
                         text: row.status_text || "",
@@ -845,10 +860,15 @@ export function FriendsList({
                     if (row.scheduling_enabled) {
                         scheduling[row.wallet_address] = true;
                     }
+                    // Store custom avatar if friend has one enabled
+                    if (row.use_custom_avatar && row.custom_avatar_url) {
+                        customAvatars[row.wallet_address] = row.custom_avatar_url;
+                    }
                 });
                 setFriendStatuses(statuses);
                 setOnlineStatuses(online);
                 setFriendScheduling(scheduling);
+                setFriendCustomAvatars(customAvatars);
             }
 
             // Process socials
@@ -1528,6 +1548,7 @@ export function FriendsList({
                                 >
                                     <FriendCard
                                         friend={friend}
+                                        effectiveAvatar={getEffectiveAvatar(friend, friendCustomAvatars)}
                                         index={virtualItem.index}
                                         isExpanded={expandedId === friend.id}
                                         isFavorite={favorites.has(addressLower)}
@@ -1585,6 +1606,7 @@ export function FriendsList({
                             <FriendCard
                                 key={friend.id}
                                 friend={friend}
+                                effectiveAvatar={getEffectiveAvatar(friend, friendCustomAvatars)}
                                 index={index}
                                 isExpanded={expandedId === friend.id}
                                 isFavorite={favorites.has(addressLower)}

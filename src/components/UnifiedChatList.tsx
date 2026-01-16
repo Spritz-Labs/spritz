@@ -248,9 +248,14 @@ export function UnifiedChatList({
         allAvailableFolders,
         assignments,
         addFolder,
+        removeFolder,
         assignChat,
         getChatFolder,
     } = useChatFolders(userAddress);
+    
+    // State for folder management
+    const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
+    const [folderLongPressTimer, setFolderLongPressTimer] = useState<NodeJS.Timeout | null>(null);
 
     // Sort chats by last message date (most recent first)
     const sortedChats = useMemo(() => {
@@ -331,6 +336,31 @@ export function UnifiedChatList({
         }
     }, [activeFolder]);
 
+    // Handle folder tab long press for delete
+    const handleFolderTouchStart = useCallback((emoji: string) => {
+        const timer = setTimeout(() => {
+            setFolderToDelete(emoji);
+        }, 500);
+        setFolderLongPressTimer(timer);
+    }, []);
+
+    const handleFolderTouchEnd = useCallback(() => {
+        if (folderLongPressTimer) {
+            clearTimeout(folderLongPressTimer);
+            setFolderLongPressTimer(null);
+        }
+    }, [folderLongPressTimer]);
+
+    // Handle folder deletion
+    const handleDeleteFolder = useCallback((emoji: string) => {
+        removeFolder(emoji);
+        setFolderToDelete(null);
+        // If the deleted folder was active, switch to All
+        if (activeFolder === emoji) {
+            setActiveFolder(null);
+        }
+    }, [removeFolder, activeFolder]);
+
     return (
         <div className="space-y-1.5 sm:space-y-3 select-none">
             {/* Folder Tabs - Horizontal scrollable */}
@@ -364,6 +394,13 @@ export function UnifiedChatList({
                         key={folder.emoji}
                         data-folder={folder.emoji}
                         onClick={() => setActiveFolder(folder.emoji)}
+                        onTouchStart={() => handleFolderTouchStart(folder.emoji)}
+                        onTouchEnd={handleFolderTouchEnd}
+                        onTouchCancel={handleFolderTouchEnd}
+                        onContextMenu={(e) => {
+                            e.preventDefault();
+                            setFolderToDelete(folder.emoji);
+                        }}
                         className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl transition-all ${
                             activeFolder === folder.emoji
                                 ? "bg-[#FF5500] text-white shadow-lg shadow-orange-500/25"
@@ -650,6 +687,53 @@ export function UnifiedChatList({
                             onCreateFolderModalClose?.();
                         }}
                     />
+                )}
+            </AnimatePresence>
+
+            {/* Delete Folder Confirmation Modal */}
+            <AnimatePresence>
+                {folderToDelete && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => setFolderToDelete(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full"
+                        >
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-4xl">{folderToDelete}</span>
+                                </div>
+                                <h3 className="text-lg font-bold text-white mb-2">Delete Folder?</h3>
+                                <p className="text-zinc-400 text-sm">
+                                    Delete the <strong>{activeFolders.find(f => f.emoji === folderToDelete)?.label || folderToDelete}</strong> folder? 
+                                    Chats in this folder will be moved back to All.
+                                </p>
+                            </div>
+                            
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setFolderToDelete(null)}
+                                    className="flex-1 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteFolder(folderToDelete)}
+                                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
                 )}
             </AnimatePresence>
         </div>

@@ -149,7 +149,7 @@ export async function GET(
         // Fetch public agents
         const { data: agents } = await supabase
             .from("shout_agents")
-            .select("id, name, personality, avatar_emoji, visibility")
+            .select("id, name, personality, avatar_emoji, avatar_url, visibility")
             .eq("owner_address", normalizedAddress)
             .eq("visibility", "public")
             .order("created_at", { ascending: false });

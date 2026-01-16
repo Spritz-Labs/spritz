@@ -28,6 +28,14 @@ import {
 } from "./ProfileWidgetTypes";
 import { ProfileWidgetRenderer } from "./ProfileWidgetRenderer";
 
+// Profile data for pre-populating widget configs
+type ProfileData = {
+    address: string;
+    scheduling?: { slug: string; title?: string; bio?: string } | null;
+    socials?: Array<{ platform: string; handle: string; url: string }>;
+    agents?: Array<{ id: string; name: string; avatar_emoji?: string; avatar_url?: string }>;
+};
+
 interface ProfileWidgetEditorProps {
     widgets: BaseWidget[];
     theme: ProfileTheme | null;
@@ -35,6 +43,7 @@ interface ProfileWidgetEditorProps {
     onThemeChange: (theme: Partial<ProfileTheme>) => void;
     onSave: () => Promise<void>;
     isSaving: boolean;
+    profileData?: ProfileData;
 }
 
 type EditorTab = 'widgets' | 'theme' | 'preview';
@@ -121,6 +130,7 @@ export function ProfileWidgetEditor({
     onThemeChange,
     onSave,
     isSaving,
+    profileData,
 }: ProfileWidgetEditorProps) {
     const [activeTab, setActiveTab] = useState<EditorTab>('widgets');
     const [showAddWidget, setShowAddWidget] = useState(false);
@@ -163,6 +173,7 @@ export function ProfileWidgetEditor({
 
     const categories = [
         { id: 'all', label: 'All', icon: '📦' },
+        { id: 'spritz', label: 'Spritz', icon: '🍊' },
         { id: 'location', label: 'Location', icon: '🗺️' },
         { id: 'social', label: 'Social', icon: '📱' },
         { id: 'media', label: 'Media', icon: '🎬' },
@@ -184,12 +195,12 @@ export function ProfileWidgetEditor({
             size: meta.defaultSize,
             position: widgets.length,
             is_visible: true,
-            config: getDefaultConfig(type),
+            config: getDefaultConfig(type, profileData),
         };
         
         setEditingWidget(newWidget);
         setShowAddWidget(false);
-    }, [widgets.length]);
+    }, [widgets.length, profileData]);
 
     // Save widget (add or update)
     const handleSaveWidget = useCallback((widget: BaseWidget) => {
@@ -921,6 +932,393 @@ function WidgetConfigFields({
                 </>
             );
 
+        // ====== SPRITZ FEATURE WIDGETS ======
+        case 'message_me':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Custom Title (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.title as string) || ''}
+                            onChange={(e) => updateField('title', e.target.value)}
+                            placeholder="Message me"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Subtitle (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.subtitle as string) || ''}
+                            onChange={(e) => updateField('subtitle', e.target.value)}
+                            placeholder="Chat on Spritz"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <p className="text-zinc-500 text-xs">This widget links to your Spritz chat. Your wallet address is used automatically.</p>
+                </>
+            );
+
+        case 'wallet':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Label (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.label as string) || ''}
+                            onChange={(e) => updateField('label', e.target.value)}
+                            placeholder="Wallet"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <p className="text-zinc-500 text-xs">Visitors can copy your wallet address with one tap.</p>
+                </>
+            );
+
+        case 'schedule':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Custom Title (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.title as string) || ''}
+                            onChange={(e) => updateField('title', e.target.value)}
+                            placeholder="Book a call"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Subtitle (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.subtitle as string) || ''}
+                            onChange={(e) => updateField('subtitle', e.target.value)}
+                            placeholder="Schedule a meeting"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <p className="text-zinc-500 text-xs">Links to your Spritz scheduling page. Make sure you have scheduling enabled in settings.</p>
+                </>
+            );
+
+        case 'agent':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Agent ID</label>
+                        <input
+                            type="text"
+                            value={(config.agentId as string) || ''}
+                            onChange={(e) => updateField('agentId', e.target.value)}
+                            placeholder="agent-id-here"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Agent Name</label>
+                        <input
+                            type="text"
+                            value={(config.name as string) || ''}
+                            onChange={(e) => updateField('name', e.target.value)}
+                            placeholder="My AI Assistant"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Avatar Emoji</label>
+                        <input
+                            type="text"
+                            value={(config.avatarEmoji as string) || ''}
+                            onChange={(e) => updateField('avatarEmoji', e.target.value)}
+                            placeholder="🤖"
+                            maxLength={4}
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <p className="text-zinc-500 text-xs">Showcase one of your AI agents. Find the agent ID in your Agents tab.</p>
+                </>
+            );
+
+        case 'social_link':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Platform</label>
+                        <select
+                            value={(config.platform as string) || 'twitter'}
+                            onChange={(e) => updateField('platform', e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                            <option value="twitter">Twitter / X</option>
+                            <option value="github">GitHub</option>
+                            <option value="linkedin">LinkedIn</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="discord">Discord</option>
+                            <option value="telegram">Telegram</option>
+                            <option value="farcaster">Farcaster</option>
+                            <option value="website">Website</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Handle / Username</label>
+                        <input
+                            type="text"
+                            value={(config.handle as string) || ''}
+                            onChange={(e) => updateField('handle', e.target.value)}
+                            placeholder="@username"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Profile URL</label>
+                        <input
+                            type="url"
+                            value={(config.url as string) || ''}
+                            onChange={(e) => updateField('url', e.target.value)}
+                            placeholder="https://..."
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                </>
+            );
+
+        case 'github':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">GitHub Username</label>
+                        <input
+                            type="text"
+                            value={(config.username as string) || ''}
+                            onChange={(e) => updateField('username', e.target.value)}
+                            placeholder="octocat"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Display Type</label>
+                        <select
+                            value={(config.type as string) || 'contributions'}
+                            onChange={(e) => updateField('type', e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                            <option value="contributions">Contribution Graph</option>
+                            <option value="repos">Pinned Repos</option>
+                            <option value="profile">Profile Stats</option>
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="checkbox"
+                            id="showStats"
+                            checked={(config.showStats as boolean) || false}
+                            onChange={(e) => updateField('showStats', e.target.checked)}
+                            className="w-4 h-4 rounded bg-zinc-800 border-zinc-700"
+                        />
+                        <label htmlFor="showStats" className="text-sm text-zinc-400">Show additional stats</label>
+                    </div>
+                </>
+            );
+
+        case 'weather':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">City</label>
+                        <input
+                            type="text"
+                            value={(config.city as string) || ''}
+                            onChange={(e) => updateField('city', e.target.value)}
+                            placeholder="San Francisco"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Country (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.country as string) || ''}
+                            onChange={(e) => updateField('country', e.target.value)}
+                            placeholder="USA"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Units</label>
+                        <select
+                            value={(config.units as string) || 'celsius'}
+                            onChange={(e) => updateField('units', e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                            <option value="celsius">Celsius (°C)</option>
+                            <option value="fahrenheit">Fahrenheit (°F)</option>
+                        </select>
+                    </div>
+                </>
+            );
+
+        case 'currently':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Activity Type</label>
+                        <select
+                            value={(config.type as string) || 'building'}
+                            onChange={(e) => updateField('type', e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                            <option value="building">🛠️ Building</option>
+                            <option value="reading">📚 Reading</option>
+                            <option value="playing">🎮 Playing</option>
+                            <option value="watching">📺 Watching</option>
+                            <option value="learning">🧠 Learning</option>
+                            <option value="listening">🎧 Listening</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Title</label>
+                        <input
+                            type="text"
+                            value={(config.title as string) || ''}
+                            onChange={(e) => updateField('title', e.target.value)}
+                            placeholder="e.g., My Next Project"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Subtitle (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.subtitle as string) || ''}
+                            onChange={(e) => updateField('subtitle', e.target.value)}
+                            placeholder="e.g., A new crypto project"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Image URL (optional)</label>
+                        <input
+                            type="url"
+                            value={(config.imageUrl as string) || ''}
+                            onChange={(e) => updateField('imageUrl', e.target.value)}
+                            placeholder="https://..."
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Link (optional)</label>
+                        <input
+                            type="url"
+                            value={(config.link as string) || ''}
+                            onChange={(e) => updateField('link', e.target.value)}
+                            placeholder="https://..."
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                </>
+            );
+
+        case 'social_embed':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Platform</label>
+                        <select
+                            value={(config.platform as string) || 'twitter'}
+                            onChange={(e) => updateField('platform', e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        >
+                            <option value="twitter">Twitter / X</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="linkedin">LinkedIn</option>
+                            <option value="mastodon">Mastodon</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Post URL</label>
+                        <input
+                            type="url"
+                            value={(config.embedUrl as string) || ''}
+                            onChange={(e) => updateField('embedUrl', e.target.value)}
+                            placeholder="https://twitter.com/user/status/..."
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                        <p className="text-zinc-500 text-xs mt-1">Paste the full URL of the post you want to embed</p>
+                    </div>
+                </>
+            );
+
+        case 'tip_jar':
+            return (
+                <>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Wallet Address</label>
+                        <input
+                            type="text"
+                            value={(config.address as string) || ''}
+                            onChange={(e) => updateField('address', e.target.value)}
+                            placeholder="0x..."
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white font-mono text-sm"
+                        />
+                        <p className="text-zinc-500 text-xs mt-1">Your wallet address is used automatically if left empty</p>
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Message (optional)</label>
+                        <input
+                            type="text"
+                            value={(config.message as string) || ''}
+                            onChange={(e) => updateField('message', e.target.value)}
+                            placeholder="Thanks for the support! ☕"
+                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm text-zinc-400 mb-2 block">Accepted Tokens</label>
+                        <div className="flex flex-wrap gap-2">
+                            {['ETH', 'USDC', 'USDT'].map((token) => {
+                                const tokens = (config.tokens as string[]) || ['ETH'];
+                                const isSelected = tokens.includes(token);
+                                return (
+                                    <button
+                                        key={token}
+                                        type="button"
+                                        onClick={() => {
+                                            const newTokens = isSelected
+                                                ? tokens.filter(t => t !== token)
+                                                : [...tokens, token];
+                                            updateField('tokens', newTokens.length > 0 ? newTokens : ['ETH']);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                            isSelected
+                                                ? 'bg-orange-500 text-white'
+                                                : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                                        }`}
+                                    >
+                                        {token}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </>
+            );
+
+        case 'stats':
+            return (
+                <StatsConfigFields config={config} onChange={onChange} />
+            );
+
+        case 'tech_stack':
+            return (
+                <TechStackConfigFields config={config} onChange={onChange} />
+            );
+
         default:
             return (
                 <p className="text-zinc-500 text-sm">
@@ -930,8 +1328,230 @@ function WidgetConfigFields({
     }
 }
 
+// Stats config fields with array editing
+function StatsConfigFields({
+    config,
+    onChange,
+}: {
+    config: Record<string, unknown>;
+    onChange: (config: Record<string, unknown>) => void;
+}) {
+    const stats = (config.stats as Array<{ label: string; value: string | number; emoji?: string }>) || [];
+    
+    const addStat = () => {
+        onChange({
+            ...config,
+            stats: [...stats, { label: '', value: '', emoji: '' }],
+        });
+    };
+    
+    const updateStat = (index: number, field: string, value: string | number) => {
+        const newStats = [...stats];
+        newStats[index] = { ...newStats[index], [field]: value };
+        onChange({ ...config, stats: newStats });
+    };
+    
+    const removeStat = (index: number) => {
+        onChange({
+            ...config,
+            stats: stats.filter((_, i) => i !== index),
+        });
+    };
+    
+    return (
+        <>
+            <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Stats</label>
+                <div className="space-y-3">
+                    {stats.map((stat, index) => (
+                        <div key={index} className="flex gap-2 items-start">
+                            <input
+                                type="text"
+                                value={stat.emoji || ''}
+                                onChange={(e) => updateStat(index, 'emoji', e.target.value)}
+                                placeholder="📊"
+                                maxLength={4}
+                                className="w-12 px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-center"
+                            />
+                            <input
+                                type="text"
+                                value={stat.value}
+                                onChange={(e) => updateStat(index, 'value', e.target.value)}
+                                placeholder="100"
+                                className="w-20 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                            />
+                            <input
+                                type="text"
+                                value={stat.label}
+                                onChange={(e) => updateStat(index, 'label', e.target.value)}
+                                placeholder="Label"
+                                className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => removeStat(index)}
+                                className="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 flex items-center justify-center"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                <button
+                    type="button"
+                    onClick={addStat}
+                    className="mt-3 w-full py-2 border-2 border-dashed border-zinc-700 rounded-lg text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+                >
+                    + Add Stat
+                </button>
+            </div>
+            <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Layout</label>
+                <div className="flex gap-2">
+                    {(['row', 'grid'] as const).map((layout) => (
+                        <button
+                            key={layout}
+                            type="button"
+                            onClick={() => onChange({ ...config, layout })}
+                            className={`flex-1 py-2 rounded-lg text-sm transition-colors capitalize ${
+                                (config.layout || 'row') === layout
+                                    ? 'bg-orange-500 text-white'
+                                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                            }`}
+                        >
+                            {layout}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </>
+    );
+}
+
+// Tech Stack config fields with array editing
+function TechStackConfigFields({
+    config,
+    onChange,
+}: {
+    config: Record<string, unknown>;
+    onChange: (config: Record<string, unknown>) => void;
+}) {
+    const technologies = (config.technologies as Array<{ name: string; icon?: string; color?: string }>) || [];
+    
+    const addTech = () => {
+        onChange({
+            ...config,
+            technologies: [...technologies, { name: '', icon: '', color: '' }],
+        });
+    };
+    
+    const updateTech = (index: number, field: string, value: string) => {
+        const newTechs = [...technologies];
+        newTechs[index] = { ...newTechs[index], [field]: value };
+        onChange({ ...config, technologies: newTechs });
+    };
+    
+    const removeTech = (index: number) => {
+        onChange({
+            ...config,
+            technologies: technologies.filter((_, i) => i !== index),
+        });
+    };
+    
+    // Common technologies for quick add
+    const quickAddTechs = [
+        { name: 'React', icon: '⚛️' },
+        { name: 'TypeScript', icon: '🔷' },
+        { name: 'Next.js', icon: '▲' },
+        { name: 'Node.js', icon: '💚' },
+        { name: 'Python', icon: '🐍' },
+        { name: 'Rust', icon: '🦀' },
+        { name: 'Solidity', icon: '💎' },
+        { name: 'Go', icon: '🔵' },
+    ];
+    
+    const availableQuickAdd = quickAddTechs.filter(
+        t => !technologies.some(tech => tech.name.toLowerCase() === t.name.toLowerCase())
+    );
+    
+    return (
+        <>
+            <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Label (optional)</label>
+                <input
+                    type="text"
+                    value={(config.label as string) || ''}
+                    onChange={(e) => onChange({ ...config, label: e.target.value })}
+                    placeholder="Tech Stack"
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                />
+            </div>
+            
+            {availableQuickAdd.length > 0 && (
+                <div>
+                    <label className="text-sm text-zinc-400 mb-2 block">Quick Add</label>
+                    <div className="flex flex-wrap gap-2">
+                        {availableQuickAdd.slice(0, 6).map((tech) => (
+                            <button
+                                key={tech.name}
+                                type="button"
+                                onClick={() => onChange({
+                                    ...config,
+                                    technologies: [...technologies, tech],
+                                })}
+                                className="px-3 py-1.5 rounded-lg text-sm bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                            >
+                                {tech.icon} {tech.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+            
+            <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Technologies</label>
+                <div className="space-y-3">
+                    {technologies.map((tech, index) => (
+                        <div key={index} className="flex gap-2 items-start">
+                            <input
+                                type="text"
+                                value={tech.icon || ''}
+                                onChange={(e) => updateTech(index, 'icon', e.target.value)}
+                                placeholder="💻"
+                                maxLength={4}
+                                className="w-12 px-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-center"
+                            />
+                            <input
+                                type="text"
+                                value={tech.name}
+                                onChange={(e) => updateTech(index, 'name', e.target.value)}
+                                placeholder="Technology name"
+                                className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => removeTech(index)}
+                                className="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 flex items-center justify-center"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                <button
+                    type="button"
+                    onClick={addTech}
+                    className="mt-3 w-full py-2 border-2 border-dashed border-zinc-700 rounded-lg text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+                >
+                    + Add Technology
+                </button>
+            </div>
+        </>
+    );
+}
+
 // Get default config for a widget type
-function getDefaultConfig(type: WidgetType): Record<string, unknown> {
+function getDefaultConfig(type: WidgetType, profileData?: ProfileData): Record<string, unknown> {
     switch (type) {
         case 'map':
             return { latitude: 0, longitude: 0, city: '', country: '', zoom: 12 };
@@ -952,11 +1572,54 @@ function getDefaultConfig(type: WidgetType): Record<string, unknown> {
         case 'clock':
             return { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
         case 'stats':
-            return { stats: [] };
+            return { stats: [], layout: 'row' };
         case 'tech_stack':
-            return { technologies: [] };
+            return { technologies: [], label: 'Tech Stack' };
         case 'currently':
-            return { type: 'building', title: '' };
+            return { type: 'building', title: '', subtitle: '', imageUrl: '', link: '' };
+        case 'github':
+            return { username: '', type: 'contributions', showStats: false };
+        case 'weather':
+            return { city: '', country: '', units: 'celsius' };
+        case 'social_embed':
+            return { platform: 'twitter', embedUrl: '', postId: '' };
+        case 'tip_jar':
+            return { 
+                address: profileData?.address || '', 
+                tokens: ['ETH'], 
+                message: '', 
+                amounts: [0.01, 0.05, 0.1] 
+            };
+        // Spritz feature widgets - use profile data if available
+        case 'message_me':
+            return { 
+                address: profileData?.address || '',
+                title: 'Message me', 
+                subtitle: 'Chat on Spritz' 
+            };
+        case 'wallet':
+            return { 
+                address: profileData?.address || '',
+                label: 'Wallet', 
+                copyEnabled: true 
+            };
+        case 'schedule':
+            return { 
+                slug: profileData?.scheduling?.slug || '',
+                title: profileData?.scheduling?.title || 'Book a call', 
+                subtitle: profileData?.scheduling?.bio || 'Schedule a meeting' 
+            };
+        case 'agent':
+            // If user has agents, pre-fill with first available one
+            const firstAgent = profileData?.agents?.[0];
+            return { 
+                agentId: firstAgent?.id || '', 
+                name: firstAgent?.name || '', 
+                avatarEmoji: firstAgent?.avatar_emoji || '🤖',
+                avatarUrl: firstAgent?.avatar_url || '',
+            };
+        case 'social_link':
+            return { platform: 'twitter', handle: '', url: '' };
         default:
             return {};
     }
