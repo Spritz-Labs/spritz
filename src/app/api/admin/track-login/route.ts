@@ -105,6 +105,8 @@ export async function POST(request: NextRequest) {
         } else {
             // Create new user
             let referredBy: string | null = null;
+            let inviteCodeRedeemed = false;
+            let inviteCodeId: string | null = null;
 
             // Validate and track invite code usage
             if (inviteCode) {
@@ -119,6 +121,7 @@ export async function POST(request: NextRequest) {
                 if (userInviteResult?.success) {
                     // User invite code was redeemed successfully
                     referredBy = userInviteResult.inviter;
+                    inviteCodeRedeemed = true;
                     console.log("[Login] Redeemed user invite code:", upperCode, "from:", referredBy);
                 } else {
                     // Try admin invite codes as fallback
@@ -148,7 +151,48 @@ export async function POST(request: NextRequest) {
                                 .eq("code", upperCode);
 
                             referredBy = code.created_by;
+                            inviteCodeRedeemed = true;
+                            inviteCodeId = code.id;
                             console.log("[Login] Redeemed admin invite code:", upperCode);
+
+                            // Award points to the code creator (inviter) - 100 pts
+                            if (code.created_by) {
+                                const inviterClaimKey = `invite_admin_${code.id}_${normalizedAddress}`;
+                                const inviterAddress = code.created_by.toLowerCase();
+                                
+                                // Check if not already claimed
+                                const { data: existingClaim } = await supabase
+                                    .from("shout_points_history")
+                                    .select("id")
+                                    .eq("claim_key", inviterClaimKey)
+                                    .single();
+                                
+                                if (!existingClaim) {
+                                    await supabase.from("shout_points_history").insert({
+                                        wallet_address: inviterAddress,
+                                        points: 100,
+                                        reason: "Invite code redeemed",
+                                        claim_key: inviterClaimKey,
+                                        metadata: { code: upperCode, redeemer: normalizedAddress },
+                                    });
+
+                                    // Get current points and increment
+                                    const { data: inviterUser } = await supabase
+                                        .from("shout_users")
+                                        .select("points")
+                                        .eq("wallet_address", inviterAddress)
+                                        .single();
+                                    
+                                    if (inviterUser) {
+                                        await supabase
+                                            .from("shout_users")
+                                            .update({ points: (inviterUser.points || 0) + 100 })
+                                            .eq("wallet_address", inviterAddress);
+                                    }
+
+                                    console.log("[Login] Awarded 100 pts to admin code creator:", inviterAddress);
+                                }
+                            }
                         }
                     }
                 }
@@ -176,6 +220,42 @@ export async function POST(request: NextRequest) {
                 });
             } catch (err) {
                 console.error("[Login] Failed to join Alpha channel:", err);
+            }
+
+            // Award points to new user if they used a valid invite code
+            if (inviteCodeRedeemed && referredBy) {
+                try {
+                    const newUserClaimKey = inviteCodeId 
+                        ? `invite_admin_${inviteCodeId}_redeemer`
+                        : `invite_user_${normalizedAddress}_welcome`;
+                    
+                    // Check if not already claimed
+                    const { data: existingClaim } = await supabase
+                        .from("shout_points_history")
+                        .select("id")
+                        .eq("claim_key", newUserClaimKey)
+                        .single();
+                    
+                    if (!existingClaim) {
+                        // Award 100 points to the new user for using an invite code
+                        await supabase.from("shout_points_history").insert({
+                            wallet_address: normalizedAddress,
+                            points: 100,
+                            reason: "Invite code redeemed",
+                            claim_key: newUserClaimKey,
+                            metadata: { referrer: referredBy },
+                        });
+
+                        await supabase
+                            .from("shout_users")
+                            .update({ points: 100 })
+                            .eq("wallet_address", normalizedAddress);
+
+                        console.log("[Login] Awarded 100 pts welcome bonus to new user:", normalizedAddress);
+                    }
+                } catch (err) {
+                    console.error("[Login] Failed to award invite code points to new user:", err);
+                }
             }
 
             // New users always have daily bonus available
