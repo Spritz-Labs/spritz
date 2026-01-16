@@ -28,6 +28,7 @@ import {
     WidgetSize,
     WIDGET_METADATA,
     getGridSpanClasses,
+    getAspectRatio,
     ProfileTheme,
     DEFAULT_THEMES,
 } from "./ProfileWidgetTypes";
@@ -91,8 +92,8 @@ function DraggableWidget({
                 isDragging ? 'z-50 opacity-70' : ''
             }`}
         >
-            {/* Widget Content - render directly without nested grid */}
-            <div className="w-full h-full">
+            {/* Widget Content - use aspect ratio for proper sizing */}
+            <div className={`w-full ${getAspectRatio(widget.size)}`}>
                 {renderWidget(widget)}
             </div>
 
@@ -431,7 +432,7 @@ export function ProfileGridEditor({
                                     items={sortedWidgets.map(w => w.id)}
                                     strategy={rectSortingStrategy}
                                 >
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 auto-rows-[minmax(120px,auto)]">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                                         {sortedWidgets.map((widget) => (
                                             <DraggableWidget
                                                 key={widget.id}

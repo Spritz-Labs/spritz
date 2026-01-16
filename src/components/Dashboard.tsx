@@ -33,6 +33,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { isAgoraConfigured } from "@/config/agora";
 import { isHuddle01Configured, createHuddle01Room } from "@/config/huddle01";
+import { supabase, isSupabaseConfigured } from "@/config/supabase";
 import { StatusModal } from "./StatusModal";
 import { SettingsModal } from "./SettingsModal";
 import { BugReportModal } from "./BugReportModal";
@@ -171,6 +172,9 @@ function DashboardContent({
     // Folder modal state
     const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
     const [selectedGroup, setSelectedGroup] = useState<XMTPGroup | null>(null);
+    
+    // Custom avatar cache for friends
+    const [friendCustomAvatars, setFriendCustomAvatars] = useState<Record<string, string | null>>({});
 
     // Group call state
     const [groupCallDuration, setGroupCallDuration] = useState(0);
@@ -540,6 +544,43 @@ function DashboardContent({
         isConfigured: isSupabaseConfigured,
         refresh: refreshFriends,
     } = useFriendRequests(userAddress);
+
+    // Fetch custom avatars for friends
+    useEffect(() => {
+        if (friends.length === 0 || !isSupabaseConfigured || !supabase) return;
+
+        const client = supabase; // Capture for closure (after null check)
+        const addresses = friends.map((f) => f.friend_address.toLowerCase());
+        
+        const fetchCustomAvatars = async () => {
+            try {
+                const { data } = await client
+                    .from("shout_user_settings")
+                    .select("wallet_address, custom_avatar_url, use_custom_avatar")
+                    .in("wallet_address", addresses);
+
+                if (data) {
+                    const avatars: Record<string, string | null> = {};
+                    data.forEach((row: { wallet_address: string; custom_avatar_url: string | null; use_custom_avatar: boolean }) => {
+                        if (row.use_custom_avatar && row.custom_avatar_url) {
+                            avatars[row.wallet_address] = row.custom_avatar_url;
+                        }
+                    });
+                    setFriendCustomAvatars(avatars);
+                }
+            } catch (err) {
+                console.error("[Dashboard] Error fetching custom avatars:", err);
+            }
+        };
+
+        fetchCustomAvatars();
+    }, [friends]);
+
+    // Helper to get effective avatar (custom if enabled, otherwise ENS/default)
+    const getEffectiveAvatar = useCallback((address: string, ensAvatar: string | null): string | null => {
+        const customAvatar = friendCustomAvatars[address.toLowerCase()];
+        return customAvatar || ensAvatar;
+    }, [friendCustomAvatars]);
 
     // Fetch user info for all unique senders in alpha chat messages (including friends for effective avatar)
     useEffect(() => {
@@ -990,18 +1031,19 @@ function DashboardContent({
     );
 
     // Convert friends to the format FriendsList expects - memoized to prevent unnecessary re-renders
+    // Uses effective avatar (custom if enabled, otherwise ENS/default)
     const friendsListData: FriendsListFriend[] = useMemo(
         () =>
             friends.map((f) => ({
                 id: f.id,
                 address: f.friend_address as Address,
                 ensName: f.ensName || null,
-                avatar: f.avatar || null,
+                avatar: getEffectiveAvatar(f.friend_address, f.avatar || null),
                 nickname: f.nickname,
                 reachUsername: f.reachUsername || null,
                 addedAt: f.created_at,
             })),
-        [friends]
+        [friends, getEffectiveAvatar]
     );
 
     // Create unified chat list combining DMs, groups, channels, and global chat

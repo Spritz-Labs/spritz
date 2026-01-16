@@ -211,23 +211,42 @@ export default function EditProfilePage() {
         setHasUnsavedChanges(true);
     }, []);
 
+    // Helper to check if widget ID is a temporary/local ID (not saved to DB yet)
+    const isLocalWidgetId = (id: string) => {
+        return id.startsWith('temp-') || id.startsWith('widget-') || id.startsWith('default-');
+    };
+
     // Save all changes
     const handleSave = async () => {
         setIsSaving(true);
 
         try {
-            // Save widgets
+            // First, get current saved widgets to know which to delete
+            const currentRes = await fetch('/api/profile/widgets', { credentials: 'include' });
+            const currentData = currentRes.ok ? await currentRes.json() : { widgets: [] };
+            const savedWidgetIds = new Set<string>((currentData.widgets || []).map((w: BaseWidget) => w.id));
+            
+            // Find widgets to delete (saved ones that are no longer in our list)
+            const currentWidgetIds = new Set<string>(widgets.filter(w => !isLocalWidgetId(w.id)).map(w => w.id));
+            const widgetsToDelete = [...savedWidgetIds].filter(id => !currentWidgetIds.has(id));
+            
+            // Delete removed widgets
+            await Promise.all(widgetsToDelete.map(id => 
+                fetch(`/api/profile/widgets?id=${id}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                })
+            ));
+
+            // Save widgets - determine which are new vs existing
             const widgetsToSave = widgets.map((w, index) => ({
-                id: w.id.startsWith('temp-') || w.id.startsWith('widget-') ? undefined : w.id,
+                id: isLocalWidgetId(w.id) ? undefined : w.id,
                 widget_type: w.widget_type,
                 size: w.size,
                 position: index,
                 config: w.config,
-                is_visible: w.is_visible,
+                is_visible: w.is_visible !== false, // Default to true
             }));
-
-            // Delete removed widgets (those with real IDs that are no longer in the list)
-            // For now, we'll just update/create - the API can handle this
 
             // Batch upsert widgets
             const widgetPromises = widgetsToSave.map(async (w, index) => {
