@@ -33,6 +33,7 @@ type ChatModalProps = {
     peerAddress: string; // Can be EVM or Solana address
     peerName?: string | null;
     peerAvatar?: string | null;
+    onMessageSent?: () => void; // Callback when a message is sent
 };
 
 type Message = {
@@ -65,6 +66,7 @@ export function ChatModal({
     peerAddress,
     peerName,
     peerAvatar,
+    onMessageSent,
 }: ChatModalProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
@@ -565,6 +567,8 @@ export function ChatModal({
             if (result.success) {
                 // Track message sent for analytics
                 trackMessageSent();
+                // Notify parent that a message was sent (for sorting)
+                onMessageSent?.();
                 // Update message status to sent
                 setMessages((prev) =>
                     prev.map((m) =>
@@ -653,6 +657,8 @@ export function ChatModal({
 
                 // Track message sent for analytics
                 trackMessageSent();
+                // Notify parent that a message was sent (for sorting)
+                onMessageSent?.();
 
                 // Add the sent pixel art message to the UI immediately
                 if (result.message && userAddress) {

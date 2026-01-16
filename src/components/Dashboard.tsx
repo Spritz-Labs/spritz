@@ -753,6 +753,54 @@ function DashboardContent({
     const wakuError = wakuContext?.error ?? null;
     const unreadCounts = wakuContext?.unreadCounts ?? {};
     const initializeWaku = wakuContext?.initialize ?? (() => Promise.resolve());
+    
+    // Track last message times for sorting chats (persisted to localStorage)
+    const [lastMessageTimes, setLastMessageTimes] = useState<Record<string, number>>(() => {
+        if (typeof window === "undefined") return {};
+        try {
+            const stored = localStorage.getItem(`spritz_last_msg_times_${userAddress?.toLowerCase()}`);
+            return stored ? JSON.parse(stored) : {};
+        } catch {
+            return {};
+        }
+    });
+    
+    // Persist last message times to localStorage
+    useEffect(() => {
+        if (userAddress && Object.keys(lastMessageTimes).length > 0) {
+            try {
+                localStorage.setItem(
+                    `spritz_last_msg_times_${userAddress.toLowerCase()}`,
+                    JSON.stringify(lastMessageTimes)
+                );
+            } catch {
+                // Ignore storage errors
+            }
+        }
+    }, [lastMessageTimes, userAddress]);
+    
+    // Update last message times when unread counts change (new message received)
+    const prevUnreadCountsRef = useRef<Record<string, number>>({});
+    useEffect(() => {
+        const now = Date.now();
+        const prevCounts = prevUnreadCountsRef.current;
+        const updates: Record<string, number> = {};
+        
+        // Check for new or increased unread counts (meaning new messages)
+        Object.entries(unreadCounts).forEach(([address, count]) => {
+            const prevCount = prevCounts[address] || 0;
+            if (count > prevCount) {
+                // New message received - update timestamp
+                updates[address] = now;
+            }
+        });
+        
+        if (Object.keys(updates).length > 0) {
+            setLastMessageTimes(prev => ({ ...prev, ...updates }));
+        }
+        
+        prevUnreadCountsRef.current = { ...unreadCounts };
+    }, [unreadCounts]);
     const markAsRead = wakuContext?.markAsRead ?? (() => {});
     const onNewMessage = wakuContext?.onNewMessage ?? (() => () => {});
     const prefetchMessages = wakuContext?.prefetchMessages ?? (() => {});
@@ -946,6 +994,12 @@ function DashboardContent({
         // Add DM chats from friends
         friendsListData.forEach((friend) => {
             const addressLower = friend.address.toLowerCase();
+            // Use tracked last message time, or fall back to when they were added
+            const lastMsgTime = lastMessageTimes[addressLower];
+            const lastMessageAt = lastMsgTime 
+                ? new Date(lastMsgTime) 
+                : new Date(friend.addedAt);
+            
             items.push({
                 id: `dm-${friend.address}`,
                 type: "dm",
@@ -955,7 +1009,7 @@ function DashboardContent({
                     `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`,
                 avatar: friend.avatar,
                 lastMessage: null, // Could be populated from message cache
-                lastMessageAt: unreadCounts[addressLower] > 0 ? new Date() : new Date(friend.addedAt),
+                lastMessageAt,
                 unreadCount: unreadCounts[addressLower] || 0,
                 isOnline: false, // Will be updated by FriendsList logic
                 metadata: {
@@ -967,13 +1021,14 @@ function DashboardContent({
         });
         
         // Add Spritz Global Chat
+        const globalLastMsgTime = lastMessageTimes["global-spritz"];
         items.push({
             id: "global-spritz",
             type: "global",
             name: "Spritz Global",
             avatar: null,
             lastMessage: "Community chat",
-            lastMessageAt: alphaUnreadCount > 0 ? new Date() : null,
+            lastMessageAt: globalLastMsgTime ? new Date(globalLastMsgTime) : new Date(),
             unreadCount: alphaUnreadCount,
             isPinned: true,
             metadata: {
@@ -983,13 +1038,15 @@ function DashboardContent({
         
         // Add public channels
         joinedChannels.forEach((channel) => {
+            const channelKey = `channel-${channel.id}`;
+            const lastMsgTime = lastMessageTimes[channelKey];
             items.push({
-                id: `channel-${channel.id}`,
+                id: channelKey,
                 type: "channel",
                 name: channel.name,
                 avatar: null,
                 lastMessage: `${channel.member_count} members`,
-                lastMessageAt: null,
+                lastMessageAt: lastMsgTime ? new Date(lastMsgTime) : null,
                 unreadCount: 0,
                 metadata: {
                     memberCount: channel.member_count,
@@ -1000,13 +1057,15 @@ function DashboardContent({
         
         // Add private groups
         groups.forEach((group) => {
+            const groupKey = `group-${group.id}`;
+            const lastMsgTime = lastMessageTimes[groupKey];
             items.push({
-                id: `group-${group.id}`,
+                id: groupKey,
                 type: "group",
                 name: group.name,
                 avatar: null,
                 lastMessage: `${group.memberCount || 0} members`,
-                lastMessageAt: null,
+                lastMessageAt: lastMsgTime ? new Date(lastMsgTime) : null,
                 unreadCount: 0,
                 metadata: {
                     memberCount: group.memberCount,
@@ -1016,7 +1075,15 @@ function DashboardContent({
         });
         
         return items;
-    }, [friendsListData, unreadCounts, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
+    }, [friendsListData, unreadCounts, lastMessageTimes, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
+    
+    // Function to update last message time when user sends a message
+    const updateLastMessageTime = useCallback((chatKey: string) => {
+        setLastMessageTimes(prev => ({
+            ...prev,
+            [chatKey]: Date.now(),
+        }));
+    }, []);
 
     // Open chat from URL parameter (e.g., ?chat=0x123...)
     // This is used when clicking a push notification
@@ -4106,6 +4173,11 @@ function DashboardContent({
                     peerAddress={chatFriend?.address || ""}
                     peerName={chatFriend?.ensName || chatFriend?.nickname}
                     peerAvatar={chatFriend?.avatar}
+                    onMessageSent={() => {
+                        if (chatFriend) {
+                            updateLastMessageTime(chatFriend.address.toLowerCase());
+                        }
+                    }}
                 />
             )}
 
