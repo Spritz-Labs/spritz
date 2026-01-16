@@ -514,36 +514,6 @@ export function UnifiedChatList({
 
                                         {/* Time & Actions */}
                                         <div className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2">
-                                            {chat.lastMessageAt && (
-                                                <span className={`text-[10px] sm:text-xs ${
-                                                    chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"
-                                                }`}>
-                                                    {formatTime(chat.lastMessageAt)}
-                                                </span>
-                                            )}
-                                            
-                                            {/* Folder quick-action button */}
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setShowFolderPicker(chat.id);
-                                                }}
-                                                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all ${
-                                                    chatFolder
-                                                        ? "bg-zinc-700/50 text-white"
-                                                        : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
-                                                }`}
-                                                title={chatFolder ? `In folder ${chatFolder}` : "Add to folder"}
-                                            >
-                                                {chatFolder ? (
-                                                    <span className="text-xs sm:text-sm">{chatFolder}</span>
-                                                ) : (
-                                                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                                    </svg>
-                                                )}
-                                            </button>
-                                            
                                             {/* Quick actions - hidden on mobile, show on hover for desktop */}
                                             {chat.type === "dm" && (
                                                 <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -575,6 +545,36 @@ export function UnifiedChatList({
                                                     )}
                                                 </div>
                                             )}
+                                            
+                                            {chat.lastMessageAt && (
+                                                <span className={`text-[10px] sm:text-xs ${
+                                                    chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"
+                                                }`}>
+                                                    {formatTime(chat.lastMessageAt)}
+                                                </span>
+                                            )}
+                                            
+                                            {/* Folder quick-action button */}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setShowFolderPicker(chat.id);
+                                                }}
+                                                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all ${
+                                                    chatFolder
+                                                        ? "bg-zinc-700/50 text-white"
+                                                        : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                                                }`}
+                                                title={chatFolder ? `In folder ${chatFolder}` : "Add to folder"}
+                                            >
+                                                {chatFolder ? (
+                                                    <span className="text-xs sm:text-sm">{chatFolder}</span>
+                                                ) : (
+                                                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                                    </svg>
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
