@@ -17,6 +17,8 @@ export type UserSettings = {
     decentralizedCalls: boolean;
     publicLandingEnabled: boolean;
     publicBio: string;
+    customAvatarUrl: string | null;
+    useCustomAvatar: boolean;
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -27,6 +29,8 @@ const DEFAULT_SETTINGS: UserSettings = {
     decentralizedCalls: false, // Default to Agora until Huddle01 is fully integrated
     publicLandingEnabled: false, // Default to off for privacy
     publicBio: "",
+    customAvatarUrl: null,
+    useCustomAvatar: false,
 };
 
 // Preset status options
@@ -79,6 +83,8 @@ export function useUserSettings(userAddress: string | null) {
                         decentralizedCalls: data.decentralized_calls ?? false, // Default to Agora
                         publicLandingEnabled: data.public_landing_enabled ?? false,
                         publicBio: data.public_bio || "",
+                        customAvatarUrl: data.custom_avatar_url || null,
+                        useCustomAvatar: data.use_custom_avatar ?? false,
                     });
                 }
             } catch (err) {
@@ -122,6 +128,8 @@ export function useUserSettings(userAddress: string | null) {
                                 updatedSettings.decentralizedCalls,
                             public_landing_enabled: updatedSettings.publicLandingEnabled,
                             public_bio: updatedSettings.publicBio,
+                            custom_avatar_url: updatedSettings.customAvatarUrl,
+                            use_custom_avatar: updatedSettings.useCustomAvatar,
                             updated_at: new Date().toISOString(),
                         },
                         { onConflict: "wallet_address" }
@@ -191,6 +199,23 @@ export function useUserSettings(userAddress: string | null) {
         [updateSettings]
     );
 
+    const toggleUseCustomAvatar = useCallback(
+        () =>
+            updateSettings({
+                useCustomAvatar: !settings.useCustomAvatar,
+            }),
+        [updateSettings, settings.useCustomAvatar]
+    );
+
+    const setCustomAvatar = useCallback(
+        (url: string | null) =>
+            updateSettings({
+                customAvatarUrl: url,
+                useCustomAvatar: url ? true : false,
+            }),
+        [updateSettings]
+    );
+
     return {
         settings,
         isLoading,
@@ -201,6 +226,8 @@ export function useUserSettings(userAddress: string | null) {
         toggleSound,
         toggleDecentralizedCalls,
         togglePublicLanding,
+        toggleUseCustomAvatar,
+        setCustomAvatar,
         clearStatus,
         isConfigured: isSupabaseConfigured,
     };

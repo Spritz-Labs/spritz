@@ -48,6 +48,10 @@ type SettingsModalProps = {
     userEmail: string | null;
     isEmailVerified: boolean;
     onOpenEmailModal: () => void;
+    // Avatar props
+    ensAvatar: string | null;
+    onToggleUseCustomAvatar: () => void;
+    onSetCustomAvatar: (url: string | null) => void;
 };
 
 export function SettingsModal({
@@ -74,7 +78,58 @@ export function SettingsModal({
     userEmail,
     isEmailVerified,
     onOpenEmailModal,
+    ensAvatar,
+    onToggleUseCustomAvatar,
+    onSetCustomAvatar,
 }: SettingsModalProps) {
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const [avatarError, setAvatarError] = useState<string | null>(null);
+    const avatarInputRef = useRef<HTMLInputElement>(null);
+
+    // Handle avatar file upload
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !userAddress) return;
+
+        // Validate file
+        if (!file.type.startsWith('image/')) {
+            setAvatarError('Please select an image file');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            setAvatarError('Image must be less than 5MB');
+            return;
+        }
+
+        setIsUploadingAvatar(true);
+        setAvatarError(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const res = await fetch('/api/upload?type=avatar', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to upload');
+            }
+
+            const { url } = await res.json();
+            onSetCustomAvatar(url);
+        } catch (err) {
+            setAvatarError(err instanceof Error ? err.message : 'Upload failed');
+        } finally {
+            setIsUploadingAvatar(false);
+            // Reset input
+            if (avatarInputRef.current) {
+                avatarInputRef.current.value = '';
+            }
+        }
+    };
     const handlePushToggle = async () => {
         // Prevent double-clicks by checking loading state
         if (pushLoading) return;
@@ -288,11 +343,108 @@ export function SettingsModal({
 
                             {/* Settings List - Scrollable */}
                             <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-4 space-y-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
-                                {/* Status & Invites Section */}
+                                {/* Profile Section */}
                                 <div className="mb-4">
                                     <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 px-1">
                                         Profile
                                     </h3>
+
+                                    {/* Profile Photo */}
+                                    <div className="px-4 py-3 rounded-xl bg-zinc-800/50 mb-2">
+                                        <div className="flex items-center gap-4">
+                                            {/* Current Avatar */}
+                                            <div className="relative">
+                                                {(settings.useCustomAvatar && settings.customAvatarUrl) || (!settings.useCustomAvatar && ensAvatar) ? (
+                                                    <img
+                                                        src={settings.useCustomAvatar ? settings.customAvatarUrl! : ensAvatar!}
+                                                        alt="Profile"
+                                                        className="w-16 h-16 rounded-full object-cover border-2 border-zinc-700"
+                                                    />
+                                                ) : (
+                                                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center border-2 border-zinc-700">
+                                                        <span className="text-white text-xl font-bold">
+                                                            {userAddress?.slice(2, 4).toUpperCase() || "?"}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {isUploadingAvatar && (
+                                                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Upload Controls */}
+                                            <div className="flex-1">
+                                                <p className="text-white font-medium text-sm mb-1">Profile Photo</p>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        ref={avatarInputRef}
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handleAvatarUpload}
+                                                        className="hidden"
+                                                        id="avatar-upload"
+                                                    />
+                                                    <button
+                                                        onClick={() => avatarInputRef.current?.click()}
+                                                        disabled={isUploadingAvatar}
+                                                        className="px-3 py-1.5 text-xs rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white transition-colors disabled:opacity-50"
+                                                    >
+                                                        {isUploadingAvatar ? 'Uploading...' : 'Upload'}
+                                                    </button>
+                                                    {settings.customAvatarUrl && (
+                                                        <button
+                                                            onClick={() => onSetCustomAvatar(null)}
+                                                            className="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {avatarError && (
+                                                    <p className="text-red-400 text-xs mt-1">{avatarError}</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Toggle ENS vs Custom Avatar */}
+                                        {(settings.customAvatarUrl || ensAvatar) && (
+                                            <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                                                <button
+                                                    onClick={onToggleUseCustomAvatar}
+                                                    disabled={!settings.customAvatarUrl}
+                                                    className="w-full flex items-center justify-between disabled:opacity-50"
+                                                >
+                                                    <div className="text-left">
+                                                        <p className="text-white text-sm">
+                                                            {settings.useCustomAvatar ? 'Using custom photo' : 'Using ENS avatar'}
+                                                        </p>
+                                                        <p className="text-zinc-500 text-xs">
+                                                            {settings.customAvatarUrl 
+                                                                ? 'Toggle to switch between custom and ENS'
+                                                                : 'Upload a photo to use custom avatar'}
+                                                        </p>
+                                                    </div>
+                                                    <div
+                                                        className={`w-11 h-6 rounded-full transition-colors relative ${
+                                                            settings.useCustomAvatar
+                                                                ? "bg-orange-500"
+                                                                : "bg-zinc-700"
+                                                        }`}
+                                                    >
+                                                        <div
+                                                            className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                                                                settings.useCustomAvatar
+                                                                    ? "translate-x-5"
+                                                                    : "translate-x-0.5"
+                                                            }`}
+                                                        />
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {/* Status */}
                                     <button

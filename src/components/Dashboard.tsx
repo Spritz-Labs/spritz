@@ -271,6 +271,8 @@ function DashboardContent({
         toggleSound,
         toggleDecentralizedCalls,
         togglePublicLanding,
+        toggleUseCustomAvatar,
+        setCustomAvatar,
     } = useUserSettings(userAddress);
 
     // Push notifications
@@ -4286,6 +4288,9 @@ function DashboardContent({
                 userEmail={userEmail}
                 isEmailVerified={isEmailVerified}
                 onOpenEmailModal={() => setIsEmailModalOpen(true)}
+                ensAvatar={userENS.avatar}
+                onToggleUseCustomAvatar={toggleUseCustomAvatar}
+                onSetCustomAvatar={setCustomAvatar}
             />
 
             {/* First-time Push Notification Prompt */}
