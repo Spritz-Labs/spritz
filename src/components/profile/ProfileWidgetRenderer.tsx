@@ -27,6 +27,34 @@ import {
     ScheduleWidgetConfig,
     AgentWidgetConfig,
     SocialLinkWidgetConfig,
+    // Interactive widget configs
+    PollWidgetConfig,
+    GuestbookWidgetConfig,
+    ReactionWallWidgetConfig,
+    PetWidgetConfig,
+    FortuneCookieWidgetConfig,
+    // Aesthetic widget configs
+    PhotoCarouselWidgetConfig,
+    MoodBoardWidgetConfig,
+    ColorPaletteWidgetConfig,
+    VinylRecordWidgetConfig,
+    PolaroidStackWidgetConfig,
+    ZodiacWidgetConfig,
+    // Entertainment widget configs
+    BookshelfWidgetConfig,
+    GameNowPlayingWidgetConfig,
+    MovieQueueWidgetConfig,
+    PodcastFavoritesWidgetConfig,
+    // Productivity widget configs
+    AvailabilityStatusWidgetConfig,
+    TimezoneOverlapWidgetConfig,
+    StreakCounterWidgetConfig,
+    GoalsChecklistWidgetConfig,
+    // Fun widget configs
+    FunCounterWidgetConfig,
+    VisitorCounterWidgetConfig,
+    RandomFactWidgetConfig,
+    LanguagesWidgetConfig,
 } from "./ProfileWidgetTypes";
 
 // Widget components
@@ -52,6 +80,34 @@ import { WalletWidget } from "./widgets/WalletWidget";
 import { ScheduleWidget } from "./widgets/ScheduleWidget";
 import { AgentWidget } from "./widgets/AgentWidget";
 import { SocialLinkWidget } from "./widgets/SocialLinkWidget";
+// Interactive widgets
+import { PollWidget } from "./widgets/PollWidget";
+import { GuestbookWidget } from "./widgets/GuestbookWidget";
+import { ReactionWallWidget } from "./widgets/ReactionWallWidget";
+import { PetWidget } from "./widgets/PetWidget";
+import { FortuneCookieWidget } from "./widgets/FortuneCookieWidget";
+// Aesthetic widgets
+import { PhotoCarouselWidget } from "./widgets/PhotoCarouselWidget";
+import { MoodBoardWidget } from "./widgets/MoodBoardWidget";
+import { ColorPaletteWidget } from "./widgets/ColorPaletteWidget";
+import { VinylRecordWidget } from "./widgets/VinylRecordWidget";
+import { PolaroidStackWidget } from "./widgets/PolaroidStackWidget";
+import { ZodiacWidget } from "./widgets/ZodiacWidget";
+// Entertainment widgets
+import { BookshelfWidget } from "./widgets/BookshelfWidget";
+import { GameNowPlayingWidget } from "./widgets/GameNowPlayingWidget";
+import { MovieQueueWidget } from "./widgets/MovieQueueWidget";
+import { PodcastFavoritesWidget } from "./widgets/PodcastFavoritesWidget";
+// Productivity widgets
+import { AvailabilityStatusWidget } from "./widgets/AvailabilityStatusWidget";
+import { TimezoneOverlapWidget } from "./widgets/TimezoneOverlapWidget";
+import { StreakCounterWidget } from "./widgets/StreakCounterWidget";
+import { GoalsChecklistWidget } from "./widgets/GoalsChecklistWidget";
+// Fun widgets
+import { FunCounterWidget } from "./widgets/FunCounterWidget";
+import { VisitorCounterWidget } from "./widgets/VisitorCounterWidget";
+import { RandomFactWidget } from "./widgets/RandomFactWidget";
+import { LanguagesWidget } from "./widgets/LanguagesWidget";
 
 interface ProfileWidgetRendererProps {
     widgets: BaseWidget[];
@@ -107,6 +163,57 @@ export function renderWidget(widget: BaseWidget): React.ReactNode {
             return <AgentWidget config={config as unknown as AgentWidgetConfig} size={size} />;
         case 'social_link':
             return <SocialLinkWidget config={config as unknown as SocialLinkWidgetConfig} size={size} />;
+        // Interactive widgets
+        case 'poll':
+            return <PollWidget config={config as unknown as PollWidgetConfig} size={size} />;
+        case 'guestbook':
+            return <GuestbookWidget config={config as unknown as GuestbookWidgetConfig} size={size} />;
+        case 'reaction_wall':
+            return <ReactionWallWidget config={config as unknown as ReactionWallWidgetConfig} size={size} />;
+        case 'pet':
+            return <PetWidget config={config as unknown as PetWidgetConfig} size={size} />;
+        case 'fortune_cookie':
+            return <FortuneCookieWidget config={config as unknown as FortuneCookieWidgetConfig} size={size} />;
+        // Aesthetic widgets
+        case 'photo_carousel':
+            return <PhotoCarouselWidget config={config as unknown as PhotoCarouselWidgetConfig} size={size} />;
+        case 'mood_board':
+            return <MoodBoardWidget config={config as unknown as MoodBoardWidgetConfig} size={size} />;
+        case 'color_palette':
+            return <ColorPaletteWidget config={config as unknown as ColorPaletteWidgetConfig} size={size} />;
+        case 'vinyl_record':
+            return <VinylRecordWidget config={config as unknown as VinylRecordWidgetConfig} size={size} />;
+        case 'polaroid_stack':
+            return <PolaroidStackWidget config={config as unknown as PolaroidStackWidgetConfig} size={size} />;
+        case 'zodiac':
+            return <ZodiacWidget config={config as unknown as ZodiacWidgetConfig} size={size} />;
+        // Entertainment widgets
+        case 'bookshelf':
+            return <BookshelfWidget config={config as unknown as BookshelfWidgetConfig} size={size} />;
+        case 'game_now_playing':
+            return <GameNowPlayingWidget config={config as unknown as GameNowPlayingWidgetConfig} size={size} />;
+        case 'movie_queue':
+            return <MovieQueueWidget config={config as unknown as MovieQueueWidgetConfig} size={size} />;
+        case 'podcast_favorites':
+            return <PodcastFavoritesWidget config={config as unknown as PodcastFavoritesWidgetConfig} size={size} />;
+        // Productivity widgets
+        case 'availability_status':
+            return <AvailabilityStatusWidget config={config as unknown as AvailabilityStatusWidgetConfig} size={size} />;
+        case 'timezone_overlap':
+            return <TimezoneOverlapWidget config={config as unknown as TimezoneOverlapWidgetConfig} size={size} />;
+        case 'streak_counter':
+            return <StreakCounterWidget config={config as unknown as StreakCounterWidgetConfig} size={size} />;
+        case 'goals_checklist':
+            return <GoalsChecklistWidget config={config as unknown as GoalsChecklistWidgetConfig} size={size} />;
+        // Fun widgets
+        case 'fun_counter':
+            return <FunCounterWidget config={config as unknown as FunCounterWidgetConfig} size={size} />;
+        case 'visitor_counter':
+            return <VisitorCounterWidget config={config as unknown as VisitorCounterWidgetConfig} size={size} />;
+        case 'random_fact':
+            return <RandomFactWidget config={config as unknown as RandomFactWidgetConfig} size={size} />;
+        case 'languages':
+            return <LanguagesWidget config={config as unknown as LanguagesWidgetConfig} size={size} />;
         default:
             // Fallback for unknown widget types
             return (

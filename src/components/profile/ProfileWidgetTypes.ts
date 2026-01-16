@@ -24,7 +24,35 @@ export type WidgetType =
     | 'wallet'
     | 'schedule'
     | 'agent'
-    | 'social_link';
+    | 'social_link'
+    // Interactive & Fun widgets
+    | 'poll'
+    | 'guestbook'
+    | 'reaction_wall'
+    | 'pet'
+    | 'fortune_cookie'
+    // Aesthetic widgets
+    | 'photo_carousel'
+    | 'mood_board'
+    | 'color_palette'
+    | 'vinyl_record'
+    | 'polaroid_stack'
+    | 'zodiac'
+    // What I'm Into widgets
+    | 'bookshelf'
+    | 'game_now_playing'
+    | 'movie_queue'
+    | 'podcast_favorites'
+    // Productivity widgets
+    | 'availability_status'
+    | 'timezone_overlap'
+    | 'streak_counter'
+    | 'goals_checklist'
+    // Fun Stats widgets
+    | 'fun_counter'
+    | 'visitor_counter'
+    | 'random_fact'
+    | 'languages';
 
 // Base widget interface
 export interface BaseWidget {
@@ -217,6 +245,240 @@ export interface SocialLinkWidgetConfig {
     url: string;
 }
 
+// ====== INTERACTIVE & FUN WIDGETS ======
+
+// Poll Widget - Interactive voting
+export interface PollWidgetConfig {
+    question: string;
+    options: Array<{
+        id: string;
+        text: string;
+        votes?: number;
+    }>;
+    allowMultiple?: boolean;
+    showResults?: boolean;
+    endDate?: string;
+}
+
+// Guestbook Widget - Visitor messages
+export interface GuestbookWidgetConfig {
+    title?: string;
+    maxMessages?: number;
+    messages?: Array<{
+        id: string;
+        author: string;
+        authorAddress?: string;
+        content: string;
+        timestamp: string;
+        emoji?: string;
+    }>;
+}
+
+// Reaction Wall Widget - Emoji reactions
+export interface ReactionWallWidgetConfig {
+    allowedEmojis?: string[];
+    reactions?: Record<string, number>; // emoji -> count
+    maxReactions?: number;
+}
+
+// Pet Widget - Virtual pet
+export interface PetWidgetConfig {
+    petType: 'cat' | 'dog' | 'hamster' | 'bird' | 'fish' | 'alien' | 'robot' | 'ghost';
+    name: string;
+    mood?: 'happy' | 'sleepy' | 'hungry' | 'playful' | 'excited';
+    color?: string;
+}
+
+// Fortune Cookie Widget - Random quotes/fortunes
+export interface FortuneCookieWidgetConfig {
+    fortunes?: string[];
+    category?: 'wisdom' | 'funny' | 'motivation' | 'tech' | 'custom';
+    showDaily?: boolean;
+}
+
+// ====== AESTHETIC WIDGETS ======
+
+// Photo Carousel Widget - Rotating images
+export interface PhotoCarouselWidgetConfig {
+    images: Array<{
+        url: string;
+        caption?: string;
+    }>;
+    autoPlay?: boolean;
+    interval?: number; // seconds
+    showDots?: boolean;
+    showArrows?: boolean;
+}
+
+// Mood Board Widget - Image collage
+export interface MoodBoardWidgetConfig {
+    images: Array<{
+        url: string;
+        size?: 'small' | 'medium' | 'large';
+    }>;
+    title?: string;
+    gap?: number;
+}
+
+// Color Palette Widget - Brand colors
+export interface ColorPaletteWidgetConfig {
+    colors: Array<{
+        hex: string;
+        name?: string;
+    }>;
+    title?: string;
+    showHex?: boolean;
+}
+
+// Vinyl Record Widget - Album display
+export interface VinylRecordWidgetConfig {
+    albumArt: string;
+    albumName: string;
+    artistName: string;
+    isSpinning?: boolean;
+    spotifyUrl?: string;
+}
+
+// Polaroid Stack Widget - Stacked photos
+export interface PolaroidStackWidgetConfig {
+    photos: Array<{
+        url: string;
+        caption?: string;
+        rotation?: number;
+    }>;
+    spread?: 'tight' | 'loose' | 'scattered';
+}
+
+// Zodiac Widget - Astrological sign
+export interface ZodiacWidgetConfig {
+    sign: 'aries' | 'taurus' | 'gemini' | 'cancer' | 'leo' | 'virgo' | 'libra' | 'scorpio' | 'sagittarius' | 'capricorn' | 'aquarius' | 'pisces';
+    showTraits?: boolean;
+    showDates?: boolean;
+}
+
+// ====== WHAT I'M INTO WIDGETS ======
+
+// Bookshelf Widget - Books display
+export interface BookshelfWidgetConfig {
+    books: Array<{
+        title: string;
+        author: string;
+        coverUrl?: string;
+        status?: 'reading' | 'finished' | 'want_to_read';
+        rating?: number;
+    }>;
+    title?: string;
+}
+
+// Game Now Playing Widget
+export interface GameNowPlayingWidgetConfig {
+    gameName: string;
+    coverUrl?: string;
+    platform?: 'pc' | 'playstation' | 'xbox' | 'nintendo' | 'mobile';
+    hoursPlayed?: number;
+    achievement?: string;
+}
+
+// Movie Queue Widget
+export interface MovieQueueWidgetConfig {
+    items: Array<{
+        title: string;
+        posterUrl?: string;
+        type: 'movie' | 'show';
+        status?: 'watching' | 'finished' | 'want_to_watch';
+        rating?: number;
+    }>;
+    title?: string;
+}
+
+// Podcast Favorites Widget
+export interface PodcastFavoritesWidgetConfig {
+    podcasts: Array<{
+        name: string;
+        coverUrl?: string;
+        latestEpisode?: string;
+        spotifyUrl?: string;
+    }>;
+}
+
+// ====== PRODUCTIVITY WIDGETS ======
+
+// Availability Status Widget
+export interface AvailabilityStatusWidgetConfig {
+    status: 'available' | 'busy' | 'away' | 'dnd' | 'offline';
+    customMessage?: string;
+    showSchedule?: boolean;
+    schedule?: {
+        timezone: string;
+        workHours?: { start: string; end: string };
+    };
+}
+
+// Timezone Overlap Widget
+export interface TimezoneOverlapWidgetConfig {
+    timezone: string;
+    label?: string;
+    showWorkHours?: boolean;
+    workHours?: { start: number; end: number }; // 0-24
+}
+
+// Streak Counter Widget
+export interface StreakCounterWidgetConfig {
+    label: string;
+    currentStreak: number;
+    longestStreak?: number;
+    unit?: 'days' | 'weeks' | 'commits' | 'workouts' | 'custom';
+    emoji?: string;
+    startDate?: string;
+}
+
+// Goals Checklist Widget
+export interface GoalsChecklistWidgetConfig {
+    title?: string;
+    goals: Array<{
+        id: string;
+        text: string;
+        completed: boolean;
+        emoji?: string;
+    }>;
+    showProgress?: boolean;
+}
+
+// ====== FUN STATS WIDGETS ======
+
+// Fun Counter Widget (coffee, etc.)
+export interface FunCounterWidgetConfig {
+    label: string;
+    count: number;
+    emoji: string;
+    unit?: string;
+    incrementable?: boolean;
+}
+
+// Visitor Counter Widget
+export interface VisitorCounterWidgetConfig {
+    style: 'retro' | 'modern' | 'minimal';
+    count?: number;
+    label?: string;
+}
+
+// Random Fact Widget
+export interface RandomFactWidgetConfig {
+    facts: string[];
+    title?: string;
+    refreshable?: boolean;
+}
+
+// Languages Widget
+export interface LanguagesWidgetConfig {
+    languages: Array<{
+        code: string; // ISO 639-1 code
+        name: string;
+        proficiency?: 'native' | 'fluent' | 'conversational' | 'learning';
+    }>;
+    showFlags?: boolean;
+}
+
 // Profile Theme
 export interface ProfileTheme {
     background_type: 'solid' | 'gradient' | 'image' | 'mesh';
@@ -233,7 +495,7 @@ export interface ProfileTheme {
 }
 
 // Widget category type
-export type WidgetCategory = 'spritz' | 'location' | 'social' | 'media' | 'personal' | 'web3' | 'utility';
+export type WidgetCategory = 'spritz' | 'location' | 'social' | 'media' | 'personal' | 'web3' | 'utility' | 'interactive' | 'aesthetic' | 'entertainment' | 'productivity' | 'fun';
 
 // Widget metadata for editor
 export const WIDGET_METADATA: Record<WidgetType, {
@@ -412,6 +674,195 @@ export const WIDGET_METADATA: Record<WidgetType, {
         defaultSize: '1x1',
         allowedSizes: ['1x1', '2x1'],
         category: 'spritz',
+    },
+    // Interactive & Fun widgets
+    poll: {
+        name: 'Poll',
+        description: 'Let visitors vote on a question',
+        icon: '📊',
+        defaultSize: '2x2',
+        allowedSizes: ['2x1', '2x2'],
+        category: 'interactive',
+    },
+    guestbook: {
+        name: 'Guestbook',
+        description: 'Let visitors leave messages',
+        icon: '📝',
+        defaultSize: '2x2',
+        allowedSizes: ['2x2', '4x2'],
+        category: 'interactive',
+    },
+    reaction_wall: {
+        name: 'Reaction Wall',
+        description: 'Collect emoji reactions from visitors',
+        icon: '🎉',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'interactive',
+    },
+    pet: {
+        name: 'Virtual Pet',
+        description: 'An adorable animated companion',
+        icon: '🐱',
+        defaultSize: '1x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'interactive',
+    },
+    fortune_cookie: {
+        name: 'Fortune Cookie',
+        description: 'Random wisdom for your visitors',
+        icon: '🥠',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'interactive',
+    },
+    // Aesthetic widgets
+    photo_carousel: {
+        name: 'Photo Carousel',
+        description: 'Rotating slideshow of images',
+        icon: '🎠',
+        defaultSize: '2x2',
+        allowedSizes: ['2x1', '2x2', '4x2'],
+        category: 'aesthetic',
+    },
+    mood_board: {
+        name: 'Mood Board',
+        description: 'Collage of inspiration images',
+        icon: '🎨',
+        defaultSize: '2x2',
+        allowedSizes: ['2x2', '4x2'],
+        category: 'aesthetic',
+    },
+    color_palette: {
+        name: 'Color Palette',
+        description: 'Show your brand/favorite colors',
+        icon: '🌈',
+        defaultSize: '2x1',
+        allowedSizes: ['2x1', '4x1'],
+        category: 'aesthetic',
+    },
+    vinyl_record: {
+        name: 'Vinyl Record',
+        description: 'Spinning album art display',
+        icon: '💿',
+        defaultSize: '2x2',
+        allowedSizes: ['1x1', '2x2'],
+        category: 'aesthetic',
+    },
+    polaroid_stack: {
+        name: 'Polaroid Stack',
+        description: 'Stacked polaroid-style photos',
+        icon: '📸',
+        defaultSize: '2x2',
+        allowedSizes: ['2x2', '4x2'],
+        category: 'aesthetic',
+    },
+    zodiac: {
+        name: 'Zodiac Sign',
+        description: 'Display your astrological sign',
+        icon: '♈',
+        defaultSize: '1x1',
+        allowedSizes: ['1x1', '2x1'],
+        category: 'aesthetic',
+    },
+    // What I'm Into widgets
+    bookshelf: {
+        name: 'Bookshelf',
+        description: 'Books you\'re reading',
+        icon: '📚',
+        defaultSize: '2x2',
+        allowedSizes: ['2x1', '2x2', '4x1', '4x2'],
+        category: 'entertainment',
+    },
+    game_now_playing: {
+        name: 'Now Playing',
+        description: 'Game you\'re currently playing',
+        icon: '🎮',
+        defaultSize: '2x1',
+        allowedSizes: ['2x1', '2x2'],
+        category: 'entertainment',
+    },
+    movie_queue: {
+        name: 'Watch List',
+        description: 'Movies and shows queue',
+        icon: '🎬',
+        defaultSize: '2x2',
+        allowedSizes: ['2x1', '2x2', '4x2'],
+        category: 'entertainment',
+    },
+    podcast_favorites: {
+        name: 'Podcasts',
+        description: 'Podcasts you love',
+        icon: '🎙️',
+        defaultSize: '2x1',
+        allowedSizes: ['2x1', '2x2', '4x1'],
+        category: 'entertainment',
+    },
+    // Productivity widgets
+    availability_status: {
+        name: 'Availability',
+        description: 'Show if you\'re available',
+        icon: '🟢',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1'],
+        category: 'productivity',
+    },
+    timezone_overlap: {
+        name: 'Time Zone',
+        description: 'Your local time for visitors',
+        icon: '🌍',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'productivity',
+    },
+    streak_counter: {
+        name: 'Streak',
+        description: 'Track your daily streaks',
+        icon: '🔥',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1'],
+        category: 'productivity',
+    },
+    goals_checklist: {
+        name: 'Goals',
+        description: 'Public goals checklist',
+        icon: '✅',
+        defaultSize: '2x2',
+        allowedSizes: ['2x1', '2x2'],
+        category: 'productivity',
+    },
+    // Fun Stats widgets
+    fun_counter: {
+        name: 'Fun Counter',
+        description: 'Count anything (coffees, etc.)',
+        icon: '☕',
+        defaultSize: '1x1',
+        allowedSizes: ['1x1', '2x1'],
+        category: 'fun',
+    },
+    visitor_counter: {
+        name: 'Visitor Counter',
+        description: 'Retro hit counter',
+        icon: '👀',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1'],
+        category: 'fun',
+    },
+    random_fact: {
+        name: 'Random Fact',
+        description: 'Fun facts about you',
+        icon: '💡',
+        defaultSize: '2x1',
+        allowedSizes: ['2x1', '2x2'],
+        category: 'fun',
+    },
+    languages: {
+        name: 'Languages',
+        description: 'Languages you speak',
+        icon: '🗣️',
+        defaultSize: '2x1',
+        allowedSizes: ['1x1', '2x1', '2x2'],
+        category: 'fun',
     },
 };
 
