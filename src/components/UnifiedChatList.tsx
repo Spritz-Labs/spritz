@@ -1,0 +1,643 @@
+"use client";
+
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { useChatFolders, DEFAULT_FOLDER_EMOJIS, FOLDER_CATEGORIES, type ChatFolder } from "@/hooks/useChatFolders";
+
+// Create Folder Modal Component
+function CreateFolderModal({
+    activeFolders,
+    onClose,
+    onCreateFolder,
+}: {
+    activeFolders: ChatFolder[];
+    onClose: () => void;
+    onCreateFolder: (emoji: string, label: string) => void;
+}) {
+    const [customEmoji, setCustomEmoji] = useState("");
+    const [customLabel, setCustomLabel] = useState("");
+    const [activeCategory, setActiveCategory] = useState("popular");
+
+    const filteredEmojis = DEFAULT_FOLDER_EMOJIS.filter(f => f.category === activeCategory);
+    const isCustomValid = customEmoji.trim().length > 0;
+
+    const handleCreateCustom = () => {
+        if (isCustomValid) {
+            onCreateFolder(customEmoji.trim(), customLabel.trim() || "Custom");
+        }
+    };
+
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={onClose}
+        >
+            <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto"
+            >
+                <h3 className="text-lg font-bold text-white mb-2">Create Folder</h3>
+                <p className="text-zinc-400 text-sm mb-4">
+                    Choose an emoji or create your own. Long-press chats to organize them.
+                </p>
+                
+                {/* Custom Folder Input */}
+                <div className="mb-6 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                    <p className="text-xs text-zinc-500 mb-2 font-medium">Create Custom Folder</p>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={customEmoji}
+                            onChange={(e) => setCustomEmoji(e.target.value)}
+                            placeholder="😀"
+                            className="w-14 h-12 text-center text-2xl bg-zinc-800 border border-zinc-700 rounded-xl focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20"
+                            maxLength={4}
+                        />
+                        <input
+                            type="text"
+                            value={customLabel}
+                            onChange={(e) => setCustomLabel(e.target.value)}
+                            placeholder="Folder name (optional)"
+                            className="flex-1 h-12 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20"
+                            maxLength={20}
+                        />
+                        <button
+                            onClick={handleCreateCustom}
+                            disabled={!isCustomValid}
+                            className="px-4 h-12 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Add
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Category Tabs */}
+                <div className="flex gap-1 overflow-x-auto scrollbar-none mb-4 -mx-2 px-2">
+                    {FOLDER_CATEGORIES.map(cat => (
+                        <button
+                            key={cat.id}
+                            onClick={() => setActiveCategory(cat.id)}
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                activeCategory === cat.id
+                                    ? "bg-[#FF5500] text-white"
+                                    : "bg-zinc-800/50 text-zinc-400 hover:text-white"
+                            }`}
+                        >
+                            {cat.label}
+                        </button>
+                    ))}
+                </div>
+                
+                {/* Emoji Grid */}
+                <div className="grid grid-cols-5 gap-2 mb-4">
+                    {filteredEmojis.map(folder => {
+                        const isActive = activeFolders.some(f => f.emoji === folder.emoji);
+                        return (
+                            <button
+                                key={folder.emoji}
+                                onClick={() => onCreateFolder(folder.emoji, folder.label)}
+                                disabled={isActive}
+                                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                                    isActive
+                                        ? "bg-zinc-800 opacity-50 cursor-not-allowed"
+                                        : "bg-zinc-800/50 hover:bg-zinc-700 hover:scale-105"
+                                }`}
+                                title={folder.label}
+                            >
+                                <span className="text-2xl">{folder.emoji}</span>
+                                <span className="text-[10px] text-zinc-500 truncate w-full text-center">
+                                    {folder.label}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+                
+                {/* More Emoji Suggestions */}
+                <div className="border-t border-zinc-800 pt-4 mb-4">
+                    <p className="text-xs text-zinc-500 mb-2">More suggestions</p>
+                    <div className="flex flex-wrap gap-2">
+                        {["🚀", "💡", "🎯", "🔒", "📱", "🌟", "💪", "🎁", "☕", "🏆", "🌈", "🔮", "🎪", "🎲", "🃏"].map(emoji => (
+                            <button
+                                key={emoji}
+                                onClick={() => setCustomEmoji(emoji)}
+                                className="w-10 h-10 rounded-lg bg-zinc-800/30 hover:bg-zinc-700 text-xl transition-all hover:scale-110"
+                            >
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                
+                <button
+                    onClick={onClose}
+                    className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-colors"
+                >
+                    Cancel
+                </button>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+// Unified chat item that can represent any chat type
+export type UnifiedChatItem = {
+    id: string;
+    type: "dm" | "group" | "channel" | "global";
+    name: string;
+    avatar: string | null;
+    lastMessage: string | null;
+    lastMessageAt: Date | null;
+    unreadCount: number;
+    isOnline?: boolean;
+    isPinned?: boolean;
+    metadata: {
+        // For DMs
+        address?: string;
+        ensName?: string | null;
+        reachUsername?: string | null;
+        // For groups/channels
+        memberCount?: number;
+        isPublic?: boolean;
+        // For global chat
+        isAlpha?: boolean;
+    };
+};
+
+type UnifiedChatListProps = {
+    chats: UnifiedChatItem[];
+    userAddress: string;
+    onChatClick: (chat: UnifiedChatItem) => void;
+    onCallClick?: (chat: UnifiedChatItem) => void;
+    onVideoClick?: (chat: UnifiedChatItem) => void;
+};
+
+const formatTime = (date: Date | null) => {
+    if (!date) return "";
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days === 0) {
+        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } else if (days === 1) {
+        return "Yesterday";
+    } else if (days < 7) {
+        return date.toLocaleDateString([], { weekday: "short" });
+    } else {
+        return date.toLocaleDateString([], { month: "short", day: "numeric" });
+    }
+};
+
+const getChatTypeIcon = (type: UnifiedChatItem["type"]) => {
+    switch (type) {
+        case "dm":
+            return null; // DMs show avatar instead
+        case "group":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+            );
+        case "channel":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                </svg>
+            );
+        case "global":
+            return (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            );
+    }
+};
+
+export function UnifiedChatList({
+    chats,
+    userAddress,
+    onChatClick,
+    onCallClick,
+    onVideoClick,
+}: UnifiedChatListProps) {
+    const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = "All"
+    const [showFolderPicker, setShowFolderPicker] = useState<string | null>(null);
+    const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+    const tabsRef = useRef<HTMLDivElement>(null);
+
+    const {
+        activeFolders,
+        allAvailableFolders,
+        assignments,
+        addFolder,
+        assignChat,
+        getChatFolder,
+    } = useChatFolders(userAddress);
+
+    // Sort chats by last message date (most recent first)
+    const sortedChats = useMemo(() => {
+        return [...chats].sort((a, b) => {
+            // Pinned chats come first
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            
+            // Then by unread count (chats with unreads first)
+            if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+            if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+            
+            // Then by last message time
+            const aTime = a.lastMessageAt?.getTime() || 0;
+            const bTime = b.lastMessageAt?.getTime() || 0;
+            return bTime - aTime;
+        });
+    }, [chats]);
+
+    // Filter chats by active folder
+    const filteredChats = useMemo(() => {
+        if (activeFolder === null) {
+            return sortedChats; // "All" folder shows everything
+        }
+        return sortedChats.filter(chat => getChatFolder(chat.id) === activeFolder);
+    }, [sortedChats, activeFolder, getChatFolder]);
+
+    // Get unread count per folder
+    const folderUnreadCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        sortedChats.forEach(chat => {
+            const folder = getChatFolder(chat.id);
+            if (folder && chat.unreadCount > 0) {
+                counts[folder] = (counts[folder] || 0) + chat.unreadCount;
+            }
+        });
+        return counts;
+    }, [sortedChats, getChatFolder]);
+
+    // Total unread for "All" tab
+    const totalUnread = useMemo(() => {
+        return sortedChats.reduce((sum, chat) => sum + chat.unreadCount, 0);
+    }, [sortedChats]);
+
+    // Handle long press to show folder picker
+    const handleTouchStart = useCallback((chatId: string) => {
+        const timer = setTimeout(() => {
+            setShowFolderPicker(chatId);
+        }, 500);
+        setLongPressTimer(timer);
+    }, []);
+
+    const handleTouchEnd = useCallback(() => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            setLongPressTimer(null);
+        }
+    }, [longPressTimer]);
+
+    // Handle folder assignment
+    const handleAssignFolder = useCallback((chatId: string, emoji: string | null) => {
+        if (emoji) {
+            // Make sure folder exists
+            const folder = allAvailableFolders.find(f => f.emoji === emoji);
+            if (folder) {
+                addFolder(folder.emoji, folder.label);
+            }
+        }
+        assignChat(chatId, emoji);
+        setShowFolderPicker(null);
+    }, [allAvailableFolders, addFolder, assignChat]);
+
+    // Scroll tabs to show active folder
+    useEffect(() => {
+        if (tabsRef.current && activeFolder) {
+            const activeTab = tabsRef.current.querySelector(`[data-folder="${activeFolder}"]`);
+            activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        }
+    }, [activeFolder]);
+
+    return (
+        <div className="space-y-3">
+            {/* Folder Tabs - Horizontal scrollable */}
+            <div 
+                ref={tabsRef}
+                className="flex items-center gap-1 overflow-x-auto scrollbar-none pb-2 -mx-2 px-2"
+            >
+                {/* All Tab */}
+                <button
+                    onClick={() => setActiveFolder(null)}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all ${
+                        activeFolder === null
+                            ? "bg-[#FF5500] text-white shadow-lg shadow-orange-500/25"
+                            : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                    }`}
+                >
+                    <span className="text-base">📥</span>
+                    <span className="text-sm font-medium">All</span>
+                    {totalUnread > 0 && (
+                        <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                            activeFolder === null ? "bg-white text-[#FF5500]" : "bg-[#FF5500] text-white"
+                        }`}>
+                            {totalUnread > 99 ? "99+" : totalUnread}
+                        </span>
+                    )}
+                </button>
+
+                {/* Active Folders */}
+                {activeFolders.map(folder => (
+                    <button
+                        key={folder.emoji}
+                        data-folder={folder.emoji}
+                        onClick={() => setActiveFolder(folder.emoji)}
+                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all ${
+                            activeFolder === folder.emoji
+                                ? "bg-[#FF5500] text-white shadow-lg shadow-orange-500/25"
+                                : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                        }`}
+                    >
+                        <span className="text-base">{folder.emoji}</span>
+                        <span className="text-sm font-medium hidden sm:inline">{folder.label}</span>
+                        {folderUnreadCounts[folder.emoji] > 0 && (
+                            <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                                activeFolder === folder.emoji ? "bg-white text-[#FF5500]" : "bg-[#FF5500] text-white"
+                            }`}>
+                                {folderUnreadCounts[folder.emoji] > 99 ? "99+" : folderUnreadCounts[folder.emoji]}
+                            </span>
+                        )}
+                    </button>
+                ))}
+
+                {/* Add Folder Button */}
+                <button
+                    onClick={() => setShowFolderPicker("_new")}
+                    className="flex-shrink-0 w-9 h-9 rounded-xl bg-zinc-800/30 text-zinc-500 hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center"
+                    title="Add folder"
+                >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                </button>
+            </div>
+
+            {/* Chat Count */}
+            <div className="flex items-center justify-between text-sm text-zinc-500 px-1">
+                <span>
+                    {filteredChats.length} {filteredChats.length === 1 ? "chat" : "chats"}
+                    {activeFolder && ` in ${activeFolders.find(f => f.emoji === activeFolder)?.label || activeFolder}`}
+                </span>
+                {activeFolder && (
+                    <button
+                        onClick={() => setActiveFolder(null)}
+                        className="text-xs text-[#FF5500] hover:underline"
+                    >
+                        Show all
+                    </button>
+                )}
+            </div>
+
+            {/* Chat List */}
+            <div className="space-y-2">
+                {filteredChats.length === 0 ? (
+                    <div className="text-center py-12">
+                        <div className="w-16 h-16 rounded-full bg-zinc-800/50 flex items-center justify-center mx-auto mb-4">
+                            <span className="text-3xl">{activeFolder || "📭"}</span>
+                        </div>
+                        <p className="text-zinc-400 font-medium">
+                            {activeFolder 
+                                ? `No chats in ${activeFolders.find(f => f.emoji === activeFolder)?.label || "this folder"}`
+                                : "No chats yet"}
+                        </p>
+                        <p className="text-zinc-500 text-sm mt-1">
+                            {activeFolder
+                                ? "Long-press a chat to move it here"
+                                : "Start a conversation with a friend"}
+                        </p>
+                    </div>
+                ) : (
+                    filteredChats.map(chat => {
+                        const chatFolder = getChatFolder(chat.id);
+                        
+                        return (
+                            <motion.div
+                                key={chat.id}
+                                className="relative"
+                                onTouchStart={() => handleTouchStart(chat.id)}
+                                onTouchEnd={handleTouchEnd}
+                                onTouchCancel={handleTouchEnd}
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    setShowFolderPicker(chat.id);
+                                }}
+                            >
+                                <div
+                                    onClick={() => onChatClick(chat)}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            onChatClick(chat);
+                                        }
+                                    }}
+                                    className={`w-full rounded-xl p-3 transition-all text-left group cursor-pointer ${
+                                        chat.unreadCount > 0
+                                            ? "bg-[#FF5500]/10 hover:bg-[#FF5500]/15 border border-[#FF5500]/30"
+                                            : "bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        {/* Avatar */}
+                                        <div className="relative flex-shrink-0">
+                                            {chat.avatar ? (
+                                                <img
+                                                    src={chat.avatar}
+                                                    alt={chat.name}
+                                                    className={`w-12 h-12 rounded-full object-cover ${
+                                                        chat.unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""
+                                                    }`}
+                                                />
+                                            ) : (
+                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                                    chat.type === "global"
+                                                        ? "bg-gradient-to-br from-orange-500 to-amber-500"
+                                                        : chat.type === "channel"
+                                                        ? "bg-gradient-to-br from-blue-500 to-cyan-500"
+                                                        : chat.type === "group"
+                                                        ? "bg-gradient-to-br from-purple-500 to-pink-500"
+                                                        : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
+                                                } ${chat.unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""}`}>
+                                                    <span className="text-white font-bold text-lg">
+                                                        {chat.name[0].toUpperCase()}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            
+                                            {/* Online indicator for DMs */}
+                                            {chat.type === "dm" && chat.isOnline && (
+                                                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full border-2 border-zinc-900" />
+                                            )}
+                                            
+                                            {/* Unread badge */}
+                                            {chat.unreadCount > 0 && (
+                                                <div className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 bg-[#FF5500] rounded-full flex items-center justify-center border-2 border-zinc-900">
+                                                    <span className="text-white text-[10px] font-bold">
+                                                        {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            
+                                            {/* Chat type badge */}
+                                            {chat.type !== "dm" && (
+                                                <div className="absolute -bottom-0.5 -left-0.5 w-5 h-5 bg-zinc-700 rounded-full flex items-center justify-center border-2 border-zinc-900 text-zinc-300">
+                                                    {getChatTypeIcon(chat.type)}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Content */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <p className={`font-medium truncate ${
+                                                    chat.unreadCount > 0 ? "text-white" : "text-zinc-200"
+                                                }`}>
+                                                    {chat.name}
+                                                </p>
+                                                {/* Folder indicator */}
+                                                {chatFolder && (
+                                                    <span className="text-sm flex-shrink-0">{chatFolder}</span>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Last message preview */}
+                                            <p className={`text-sm truncate ${
+                                                chat.unreadCount > 0 ? "text-zinc-300" : "text-zinc-500"
+                                            }`}>
+                                                {chat.lastMessage || (
+                                                    chat.type === "dm" ? "Say hello!" : 
+                                                    chat.type === "global" ? "Join the global conversation" :
+                                                    `${chat.metadata.memberCount || 0} members`
+                                                )}
+                                            </p>
+                                        </div>
+
+                                        {/* Time & Actions */}
+                                        <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                                            {chat.lastMessageAt && (
+                                                <span className={`text-xs ${
+                                                    chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"
+                                                }`}>
+                                                    {formatTime(chat.lastMessageAt)}
+                                                </span>
+                                            )}
+                                            
+                                            {/* Quick actions on hover */}
+                                            {chat.type === "dm" && (
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {onCallClick && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onCallClick(chat);
+                                                            }}
+                                                            className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/30 transition-colors"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+                                                    {onVideoClick && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onVideoClick(chat);
+                                                            }}
+                                                            className="w-7 h-7 rounded-full bg-[#FB8D22]/20 text-[#FFBBA7] flex items-center justify-center hover:bg-[#FB8D22]/30 transition-colors"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Folder Picker Popup */}
+                                <AnimatePresence>
+                                    {showFolderPicker === chat.id && (
+                                        <>
+                                            <div 
+                                                className="fixed inset-0 z-40"
+                                                onClick={() => setShowFolderPicker(null)}
+                                            />
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                                className="absolute right-0 top-full mt-2 z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl p-2 min-w-[200px]"
+                                            >
+                                                <p className="text-xs text-zinc-500 px-2 py-1 mb-1">Move to folder</p>
+                                                
+                                                {/* Remove from folder option */}
+                                                {chatFolder && (
+                                                    <button
+                                                        onClick={() => handleAssignFolder(chat.id, null)}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-sm"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                        Remove from {chatFolder}
+                                                    </button>
+                                                )}
+                                                
+                                                {/* Available folders */}
+                                                <div className="grid grid-cols-5 gap-1 p-1">
+                                                    {allAvailableFolders.map(folder => (
+                                                        <button
+                                                            key={folder.emoji}
+                                                            onClick={() => handleAssignFolder(chat.id, folder.emoji)}
+                                                            className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all ${
+                                                                chatFolder === folder.emoji
+                                                                    ? "bg-[#FF5500]/20 ring-2 ring-[#FF5500]"
+                                                                    : "hover:bg-zinc-800"
+                                                            }`}
+                                                            title={folder.label}
+                                                        >
+                                                            {folder.emoji}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        </>
+                                    )}
+                                </AnimatePresence>
+                            </motion.div>
+                        );
+                    })
+                )}
+            </div>
+
+            {/* New Folder Picker Modal */}
+            <AnimatePresence>
+                {showFolderPicker === "_new" && (
+                    <CreateFolderModal
+                        activeFolders={activeFolders}
+                        onClose={() => setShowFolderPicker(null)}
+                        onCreateFolder={(emoji, label) => {
+                            addFolder(emoji, label);
+                            setShowFolderPicker(null);
+                        }}
+                    />
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}

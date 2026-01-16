@@ -72,6 +72,7 @@ import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
 import { WalletModal } from "./WalletModal";
+import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -937,6 +938,85 @@ function DashboardContent({
             })),
         [friends]
     );
+
+    // Create unified chat list combining DMs, groups, channels, and global chat
+    const unifiedChats: UnifiedChatItem[] = useMemo(() => {
+        const items: UnifiedChatItem[] = [];
+        
+        // Add DM chats from friends
+        friendsListData.forEach((friend) => {
+            const addressLower = friend.address.toLowerCase();
+            items.push({
+                id: `dm-${friend.address}`,
+                type: "dm",
+                name: friend.nickname || 
+                    (friend.reachUsername ? `@${friend.reachUsername}` : null) || 
+                    friend.ensName || 
+                    `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`,
+                avatar: friend.avatar,
+                lastMessage: null, // Could be populated from message cache
+                lastMessageAt: unreadCounts[addressLower] > 0 ? new Date() : new Date(friend.addedAt),
+                unreadCount: unreadCounts[addressLower] || 0,
+                isOnline: false, // Will be updated by FriendsList logic
+                metadata: {
+                    address: friend.address,
+                    ensName: friend.ensName,
+                    reachUsername: friend.reachUsername,
+                },
+            });
+        });
+        
+        // Add Spritz Global Chat
+        items.push({
+            id: "global-spritz",
+            type: "global",
+            name: "Spritz Global",
+            avatar: null,
+            lastMessage: "Community chat",
+            lastMessageAt: alphaUnreadCount > 0 ? new Date() : null,
+            unreadCount: alphaUnreadCount,
+            isPinned: true,
+            metadata: {
+                isAlpha: isAlphaMember,
+            },
+        });
+        
+        // Add public channels
+        joinedChannels.forEach((channel) => {
+            items.push({
+                id: `channel-${channel.id}`,
+                type: "channel",
+                name: channel.name,
+                avatar: null,
+                lastMessage: `${channel.member_count} members`,
+                lastMessageAt: null,
+                unreadCount: 0,
+                metadata: {
+                    memberCount: channel.member_count,
+                    isPublic: true,
+                },
+            });
+        });
+        
+        // Add private groups
+        groups.forEach((group) => {
+            items.push({
+                id: `group-${group.id}`,
+                type: "group",
+                name: group.name,
+                avatar: null,
+                lastMessage: `${group.memberCount || 0} members`,
+                lastMessageAt: null,
+                unreadCount: 0,
+                metadata: {
+                    memberCount: group.memberCount,
+                    isPublic: false,
+                },
+            });
+        });
+        
+        return items;
+    }, [friendsListData, unreadCounts, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
 
     // Open chat from URL parameter (e.g., ?chat=0x123...)
     // This is used when clicking a push notification
@@ -1815,6 +1895,57 @@ function DashboardContent({
         // Mark messages from this friend as read
         markAsRead(friend.address);
     };
+
+    // Handle unified chat item click
+    const handleUnifiedChatClick = useCallback((chat: UnifiedChatItem) => {
+        switch (chat.type) {
+            case "dm":
+                // Find the friend and open chat
+                const friend = friendsListData.find(
+                    f => `dm-${f.address}` === chat.id
+                );
+                if (friend) {
+                    setChatFriend(friend);
+                    markAsRead(friend.address);
+                }
+                break;
+            case "global":
+                setIsAlphaChatOpen(true);
+                break;
+            case "channel":
+                const channelId = chat.id.replace("channel-", "");
+                const channel = joinedChannels.find(c => c.id === channelId);
+                if (channel) {
+                    setSelectedChannel(channel);
+                }
+                break;
+            case "group":
+                const groupId = chat.id.replace("group-", "");
+                const group = groups.find(g => g.id === groupId);
+                if (group) {
+                    setSelectedGroup(group);
+                }
+                break;
+        }
+    }, [friendsListData, joinedChannels, groups, markAsRead]);
+
+    // Handle call from unified chat
+    const handleUnifiedCallClick = useCallback((chat: UnifiedChatItem) => {
+        if (chat.type !== "dm") return;
+        const friend = friendsListData.find(f => `dm-${f.address}` === chat.id);
+        if (friend) {
+            handleCall(friend);
+        }
+    }, [friendsListData, handleCall]);
+
+    // Handle video call from unified chat
+    const handleUnifiedVideoClick = useCallback((chat: UnifiedChatItem) => {
+        if (chat.type !== "dm") return;
+        const friend = friendsListData.find(f => `dm-${f.address}` === chat.id);
+        if (friend) {
+            handleVideoCall(friend);
+        }
+    }, [friendsListData, handleVideoCall]);
 
     return (
         <>
@@ -3278,7 +3409,7 @@ function DashboardContent({
                                 </div>
                             )}
 
-                            {/* Direct Messages (Chats) - Show first */}
+                            {/* Unified Chat List - Telegram-style with emoji folders */}
                             <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6">
                                 <div className="p-6 border-b border-zinc-800">
                                     <div className="flex items-center justify-between">
@@ -3287,50 +3418,13 @@ function DashboardContent({
                                                 Chats
                                             </h2>
                                             <p className="text-zinc-500 text-sm mt-1">
-                                                {friendsListData.length}{" "}
-                                                conversations
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="p-6">
-                                    <FriendsList
-                                        friends={friendsListData}
-                                        userAddress={userAddress}
-                                        onCall={handleCall}
-                                        onVideoCall={handleVideoCall}
-                                        onChat={handleChat}
-                                        onRemove={handleRemoveFriend}
-                                        onUpdateNote={updateNickname}
-                                        isCallActive={callState !== "idle"}
-                                        unreadCounts={unreadCounts}
-                                        hideChat={false}
-                                        friendsWakuStatus={friendsWakuStatus}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Group Chats Section */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6">
-                                <div className="p-6 border-b border-zinc-800">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h2 className="text-xl font-bold text-white">
-                                                Group Chats
-                                            </h2>
-                                            <p className="text-zinc-500 text-sm mt-1">
-                                                {groups.length +
-                                                    joinedChannels.length +
-                                                    1}{" "}
-                                                total
+                                                {unifiedChats.length} conversations • Long-press to organize
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() =>
-                                                    setIsBrowseChannelsOpen(
-                                                        true
-                                                    )
+                                                    setIsBrowseChannelsOpen(true)
                                                 }
                                                 className="py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-all flex items-center gap-2"
                                             >
@@ -3352,205 +3446,42 @@ function DashboardContent({
                                                 </span>
                                             </button>
                                             {isWakuInitialized && (
-                                                    <button
-                                                        onClick={() =>
-                                                            setIsCreateGroupOpen(
-                                                                true
-                                                            )
-                                                        }
-                                                        disabled={
-                                                            friends.length === 0
-                                                        }
-                                                        className="py-2 px-3 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center gap-2 disabled:opacity-50"
+                                                <button
+                                                    onClick={() =>
+                                                        setIsCreateGroupOpen(true)
+                                                    }
+                                                    disabled={friends.length === 0}
+                                                    className="py-2 px-3 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center gap-2 disabled:opacity-50"
+                                                >
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
                                                     >
-                                                        <svg
-                                                            className="w-4 h-4"
-                                                            fill="none"
-                                                            viewBox="0 0 24 24"
-                                                            stroke="currentColor"
-                                                        >
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={2}
-                                                                d="M12 4v16m8-8H4"
-                                                            />
-                                                        </svg>
-                                                        <span className="hidden sm:inline">
-                                                            New
-                                                        </span>
-                                                    </button>
-                                                )}
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M12 4v16m8-8H4"
+                                                        />
+                                                    </svg>
+                                                    <span className="hidden sm:inline">
+                                                        New
+                                                    </span>
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                                <div className="p-4 space-y-2">
-                                    {/* Spritz Global Chat - always show first */}
-                                    <motion.button
-                                        onClick={() => setIsAlphaChatOpen(true)}
-                                        className={`w-full rounded-xl p-3 transition-all text-left ${
-                                            isAlphaMember
-                                                ? "bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50"
-                                                : "bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/30 hover:border-orange-500/50"
-                                        }`}
-                                        whileTap={{ scale: 0.99 }}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="relative flex-shrink-0">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
-                                                    <span className="text-lg">
-                                                        🍊
-                                                    </span>
-                                                </div>
-                                                {isAlphaMember &&
-                                                    alphaUnreadCount > 0 && (
-                                                        <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full flex items-center justify-center">
-                                                            <span className="text-white text-[10px] font-bold">
-                                                                {alphaUnreadCount >
-                                                                9
-                                                                    ? "9+"
-                                                                    : alphaUnreadCount}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-white font-medium truncate">
-                                                        Spritz Global
-                                                    </p>
-                                                    <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] rounded">
-                                                        Official
-                                                    </span>
-                                                </div>
-                                                <p className="text-zinc-500 text-sm">
-                                                    {isAlphaMember
-                                                        ? "Community chat"
-                                                        : "Tap to join"}
-                                                </p>
-                                            </div>
-                                            <svg
-                                                className="w-5 h-5 text-zinc-600"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M9 5l7 7-7 7"
-                                                />
-                                            </svg>
-                                        </div>
-                                    </motion.button>
-
-                                    {/* Public Channels */}
-                                    {joinedChannels.map((channel) => (
-                                        <button
-                                            key={channel.id}
-                                            onClick={() =>
-                                                setSelectedChannel(channel)
-                                            }
-                                            className="w-full flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors text-left"
-                                        >
-                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-xl">
-                                                {channel.emoji}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-white font-medium truncate">
-                                                        {channel.name}
-                                                    </p>
-                                                    {channel.is_official && (
-                                                        <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] rounded">
-                                                            Official
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-zinc-500 text-sm truncate">
-                                                    {channel.member_count}{" "}
-                                                    members
-                                                </p>
-                                            </div>
-                                            <svg
-                                                className="w-5 h-5 text-zinc-600"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M9 5l7 7-7 7"
-                                                />
-                                            </svg>
-                                        </button>
-                                    ))}
-
-                                    {/* Private Group Chats */}
-                                    {isWakuInitialized &&
-                                        groups.map((group) => (
-                                            <button
-                                                key={group.id}
-                                                onClick={() =>
-                                                    setSelectedGroup(group)
-                                                }
-                                                className="w-full flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors text-left"
-                                            >
-                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 flex items-center justify-center text-xl">
-                                                    {group.emoji || "👥"}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="text-white font-medium truncate">
-                                                            {group.name}
-                                                        </p>
-                                                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[10px] rounded">
-                                                            Private
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-zinc-500 text-sm truncate">
-                                                        {group.memberCount || 0}{" "}
-                                                        members
-                                                    </p>
-                                                </div>
-                                                <svg
-                                                    className="w-5 h-5 text-zinc-600"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        strokeWidth={2}
-                                                        d="M9 5l7 7-7 7"
-                                                    />
-                                                </svg>
-                                            </button>
-                                        ))}
-
-                                    {/* Empty state for channels */}
-                                    {joinedChannels.length === 0 &&
-                                        groups.length === 0 && (
-                                            <div className="text-center py-4">
-                                                <p className="text-zinc-500 text-sm">
-                                                    <button
-                                                        onClick={() =>
-                                                            setIsBrowseChannelsOpen(
-                                                                true
-                                                            )
-                                                        }
-                                                        className="text-[#FF5500] hover:underline"
-                                                    >
-                                                        Browse channels
-                                                    </button>{" "}
-                                                    to find communities to join
-                                                </p>
-                                            </div>
-                                        )}
+                                <div className="p-4">
+                                    <UnifiedChatList
+                                        chats={unifiedChats}
+                                        userAddress={userAddress}
+                                        onChatClick={handleUnifiedChatClick}
+                                        onCallClick={handleUnifiedCallClick}
+                                        onVideoClick={handleUnifiedVideoClick}
+                                    />
                                 </div>
                             </div>
 
