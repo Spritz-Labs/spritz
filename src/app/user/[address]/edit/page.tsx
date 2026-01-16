@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ProfileGridEditor } from "@/components/profile/ProfileGridEditor";
-import { BaseWidget, ProfileTheme, DEFAULT_THEMES } from "@/components/profile/ProfileWidgetTypes";
+import { BaseWidget, ProfileTheme, DEFAULT_THEMES, WidgetSize } from "@/components/profile/ProfileWidgetTypes";
 
 type ProfileData = {
     address: string;
@@ -12,6 +12,95 @@ type ProfileData = {
     socials?: Array<{ platform: string; handle: string; url: string }>;
     agents?: Array<{ id: string; name: string; avatar_emoji?: string; avatar_url?: string }>;
 };
+
+// Generate default widgets from profile data (mirrors the public profile default view)
+function generateDefaultWidgets(profileData: ProfileData): BaseWidget[] {
+    const widgets: BaseWidget[] = [];
+    let position = 0;
+
+    // 1. Message Me widget (always show)
+    widgets.push({
+        id: `default-message-${Date.now()}`,
+        widget_type: 'message_me',
+        size: '2x1' as WidgetSize,
+        position: position++,
+        is_visible: true,
+        config: {
+            address: profileData.address,
+            title: 'Message me',
+            subtitle: 'Chat on Spritz',
+        },
+    });
+
+    // 2. Wallet widget (always show)
+    widgets.push({
+        id: `default-wallet-${Date.now() + 1}`,
+        widget_type: 'wallet',
+        size: '2x1' as WidgetSize,
+        position: position++,
+        is_visible: true,
+        config: {
+            address: profileData.address,
+            label: 'Wallet',
+            copyEnabled: true,
+        },
+    });
+
+    // 3. Schedule widget (if scheduling is enabled)
+    if (profileData.scheduling?.slug) {
+        widgets.push({
+            id: `default-schedule-${Date.now() + 2}`,
+            widget_type: 'schedule',
+            size: '2x1' as WidgetSize,
+            position: position++,
+            is_visible: true,
+            config: {
+                slug: profileData.scheduling.slug,
+                title: profileData.scheduling.title || 'Book a call',
+                subtitle: profileData.scheduling.bio || 'Schedule a meeting',
+            },
+        });
+    }
+
+    // 4. Social Link widgets
+    if (profileData.socials && profileData.socials.length > 0) {
+        profileData.socials.forEach((social, index) => {
+            widgets.push({
+                id: `default-social-${Date.now() + 3 + index}`,
+                widget_type: 'social_link',
+                size: '1x1' as WidgetSize,
+                position: position++,
+                is_visible: true,
+                config: {
+                    platform: social.platform.toLowerCase(),
+                    handle: social.handle,
+                    url: social.url,
+                },
+            });
+        });
+    }
+
+    // 5. Agent widgets
+    if (profileData.agents && profileData.agents.length > 0) {
+        profileData.agents.forEach((agent, index) => {
+            widgets.push({
+                id: `default-agent-${Date.now() + 100 + index}`,
+                widget_type: 'agent',
+                size: '1x1' as WidgetSize,
+                position: position++,
+                is_visible: true,
+                config: {
+                    agentId: agent.id,
+                    name: agent.name,
+                    avatarEmoji: agent.avatar_emoji || '🤖',
+                    avatarUrl: agent.avatar_url || '',
+                },
+            });
+        });
+    }
+
+    return widgets;
+}
 
 export default function EditProfilePage() {
     const params = useParams();
@@ -61,24 +150,39 @@ export default function EditProfilePage() {
                 ]);
 
                 // Profile data for pre-filling configs
+                let fetchedProfileData: ProfileData = { address };
                 if (profileRes.ok) {
                     const profile = await profileRes.json();
-                    setProfileData({
+                    fetchedProfileData = {
                         address: profile.user.address,
                         scheduling: profile.scheduling,
                         socials: profile.socials,
                         agents: profile.agents,
-                    });
+                    };
+                    setProfileData(fetchedProfileData);
                 } else {
                     // User may not have a public profile yet, but that's ok
-                    setProfileData({ address });
+                    setProfileData(fetchedProfileData);
                 }
 
                 // Widgets and theme
                 if (widgetsRes.ok) {
                     const data = await widgetsRes.json();
-                    setWidgets(data.widgets || []);
+                    const savedWidgets = data.widgets || [];
+                    
+                    // If no saved widgets, generate default widgets from profile data
+                    if (savedWidgets.length === 0) {
+                        const defaultWidgets = generateDefaultWidgets(fetchedProfileData);
+                        setWidgets(defaultWidgets);
+                    } else {
+                        setWidgets(savedWidgets);
+                    }
+                    
                     setTheme(data.theme || null);
+                } else {
+                    // Even if widgets API fails, show defaults
+                    const defaultWidgets = generateDefaultWidgets(fetchedProfileData);
+                    setWidgets(defaultWidgets);
                 }
             } catch (err) {
                 console.error("[Edit Profile] Error:", err);
