@@ -197,92 +197,125 @@ function NetworkWarningContent({ onAcknowledge }: { onAcknowledge: () => void })
         <div className="absolute inset-0 z-20 bg-zinc-900 flex flex-col">
             {/* Header */}
             <div className="p-4 border-b border-zinc-800 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                    <span className="text-xl">⚠️</span>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <span className="text-xl">💰</span>
                 </div>
                 <div>
-                    <h2 className="text-lg font-semibold text-white">Before You Deposit</h2>
-                    <p className="text-xs text-zinc-400">Please read carefully</p>
+                    <h2 className="text-lg font-semibold text-white">Deposit to Your Wallet</h2>
+                    <p className="text-xs text-zinc-400">Choose the right network to avoid fees or loss</p>
                 </div>
             </div>
-            
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {/* Recommended Networks - FREE */}
-                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                        <span>✅</span>
-                        <span className="text-sm font-bold text-emerald-400">Recommended - FREE Gas</span>
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
+                            <span className="text-white text-xs">✓</span>
+                        </div>
+                        <span className="text-sm font-bold text-emerald-400">RECOMMENDED</span>
+                        <span className="ml-auto px-2 py-0.5 bg-emerald-500/30 text-emerald-300 text-xs font-bold rounded-full">FREE GAS</span>
                     </div>
+                    <p className="text-xs text-emerald-300/80 mb-3">
+                        Send from any of these networks - zero fees for all transactions!
+                    </p>
                     <div className="grid grid-cols-2 gap-2">
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
-                            <ChainIcon chainId={8453} size={14} />
-                            <span className="text-xs text-white">Base</span>
+                        <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-2 rounded-lg">
+                            <ChainIcon chainId={8453} size={16} />
+                            <span className="text-sm text-white font-medium">Base</span>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
-                            <ChainIcon chainId={42161} size={14} />
-                            <span className="text-xs text-white">Arbitrum</span>
+                        <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-2 rounded-lg">
+                            <ChainIcon chainId={42161} size={16} />
+                            <span className="text-sm text-white font-medium">Arbitrum</span>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
-                            <ChainIcon chainId={10} size={14} />
-                            <span className="text-xs text-white">Optimism</span>
+                        <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-2 rounded-lg">
+                            <ChainIcon chainId={10} size={16} />
+                            <span className="text-sm text-white font-medium">Optimism</span>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
-                            <ChainIcon chainId={137} size={14} />
-                            <span className="text-xs text-white">Polygon</span>
+                        <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-2 rounded-lg">
+                            <ChainIcon chainId={137} size={16} />
+                            <span className="text-sm text-white font-medium">Polygon</span>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
-                            <ChainIcon chainId={56} size={14} />
-                            <span className="text-xs text-white">BNB Chain</span>
+                        <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-2 rounded-lg">
+                            <ChainIcon chainId={56} size={16} />
+                            <span className="text-sm text-white font-medium">BNB Chain</span>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg">
-                            <ChainIcon chainId={130} size={14} />
-                            <span className="text-xs text-white">Unichain</span>
+                        <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-2 rounded-lg">
+                            <ChainIcon chainId={130} size={16} />
+                            <span className="text-sm text-white font-medium">Unichain</span>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1.5 rounded-lg col-span-2">
-                            <ChainIcon chainId={43114} size={14} />
-                            <span className="text-xs text-white">Avalanche</span>
+                        <div className="flex items-center gap-2 bg-zinc-800/50 px-3 py-2 rounded-lg col-span-2">
+                            <ChainIcon chainId={43114} size={16} />
+                            <span className="text-sm text-white font-medium">Avalanche</span>
                         </div>
                     </div>
-                    <p className="text-xs text-emerald-300/80 mt-2">Send and receive for free on these networks!</p>
                 </div>
-                
-                {/* Ethereum Mainnet - HIGH FEES */}
-                <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                        <ChainIcon chainId={1} size={20} />
-                        <span className="text-sm font-bold text-amber-400 flex-1">Ethereum Mainnet</span>
-                        <span className="text-base font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-lg">$50-200+</span>
+
+                {/* NOT RECOMMENDED - Ethereum Mainnet */}
+                <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center">
+                            <span className="text-white text-xs font-bold">!</span>
+                        </div>
+                        <span className="text-sm font-bold text-amber-400">NOT RECOMMENDED</span>
                     </div>
-                    <p className="text-xs text-amber-200/70">
-                        First transaction deploys Smart Account. Use L2s above for free.
+                    <p className="text-xs text-amber-200/70 mb-3">
+                        High gas fees - use Layer 2 networks above instead
+                    </p>
+                    <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 px-3 py-2.5 rounded-lg">
+                        <div className="flex items-center gap-2">
+                            <ChainIcon chainId={1} size={18} />
+                            <span className="text-sm text-white font-medium">Ethereum Mainnet</span>
+                        </div>
+                        <div className="text-right">
+                            <span className="text-amber-300 font-bold text-sm">$50-200+</span>
+                            <p className="text-[10px] text-amber-300/60">first tx fee</p>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-amber-200/50 mt-2">
+                        Your first transaction deploys your Smart Account, which requires high gas fees on Ethereum mainnet.
                     </p>
                 </div>
-                
+
                 {/* NOT SUPPORTED - DANGER */}
-                <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-3">
+                <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
-                        <span>🚫</span>
-                        <span className="text-sm font-bold text-red-400">NOT SUPPORTED - Funds Will Be Lost</span>
+                        <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                            <span className="text-white text-xs font-bold">✕</span>
+                        </div>
+                        <span className="text-sm font-bold text-red-400">NOT SUPPORTED</span>
+                        <span className="ml-auto px-2 py-0.5 bg-red-500/30 text-red-300 text-[10px] font-bold rounded-full">FUNDS WILL BE LOST</span>
                     </div>
-                    <p className="text-xs text-red-300/80 mb-2">
-                        Sending from these networks results in permanent loss:
+                    <p className="text-xs text-red-300/80 mb-3">
+                        These are completely different blockchains. Your address does not exist on them.
                     </p>
                     <div className="flex flex-wrap gap-2">
-                        <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-lg">Solana</span>
-                        <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-lg">Bitcoin</span>
-                        <span className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-lg">Other non-EVM</span>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-300 text-xs rounded-lg">
+                            <span className="text-base">◎</span>
+                            <span className="font-medium">Solana</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-300 text-xs rounded-lg">
+                            <span className="text-base">₿</span>
+                            <span className="font-medium">Bitcoin</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-300 text-xs rounded-lg">
+                            <span className="text-base">🔗</span>
+                            <span className="font-medium">Other non-EVM chains</span>
+                        </div>
                     </div>
                 </div>
             </div>
-            
+
             {/* Fixed CTA Button at bottom */}
-            <div className="p-4 border-t border-zinc-800">
+            <div className="p-4 border-t border-zinc-800 bg-zinc-900">
                 <button
                     onClick={onAcknowledge}
-                    className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors"
+                    className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
                 >
-                    I Understand, Show My Address
+                    <span>I Understand</span>
+                    <span className="text-emerald-200">→</span>
+                    <span>Show My Address</span>
                 </button>
             </div>
         </div>
