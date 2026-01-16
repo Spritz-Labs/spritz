@@ -32,15 +32,18 @@ type PublicProfile = {
     } | null;
 };
 
-const SOCIAL_ICONS: Record<string, string> = {
-    twitter: "𝕏",
-    x: "𝕏",
-    github: "💻",
-    linkedin: "💼",
-    website: "🌐",
-    telegram: "✈️",
-    discord: "💬",
-    email: "📧",
+const SOCIAL_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
+    twitter: { icon: "𝕏", color: "text-white", bg: "bg-black" },
+    x: { icon: "𝕏", color: "text-white", bg: "bg-black" },
+    github: { icon: "⌘", color: "text-white", bg: "bg-zinc-800" },
+    linkedin: { icon: "in", color: "text-white", bg: "bg-blue-600" },
+    website: { icon: "🌐", color: "text-white", bg: "bg-emerald-600" },
+    telegram: { icon: "✈️", color: "text-white", bg: "bg-sky-500" },
+    discord: { icon: "💬", color: "text-white", bg: "bg-indigo-600" },
+    email: { icon: "✉️", color: "text-white", bg: "bg-rose-500" },
+    instagram: { icon: "📷", color: "text-white", bg: "bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400" },
+    youtube: { icon: "▶️", color: "text-white", bg: "bg-red-600" },
+    tiktok: { icon: "♪", color: "text-white", bg: "bg-black" },
 };
 
 export default function PublicUserPage() {
@@ -85,6 +88,10 @@ export default function PublicUserPage() {
     const formatAddress = (addr: string) =>
         `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
+    const copyAddress = () => {
+        navigator.clipboard.writeText(profile?.user.address || "");
+    };
+
     if (isLoading) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -97,6 +104,9 @@ export default function PublicUserPage() {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="text-center max-w-md">
+                    <div className="w-20 h-20 rounded-full bg-zinc-900 flex items-center justify-center mx-auto mb-6">
+                        <span className="text-4xl">🔒</span>
+                    </div>
                     <h1 className="text-2xl font-bold text-white mb-4">
                         Profile Not Available
                     </h1>
@@ -112,221 +122,250 @@ export default function PublicUserPage() {
         );
     }
 
+    const displayName = profile.user.name || profile.user.ensName || formatAddress(profile.user.address);
+    const username = profile.user.username ? `@${profile.user.username}` : profile.user.ensName;
+
     // Generate structured data for SEO
-    const structuredData = profile
-        ? {
-              "@context": "https://schema.org",
-              "@type": "ProfilePage",
-              mainEntity: {
-                  "@type": "Person",
-                  name: profile.user.name || profile.user.ensName || formatAddress(profile.user.address),
-                  identifier: profile.user.address,
-                  url: `https://app.spritz.chat/user/${address}`,
-                  image: profile.user.avatarUrl || undefined,
-                  sameAs: profile.socials.map((s) => s.url),
-              },
-          }
-        : null;
+    const structuredData = {
+        "@context": "https://schema.org",
+        "@type": "ProfilePage",
+        mainEntity: {
+            "@type": "Person",
+            name: displayName,
+            identifier: profile.user.address,
+            url: `https://app.spritz.chat/user/${address}`,
+            image: profile.user.avatarUrl || undefined,
+            sameAs: profile.socials.map((s) => s.url),
+        },
+    };
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white">
-            {structuredData && (
-                <script
-                    type="application/ld+json"
-                    dangerouslySetInnerHTML={{
-                        __html: JSON.stringify(structuredData),
-                    }}
-                />
-            )}
-            <div className="max-w-4xl mx-auto px-4 py-12">
-                {/* Header */}
-                <div className="text-center mb-12">
-                    <div className="mb-6">
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                    __html: JSON.stringify(structuredData),
+                }}
+            />
+            
+            <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
+                {/* Header - Bento style */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center mb-8"
+                >
+                    {/* Avatar */}
+                    <div className="mb-4">
                         {profile.user.avatarUrl ? (
                             <img
                                 src={profile.user.avatarUrl}
-                                alt={profile.user.name || "User"}
-                                className="w-24 h-24 rounded-full mx-auto border-2 border-zinc-800"
+                                alt={displayName}
+                                className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 border-zinc-800 shadow-2xl"
                             />
                         ) : (
-                            <div className="w-24 h-24 rounded-full mx-auto bg-zinc-800 flex items-center justify-center text-4xl">
-                                {profile.user.name?.[0]?.toUpperCase() || "?"}
+                            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-5xl sm:text-6xl font-bold border-4 border-zinc-800 shadow-2xl">
+                                {displayName[0]?.toUpperCase() || "?"}
                             </div>
                         )}
                     </div>
-                    <h1 className="text-3xl font-bold mb-2">
-                        {profile.user.name ||
-                            profile.user.ensName ||
-                            formatAddress(profile.user.address)}
+
+                    {/* Name */}
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-1">
+                        {displayName}
                     </h1>
-                    {/* Show ENS name if it exists and isn't already the title */}
-                    {profile.user.ensName && profile.user.name && (
-                        <p className="text-zinc-400 text-sm mb-2">
-                            {profile.user.ensName}
+
+                    {/* Username / ENS */}
+                    {username && username !== displayName && (
+                        <p className="text-zinc-400 text-sm mb-2 flex items-center justify-center gap-1.5">
+                            {profile.user.ensName && (
+                                <span className="inline-flex items-center gap-1 text-emerald-400 text-xs bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    ENS
+                                </span>
+                            )}
+                            <span>{username}</span>
                         </p>
                     )}
-                    {/* Show ENS badge when ENS is the title (no display name) */}
-                    {profile.user.ensName && !profile.user.name && (
-                        <p className="text-emerald-400 text-xs mb-2 flex items-center justify-center gap-1">
-                            <span>✓</span> ENS Verified
-                        </p>
-                    )}
-                    <p className="text-zinc-500 text-sm font-mono mb-4">
-                        {formatAddress(profile.user.address)}
-                    </p>
+
+                    {/* Bio */}
                     {profile.user.bio && (
-                        <p className="text-zinc-300 text-base max-w-md mx-auto">
+                        <p className="text-zinc-300 text-sm sm:text-base max-w-md mx-auto mt-3 leading-relaxed">
                             {profile.user.bio}
                         </p>
                     )}
-                </div>
+                </motion.div>
 
-                {/* Socials */}
-                {profile.socials.length > 0 && (
+                {/* Bento Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                    {/* Message Card - Full width on mobile, 2 cols on desktop */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="mb-8"
+                        transition={{ delay: 0.05 }}
+                        className="col-span-2"
                     >
-                        <h2 className="text-xl font-bold mb-4">Social Links</h2>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {profile.socials.map((social) => (
-                                <a
-                                    key={social.platform}
-                                    href={social.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-3 px-4 py-3 bg-zinc-900/50 border border-zinc-800 rounded-xl hover:border-zinc-700 transition-colors"
-                                >
-                                    <span className="text-2xl">
-                                        {SOCIAL_ICONS[social.platform.toLowerCase()] ||
-                                            "🔗"}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-white font-medium text-sm capitalize">
-                                            {social.platform}
-                                        </p>
-                                        <p className="text-zinc-500 text-xs truncate">
-                                            {social.handle}
-                                        </p>
-                                    </div>
-                                </a>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* Scheduling Link */}
-                {profile.scheduling && profile.scheduling.slug && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="mb-8"
-                    >
-                        <h2 className="text-xl font-bold mb-4">Schedule a Call</h2>
                         <Link
-                            href={`/schedule/${profile.scheduling.slug}`}
-                            className="block px-6 py-4 bg-zinc-900/50 border border-zinc-800 rounded-xl hover:border-orange-500/50 transition-colors"
+                            href={`/?chat=${profile.user.address}`}
+                            className="block h-full p-5 sm:p-6 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl hover:shadow-xl hover:shadow-orange-500/20 hover:scale-[1.02] transition-all group"
                         >
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">📅</span>
-                                <div className="flex-1">
-                                    <p className="text-white font-medium">
-                                        {profile.scheduling.title ||
-                                            "Book a call"}
-                                    </p>
-                                    {profile.scheduling.bio && (
-                                        <p className="text-zinc-400 text-sm mt-1">
-                                            {profile.scheduling.bio}
-                                        </p>
-                                    )}
+                                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
                                 </div>
-                                <svg
-                                    className="w-5 h-5 text-zinc-500"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M9 5l7 7-7 7"
-                                    />
+                                <div className="flex-1">
+                                    <p className="text-white font-semibold text-lg">Message me</p>
+                                    <p className="text-white/70 text-sm">Chat on Spritz</p>
+                                </div>
+                                <svg className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
                             </div>
                         </Link>
                     </motion.div>
-                )}
 
-                {/* Public Agents */}
-                {profile.agents.length > 0 && (
+                    {/* Wallet Address Card */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        className="mb-8"
+                        transition={{ delay: 0.1 }}
+                        className="col-span-2"
                     >
-                        <h2 className="text-xl font-bold mb-4">AI Agents</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {profile.agents.map((agent) => (
-                                <Link
-                                    key={agent.id}
-                                    href={`/agent/${agent.id}`}
-                                    className="block px-6 py-4 bg-zinc-900/50 border border-zinc-800 rounded-xl hover:border-orange-500/50 transition-colors"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="text-3xl">
-                                            {agent.avatar_emoji || "🤖"}
-                                        </span>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-white font-medium mb-1">
-                                                {agent.name}
-                                            </p>
-                                            {agent.personality && (
-                                                <p className="text-zinc-400 text-sm line-clamp-2">
-                                                    {agent.personality}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <svg
-                                            className="w-5 h-5 text-zinc-500 shrink-0"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M9 5l7 7-7 7"
-                                            />
-                                        </svg>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
+                        <button
+                            onClick={copyAddress}
+                            className="w-full h-full p-5 sm:p-6 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-zinc-700 hover:bg-zinc-800/50 transition-all text-left group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center">
+                                    <span className="text-2xl">💎</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-white font-semibold">Wallet</p>
+                                    <p className="text-zinc-400 text-sm font-mono truncate">
+                                        {formatAddress(profile.user.address)}
+                                    </p>
+                                </div>
+                                <svg className="w-5 h-5 text-zinc-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                        </button>
                     </motion.div>
-                )}
 
-                {/* CTA */}
+                    {/* Scheduling Card - 2 cols if exists */}
+                    {profile.scheduling && profile.scheduling.slug && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.15 }}
+                            className="col-span-2"
+                        >
+                            <Link
+                                href={`/schedule/${profile.scheduling.slug}`}
+                                className="block h-full p-5 sm:p-6 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-emerald-500/50 hover:bg-zinc-800/50 transition-all group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                                        <span className="text-2xl">📅</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-white font-semibold">
+                                            {profile.scheduling.title || "Book a call"}
+                                        </p>
+                                        <p className="text-zinc-400 text-sm truncate">
+                                            {profile.scheduling.bio || "Schedule a meeting"}
+                                        </p>
+                                    </div>
+                                    <svg className="w-5 h-5 text-zinc-500 group-hover:translate-x-1 group-hover:text-emerald-400 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
+                            </Link>
+                        </motion.div>
+                    )}
+
+                    {/* Social Links - Individual cards */}
+                    {profile.socials.map((social, index) => {
+                        const socialStyle = SOCIAL_ICONS[social.platform.toLowerCase()] || { icon: "🔗", color: "text-white", bg: "bg-zinc-700" };
+                        return (
+                            <motion.div
+                                key={social.platform}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.2 + index * 0.05 }}
+                                className="col-span-1"
+                            >
+                                <a
+                                    href={social.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex flex-col items-center justify-center aspect-square p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-zinc-700 hover:scale-[1.05] hover:shadow-lg transition-all group"
+                                >
+                                    <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl ${socialStyle.bg} flex items-center justify-center mb-2 group-hover:scale-110 transition-transform`}>
+                                        <span className={`text-xl sm:text-2xl ${socialStyle.color} font-bold`}>
+                                            {socialStyle.icon}
+                                        </span>
+                                    </div>
+                                    <p className="text-white text-sm font-medium capitalize">
+                                        {social.platform}
+                                    </p>
+                                    <p className="text-zinc-500 text-xs truncate max-w-full">
+                                        {social.handle}
+                                    </p>
+                                </a>
+                            </motion.div>
+                        );
+                    })}
+
+                    {/* AI Agents - Individual cards */}
+                    {profile.agents.map((agent, index) => (
+                        <motion.div
+                            key={agent.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 + index * 0.05 }}
+                            className="col-span-1"
+                        >
+                            <Link
+                                href={`/agent/${agent.id}`}
+                                className="flex flex-col items-center justify-center aspect-square p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-purple-500/50 hover:scale-[1.05] hover:shadow-lg transition-all group"
+                            >
+                                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-purple-500/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                    <span className="text-2xl sm:text-3xl">
+                                        {agent.avatar_emoji || "🤖"}
+                                    </span>
+                                </div>
+                                <p className="text-white text-sm font-medium text-center line-clamp-1">
+                                    {agent.name}
+                                </p>
+                                <p className="text-zinc-500 text-xs">AI Agent</p>
+                            </Link>
+                        </motion.div>
+                    ))}
+                </div>
+
+                {/* Footer CTA */}
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="text-center mt-12 pt-8 border-t border-zinc-800"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-center mt-12 pt-8 border-t border-zinc-800/50"
                 >
-                    <p className="text-zinc-400 mb-4">Want your own profile?</p>
                     <Link
                         href="/"
-                        className="inline-block px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:shadow-lg hover:shadow-orange-500/25 transition-all"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-full hover:bg-zinc-800 hover:text-white hover:border-zinc-700 transition-all text-sm"
                     >
-                        Join Spritz
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                        </svg>
+                        Create your Spritz profile
                     </Link>
                 </motion.div>
             </div>
         </div>
     );
 }
-
