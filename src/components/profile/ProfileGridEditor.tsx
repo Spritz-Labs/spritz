@@ -31,7 +31,7 @@ import {
     ProfileTheme,
     DEFAULT_THEMES,
 } from "./ProfileWidgetTypes";
-import { ProfileWidgetRenderer } from "./ProfileWidgetRenderer";
+import { renderWidget } from "./ProfileWidgetRenderer";
 
 // Profile data for pre-populating widget configs
 type ProfileData = {
@@ -91,9 +91,9 @@ function DraggableWidget({
                 isDragging ? 'z-50 opacity-70' : ''
             }`}
         >
-            {/* Widget Content */}
-            <div className="w-full h-full min-h-[120px]">
-                <ProfileWidgetRenderer widgets={[widget]} />
+            {/* Widget Content - render directly without nested grid */}
+            <div className="w-full h-full">
+                {renderWidget(widget)}
             </div>
 
             {/* Edit Overlay */}

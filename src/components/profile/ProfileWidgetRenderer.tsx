@@ -59,7 +59,8 @@ interface ProfileWidgetRendererProps {
     onWidgetClick?: (widget: BaseWidget) => void;
 }
 
-function renderWidget(widget: BaseWidget): React.ReactNode {
+// Export for direct use in editors
+export function renderWidget(widget: BaseWidget): React.ReactNode {
     const { widget_type, config, size } = widget;
     
     switch (widget_type) {
