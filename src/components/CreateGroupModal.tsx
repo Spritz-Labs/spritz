@@ -134,7 +134,7 @@ export function CreateGroupModal({
                         <div className="flex items-center justify-between mb-4">
                             <div>
                                 <h2 className="text-xl font-semibold text-white">
-                                    Create Group
+                                    Create Group Chat
                                 </h2>
                                 <p className="text-zinc-500 text-sm mt-1">
                                     Start a group chat with friends
@@ -359,7 +359,7 @@ export function CreateGroupModal({
                                         Creating...
                                     </span>
                                 ) : (
-                                    "Create Group"
+                                    "Create Group Chat"
                                 )}
                             </button>
                         </div>

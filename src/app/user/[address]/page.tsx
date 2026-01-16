@@ -7,6 +7,27 @@ import { motion } from "motion/react";
 import { ProfileWidgetRenderer } from "@/components/profile/ProfileWidgetRenderer";
 import { BaseWidget, ProfileTheme, DEFAULT_THEMES } from "@/components/profile/ProfileWidgetTypes";
 
+// Check if current user is the profile owner
+function useIsProfileOwner(profileAddress: string | null) {
+    const [isOwner, setIsOwner] = useState(false);
+    
+    useEffect(() => {
+        if (!profileAddress) return;
+        
+        // Check session to see if logged-in user matches profile
+        fetch('/api/auth/session', { credentials: 'include' })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.user?.address) {
+                    setIsOwner(data.user.address.toLowerCase() === profileAddress.toLowerCase());
+                }
+            })
+            .catch(() => setIsOwner(false));
+    }, [profileAddress]);
+    
+    return isOwner;
+}
+
 type PublicProfile = {
     user: {
         address: string;
@@ -56,6 +77,7 @@ export default function PublicUserPage() {
     const [theme, setTheme] = useState<ProfileTheme | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const isOwner = useIsProfileOwner(profile?.user.address || null);
 
     useEffect(() => {
         if (!address) return;
@@ -178,6 +200,25 @@ export default function PublicUserPage() {
             />
             
             <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
+                {/* Edit Button (only for profile owner) */}
+                {isOwner && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex justify-end mb-4"
+                    >
+                        <Link
+                            href={`/user/${address}/edit`}
+                            className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur border border-zinc-700 rounded-xl text-sm text-white transition-colors"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit Profile
+                        </Link>
+                    </motion.div>
+                )}
+
                 {/* Header */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
