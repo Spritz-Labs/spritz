@@ -270,7 +270,7 @@ export function MentionInput({
     }, [showSuggestions, inputRef]);
 
     return (
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0">
             <input
                 ref={inputRef as React.RefObject<HTMLInputElement>}
                 type="text"
@@ -284,7 +284,7 @@ export function MentionInput({
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 disabled={disabled}
-                className={className}
+                className={`w-full ${className || ""}`}
             />
             
             {/* Suggestions Popup (Mentions or Emojis) */}
