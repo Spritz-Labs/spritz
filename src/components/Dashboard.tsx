@@ -167,6 +167,9 @@ function DashboardContent({
     const [isCreatingGroup, setIsCreatingGroup] = useState(false);
     const [groups, setGroups] = useState<XMTPGroup[]>([]);
     const [isLoadingGroups, setIsLoadingGroups] = useState(false);
+    
+    // Folder modal state
+    const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
     const [selectedGroup, setSelectedGroup] = useState<XMTPGroup | null>(null);
 
     // Group call state
@@ -3478,22 +3481,41 @@ function DashboardContent({
 
                             {/* Unified Chat List - Telegram-style with emoji folders */}
                             <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6">
-                                <div className="p-6 border-b border-zinc-800">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h2 className="text-xl font-bold text-white">
-                                                Chats
-                                            </h2>
-                                            <p className="text-zinc-500 text-sm mt-1">
-                                                {unifiedChats.length} conversations • Long-press to organize
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-2">
+                                <div className="p-4 sm:p-6 border-b border-zinc-800">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <h2 className="text-lg sm:text-xl font-bold text-white">
+                                            Chats
+                                        </h2>
+                                        <div className="flex items-center gap-1.5 sm:gap-2">
+                                            {/* Add Folder Button */}
+                                            <button
+                                                onClick={() => setIsCreateFolderOpen(true)}
+                                                className="w-9 h-9 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
+                                                title="Create folder"
+                                            >
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                                                    />
+                                                </svg>
+                                                <span className="hidden sm:inline text-sm font-medium">
+                                                    Folder
+                                                </span>
+                                            </button>
                                             <button
                                                 onClick={() =>
                                                     setIsBrowseChannelsOpen(true)
                                                 }
-                                                className="py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-all flex items-center gap-2"
+                                                className="w-9 h-9 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
+                                                title="Browse channels"
                                             >
                                                 <svg
                                                     className="w-4 h-4"
@@ -3508,7 +3530,7 @@ function DashboardContent({
                                                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                                                     />
                                                 </svg>
-                                                <span className="hidden sm:inline">
+                                                <span className="hidden sm:inline text-sm font-medium">
                                                     Browse
                                                 </span>
                                             </button>
@@ -3518,7 +3540,8 @@ function DashboardContent({
                                                         setIsCreateGroupOpen(true)
                                                     }
                                                     disabled={friends.length === 0}
-                                                    className="py-2 px-3 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center gap-2 disabled:opacity-50"
+                                                    className="w-9 h-9 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50"
+                                                    title="New group"
                                                 >
                                                     <svg
                                                         className="w-4 h-4"
@@ -3533,7 +3556,7 @@ function DashboardContent({
                                                             d="M12 4v16m8-8H4"
                                                         />
                                                     </svg>
-                                                    <span className="hidden sm:inline">
+                                                    <span className="hidden sm:inline text-sm font-medium">
                                                         New
                                                     </span>
                                                 </button>
@@ -3548,6 +3571,8 @@ function DashboardContent({
                                         onChatClick={handleUnifiedChatClick}
                                         onCallClick={handleUnifiedCallClick}
                                         onVideoClick={handleUnifiedVideoClick}
+                                        showCreateFolderModal={isCreateFolderOpen}
+                                        onCreateFolderModalClose={() => setIsCreateFolderOpen(false)}
                                     />
                                 </div>
                             </div>

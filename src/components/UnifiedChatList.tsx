@@ -176,6 +176,8 @@ type UnifiedChatListProps = {
     onChatClick: (chat: UnifiedChatItem) => void;
     onCallClick?: (chat: UnifiedChatItem) => void;
     onVideoClick?: (chat: UnifiedChatItem) => void;
+    showCreateFolderModal?: boolean;
+    onCreateFolderModalClose?: () => void;
 };
 
 const formatTime = (date: Date | null) => {
@@ -226,11 +228,20 @@ export function UnifiedChatList({
     onChatClick,
     onCallClick,
     onVideoClick,
+    showCreateFolderModal,
+    onCreateFolderModalClose,
 }: UnifiedChatListProps) {
     const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = "All"
     const [showFolderPicker, setShowFolderPicker] = useState<string | null>(null);
     const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
     const tabsRef = useRef<HTMLDivElement>(null);
+    
+    // Sync external modal state with internal state
+    useEffect(() => {
+        if (showCreateFolderModal) {
+            setShowFolderPicker("_new");
+        }
+    }, [showCreateFolderModal]);
 
     const {
         activeFolders,
@@ -370,33 +381,6 @@ export function UnifiedChatList({
                         )}
                     </button>
                 ))}
-
-                {/* Add Folder Button */}
-                <button
-                    onClick={() => setShowFolderPicker("_new")}
-                    className="flex-shrink-0 w-9 h-9 rounded-xl bg-zinc-800/30 text-zinc-500 hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center"
-                    title="Add folder"
-                >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                </button>
-            </div>
-
-            {/* Chat Count */}
-            <div className="flex items-center justify-between text-sm text-zinc-500 px-1">
-                <span>
-                    {filteredChats.length} {filteredChats.length === 1 ? "chat" : "chats"}
-                    {activeFolder && ` in ${activeFolders.find(f => f.emoji === activeFolder)?.label || activeFolder}`}
-                </span>
-                {activeFolder && (
-                    <button
-                        onClick={() => setActiveFolder(null)}
-                        className="text-xs text-[#FF5500] hover:underline"
-                    >
-                        Show all
-                    </button>
-                )}
             </div>
 
             {/* Chat List */}
@@ -526,13 +510,37 @@ export function UnifiedChatList({
 
                                         {/* Time & Actions */}
                                         <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                                            {chat.lastMessageAt && (
-                                                <span className={`text-xs ${
-                                                    chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"
-                                                }`}>
-                                                    {formatTime(chat.lastMessageAt)}
-                                                </span>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {chat.lastMessageAt && (
+                                                    <span className={`text-xs ${
+                                                        chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"
+                                                    }`}>
+                                                        {formatTime(chat.lastMessageAt)}
+                                                    </span>
+                                                )}
+                                                
+                                                {/* Folder quick-action button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setShowFolderPicker(chat.id);
+                                                    }}
+                                                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                                                        chatFolder
+                                                            ? "bg-zinc-700/50 text-white"
+                                                            : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                                                    }`}
+                                                    title={chatFolder ? `In folder ${chatFolder}` : "Add to folder"}
+                                                >
+                                                    {chatFolder ? (
+                                                        <span className="text-sm">{chatFolder}</span>
+                                                    ) : (
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            </div>
                                             
                                             {/* Quick actions on hover */}
                                             {chat.type === "dm" && (
@@ -630,10 +638,14 @@ export function UnifiedChatList({
                 {showFolderPicker === "_new" && (
                     <CreateFolderModal
                         activeFolders={activeFolders}
-                        onClose={() => setShowFolderPicker(null)}
+                        onClose={() => {
+                            setShowFolderPicker(null);
+                            onCreateFolderModalClose?.();
+                        }}
                         onCreateFolder={(emoji, label) => {
                             addFolder(emoji, label);
                             setShowFolderPicker(null);
+                            onCreateFolderModalClose?.();
                         }}
                     />
                 )}
