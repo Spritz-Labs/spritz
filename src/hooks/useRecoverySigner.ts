@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useAccount, useSignMessage, useSignTypedData } from "wagmi";
+import { useAccount, useSignMessage, useSignTypedData, useSwitchChain, useChainId } from "wagmi";
 import { type Address, isAddress } from "viem";
 import { addRecoverySigner, addRecoverySignerWithWallet } from "@/lib/safeWallet";
 import type { PasskeyCredential } from "@/lib/safeWallet";
@@ -33,6 +33,8 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
     const { address: walletAddress } = useAccount();
     const { signMessageAsync } = useSignMessage();
     const { signTypedDataAsync } = useSignTypedData();
+    const { switchChainAsync } = useSwitchChain();
+    const currentChainId = useChainId();
     
     const [recoveryInfo, setRecoveryInfo] = useState<RecoveryInfo | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -143,6 +145,19 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
         setTxHash(null);
 
         try {
+            // Switch to the target chain if not already on it
+            if (currentChainId !== chainId) {
+                console.log(`[useRecoverySigner] Switching chain from ${currentChainId} to ${chainId}`);
+                try {
+                    await switchChainAsync({ chainId });
+                } catch (switchError) {
+                    console.error("[useRecoverySigner] Chain switch error:", switchError);
+                    setError(`Please switch to the correct network in your wallet`);
+                    setStatus("error");
+                    return null;
+                }
+            }
+
             const hash = await addRecoverySignerWithWallet(
                 safeAddr as Address,
                 recoveryAddress as Address,
@@ -178,7 +193,7 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
             setStatus("error");
             return null;
         }
-    }, [recoveryInfo?.safeAddress, walletAddress, signMessageAsync, signTypedDataAsync, fetchRecoveryInfo]);
+    }, [recoveryInfo?.safeAddress, walletAddress, signMessageAsync, signTypedDataAsync, fetchRecoveryInfo, currentChainId, switchChainAsync]);
 
     return {
         recoveryInfo,
