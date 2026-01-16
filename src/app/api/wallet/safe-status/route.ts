@@ -161,16 +161,16 @@ export async function GET(request: NextRequest) {
                     transport: http(),
                 });
 
-                // Check if Safe is deployed (has code) with 10s timeout
+                // Check if Safe is deployed (has code) with 5s timeout
                 const code = await withTimeout(
                     publicClient.getCode({ address: safeAddress as Address }),
-                    10000,
+                    5000,
                     "0x" as `0x${string}`
                 );
                 status.isDeployed = !!code && code !== "0x";
 
                 if (status.isDeployed) {
-                    // Fetch owners and threshold with 10s timeout each
+                    // Fetch owners and threshold with 5s timeout each
                     const [owners, threshold] = await Promise.all([
                         withTimeout(
                             publicClient.readContract({
@@ -178,7 +178,7 @@ export async function GET(request: NextRequest) {
                                 abi: SAFE_ABI,
                                 functionName: "getOwners",
                             }),
-                            10000,
+                            5000,
                             [] as readonly string[]
                         ),
                         withTimeout(
@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
                                 abi: SAFE_ABI,
                                 functionName: "getThreshold",
                             }),
-                            10000,
+                            5000,
                             BigInt(0)
                         ),
                     ]);
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest) {
                     try {
                         let gasPrice = await withTimeout(
                             publicClient.getGasPrice(),
-                            5000,
+                            3000,
                             BigInt(0)
                         );
                         
@@ -256,10 +256,10 @@ export async function GET(request: NextRequest) {
                     }
                 }
 
-                // Fetch native balance with 5s timeout
+                // Fetch native balance with 3s timeout
                 const balance = await withTimeout(
                     publicClient.getBalance({ address: safeAddress as Address }),
-                    5000,
+                    3000,
                     BigInt(0)
                 );
                 // Use token prices
