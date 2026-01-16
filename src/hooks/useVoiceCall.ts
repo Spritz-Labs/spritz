@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { agoraAppId, isAgoraConfigured, getAgoraToken } from "@/config/agora";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("VoiceCall");
 
 // Dynamic import for Agora SDK to avoid SSR issues
 let AgoraRTC: typeof import("agora-rtc-sdk-ng").default | null = null;
@@ -193,12 +196,12 @@ export function useVoiceCall() {
 
                     if (mediaType === "audio") {
                         const remoteAudioTrack = user.audioTrack;
-                        console.log("[Agora] Remote audio track:", remoteAudioTrack ? "exists" : "null");
+                        log.debug("[Agora] Remote audio track:", remoteAudioTrack ? "exists" : "null");
                         remoteAudioTrackRef.current = remoteAudioTrack || null;
                         if (remoteAudioTrack) {
                             try {
                                 remoteAudioTrack.play();
-                                console.log("[Agora] Remote audio playing");
+                                log.debug("[Agora] Remote audio playing");
                             } catch (playErr) {
                                 console.error("[Agora] Failed to play remote audio:", playErr);
                             }
@@ -207,9 +210,9 @@ export function useVoiceCall() {
                     }
 
                     if (mediaType === "video") {
-                        console.log("[Video] Remote video track received");
+                        log.debug("[Video] Remote video track received");
                         const remoteVideoTrack = user.videoTrack;
-                        console.log("[Video] Remote video track:", remoteVideoTrack ? "exists" : "null");
+                        log.debug("[Video] Remote video track:", remoteVideoTrack ? "exists" : "null");
                         remoteVideoTrackRef.current = remoteVideoTrack || null;
                         // Switch to video layout when remote video arrives
                         setState((prev) => ({
@@ -290,28 +293,28 @@ export function useVoiceCall() {
                 await client.join(agoraAppId, channelName, token, finalUid);
 
                 // Create and publish local audio track
-                console.log("[Agora] Creating microphone audio track...");
+                log.debug("[Agora] Creating microphone audio track...");
                 const localAudioTrack =
                     await AgoraRTC.createMicrophoneAudioTrack();
-                console.log("[Agora] Audio track created:", localAudioTrack ? "success" : "failed");
+                log.debug("[Agora] Audio track created:", localAudioTrack ? "success" : "failed");
                 localAudioTrackRef.current = localAudioTrack;
                 await client.publish([localAudioTrack]);
-                console.log("[Agora] Audio track published");
+                log.debug("[Agora] Audio track published");
 
                 // Create and publish video track if video call
                 if (withVideo) {
-                    console.log("[Agora] Creating camera video track...");
+                    log.debug("[Agora] Creating camera video track...");
                     const localVideoTrack =
                         await AgoraRTC.createCameraVideoTrack();
-                    console.log("[Agora] Video track created:", localVideoTrack ? "success" : "failed");
+                    log.debug("[Agora] Video track created:", localVideoTrack ? "success" : "failed");
                     localVideoTrackRef.current = localVideoTrack;
                     await client.publish([localVideoTrack]);
-                    console.log("[Agora] Video track published");
+                    log.debug("[Agora] Video track published");
 
                     // Play local video
                     if (localVideoRef.current) {
                         localVideoTrack.play(localVideoRef.current);
-                        console.log("[Agora] Local video playing in container");
+                        log.debug("[Agora] Local video playing in container");
                     } else {
                         console.warn("[Agora] No local video container available");
                     }
@@ -552,7 +555,7 @@ export function useVoiceCall() {
 
     const toggleVideo = useCallback(async () => {
         if (!AgoraRTC || !clientRef.current) {
-            console.log("[Video] Cannot toggle - AgoraRTC or client not ready");
+            log.debug("[Video] Cannot toggle - AgoraRTC or client not ready");
             return;
         }
 
@@ -564,7 +567,7 @@ export function useVoiceCall() {
 
         if (!currentlyVideoOff) {
             // Turn off video (currently on -> turn off)
-            console.log("[Video] Turning OFF video");
+            log.debug("[Video] Turning OFF video");
             if (localVideoTrackRef.current) {
                 try {
                     await clientRef.current.unpublish([
@@ -573,7 +576,7 @@ export function useVoiceCall() {
                     localVideoTrackRef.current.stop();
                     localVideoTrackRef.current.close();
                     localVideoTrackRef.current = null;
-                    console.log("[Video] Video track unpublished and closed");
+                    log.debug("[Video] Video track unpublished and closed");
                 } catch (err) {
                     console.error("[Video] Error unpublishing video:", err);
                 }
@@ -581,7 +584,7 @@ export function useVoiceCall() {
             setState((prev) => ({ ...prev, isVideoOff: true }));
         } else {
             // Turn on video (currently off -> turn on)
-            console.log("[Video] Turning ON video");
+            log.debug("[Video] Turning ON video");
             try {
                 // Agora only allows ONE video track at a time
                 // If screen sharing is on, we need to stop it first
@@ -600,7 +603,7 @@ export function useVoiceCall() {
                 const localVideoTrack = await AgoraRTC.createCameraVideoTrack();
                 localVideoTrackRef.current = localVideoTrack;
                 await clientRef.current.publish([localVideoTrack]);
-                console.log("[Video] Video track created and published");
+                log.debug("[Video] Video track created and published");
 
                 // Update state to video call mode and video on, screen share off
                 setState((prev) => ({
@@ -614,7 +617,7 @@ export function useVoiceCall() {
                 const playLocalVideo = () => {
                     if (localVideoRef.current && localVideoTrackRef.current) {
                         localVideoTrackRef.current.play(localVideoRef.current);
-                        console.log("[Video] Local video playing");
+                        log.debug("[Video] Local video playing");
                     } else if (localVideoTrackRef.current) {
                         // Container might not be ready yet after layout switch
                         setTimeout(playLocalVideo, 100);

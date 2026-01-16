@@ -6,6 +6,9 @@ import {
     isHuddle01Configured,
     getHuddle01Token,
 } from "@/config/huddle01";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Huddle01");
 
 export type CallState = "idle" | "joining" | "connected" | "leaving" | "error";
 export type CallType = "audio" | "video";
@@ -44,14 +47,14 @@ async function loadHuddle01SDK(): Promise<void> {
 
 // Force reload the SDK (clears any internal singleton state)
 async function forceReloadHuddle01SDK(): Promise<void> {
-    console.log("[Huddle01] Force reloading SDK module...");
+    log.debug("[Huddle01] Force reloading SDK module...");
     HuddleClient = null;
     sdkLoadPromise = null;
 
     // Re-import fresh
     sdkLoadPromise = import("@huddle01/web-core").then((module) => {
         HuddleClient = module.HuddleClient;
-        console.log("[Huddle01] SDK module reloaded");
+        log.debug("[Huddle01] SDK module reloaded");
     });
 
     return sdkLoadPromise;
@@ -217,7 +220,7 @@ export function useHuddle01Call(userAddress: string | null) {
     // Function to attach pending remote video track
     const attachPendingRemoteVideo = useCallback(() => {
         if (pendingRemoteVideoTrackRef.current && remoteVideoRef.current) {
-            console.log("[Huddle01] Attaching pending remote video track");
+            log.debug("[Huddle01] Attaching pending remote video track");
             const stream = new MediaStream([
                 pendingRemoteVideoTrackRef.current,
             ]);
@@ -325,7 +328,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 }));
             }
         }, 1000);
-        console.log("[Huddle01] Duration timer started");
+        log.debug("[Huddle01] Duration timer started");
     }, []);
 
     const stopDurationTimer = useCallback(() => {
@@ -395,7 +398,7 @@ export function useHuddle01Call(userAddress: string | null) {
 
             // Wait for SDK to load (with 5 second timeout)
             if (!HuddleClient) {
-                console.log("[Huddle01] SDK not loaded, waiting...");
+                log.debug("[Huddle01] SDK not loaded, waiting...");
                 const loaded = await waitForHuddle01SDK(5000);
                 if (!loaded) {
                     isJoiningRef.current = false;
@@ -406,7 +409,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     }));
                     return false;
                 }
-                console.log("[Huddle01] SDK loaded successfully");
+                log.debug("[Huddle01] SDK loaded successfully");
             }
 
             if (!userAddress) {
@@ -420,13 +423,13 @@ export function useHuddle01Call(userAddress: string | null) {
             }
 
             // THOROUGH cleanup of any existing client from a previous call
-            console.log("[Huddle01] Starting pre-call cleanup...");
+            log.debug("[Huddle01] Starting pre-call cleanup...");
 
             // Clear any existing polling intervals (stored in our ref)
             if (pollIntervalIdRef.current) {
                 clearInterval(pollIntervalIdRef.current);
                 pollIntervalIdRef.current = null;
-                console.log("[Huddle01] Cleared existing poll interval");
+                log.debug("[Huddle01] Cleared existing poll interval");
             }
 
             // Clean up existing client - MUST be thorough to avoid state pollution
@@ -458,7 +461,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     // Leave the room
                     try {
                         await clientRef.current.leaveRoom();
-                        console.log("[Huddle01] Pre-call: leaveRoom completed");
+                        log.debug("[Huddle01] Pre-call: leaveRoom completed");
                     } catch (leaveErr) {
                         console.log(
                             "[Huddle01] Pre-call: leaveRoom error (continuing):",
@@ -484,7 +487,7 @@ export function useHuddle01Call(userAddress: string | null) {
                         /* ignore */
                     }
                 } catch (e) {
-                    console.log("[Huddle01] Cleanup error (expected):", e);
+                    log.debug("[Huddle01] Cleanup error (expected):", e);
                 }
                 clientRef.current = null;
 
@@ -506,7 +509,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     video.srcObject = null;
                 });
                 localVideoRef.current.innerHTML = "";
-                console.log("[Huddle01] Cleared local video elements");
+                log.debug("[Huddle01] Cleared local video elements");
             }
 
             // Clean up remote video elements
@@ -522,7 +525,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 remoteVideoRef.current.innerHTML = "";
                 // Clear the peer video elements map
                 peerVideoElementsRef.current.clear();
-                console.log("[Huddle01] Cleared remote video elements");
+                log.debug("[Huddle01] Cleared remote video elements");
             }
 
             // Clean up remote audio elements
@@ -534,7 +537,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 remoteAudioRef.current.srcObject = null;
                 remoteAudioRef.current.remove();
                 remoteAudioRef.current = null;
-                console.log("[Huddle01] Cleared remote audio element");
+                log.debug("[Huddle01] Cleared remote audio element");
             }
 
             // Clean up ALL orphaned audio elements in document.body from previous calls
@@ -558,12 +561,12 @@ export function useHuddle01Call(userAddress: string | null) {
 
             // Force release ALL media devices - this is crucial for switching calls
             // The browser can cache media streams which prevents new calls from working
-            console.log("[Huddle01] Force releasing all media devices...");
+            log.debug("[Huddle01] Force releasing all media devices...");
             try {
                 // Get all active media streams and stop them
                 const mediaDevices =
                     await navigator.mediaDevices.enumerateDevices();
-                console.log("[Huddle01] Found devices:", mediaDevices.length);
+                log.debug("[Huddle01] Found devices:", mediaDevices.length);
 
                 // Try to get and immediately release a stream to clear any cached state
                 try {
@@ -588,7 +591,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     );
                 }
             } catch (e) {
-                console.log("[Huddle01] Device enumeration failed:", e);
+                log.debug("[Huddle01] Device enumeration failed:", e);
             }
 
             // Longer delay to let the SDK fully reset (important for calling different people)
@@ -647,7 +650,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     );
                 }
 
-                console.log("[Huddle01] Token received for room:", roomId);
+                log.debug("[Huddle01] Token received for room:", roomId);
                 console.log(
                     "[Huddle01] Creating fresh Huddle01 client instance..."
                 );
@@ -719,7 +722,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     // Stop the tracks immediately - we just needed to prompt for permission
                     tracks.forEach((track) => track.stop());
                     permissionGranted = true;
-                    console.log("[Huddle01] Media permissions granted");
+                    log.debug("[Huddle01] Media permissions granted");
                 } catch (permError) {
                     console.error(
                         "[Huddle01] Could not get media permissions:",
@@ -865,7 +868,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 };
 
                 room.on("room-joined", () => {
-                    console.log("[Huddle01] Joined room successfully");
+                    log.debug("[Huddle01] Joined room successfully");
                     currentRoomIdRef.current = roomId;
                     isJoiningRef.current = false; // Clear joining flag on success
                     setState((prev) => ({
@@ -1257,7 +1260,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 });
 
                 room.on("room-closed", () => {
-                    console.log("[Huddle01] Room closed");
+                    log.debug("[Huddle01] Room closed");
                     stopDurationTimer();
                     // Clean up media elements
                     if (localVideoRef.current)
@@ -1292,7 +1295,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 });
 
                 room.on("peer-joined", (peer) => {
-                    console.log("[Huddle01] Peer joined:", peer);
+                    log.debug("[Huddle01] Peer joined:", peer);
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const peerData = peer as any;
                     const peerId = peerData?.peerId;
@@ -1443,7 +1446,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 });
 
                 room.on("peer-left", (peer) => {
-                    console.log("[Huddle01] Peer left:", peer);
+                    log.debug("[Huddle01] Peer left:", peer);
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const peerData = peer as any;
                     const peerId = peerData?.peerId || peerData?.id;
@@ -1490,7 +1493,7 @@ export function useHuddle01Call(userAddress: string | null) {
                         return;
                     }
 
-                    console.log("[Huddle01] Local stream playable:", data);
+                    log.debug("[Huddle01] Local stream playable:", data);
                     try {
                         const streamData = data as {
                             label?: string;
@@ -1943,7 +1946,7 @@ export function useHuddle01Call(userAddress: string | null) {
 
                 // Also listen for new-consumer event on localPeer
                 localPeerEvents.on("new-consumer", (data: unknown) => {
-                    console.log("[Huddle01] New consumer event:", data);
+                    log.debug("[Huddle01] New consumer event:", data);
                     try {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const consumerData = data as any;
@@ -2034,7 +2037,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 });
 
                 room.on("stream-removed", (data: unknown) => {
-                    console.log("[Huddle01] Remote stream removed:", data);
+                    log.debug("[Huddle01] Remote stream removed:", data);
                     try {
                         const streamData = data as {
                             peerId?: string;
@@ -2082,7 +2085,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 });
 
                 // Join the room with timeout
-                console.log("[Huddle01] Joining room...");
+                log.debug("[Huddle01] Joining room...");
                 const joinPromise = client.joinRoom({
                     roomId,
                     token,
@@ -2096,7 +2099,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 );
 
                 await Promise.race([joinPromise, joinTimeoutPromise]);
-                console.log("[Huddle01] Join room completed");
+                log.debug("[Huddle01] Join room completed");
 
                 // Log detailed room/connection state after joining
                 try {
@@ -2104,7 +2107,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     const roomAny = client.room as any;
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const clientAny = client as any;
-                    console.log("[Huddle01] Connection state after join:", {
+                    log.debug("[Huddle01] Connection state after join:", {
                         roomState: roomAny?.state,
                         roomId: roomAny?.roomId,
                         localPeerId: roomAny?.localPeer?.peerId,
@@ -2164,7 +2167,7 @@ export function useHuddle01Call(userAddress: string | null) {
                         );
                         await localPeer.enableAudio();
                         setState((prev) => ({ ...prev, isMuted: false }));
-                        console.log("[Huddle01] Audio enabled successfully");
+                        log.debug("[Huddle01] Audio enabled successfully");
                         audioEnabled = true;
                         break;
                     } catch (audioError) {
@@ -2744,7 +2747,7 @@ export function useHuddle01Call(userAddress: string | null) {
 
                 return true;
             } catch (error) {
-                console.error("[Huddle01] Error joining call:", error);
+                log.error("[Huddle01] Error joining call:", error);
                 // Clear refs on error
                 isJoiningRef.current = false;
                 currentRoomIdRef.current = null;
@@ -2772,7 +2775,7 @@ export function useHuddle01Call(userAddress: string | null) {
         if (pollIntervalIdRef.current) {
             clearInterval(pollIntervalIdRef.current);
             pollIntervalIdRef.current = null;
-            console.log("[Huddle01] Cleared polling interval on leave");
+            log.debug("[Huddle01] Cleared polling interval on leave");
         }
 
         try {
@@ -2782,7 +2785,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 // Check state to avoid "Cannot Find Producer" errors
                 const localPeer = clientRef.current.localPeer;
                 if (localPeer) {
-                    console.log("[Huddle01] Stopping local media tracks...");
+                    log.debug("[Huddle01] Stopping local media tracks...");
 
                     // Only disable audio if not already muted (producer exists)
                     if (!state.isMuted) {
@@ -2833,10 +2836,10 @@ export function useHuddle01Call(userAddress: string | null) {
                     );
 
                     // Always attempt to leave the room
-                    console.log("[Huddle01] Attempting leaveRoom...");
+                    log.debug("[Huddle01] Attempting leaveRoom...");
                     try {
                         await clientRef.current.leaveRoom();
-                        console.log("[Huddle01] leaveRoom completed");
+                        log.debug("[Huddle01] leaveRoom completed");
                     } catch (leaveErr) {
                         console.log(
                             "[Huddle01] leaveRoom error (continuing cleanup):",
@@ -2848,7 +2851,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     try {
                         if (clientAny._socket?.close) {
                             clientAny._socket.close();
-                            console.log("[Huddle01] Socket closed manually");
+                            log.debug("[Huddle01] Socket closed manually");
                         }
                         if (clientAny.socket?.close) {
                             clientAny.socket.close();
@@ -2885,7 +2888,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 }
             }
         } catch (error) {
-            console.log("[Huddle01] Cleanup error:", error);
+            log.debug("[Huddle01] Cleanup error:", error);
         } finally {
             // ALWAYS null the client ref to ensure fresh instance on next call
             clientRef.current = null;
@@ -2964,7 +2967,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 if (stream) {
                     stream.getTracks().forEach((track) => {
                         track.stop();
-                        console.log("[Huddle01] Stopped orphaned audio track");
+                        log.debug("[Huddle01] Stopped orphaned audio track");
                     });
                 }
                 audioEl.srcObject = null;
@@ -3036,7 +3039,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 setState((prev) => ({ ...prev, isMuted: true }));
             }
         } catch (error) {
-            console.error("[Huddle01] Error toggling mute:", error);
+            log.error("[Huddle01] Error toggling mute:", error);
         }
     }, [state.isMuted]);
 
@@ -3087,7 +3090,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 }
             }
         } catch (error) {
-            console.error("[Huddle01] Error toggling video:", error);
+            log.error("[Huddle01] Error toggling video:", error);
         }
     }, [state.isVideoOff]);
 
@@ -3124,7 +3127,7 @@ export function useHuddle01Call(userAddress: string | null) {
                     localScreenShareRef.current.innerHTML = "";
                 }
             } else {
-                console.log("[Huddle01] Starting screen share...");
+                log.debug("[Huddle01] Starting screen share...");
                 const screenStream = await localPeer.startScreenShare();
                 console.log(
                     "[Huddle01] Screen share started, got stream:",
@@ -3208,7 +3211,7 @@ export function useHuddle01Call(userAddress: string | null) {
                 }
             }
         } catch (error) {
-            console.error("[Huddle01] Error toggling screen share:", error);
+            log.error("[Huddle01] Error toggling screen share:", error);
             // Reset state if screen share failed (e.g., user cancelled)
             setState((prev) => ({ ...prev, isScreenSharing: false }));
         }
@@ -3252,7 +3255,7 @@ export function useHuddle01Call(userAddress: string | null) {
 
     const takeScreenshot = useCallback(async (): Promise<boolean> => {
         // Screenshot implementation similar to Agora
-        console.log("[Huddle01] Screenshot not yet implemented");
+        log.debug("[Huddle01] Screenshot not yet implemented");
         return false;
     }, []);
 

@@ -12,6 +12,9 @@ import {
 // Address can be EVM (0x...) or Solana (base58)
 import protobuf from "protobufjs";
 import { supabase } from "@/config/supabase";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Waku");
 
 // Dynamic imports for Waku to avoid SSR issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,7 +124,7 @@ async function decryptFromStorage(
         const decoder = new TextDecoder();
         return decoder.decode(decrypted);
     } catch (err) {
-        console.error("[Waku] Failed to decrypt message:", err);
+        log.error("[Waku] Failed to decrypt message:", err);
         return "[Decryption failed]";
     }
 }
@@ -139,7 +142,7 @@ async function saveMessageToSupabase(
     sentAt: Date
 ): Promise<boolean> {
     if (!supabase) {
-        console.log("[Waku] Supabase not configured, skipping message save");
+        log.debug("[Waku] Supabase not configured, skipping message save");
         return false;
     }
 
@@ -166,14 +169,14 @@ async function saveMessageToSupabase(
                 );
                 return true;
             }
-            console.error("[Waku] Failed to save message to Supabase:", error);
+            log.error("[Waku] Failed to save message to Supabase:", error);
             return false;
         }
 
-        console.log("[Waku] Message saved to Supabase:", messageId);
+        log.debug("[Waku] Message saved to Supabase:", messageId);
         return true;
     } catch (err) {
-        console.error("[Waku] Error saving to Supabase:", err);
+        log.error("[Waku] Error saving to Supabase:", err);
         return false;
     }
 }
@@ -214,7 +217,7 @@ async function fetchMessagesFromSupabase(
             return [];
         }
 
-        console.log("[Waku] Fetched", data.length, "messages from Supabase");
+        log.debug("[Waku] Fetched", data.length, "messages from Supabase");
 
         // Decrypt messages
         const decrypted = await Promise.all(
@@ -237,7 +240,7 @@ async function fetchMessagesFromSupabase(
 
         return decrypted;
     } catch (err) {
-        console.error("[Waku] Error fetching from Supabase:", err);
+        log.error("[Waku] Error fetching from Supabase:", err);
         return [];
     }
 }
@@ -257,7 +260,7 @@ function persistMessages(topic: string, messages: unknown[]) {
         allMessages[topic] = serializable;
         localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(allMessages));
     } catch (e) {
-        console.log("[Waku] Failed to persist messages:", e);
+        log.debug("[Waku] Failed to persist messages:", e);
     }
 }
 
@@ -305,7 +308,7 @@ function loadPersistedMessages(topic: string): unknown[] {
 
         return cleanedMessages;
     } catch (e) {
-        console.log("[Waku] Failed to load persisted messages:", e);
+        log.debug("[Waku] Failed to load persisted messages:", e);
         return [];
     }
 }
@@ -482,11 +485,11 @@ export function WakuProvider({
                     wakuSdk = sdk;
                     wakuEncryption = encryption;
                     wakuUtils = utils;
-                    console.log("[Waku] SDK loaded");
+                    log.debug("[Waku] SDK loaded");
                     setSdkLoaded(true);
                 })
                 .catch((err) => {
-                    console.error("[Waku] Failed to load SDK:", err);
+                    log.error("[Waku] Failed to load SDK:", err);
                     setError("Failed to load Waku SDK");
                 });
         } else if (wakuSdk) {
@@ -528,7 +531,7 @@ export function WakuProvider({
 
         // Wait for SDK to load if not ready
         if (!wakuSdk || !wakuEncryption || !wakuUtils) {
-            console.log("[Waku] SDK not loaded yet, waiting...");
+            log.debug("[Waku] SDK not loaded yet, waiting...");
             // Try to wait for SDK
             for (let i = 0; i < 50; i++) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
@@ -541,13 +544,13 @@ export function WakuProvider({
         }
 
         if (nodeRef.current && isInitialized) {
-            console.log("[Waku] Already initialized");
+            log.debug("[Waku] Already initialized");
             return true; // Already initialized
         }
 
         // Prevent multiple simultaneous initializations
         if (isInitializing) {
-            console.log("[Waku] Already initializing...");
+            log.debug("[Waku] Already initializing...");
             return false;
         }
 
@@ -555,7 +558,7 @@ export function WakuProvider({
         setError(null);
 
         try {
-            console.log("[Waku] Creating light node...");
+            log.debug("[Waku] Creating light node...");
 
             // Create and start a Light Node
             const node = await wakuSdk.createLightNode({
@@ -566,10 +569,10 @@ export function WakuProvider({
             });
 
             await node.start();
-            console.log("[Waku] Node started");
+            log.debug("[Waku] Node started");
 
             // Wait for peer connections with timeout
-            console.log("[Waku] Waiting for peers...");
+            log.debug("[Waku] Waiting for peers...");
             const peerPromise = node.waitForPeers([
                 wakuSdk.Protocols.LightPush,
                 wakuSdk.Protocols.Filter,
@@ -584,7 +587,7 @@ export function WakuProvider({
             );
 
             await Promise.race([peerPromise, timeoutPromise]);
-            console.log("[Waku] Connected to peers");
+            log.debug("[Waku] Connected to peers");
 
             nodeRef.current = node;
             setIsInitialized(true);
@@ -593,7 +596,7 @@ export function WakuProvider({
 
             return true;
         } catch (err) {
-            console.error("[Waku] Failed to initialize:", err);
+            log.error("[Waku] Failed to initialize:", err);
             setIsInitialized(false);
             setIsInitializing(false);
             setError(
@@ -606,7 +609,7 @@ export function WakuProvider({
     // Auto-initialize Waku when SDK is loaded and we have a user address
     useEffect(() => {
         if (sdkLoaded && userAddress && !isInitialized && !isInitializing) {
-            console.log("[Waku] Auto-initializing...");
+            log.debug("[Waku] Auto-initializing...");
             initialize();
         }
     }, [sdkLoaded, userAddress, isInitialized, isInitializing, initialize]);
@@ -615,7 +618,7 @@ export function WakuProvider({
     const revokeAllInstallations = useCallback(async (): Promise<boolean> => {
         // Waku doesn't have installation limits like XMTP
         // This is kept for API compatibility
-        console.log("[Waku] revokeAllInstallations called - no-op for Waku");
+        log.debug("[Waku] revokeAllInstallations called - no-op for Waku");
         return true;
     }, []);
 
@@ -668,7 +671,7 @@ export function WakuProvider({
 
             // Check if SDK modules are loaded
             if (!wakuSdk || !wakuEncryption || !wakuUtils) {
-                console.log("[Waku] SDK not ready for sendMessage");
+                log.debug("[Waku] SDK not ready for sendMessage");
                 return {
                     success: false,
                     error: "Waku SDK is loading. Please wait a moment and try again.",
@@ -694,7 +697,7 @@ export function WakuProvider({
                     userAddress,
                     peerAddress
                 );
-                console.log("[Waku] Sending message to topic:", contentTopic);
+                log.debug("[Waku] Sending message to topic:", contentTopic);
 
                 // Get symmetric key for this conversation
                 const symmetricKey = await getDmSymmetricKey(peerAddress);
@@ -731,7 +734,7 @@ export function WakuProvider({
                 const result = await nodeRef.current.lightPush.send(encoder, {
                     payload,
                 });
-                console.log("[Waku] Message sent successfully!", result);
+                log.debug("[Waku] Message sent successfully!", result);
 
                 // Add to local cache immediately so it appears in UI
                 const sentMessage = {
@@ -790,7 +793,7 @@ export function WakuProvider({
 
                 return { success: true, messageId, message: sentMessage };
             } catch (err) {
-                console.error("[Waku] Failed to send message:", err);
+                log.error("[Waku] Failed to send message:", err);
                 return {
                     success: false,
                     error: err instanceof Error ? err.message : "Unknown error",
@@ -863,7 +866,7 @@ export function WakuProvider({
                     "messages"
                 );
                 if (supabaseMessages.length > 0) {
-                    console.log("[Waku] First Supabase message:", {
+                    log.debug("[Waku] First Supabase message:", {
                         id: supabaseMessages[0].id,
                         sender: supabaseMessages[0].senderInboxId?.slice(0, 10),
                         content: supabaseMessages[0].content?.slice(0, 30),
@@ -1010,7 +1013,7 @@ export function WakuProvider({
                 persistMessages(cacheKey, mergedMessages);
                 return mergedMessages;
             } catch (err) {
-                console.error("[Waku] Failed to get messages:", err);
+                log.error("[Waku] Failed to get messages:", err);
                 // Return empty array on error - cache is already populated above
                 return [];
             }
@@ -1027,12 +1030,12 @@ export function WakuProvider({
             return;
         }
 
-        console.log("[Waku] Prefetching messages for", peerAddress);
+        log.debug("[Waku] Prefetching messages for", peerAddress);
         
         // Fire and forget - don't await, just trigger the fetch in background
         // This will populate the cache so when chat opens, messages are ready
         getMessages(peerAddress, true).catch(err => {
-            console.log("[Waku] Prefetch failed (non-critical):", err);
+            log.debug("[Waku] Prefetch failed (non-critical):", err);
         });
     }, [userAddress, getMessages]);
 
@@ -1076,7 +1079,7 @@ export function WakuProvider({
                         wakuMessage
                     );
                     if (!wakuMessage.payload) {
-                        console.log("[Waku] Message has no payload");
+                        log.debug("[Waku] Message has no payload");
                         return;
                     }
                     try {
@@ -1084,7 +1087,7 @@ export function WakuProvider({
                             wakuMessage.payload
                         );
                         const msg = MessageProto.toObject(decoded);
-                        console.log("[Waku] Decoded message:", msg);
+                        log.debug("[Waku] Decoded message:", msg);
 
                         // Deduplicate
                         if (processedMessageIds.current.has(msg.messageId)) {
@@ -1175,7 +1178,7 @@ export function WakuProvider({
                 // Return the decoder for cleanup
                 return decoder;
             } catch (err) {
-                console.error("[Waku] Failed to stream messages:", err);
+                log.error("[Waku] Failed to stream messages:", err);
                 return null;
             }
         },
@@ -1219,7 +1222,7 @@ export function WakuProvider({
             const client = supabase;
             const userAddrLower = userAddress.toLowerCase();
             
-            console.log("[Waku] Loading initial unread counts for:", userAddrLower);
+            log.debug("[Waku] Loading initial unread counts for:", userAddrLower);
             
             try {
                 // Get all unread messages for this user (messages where they are recipient)
@@ -1232,12 +1235,12 @@ export function WakuProvider({
                     .order("created_at", { ascending: false });
                 
                 if (msgError) {
-                    console.error("[Waku] Error loading unread messages:", msgError);
+                    log.error("[Waku] Error loading unread messages:", msgError);
                     return;
                 }
                 
                 if (!unreadMessages || unreadMessages.length === 0) {
-                    console.log("[Waku] No unread messages found");
+                    log.debug("[Waku] No unread messages found");
                     return;
                 }
                 
@@ -1248,7 +1251,7 @@ export function WakuProvider({
                     .eq("reader_address", userAddrLower);
                 
                 if (receiptError) {
-                    console.error("[Waku] Error loading read receipts:", receiptError);
+                    log.error("[Waku] Error loading read receipts:", receiptError);
                 }
                 
                 const readMessageIds = new Set(
@@ -1269,13 +1272,13 @@ export function WakuProvider({
                     }
                 }
                 
-                console.log("[Waku] Initial unread counts:", counts, "(active peer:", activePeer, ")");
+                log.debug("[Waku] Initial unread counts:", counts, "(active peer:", activePeer, ")");
                 
                 if (Object.keys(counts).length > 0) {
                     setUnreadCounts(counts);
                 }
             } catch (err) {
-                console.error("[Waku] Error loading initial unread counts:", err);
+                log.error("[Waku] Error loading initial unread counts:", err);
             }
         };
         
@@ -1287,7 +1290,7 @@ export function WakuProvider({
     useEffect(() => {
         if (!isInitialized || !userAddress || !supabase) return;
 
-        console.log("[Waku] Setting up global message listener for:", userAddress.toLowerCase());
+        log.debug("[Waku] Setting up global message listener for:", userAddress.toLowerCase());
         
         const client = supabase; // Capture for closure
         const channel = client
@@ -1305,7 +1308,7 @@ export function WakuProvider({
                     
                     // Skip if we've already processed this message
                     if (processedMessageIds.current.has(msg.message_id)) {
-                        console.log("[Waku] Skipping already processed message:", msg.message_id);
+                        log.debug("[Waku] Skipping already processed message:", msg.message_id);
                         return;
                     }
                     processedMessageIds.current.add(msg.message_id);
@@ -1315,13 +1318,13 @@ export function WakuProvider({
                         return;
                     }
                     
-                    console.log("[Waku] Global listener received message from:", msg.sender_address);
+                    log.debug("[Waku] Global listener received message from:", msg.sender_address);
                     
                     const senderLower = msg.sender_address.toLowerCase();
                     
                     // Only increment unread if this chat is not currently open
                     if (activeChatPeerRef.current !== senderLower) {
-                        console.log("[Waku] Incrementing unread for:", senderLower);
+                        log.debug("[Waku] Incrementing unread for:", senderLower);
                         setUnreadCounts((prev) => ({
                             ...prev,
                             [senderLower]: (prev[senderLower] || 0) + 1,
@@ -1337,20 +1340,20 @@ export function WakuProvider({
                                     conversationId: msg.conversation_id,
                                 });
                             } catch (err) {
-                                console.error("[Waku] Notification callback error:", err);
+                                log.error("[Waku] Notification callback error:", err);
                             }
                         });
                     } else {
-                        console.log("[Waku] Chat is open, skipping unread increment");
+                        log.debug("[Waku] Chat is open, skipping unread increment");
                     }
                 }
             )
             .subscribe((status) => {
-                console.log("[Waku] Global message subscription status:", status);
+                log.debug("[Waku] Global message subscription status:", status);
             });
 
         return () => {
-            console.log("[Waku] Removing global message listener");
+            log.debug("[Waku] Removing global message listener");
             client.removeChannel(channel);
         };
     }, [isInitialized, userAddress]);
@@ -1404,7 +1407,7 @@ export function WakuProvider({
 
             try {
                 const groupId = generateGroupId();
-                console.log("[Waku] Creating group:", groupId, groupName, emoji);
+                log.debug("[Waku] Creating group:", groupId, groupName, emoji);
 
                 // Generate symmetric key for the group
                 const symmetricKey = wakuEncryption.generateSymmetricKey();
@@ -1470,7 +1473,7 @@ export function WakuProvider({
                         }
 
                         if (groupError) {
-                            console.error("[Waku] Error saving group to Supabase:", groupError.message || groupError);
+                            log.error("[Waku] Error saving group to Supabase:", groupError.message || groupError);
                         } else {
                             // Insert all members
                             const memberInserts = allMembers.map((addr) => ({
@@ -1484,17 +1487,17 @@ export function WakuProvider({
                                 .insert(memberInserts);
 
                             if (membersError) {
-                                console.error("[Waku] Error saving group members to Supabase:", membersError);
+                                log.error("[Waku] Error saving group members to Supabase:", membersError);
                             } else {
-                                console.log("[Waku] Group saved to Supabase successfully");
+                                log.debug("[Waku] Group saved to Supabase successfully");
                             }
                         }
                     } catch (dbErr) {
-                        console.error("[Waku] Database error saving group:", dbErr);
+                        log.error("[Waku] Database error saving group:", dbErr);
                     }
                 }
 
-                console.log("[Waku] Group created successfully");
+                log.debug("[Waku] Group created successfully");
                 return {
                     success: true,
                     groupId,
@@ -1502,7 +1505,7 @@ export function WakuProvider({
                     members: allMembers,
                 };
             } catch (err) {
-                console.error("[Waku] Failed to create group:", err);
+                log.error("[Waku] Failed to create group:", err);
                 return {
                     success: false,
                     error:
@@ -1521,7 +1524,7 @@ export function WakuProvider({
         const storedGroups = getStoredGroups();
         const userAddrLower = userAddress?.toLowerCase() || "";
         
-        console.log("[Waku] getGroups called:", {
+        log.debug("[Waku] getGroups called:", {
             userAddress: userAddrLower,
             storedGroupsCount: storedGroups.length,
         });
@@ -1542,7 +1545,7 @@ export function WakuProvider({
                     .eq("member_address", userAddrLower);
 
                 if (memberError) {
-                    console.error("[Waku] Error fetching group memberships:", memberError);
+                    log.error("[Waku] Error fetching group memberships:", memberError);
                 } else if (memberRows && memberRows.length > 0) {
                     const groupIds = memberRows.map((r: { group_id: string }) => r.group_id);
                     
@@ -1553,7 +1556,7 @@ export function WakuProvider({
                         .in("id", groupIds);
 
                     if (groupsError) {
-                        console.error("[Waku] Error fetching groups:", groupsError);
+                        log.error("[Waku] Error fetching groups:", groupsError);
                     } else if (dbGroups) {
                         // Fetch all members for these groups
                         const { data: allMembers, error: allMembersError } = await supabase
@@ -1562,7 +1565,7 @@ export function WakuProvider({
                             .in("group_id", groupIds);
 
                         if (allMembersError) {
-                            console.error("[Waku] Error fetching group members:", allMembersError);
+                            log.error("[Waku] Error fetching group members:", allMembersError);
                         }
 
                         // Build member lists per group
@@ -1588,7 +1591,7 @@ export function WakuProvider({
                                 };
                                 groupsMap.set(dbGroup.id, group);
                                 hasUpdates = true;
-                                console.log("[Waku] Found group from Supabase:", dbGroup.name, "emoji:", dbGroup.emoji);
+                                log.debug("[Waku] Found group from Supabase:", dbGroup.name, "emoji:", dbGroup.emoji);
                             } else {
                                 // Update emoji if it exists in Supabase but not locally
                                 const existingGroup = groupsMap.get(dbGroup.id);
@@ -1596,7 +1599,7 @@ export function WakuProvider({
                                     existingGroup.emoji = dbGroup.emoji;
                                     groupsMap.set(dbGroup.id, existingGroup);
                                     hasUpdates = true;
-                                    console.log("[Waku] Updated emoji for group:", dbGroup.name, "to:", dbGroup.emoji);
+                                    log.debug("[Waku] Updated emoji for group:", dbGroup.name, "to:", dbGroup.emoji);
                                 }
                             }
                         }
@@ -1605,12 +1608,12 @@ export function WakuProvider({
                         if (hasUpdates) {
                             const updatedGroups = Array.from(groupsMap.values());
                             saveGroups(updatedGroups);
-                            console.log("[Waku] Saved groups to localStorage with emoji updates");
+                            log.debug("[Waku] Saved groups to localStorage with emoji updates");
                         }
                     }
                 }
             } catch (dbErr) {
-                console.error("[Waku] Database error fetching groups:", dbErr);
+                log.error("[Waku] Database error fetching groups:", dbErr);
             }
         }
 
@@ -1621,7 +1624,7 @@ export function WakuProvider({
             .filter((g) => {
                 const isUserMember = g.members.includes(userAddrLower);
                 if (!isUserMember) {
-                    console.log("[Waku] User not in group:", g.name, "members:", g.members);
+                    log.debug("[Waku] User not in group:", g.name, "members:", g.members);
                 }
                 return isUserMember;
             })
@@ -1633,7 +1636,7 @@ export function WakuProvider({
                 createdAt: new Date(g.createdAt),
             }));
             
-        console.log("[Waku] Total groups found:", filteredGroups.length);
+        log.debug("[Waku] Total groups found:", filteredGroups.length);
         return filteredGroups;
     }, [getHiddenGroups, getStoredGroups, saveGroups, userAddress]);
 
@@ -1775,7 +1778,7 @@ export function WakuProvider({
                 persistMessages(cacheKey, mergedMessages);
                 return mergedMessages;
             } catch (err) {
-                console.error("[Waku] Failed to get group messages:", err);
+                log.error("[Waku] Failed to get group messages:", err);
                 return [];
             }
         },
@@ -1900,7 +1903,7 @@ export function WakuProvider({
 
                 return { success: true, messageId, message: sentMessage };
             } catch (err) {
-                console.error("[Waku] Failed to send group message:", err);
+                log.error("[Waku] Failed to send group message:", err);
                 return {
                     success: false,
                     error:
@@ -2008,7 +2011,7 @@ export function WakuProvider({
 
                 return decoder;
             } catch (err) {
-                console.error("[Waku] Failed to stream group messages:", err);
+                log.error("[Waku] Failed to stream group messages:", err);
                 return null;
             }
         },
@@ -2066,7 +2069,7 @@ export function WakuProvider({
                         .insert(memberInserts);
 
                     if (error) {
-                        console.error("[Waku] Error adding members to Supabase:", error);
+                        log.error("[Waku] Error adding members to Supabase:", error);
                     }
                 }
 
@@ -2112,7 +2115,7 @@ export function WakuProvider({
                         .eq("member_address", memberAddress.toLowerCase());
 
                     if (error) {
-                        console.error("[Waku] Error removing member from Supabase:", error);
+                        log.error("[Waku] Error removing member from Supabase:", error);
                     }
                 }
 
@@ -2165,7 +2168,7 @@ export function WakuProvider({
                         .eq("member_address", userAddress.toLowerCase());
 
                     if (error) {
-                        console.error("[Waku] Error leaving group in Supabase:", error);
+                        log.error("[Waku] Error leaving group in Supabase:", error);
                     }
                 }
 
@@ -2280,7 +2283,7 @@ export function WakuProvider({
                 try {
                     await nodeRef.current.filter.unsubscribe(decoder);
                 } catch (err) {
-                    console.log("[Waku] Error unsubscribing:", err);
+                    log.debug("[Waku] Error unsubscribing:", err);
                 }
             });
         }

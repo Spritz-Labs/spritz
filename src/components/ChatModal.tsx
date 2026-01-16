@@ -25,6 +25,9 @@ import {
 // import { VoiceRecorder, VoiceMessage } from "./VoiceRecorder";
 import { MessageSearch } from "./MessageSearch";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Chat");
 
 type ChatModalProps = {
     isOpen: boolean;
@@ -211,7 +214,7 @@ export function ChatModal({
                 }
 
                 // Load messages immediately (may be from cache)
-                console.log("[Chat] Loading messages for", peerAddress);
+                log.debug("[Chat] Loading messages for", peerAddress);
                 try {
                     // First load from cache (fast), then refresh in background
                     const existingMessages = await getMessages(peerAddress);
@@ -264,7 +267,7 @@ export function ChatModal({
                 markAsRead(peerAddress);
 
                 // Start streaming new messages
-                console.log("[Chat] Setting up message stream...");
+                log.debug("[Chat] Setting up message stream...");
                 try {
                     const stream = await streamMessages(
                         peerAddress,
@@ -301,7 +304,7 @@ export function ChatModal({
                             markMessagesRead([newMsg.id]);
                         }
                     );
-                    console.log("[Chat] Stream setup complete:", stream);
+                    log.debug("[Chat] Stream setup complete:", stream);
                     streamRef.current = stream;
                 } catch (streamErr) {
                     console.log(
@@ -436,7 +439,7 @@ export function ChatModal({
                     }
                 }
             } catch (err) {
-                console.log("[Chat] Polling error:", err);
+                log.debug("[Chat] Polling error:", err);
             }
         }, 3000); // Poll every 3 seconds
 
@@ -469,7 +472,7 @@ export function ChatModal({
         const checkReadReceipts = () => {
             const myMsgIds = sentMessageIdsRef.current;
             if (myMsgIds.length > 0) {
-                console.log("[Chat] Checking read receipts for", myMsgIds.length, "sent messages");
+                log.debug("[Chat] Checking read receipts for", myMsgIds.length, "sent messages");
                 fetchReadReceipts(myMsgIds);
             }
         };
@@ -494,7 +497,7 @@ export function ChatModal({
         const markAllAsRead = () => {
             const peerMsgIds = peerMessageIdsRef.current;
             if (peerMsgIds.length > 0) {
-                console.log("[Chat] Marking", peerMsgIds.length, "peer messages as read");
+                log.debug("[Chat] Marking", peerMsgIds.length, "peer messages as read");
                 markMessagesRead(peerMsgIds);
                 // Also clear unread count in Waku provider
                 markAsRead(peerAddress);

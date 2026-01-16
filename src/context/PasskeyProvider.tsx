@@ -13,6 +13,9 @@ import {
     startAuthentication,
 } from "@simplewebauthn/browser";
 import { type Address } from "viem";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Passkey");
 
 // Storage keys (new system)
 const SESSION_STORAGE_KEY = "spritz_passkey_session";
@@ -81,7 +84,7 @@ function validateSession(token: string): { userAddress: string; exp: number } | 
             payload = JSON.parse(base64UrlDecode(token));
         }
         
-        console.log("[Passkey] Validating session, payload:", { 
+        log.debug("[Passkey] Validating session, payload:", { 
             hasExp: !!payload.exp, 
             hasUserAddress: !!payload.userAddress,
             hasSub: !!payload.sub,
@@ -96,14 +99,14 @@ function validateSession(token: string): { userAddress: string; exp: number } | 
         const userAddress = payload.userAddress || payload.sub;
         
         const isValid = payload.exp && expMs > Date.now() && userAddress;
-        console.log("[Passkey] Session validation:", { expMs, now: Date.now(), isExpired: expMs <= Date.now(), userAddress: userAddress?.slice(0, 10), isValid });
+        log.debug("[Passkey] Session validation:", { expMs, now: Date.now(), isExpired: expMs <= Date.now(), userAddress: userAddress?.slice(0, 10), isValid });
         
         if (isValid) {
             return { userAddress, exp: expMs };
         }
         return null;
     } catch (e) {
-        console.error("[Passkey] Session validation error:", e);
+        log.error("[Passkey] Session validation error:", e);
         return null;
     }
 }
@@ -130,10 +133,10 @@ function checkForOldCredentials(): {
         
         if (storedCredential && deviceId) {
             const credential = JSON.parse(storedCredential) as OldCredential;
-            console.log("[Passkey] Found OLD credential from pre-migration system");
-            console.log("[Passkey] Old credential ID:", credential.id?.slice(0, 20) + "...");
-            console.log("[Passkey] Old device ID:", deviceId?.slice(0, 8) + "...");
-            console.log("[Passkey] Stored address:", storedAddress);
+            log.debug("[Passkey] Found OLD credential from pre-migration system");
+            log.debug("[Passkey] Old credential ID:", credential.id?.slice(0, 20) + "...");
+            log.debug("[Passkey] Old device ID:", deviceId?.slice(0, 8) + "...");
+            log.debug("[Passkey] Stored address:", storedAddress);
             return { 
                 hasOldCredentials: true, 
                 credential, 
@@ -143,7 +146,7 @@ function checkForOldCredentials(): {
         }
         return { hasOldCredentials: false };
     } catch (e) {
-        console.error("[Passkey] Error checking old credentials:", e);
+        log.error("[Passkey] Error checking old credentials:", e);
         return { hasOldCredentials: false };
     }
 }
@@ -161,18 +164,18 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
     // Check for stored session on mount (including backwards compatibility for old system)
     useEffect(() => {
         const restoreSession = async () => {
-            console.log("[Passkey] Restoring session on mount...");
+            log.debug("[Passkey] Restoring session on mount...");
             const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
             const storedAddress = localStorage.getItem(USER_ADDRESS_KEY);
             
-            console.log("[Passkey] Stored session exists:", !!storedSession, "length:", storedSession?.length);
-            console.log("[Passkey] Stored address:", storedAddress?.slice(0, 15) + "...");
+            log.debug("[Passkey] Stored session exists:", !!storedSession, "length:", storedSession?.length);
+            log.debug("[Passkey] Stored address:", storedAddress?.slice(0, 15) + "...");
 
             // First, check for valid new-system session
             if (storedSession && storedAddress) {
                 const session = validateSession(storedSession);
                 if (session) {
-                    console.log("[Passkey] Restored valid session, expires:", 
+                    log.debug("[Passkey] Restored valid session, expires:", 
                         new Date(session.exp).toLocaleDateString());
                     
                     // SECURITY: Try to extend the server session cookie
@@ -184,7 +187,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                             credentials: "include", // Send existing cookie
                         });
                         if (res.ok) {
-                            console.log("[Passkey] Server session extended");
+                            log.debug("[Passkey] Server session extended");
                             setState({
                                 isLoading: false,
                                 isAuthenticated: true,
@@ -197,7 +200,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         } else if (res.status === 401) {
                             // Server session expired - localStorage token not enough
                             // User needs to re-authenticate
-                            console.log("[Passkey] Server session expired, re-auth required");
+                            log.debug("[Passkey] Server session expired, re-auth required");
                             localStorage.removeItem(SESSION_STORAGE_KEY);
                             localStorage.removeItem(USER_ADDRESS_KEY);
                             setState((prev) => ({ ...prev, hasStoredSession: false }));
@@ -219,7 +222,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     });
                     return;
                 } else {
-                    console.log("[Passkey] Session expired or invalid");
+                    log.debug("[Passkey] Session expired or invalid");
                 }
             }
 
@@ -228,15 +231,15 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             // This ensures proper server-side verification
             const oldCredCheck = checkForOldCredentials();
             if (oldCredCheck.hasOldCredentials) {
-                console.log("[Passkey] Found old credentials - user must re-authenticate");
-                console.log("[Passkey] Old credential system is deprecated for security");
+                log.debug("[Passkey] Found old credentials - user must re-authenticate");
+                log.debug("[Passkey] Old credential system is deprecated for security");
                 // Clear old credentials to prevent confusion
                 localStorage.removeItem(OLD_CREDENTIAL_STORAGE_KEY);
                 localStorage.removeItem(OLD_DEVICE_ID_STORAGE_KEY);
             }
 
             // No valid session found
-            console.log("[Passkey] No valid session found");
+            log.debug("[Passkey] No valid session found");
             localStorage.removeItem(SESSION_STORAGE_KEY);
             localStorage.removeItem(USER_ADDRESS_KEY);
             setState((prev) => ({ ...prev, hasStoredSession: false }));
@@ -272,7 +275,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 const tempAddress = await generateWalletAddress(username || "spritz-user");
                 
                 // Step 1: Get registration options from server
-                console.log("[Passkey] Fetching registration options...");
+                log.debug("[Passkey] Fetching registration options...");
                 const optionsResponse = await fetch("/api/passkey/register/options", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -288,11 +291,11 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 }
 
                 const { options } = await optionsResponse.json();
-                console.log("[Passkey] Got registration options, starting WebAuthn...");
+                log.debug("[Passkey] Got registration options, starting WebAuthn...");
 
                 // Step 2: Create credential using WebAuthn
                 const credential = await startRegistration({ optionsJSON: options });
-                console.log("[Passkey] WebAuthn registration complete, verifying with server...");
+                log.debug("[Passkey] WebAuthn registration complete, verifying with server...");
 
                 // Step 3: Verify with server and store credential
                 // Check if this is a recovery registration
@@ -300,7 +303,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 const recoveryAddress = localStorage.getItem("spritz_recovery_address");
                 
                 if (recoveryToken) {
-                    console.log("[Passkey] Found recovery token, will restore account:", recoveryAddress?.slice(0, 15) + "...");
+                    log.debug("[Passkey] Found recovery token, will restore account:", recoveryAddress?.slice(0, 15) + "...");
                 }
                 
                 const verifyResponse = await fetch("/api/passkey/register/verify", {
@@ -322,9 +325,9 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 }
 
                 const { sessionToken, userAddress: serverUserAddress, credentialId, backedUp } = await verifyResponse.json();
-                console.log("[Passkey] Registration verified! Credential ID:", credentialId?.slice(0, 20) + "...");
-                console.log("[Passkey] Server returned address:", serverUserAddress);
-                console.log("[Passkey] Passkey synced (backed up):", backedUp);
+                log.debug("[Passkey] Registration verified! Credential ID:", credentialId?.slice(0, 20) + "...");
+                log.debug("[Passkey] Server returned address:", serverUserAddress);
+                log.debug("[Passkey] Passkey synced (backed up):", backedUp);
 
                 // Use the address returned by the server (derived from credential ID on server)
                 // Or the recovered address if this was a recovery registration
@@ -352,12 +355,12 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     warning,
                 });
 
-                console.log("[Passkey] Registration complete! Address:", walletAddress);
+                log.debug("[Passkey] Registration complete! Address:", walletAddress);
                 if (warning) {
                     console.warn("[Passkey]", warning);
                 }
             } catch (error) {
-                console.error("[Passkey] Registration error:", error);
+                log.error("[Passkey] Registration error:", error);
                 const errorMessage =
                     error instanceof Error
                         ? error.message
@@ -379,7 +382,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
 
         try {
             // Step 1: Get authentication options from server
-            console.log("[Passkey] Fetching auth options, useDevicePasskey:", useDevicePasskey);
+            log.debug("[Passkey] Fetching auth options, useDevicePasskey:", useDevicePasskey);
             const optionsResponse = await fetch("/api/passkey/login/options", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -392,7 +395,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             }
 
             const { options, useDevicePasskey: serverUseDevice } = await optionsResponse.json();
-            console.log("[Passkey] Got auth options, useDevicePasskey:", serverUseDevice);
+            log.debug("[Passkey] Got auth options, useDevicePasskey:", serverUseDevice);
 
             // Step 2: Authenticate using WebAuthn
             let credential;
@@ -400,7 +403,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             if (serverUseDevice) {
                 // For device passkey mode, we need to trigger the platform authenticator
                 // The challenge is that non-discoverable credentials won't show up with empty allowCredentials
-                console.log("[Passkey] Using device passkey mode...");
+                log.debug("[Passkey] Using device passkey mode...");
                 
                 // Helper to convert ArrayBuffer to base64url
                 const toBase64url = (buffer: ArrayBuffer): string => {
@@ -445,7 +448,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
                 };
                 
-                console.log("[Passkey] allowCredentials count:", allowCredentials.length);
+                log.debug("[Passkey] allowCredentials count:", allowCredentials.length);
                 
                 try {
                     // Try with signal to allow cancellation
@@ -462,7 +465,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         throw new Error("No credential selected");
                     }
                     
-                    console.log("[Passkey] Got credential from device");
+                    log.debug("[Passkey] Got credential from device");
                     
                     // Convert to the format expected by the verify endpoint (base64url encoded)
                     const response = nativeCredential.response as AuthenticatorAssertionResponse;
@@ -481,9 +484,9 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         clientExtensionResults: nativeCredential.getClientExtensionResults(),
                     };
                 } catch (nativeError) {
-                    console.log("[Passkey] Native WebAuthn error:", nativeError);
+                    log.debug("[Passkey] Native WebAuthn error:", nativeError);
                     // Fallback to library method
-                    console.log("[Passkey] Falling back to library method...");
+                    log.debug("[Passkey] Falling back to library method...");
                     credential = await startAuthentication({ optionsJSON: options });
                 }
             } else {
@@ -491,7 +494,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 credential = await startAuthentication({ optionsJSON: options });
             }
             
-            console.log("[Passkey] WebAuthn authentication complete, verifying with server...");
+            log.debug("[Passkey] WebAuthn authentication complete, verifying with server...");
 
             // Step 3: Verify with server
             const verifyResponse = await fetch("/api/passkey/login/verify", {
@@ -510,8 +513,8 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 
                 // RESCUE FLOW: Check if this is a rescuable orphaned passkey
                 if (errorMsg === "rescue_available" && errorData.rescueToken && errorData.rescueAddress) {
-                    console.log("[Passkey] RESCUE: Found orphaned account!", errorData.rescueAddress);
-                    console.log("[Passkey] RESCUE: Starting re-registration to link passkey...");
+                    log.debug("[Passkey] RESCUE: Found orphaned account!", errorData.rescueAddress);
+                    log.debug("[Passkey] RESCUE: Starting re-registration to link passkey...");
                     
                     // Store rescue token for the registration flow
                     localStorage.setItem("spritz_recovery_token", errorData.rescueToken);
@@ -533,7 +536,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 // SECURITY: Old credential migration removed - insecure
                 // If credential not found, user must re-register their passkey
                 if (errorMsg.includes("not found") || errorMsg.includes("register first")) {
-                    console.log("[Passkey] Server credential not found - user must register a new passkey");
+                    log.debug("[Passkey] Server credential not found - user must register a new passkey");
                     // Clear any old credentials
                     localStorage.removeItem(OLD_CREDENTIAL_STORAGE_KEY);
                     localStorage.removeItem(OLD_DEVICE_ID_STORAGE_KEY);
@@ -543,8 +546,8 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             }
 
             const { sessionToken, credentialId, userAddress: serverUserAddress } = await verifyResponse.json();
-            console.log("[Passkey] Authentication verified! Credential ID:", credentialId?.slice(0, 20) + "...");
-            console.log("[Passkey] Server returned address:", serverUserAddress);
+            log.debug("[Passkey] Authentication verified! Credential ID:", credentialId?.slice(0, 20) + "...");
+            log.debug("[Passkey] Server returned address:", serverUserAddress);
 
             // Use the address returned by the server (from the stored credential)
             // This ensures we use the correct address associated with this passkey
@@ -563,9 +566,9 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 warning: null,
             });
 
-            console.log("[Passkey] Login complete! Address:", walletAddress);
+            log.debug("[Passkey] Login complete! Address:", walletAddress);
         } catch (error) {
-            console.error("[Passkey] Login error:", error);
+            log.error("[Passkey] Login error:", error);
             const errorMessage =
                 error instanceof Error
                     ? error.message
@@ -587,12 +590,12 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         const rescueAddress = localStorage.getItem("spritz_recovery_address");
         
         if (!rescueToken || !rescueAddress) {
-            console.error("[Passkey] No rescue token found");
+            log.error("[Passkey] No rescue token found");
             setState((prev) => ({ ...prev, error: "No rescue pending. Please try logging in again." }));
             return;
         }
         
-        console.log("[Passkey] RESCUE: Starting re-registration for", rescueAddress);
+        log.debug("[Passkey] RESCUE: Starting re-registration for", rescueAddress);
         setState((prev) => ({ ...prev, isLoading: true, error: null, warning: null }));
         
         try {
@@ -613,11 +616,11 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             }
 
             const { options } = await optionsResponse.json();
-            console.log("[Passkey] RESCUE: Got registration options");
+            log.debug("[Passkey] RESCUE: Got registration options");
 
             // Step 2: Create credential using WebAuthn
             const credential = await startRegistration({ optionsJSON: options });
-            console.log("[Passkey] RESCUE: WebAuthn registration complete");
+            log.debug("[Passkey] RESCUE: WebAuthn registration complete");
 
             // Step 3: Verify with server (include rescue token)
             const verifyResponse = await fetch("/api/passkey/register/verify", {
@@ -639,7 +642,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             }
 
             const { sessionToken, userAddress: serverUserAddress } = await verifyResponse.json();
-            console.log("[Passkey] RESCUE: Successfully linked passkey to", serverUserAddress);
+            log.debug("[Passkey] RESCUE: Successfully linked passkey to", serverUserAddress);
 
             // Clear rescue state
             localStorage.removeItem("spritz_recovery_token");
@@ -659,9 +662,9 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 warning: null,
             });
 
-            console.log("[Passkey] RESCUE complete! Address:", serverUserAddress);
+            log.debug("[Passkey] RESCUE complete! Address:", serverUserAddress);
         } catch (error) {
-            console.error("[Passkey] RESCUE error:", error);
+            log.error("[Passkey] RESCUE error:", error);
             // Clear rescue state on error
             localStorage.removeItem("spritz_needs_rescue");
             
@@ -676,7 +679,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const logout = useCallback(async () => {
-        console.log("[Passkey] Logging out...");
+        log.debug("[Passkey] Logging out...");
         
         // Clear localStorage
         localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -690,7 +693,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem("spritz_recovery_token");
         localStorage.removeItem("spritz_recovery_address");
         
-        console.log("[Passkey] Cleared localStorage");
+        log.debug("[Passkey] Cleared localStorage");
 
         // Call server logout to clear HTTP-only session cookie
         try {
@@ -698,9 +701,9 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 method: "POST",
                 credentials: "include",
             });
-            console.log("[Passkey] Server session cleared");
+            log.debug("[Passkey] Server session cleared");
         } catch (e) {
-            console.error("[Passkey] Server logout error:", e);
+            log.error("[Passkey] Server logout error:", e);
         }
 
         setState({
@@ -712,7 +715,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             warning: null,
         });
         
-        console.log("[Passkey] Logout complete");
+        log.debug("[Passkey] Logout complete");
     }, []);
 
     return (
