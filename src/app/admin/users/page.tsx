@@ -119,6 +119,26 @@ export default function UsersPage() {
     const [editBanReason, setEditBanReason] = useState("");
     const [editBetaAccess, setEditBetaAccess] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Chain wallet status
+    const [walletStatus, setWalletStatus] = useState<{
+        smartWalletAddress: string;
+        deployedCount: number;
+        totalChains: number;
+        totalBalanceUsd: number;
+        chainsWithBalance: number;
+        chains: Array<{
+            chainId: number;
+            chainName: string;
+            symbol: string;
+            color: string;
+            isDeployed: boolean;
+            balance: string;
+            balanceUsd: number;
+            sponsored: boolean;
+        }>;
+    } | null>(null);
+    const [isLoadingWallets, setIsLoadingWallets] = useState(false);
 
     // ENS resolution
     const [resolvedENS, setResolvedENS] = useState<Map<string, CachedENS>>(() =>
@@ -386,6 +406,30 @@ export default function UsersPage() {
         }
     };
 
+    // Fetch wallet chain deployments
+    const fetchWalletStatus = useCallback(async (walletAddress: string) => {
+        const authHeaders = getAuthHeaders();
+        if (!authHeaders) return;
+        
+        setIsLoadingWallets(true);
+        setWalletStatus(null);
+        
+        try {
+            const res = await fetch(`/api/admin/user-wallets?address=${walletAddress}`, {
+                headers: authHeaders,
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                setWalletStatus(data);
+            }
+        } catch (err) {
+            console.error("Error fetching wallet status:", err);
+        } finally {
+            setIsLoadingWallets(false);
+        }
+    }, [getAuthHeaders]);
+
     // Open edit modal
     const openEditModal = (user: User) => {
         setEditingUser(user);
@@ -393,6 +437,9 @@ export default function UsersPage() {
         setEditBanned(user.is_banned);
         setEditBanReason(user.ban_reason || "");
         setEditBetaAccess(user.beta_access || false);
+        
+        // Fetch wallet chain info
+        fetchWalletStatus(user.wallet_address);
     };
 
     // Generate CSV content from users
@@ -1161,6 +1208,97 @@ export default function UsersPage() {
                                                 : "Not verified"}
                                         </p>
                                     </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Wallet Chain Deployments */}
+                        <div className="mb-6">
+                            <h3 className="text-sm font-semibold text-zinc-400 mb-3 uppercase flex items-center gap-2">
+                                Smart Wallet Chains
+                                {walletStatus && (
+                                    <span className="text-xs font-normal text-zinc-500">
+                                        ({walletStatus.deployedCount}/{walletStatus.totalChains} deployed)
+                                    </span>
+                                )}
+                            </h3>
+                            
+                            {isLoadingWallets ? (
+                                <div className="flex items-center justify-center py-6">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#FF5500]"></div>
+                                </div>
+                            ) : walletStatus ? (
+                                <div className="space-y-3">
+                                    {/* Smart Wallet Address */}
+                                    <div className="bg-zinc-800/50 rounded-lg p-3 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs text-zinc-500">Smart Wallet Address</p>
+                                            <p className="font-mono text-sm text-white">{walletStatus.smartWalletAddress}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs text-zinc-500">Total Balance</p>
+                                            <p className="text-lg font-bold text-emerald-400">
+                                                ${walletStatus.totalBalanceUsd.toFixed(2)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Chain Grid */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        {walletStatus.chains.map((chain) => (
+                                            <div
+                                                key={chain.chainId}
+                                                className={`rounded-lg p-3 border ${
+                                                    chain.isDeployed 
+                                                        ? 'bg-zinc-800/70 border-zinc-700' 
+                                                        : 'bg-zinc-900/50 border-zinc-800/50 opacity-60'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <div
+                                                        className="w-3 h-3 rounded-full"
+                                                        style={{ backgroundColor: chain.color }}
+                                                    />
+                                                    <span className="text-xs font-medium text-white">
+                                                        {chain.chainName}
+                                                    </span>
+                                                    {chain.isDeployed ? (
+                                                        <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
+                                                            ✓
+                                                        </span>
+                                                    ) : (
+                                                        <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-zinc-700/50 text-zinc-500 rounded">
+                                                            —
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {chain.isDeployed && (
+                                                    <div className="text-xs text-zinc-400">
+                                                        <span className="font-mono">
+                                                            {parseFloat(chain.balance) > 0.0001 
+                                                                ? parseFloat(chain.balance).toFixed(4) 
+                                                                : '0'
+                                                            } {chain.symbol}
+                                                        </span>
+                                                        {chain.balanceUsd > 0.01 && (
+                                                            <span className="text-emerald-400 ml-1">
+                                                                (${chain.balanceUsd.toFixed(2)})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {!chain.isDeployed && (
+                                                    <div className="text-[10px] text-zinc-600">
+                                                        {chain.sponsored ? 'Free gas' : 'Paid gas'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-4 text-zinc-500 text-sm">
+                                    Failed to load wallet info
                                 </div>
                             )}
                         </div>
