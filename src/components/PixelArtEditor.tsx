@@ -583,7 +583,7 @@ export function PixelArtEditor({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 select-none"
                     onClick={onClose}
                 >
                     <motion.div
@@ -627,18 +627,21 @@ export function PixelArtEditor({
                         {/* Canvas */}
                         <div className="flex justify-center mb-4">
                             <div
-                                className="border-2 border-zinc-700 rounded-lg overflow-hidden"
-                                style={{ touchAction: "none" }}
+                                className="border-2 border-zinc-700 rounded-lg overflow-hidden select-none"
+                                style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none" }}
                             >
                                 <canvas
                                     ref={canvasRef}
                                     width={CANVAS_SIZE * PIXEL_SIZE}
                                     height={CANVAS_SIZE * PIXEL_SIZE}
-                                    className="cursor-crosshair"
+                                    className="cursor-crosshair select-none"
                                     style={{
                                         width: "100%",
                                         maxWidth: CANVAS_SIZE * PIXEL_SIZE,
                                         imageRendering: "pixelated",
+                                        touchAction: "none",
+                                        WebkitUserSelect: "none",
+                                        userSelect: "none",
                                     }}
                                     onMouseDown={handleMouseDown}
                                     onMouseMove={handleMouseMove}

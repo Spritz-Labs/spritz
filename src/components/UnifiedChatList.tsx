@@ -332,7 +332,7 @@ export function UnifiedChatList({
     }, [activeFolder]);
 
     return (
-        <div className="space-y-1.5 sm:space-y-3">
+        <div className="space-y-1.5 sm:space-y-3 select-none">
             {/* Folder Tabs - Horizontal scrollable */}
             <div 
                 ref={tabsRef}
@@ -408,8 +408,12 @@ export function UnifiedChatList({
                         return (
                             <motion.div
                                 key={chat.id}
-                                className="relative"
-                                onTouchStart={() => handleTouchStart(chat.id)}
+                                className="relative select-none"
+                                onTouchStart={(e) => {
+                                    // Prevent text selection on long press
+                                    e.currentTarget.style.webkitUserSelect = 'none';
+                                    handleTouchStart(chat.id);
+                                }}
                                 onTouchEnd={handleTouchEnd}
                                 onTouchCancel={handleTouchEnd}
                                 onContextMenu={(e) => {
