@@ -77,10 +77,10 @@ export async function GET(
             );
         }
 
-        // Check if user has public landing enabled
+        // Check if user has public landing enabled and get avatar preferences
         const { data: settings, error: settingsError } = await supabase
             .from("shout_user_settings")
-            .select("public_landing_enabled, public_bio")
+            .select("public_landing_enabled, public_bio, custom_avatar_url, use_custom_avatar")
             .eq("wallet_address", normalizedAddress)
             .single();
 
@@ -161,13 +161,20 @@ export async function GET(
             .eq("wallet_address", normalizedAddress)
             .single();
 
+        // Determine which avatar to use based on user preference
+        // If useCustomAvatar is true and they have a custom avatar, use it
+        // Otherwise, fall back to ENS avatar
+        const avatarUrl = (settings?.use_custom_avatar && settings?.custom_avatar_url)
+            ? settings.custom_avatar_url
+            : ensAvatar;
+
         return NextResponse.json({
             user: {
                 address: normalizedAddress,
                 name: user?.display_name || usernameData?.username || null,
                 username: usernameData?.username || null,
                 ensName: ensName,
-                avatarUrl: ensAvatar,
+                avatarUrl: avatarUrl,
                 bio: settings?.public_bio || null,
             },
             socials: socials || [],
