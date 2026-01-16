@@ -2,12 +2,27 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from "@dnd-kit/core";
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { 
     BaseWidget, 
     WidgetType, 
-    WidgetSize,
     WIDGET_METADATA,
-    getGridSpanClasses,
     ProfileTheme,
     DEFAULT_THEMES,
 } from "./ProfileWidgetTypes";
@@ -24,6 +39,81 @@ interface ProfileWidgetEditorProps {
 
 type EditorTab = 'widgets' | 'theme' | 'preview';
 
+// Sortable widget item component
+function SortableWidgetItem({
+    widget,
+    index,
+    totalCount,
+    onEdit,
+    onDelete,
+}: {
+    widget: BaseWidget;
+    index: number;
+    totalCount: number;
+    onEdit: () => void;
+    onDelete: () => void;
+}) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: widget.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        zIndex: isDragging ? 50 : 'auto',
+    };
+
+    const meta = WIDGET_METADATA[widget.widget_type];
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            className={`flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-xl ${
+                isDragging ? 'shadow-xl ring-2 ring-orange-500/50' : ''
+            }`}
+        >
+            {/* Drag Handle */}
+            <button
+                {...attributes}
+                {...listeners}
+                className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center cursor-grab active:cursor-grabbing touch-none"
+            >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+            </button>
+            
+            <span className="text-2xl">{meta?.icon || '📦'}</span>
+            <div className="flex-1">
+                <p className="text-white font-medium">{meta?.name || widget.widget_type}</p>
+                <p className="text-zinc-500 text-sm">{widget.size}</p>
+            </div>
+            
+            <div className="flex items-center gap-1">
+                <button
+                    onClick={onEdit}
+                    className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center"
+                >
+                    ✏️
+                </button>
+                <button
+                    onClick={onDelete}
+                    className="w-8 h-8 rounded-lg bg-zinc-800 text-red-400 hover:text-red-300 flex items-center justify-center"
+                >
+                    🗑️
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export function ProfileWidgetEditor({
     widgets,
     theme,
@@ -36,6 +126,33 @@ export function ProfileWidgetEditor({
     const [showAddWidget, setShowAddWidget] = useState(false);
     const [editingWidget, setEditingWidget] = useState<BaseWidget | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+    // Drag and drop sensors
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8, // 8px movement required before drag starts
+            },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    // Handle drag end
+    const handleDragEnd = useCallback((event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (over && active.id !== over.id) {
+            const oldIndex = widgets.findIndex((w) => w.id === active.id);
+            const newIndex = widgets.findIndex((w) => w.id === over.id);
+
+            const newWidgets = arrayMove(widgets, oldIndex, newIndex);
+            // Update positions
+            newWidgets.forEach((w, i) => (w.position = i));
+            onWidgetsChange(newWidgets);
+        }
+    }, [widgets, onWidgetsChange]);
 
     // Group widgets by category
     const widgetsByCategory = Object.entries(WIDGET_METADATA).reduce((acc, [type, meta]) => {
@@ -93,22 +210,6 @@ export function ProfileWidgetEditor({
         setEditingWidget(null);
     }, [widgets, onWidgetsChange]);
 
-    // Move widget
-    const handleMoveWidget = useCallback((widgetId: string, direction: 'up' | 'down') => {
-        const index = widgets.findIndex(w => w.id === widgetId);
-        if (index === -1) return;
-        
-        const newIndex = direction === 'up' ? index - 1 : index + 1;
-        if (newIndex < 0 || newIndex >= widgets.length) return;
-        
-        const newWidgets = [...widgets];
-        [newWidgets[index], newWidgets[newIndex]] = [newWidgets[newIndex], newWidgets[index]];
-        
-        // Update positions
-        newWidgets.forEach((w, i) => w.position = i);
-        onWidgetsChange(newWidgets);
-    }, [widgets, onWidgetsChange]);
-
     const activeTheme = theme || DEFAULT_THEMES.dark as ProfileTheme;
 
     return (
@@ -163,53 +264,37 @@ export function ProfileWidgetEditor({
                             Add Widget
                         </button>
 
-                        {/* Widget List */}
-                        <div className="space-y-3">
-                            {widgets.map((widget, index) => {
-                                const meta = WIDGET_METADATA[widget.widget_type];
-                                return (
-                                    <div
-                                        key={widget.id}
-                                        className="flex items-center gap-3 p-4 bg-zinc-900 border border-zinc-800 rounded-xl"
-                                    >
-                                        <span className="text-2xl">{meta?.icon || '📦'}</span>
-                                        <div className="flex-1">
-                                            <p className="text-white font-medium">{meta?.name || widget.widget_type}</p>
-                                            <p className="text-zinc-500 text-sm">{widget.size}</p>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={() => handleMoveWidget(widget.id, 'up')}
-                                                disabled={index === 0}
-                                                className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-30 flex items-center justify-center"
-                                            >
-                                                ↑
-                                            </button>
-                                            <button
-                                                onClick={() => handleMoveWidget(widget.id, 'down')}
-                                                disabled={index === widgets.length - 1}
-                                                className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-30 flex items-center justify-center"
-                                            >
-                                                ↓
-                                            </button>
-                                            <button
-                                                onClick={() => setEditingWidget(widget)}
-                                                className="w-8 h-8 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center"
-                                            >
-                                                ✏️
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteWidget(widget.id)}
-                                                className="w-8 h-8 rounded-lg bg-zinc-800 text-red-400 hover:text-red-300 flex items-center justify-center"
-                                            >
-                                                🗑️
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        {/* Widget List with Drag and Drop */}
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <SortableContext
+                                items={widgets.map((w) => w.id)}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                <div className="space-y-3">
+                                    {widgets.map((widget, index) => (
+                                        <SortableWidgetItem
+                                            key={widget.id}
+                                            widget={widget}
+                                            index={index}
+                                            totalCount={widgets.length}
+                                            onEdit={() => setEditingWidget(widget)}
+                                            onDelete={() => handleDeleteWidget(widget.id)}
+                                        />
+                                    ))}
+                                </div>
+                            </SortableContext>
+                        </DndContext>
+
+                        {/* Drag hint */}
+                        {widgets.length > 1 && (
+                            <p className="text-zinc-500 text-xs text-center mt-2">
+                                Drag widgets to reorder them
+                            </p>
+                        )}
 
                         {widgets.length === 0 && (
                             <div className="text-center py-12">
@@ -346,7 +431,7 @@ export function ProfileWidgetEditor({
                                     <button
                                         key={cat.id}
                                         onClick={() => setSelectedCategory(cat.id)}
-                                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                        className={`shrink-0 px-3 py-1.5 rounded-lg text-sm transition-colors ${
                                             selectedCategory === cat.id
                                                 ? 'bg-orange-500 text-white'
                                                 : 'bg-zinc-800 text-zinc-400 hover:text-white'
