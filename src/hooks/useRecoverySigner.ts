@@ -1,10 +1,22 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useAccount, useSignMessage, useSignTypedData, useSwitchChain, useChainId } from "wagmi";
+import { useAccount, useSignMessage, useSignTypedData, useChainId } from "wagmi";
 import { type Address, isAddress } from "viem";
 import { addRecoverySigner, addRecoverySignerWithWallet } from "@/lib/safeWallet";
 import type { PasskeyCredential } from "@/lib/safeWallet";
+
+// Chain name mapping for user-friendly error messages
+const CHAIN_NAMES: Record<number, string> = {
+    1: "Ethereum",
+    8453: "Base",
+    42161: "Arbitrum",
+    10: "Optimism",
+    137: "Polygon",
+    56: "BNB Chain",
+    43114: "Avalanche",
+    1301: "Unichain",
+};
 
 export type RecoveryInfo = {
     safeAddress: Address;
@@ -33,7 +45,6 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
     const { address: walletAddress } = useAccount();
     const { signMessageAsync } = useSignMessage();
     const { signTypedDataAsync } = useSignTypedData();
-    const { switchChainAsync } = useSwitchChain();
     const currentChainId = useChainId();
     
     const [recoveryInfo, setRecoveryInfo] = useState<RecoveryInfo | null>(null);
@@ -145,17 +156,14 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
         setTxHash(null);
 
         try {
-            // Switch to the target chain if not already on it
+            // Check if on the correct chain - don't auto-switch to avoid modal issues
             if (currentChainId !== chainId) {
-                console.log(`[useRecoverySigner] Switching chain from ${currentChainId} to ${chainId}`);
-                try {
-                    await switchChainAsync({ chainId });
-                } catch (switchError) {
-                    console.error("[useRecoverySigner] Chain switch error:", switchError);
-                    setError(`Please switch to the correct network in your wallet`);
-                    setStatus("error");
-                    return null;
-                }
+                const targetChainName = CHAIN_NAMES[chainId] || `Chain ${chainId}`;
+                const currentChainName = CHAIN_NAMES[currentChainId] || `Chain ${currentChainId}`;
+                console.log(`[useRecoverySigner] Wrong chain: on ${currentChainName}, need ${targetChainName}`);
+                setError(`Please switch to ${targetChainName} in your wallet first (currently on ${currentChainName})`);
+                setStatus("error");
+                return null;
             }
 
             const hash = await addRecoverySignerWithWallet(
@@ -193,7 +201,7 @@ export function useRecoverySigner(): UseRecoverySignerReturn {
             setStatus("error");
             return null;
         }
-    }, [recoveryInfo?.safeAddress, walletAddress, signMessageAsync, signTypedDataAsync, fetchRecoveryInfo, currentChainId, switchChainAsync]);
+    }, [recoveryInfo?.safeAddress, walletAddress, signMessageAsync, signTypedDataAsync, fetchRecoveryInfo, currentChainId]);
 
     return {
         recoveryInfo,
