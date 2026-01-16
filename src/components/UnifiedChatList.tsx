@@ -300,7 +300,7 @@ export function UnifiedChatList({
     }, [longPressTimer]);
 
     // Handle folder assignment
-    const handleAssignFolder = useCallback((chatId: string, emoji: string | null) => {
+    const handleAssignFolder = useCallback((chatId: string, emoji: string | null, chatType: "dm" | "group" | "channel" | "global" = "dm") => {
         if (emoji) {
             // Make sure folder exists
             const folder = allAvailableFolders.find(f => f.emoji === emoji);
@@ -308,7 +308,7 @@ export function UnifiedChatList({
                 addFolder(folder.emoji, folder.label);
             }
         }
-        assignChat(chatId, emoji);
+        assignChat(chatId, emoji, chatType);
         setShowFolderPicker(null);
     }, [allAvailableFolders, addFolder, assignChat]);
 
@@ -588,7 +588,7 @@ export function UnifiedChatList({
                                                 {/* Remove from folder option */}
                                                 {chatFolder && (
                                                     <button
-                                                        onClick={() => handleAssignFolder(chat.id, null)}
+                                                        onClick={() => handleAssignFolder(chat.id, null, chat.type)}
                                                         className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-sm"
                                                     >
                                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -603,7 +603,7 @@ export function UnifiedChatList({
                                                     {allAvailableFolders.map(folder => (
                                                         <button
                                                             key={folder.emoji}
-                                                            onClick={() => handleAssignFolder(chat.id, folder.emoji)}
+                                                            onClick={() => handleAssignFolder(chat.id, folder.emoji, chat.type)}
                                                             className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all ${
                                                                 chatFolder === folder.emoji
                                                                     ? "bg-[#FF5500]/20 ring-2 ring-[#FF5500]"
