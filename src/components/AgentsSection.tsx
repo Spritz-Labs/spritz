@@ -112,6 +112,7 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
         name?: string;
         personality?: string;
         avatarEmoji?: string;
+        avatarUrl?: string | null;
         visibility?: "private" | "friends" | "public";
         tags?: string[];
         webSearchEnabled?: boolean;
@@ -330,9 +331,17 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                         onClick={() => handleOpenChat(agent)}
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-xl shrink-0">
-                                                {agent.avatar_emoji}
-                                            </div>
+                                            {agent.avatar_url ? (
+                                                <img
+                                                    src={agent.avatar_url}
+                                                    alt={agent.name}
+                                                    className="w-10 h-10 rounded-xl object-cover shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-xl shrink-0">
+                                                    {agent.avatar_emoji}
+                                                </div>
+                                            )}
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
                                                     <h3 className="font-medium text-white truncate">{agent.name}</h3>
@@ -430,9 +439,17 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                 onClick={() => handleOpenFavoriteChat(fav.agent)}
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center text-xl shrink-0">
-                                                        {fav.agent.avatar_emoji}
-                                                    </div>
+                                                    {fav.agent.avatar_url ? (
+                                                        <img
+                                                            src={fav.agent.avatar_url}
+                                                            alt={fav.agent.name}
+                                                            className="w-10 h-10 rounded-xl object-cover shrink-0"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center text-xl shrink-0">
+                                                            {fav.agent.avatar_emoji}
+                                                        </div>
+                                                    )}
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
                                                             <h3 className="font-medium text-white truncate">{fav.agent.name}</h3>

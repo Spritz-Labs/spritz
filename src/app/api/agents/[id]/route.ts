@@ -79,7 +79,8 @@ export async function PATCH(
             userAddress: bodyUserAddress, 
             name, 
             personality, 
-            avatarEmoji, 
+            avatarEmoji,
+            avatarUrl,
             visibility, 
             webSearchEnabled, 
             useKnowledgeBase,
@@ -133,6 +134,7 @@ export async function PATCH(
                 : `You are an AI assistant named "${agentName}". Be helpful and friendly.`;
         }
         if (avatarEmoji !== undefined) updates.avatar_emoji = avatarEmoji;
+        if (avatarUrl !== undefined) updates.avatar_url = avatarUrl;
         if (visibility !== undefined) updates.visibility = visibility;
         if (webSearchEnabled !== undefined) updates.web_search_enabled = webSearchEnabled;
         if (useKnowledgeBase !== undefined) updates.use_knowledge_base = useKnowledgeBase;

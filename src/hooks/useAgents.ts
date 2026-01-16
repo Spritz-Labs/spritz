@@ -38,6 +38,7 @@ export type Agent = {
     system_instructions: string | null;
     model: string;
     avatar_emoji: string;
+    avatar_url?: string | null;
     visibility: "private" | "friends" | "public";
     web_search_enabled: boolean;
     use_knowledge_base: boolean;
@@ -170,6 +171,7 @@ export function useAgents(userAddress: string | null) {
             name?: string;
             personality?: string;
             avatarEmoji?: string;
+            avatarUrl?: string | null;
             visibility?: "private" | "friends" | "public";
             tags?: string[];
             webSearchEnabled?: boolean;

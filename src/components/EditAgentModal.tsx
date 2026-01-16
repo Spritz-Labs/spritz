@@ -34,6 +34,7 @@ interface EditAgentModalProps {
         name?: string;
         personality?: string;
         avatarEmoji?: string;
+        avatarUrl?: string | null;
         visibility?: "private" | "friends" | "public";
         tags?: string[];
         webSearchEnabled?: boolean;
@@ -61,6 +62,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
     const [name, setName] = useState("");
     const [personality, setPersonality] = useState("");
     const [emoji, setEmoji] = useState("🤖");
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
@@ -144,6 +147,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
         name: string;
         personality: string;
         emoji: string;
+        avatarUrl: string | null;
         visibility: "private" | "friends" | "public";
         tags: string[];
         webSearchEnabled: boolean;
@@ -166,6 +170,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
             const agentName = agent.name;
             const agentPersonality = agent.personality || "";
             const agentEmoji = agent.avatar_emoji || "🤖";
+            const agentAvatarUrl = agent.avatar_url || null;
             const agentVisibility = agent.visibility;
             const agentTags = agent.tags || [];
             const agentWebSearch = agent.web_search_enabled !== false;
@@ -185,6 +190,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
             setName(agentName);
             setPersonality(agentPersonality);
             setEmoji(agentEmoji);
+            setAvatarUrl(agentAvatarUrl);
             setVisibility(agentVisibility);
             setTags(agentTags);
             setTagInput("");
@@ -209,6 +215,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                 name: agentName,
                 personality: agentPersonality,
                 emoji: agentEmoji,
+                avatarUrl: agentAvatarUrl,
                 visibility: agentVisibility,
                 tags: agentTags,
                 webSearchEnabled: agentWebSearch,
@@ -398,6 +405,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                 name: name.trim(),
                 personality: personality.trim(),
                 avatarEmoji: emoji,
+                avatarUrl,
                 visibility,
                 tags,
                 webSearchEnabled,
@@ -426,6 +434,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
         name !== originalValues.name ||
         personality !== originalValues.personality ||
         emoji !== originalValues.emoji ||
+        avatarUrl !== originalValues.avatarUrl ||
         visibility !== originalValues.visibility ||
         JSON.stringify(tags) !== JSON.stringify(originalValues.tags) ||
         webSearchEnabled !== originalValues.webSearchEnabled ||
@@ -535,17 +544,104 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                         />
                                     </div>
 
-                                    {/* Emoji */}
+                                    {/* Avatar */}
                                     <div>
                                         <label className="block text-sm font-medium text-zinc-300 mb-2">Avatar</label>
+                                        
+                                        {/* Current Avatar Preview */}
+                                        <div className="flex items-center gap-4 mb-3">
+                                            <div className="relative">
+                                                {avatarUrl ? (
+                                                    <img
+                                                        src={avatarUrl}
+                                                        alt="Agent avatar"
+                                                        className="w-16 h-16 rounded-xl object-cover border-2 border-purple-500"
+                                                    />
+                                                ) : (
+                                                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-3xl border-2 border-purple-500">
+                                                        {emoji}
+                                                    </div>
+                                                )}
+                                                {isUploadingAvatar && (
+                                                    <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
+                                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="flex flex-col gap-2">
+                                                <label className="px-3 py-1.5 text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 rounded-lg cursor-pointer transition-colors">
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="hidden"
+                                                        onChange={async (e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (!file) return;
+                                                            
+                                                            if (!file.type.startsWith('image/')) {
+                                                                setError('Please select an image file');
+                                                                return;
+                                                            }
+                                                            if (file.size > 5 * 1024 * 1024) {
+                                                                setError('Image must be less than 5MB');
+                                                                return;
+                                                            }
+
+                                                            setIsUploadingAvatar(true);
+                                                            setError(null);
+
+                                                            try {
+                                                                const formData = new FormData();
+                                                                formData.append('file', file);
+
+                                                                const res = await fetch('/api/upload?type=avatar', {
+                                                                    method: 'POST',
+                                                                    body: formData,
+                                                                });
+
+                                                                if (!res.ok) {
+                                                                    const data = await res.json();
+                                                                    throw new Error(data.error || 'Failed to upload');
+                                                                }
+
+                                                                const { url } = await res.json();
+                                                                setAvatarUrl(url);
+                                                            } catch (err) {
+                                                                setError(err instanceof Error ? err.message : 'Upload failed');
+                                                            } finally {
+                                                                setIsUploadingAvatar(false);
+                                                                e.target.value = '';
+                                                            }
+                                                        }}
+                                                    />
+                                                    {isUploadingAvatar ? 'Uploading...' : 'Upload Image'}
+                                                </label>
+                                                {avatarUrl && (
+                                                    <button
+                                                        onClick={() => setAvatarUrl(null)}
+                                                        className="px-3 py-1.5 text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors"
+                                                    >
+                                                        Remove Image
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Emoji Picker (fallback when no image) */}
+                                        <p className="text-xs text-zinc-500 mb-2">
+                                            {avatarUrl ? 'Or choose an emoji as fallback:' : 'Or choose an emoji:'}
+                                        </p>
                                         <div className="flex flex-wrap gap-2">
                                             {AGENT_EMOJIS.map((e) => (
                                                 <button
                                                     key={e}
                                                     onClick={() => setEmoji(e)}
                                                     className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${
-                                                        emoji === e
+                                                        emoji === e && !avatarUrl
                                                             ? "bg-purple-500/30 border-2 border-purple-500 scale-110"
+                                                            : emoji === e
+                                                            ? "bg-purple-500/20 border border-purple-500/50"
                                                             : "bg-zinc-800 border border-zinc-700 hover:border-zinc-600"
                                                     }`}
                                                 >
