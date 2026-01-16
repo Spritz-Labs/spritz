@@ -852,6 +852,17 @@ function DashboardContent({
         
         prevUnreadCountsRef.current = { ...unreadCounts };
     }, [unreadCounts]);
+
+    // Update last message time for global/alpha chat when new messages arrive
+    const prevAlphaUnreadRef = useRef<number>(0);
+    useEffect(() => {
+        if (alphaUnreadCount > prevAlphaUnreadRef.current) {
+            // New message in global chat - update timestamp
+            setLastMessageTimes(prev => ({ ...prev, "global-spritz": Date.now() }));
+        }
+        prevAlphaUnreadRef.current = alphaUnreadCount;
+    }, [alphaUnreadCount]);
+
     const markAsRead = wakuContext?.markAsRead ?? (() => {});
     const onNewMessage = wakuContext?.onNewMessage ?? (() => () => {});
     const prefetchMessages = wakuContext?.prefetchMessages ?? (() => {});
