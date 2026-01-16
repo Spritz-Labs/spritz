@@ -3480,17 +3480,17 @@ function DashboardContent({
                             )}
 
                             {/* Unified Chat List - Telegram-style with emoji folders */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6">
-                                <div className="p-4 sm:p-6 border-b border-zinc-800">
+                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
+                                <div className="px-1 py-2 sm:p-4 sm:border-b sm:border-zinc-800">
                                     <div className="flex items-center justify-between gap-2">
-                                        <h2 className="text-lg sm:text-xl font-bold text-white">
+                                        <h2 className="text-base sm:text-xl font-bold text-white">
                                             Chats
                                         </h2>
-                                        <div className="flex items-center gap-1.5 sm:gap-2">
+                                        <div className="flex items-center gap-1 sm:gap-2">
                                             {/* Add Folder Button */}
                                             <button
                                                 onClick={() => setIsCreateFolderOpen(true)}
-                                                className="w-9 h-9 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
+                                                className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
                                                 title="Create folder"
                                             >
                                                 <svg
@@ -3514,7 +3514,7 @@ function DashboardContent({
                                                 onClick={() =>
                                                     setIsBrowseChannelsOpen(true)
                                                 }
-                                                className="w-9 h-9 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
+                                                className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
                                                 title="Browse channels"
                                             >
                                                 <svg
@@ -3540,7 +3540,7 @@ function DashboardContent({
                                                         setIsCreateGroupOpen(true)
                                                     }
                                                     disabled={friends.length === 0}
-                                                    className="w-9 h-9 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50"
+                                                    className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50"
                                                     title="New group"
                                                 >
                                                     <svg
@@ -3564,7 +3564,7 @@ function DashboardContent({
                                         </div>
                                     </div>
                                 </div>
-                                <div className="p-4">
+                                <div className="px-0 sm:p-4">
                                     <UnifiedChatList
                                         chats={unifiedChats}
                                         userAddress={userAddress}
