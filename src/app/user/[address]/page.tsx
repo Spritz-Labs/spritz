@@ -322,7 +322,7 @@ export default function PublicUserPage() {
                                 className="col-span-2"
                             >
                                 <Link
-                                    href={`/schedule/${profile.scheduling.slug}`}
+                                    href={`/book/${profile.scheduling.slug}`}
                                     className="block h-full p-5 sm:p-6 rounded-2xl transition-all group"
                                     style={{
                                         backgroundColor: activeTheme.card_background,
