@@ -44,29 +44,29 @@ function renderWidget(widget: BaseWidget): React.ReactNode {
     
     switch (widget_type) {
         case 'map':
-            return <MapWidget config={config as MapWidgetConfig} size={size} />;
+            return <MapWidget config={config as unknown as MapWidgetConfig} size={size} />;
         case 'image':
-            return <ImageWidget config={config as ImageWidgetConfig} size={size} />;
+            return <ImageWidget config={config as unknown as ImageWidgetConfig} size={size} />;
         case 'text':
-            return <TextWidget config={config as TextWidgetConfig} size={size} />;
+            return <TextWidget config={config as unknown as TextWidgetConfig} size={size} />;
         case 'link':
-            return <LinkWidget config={config as LinkWidgetConfig} size={size} />;
+            return <LinkWidget config={config as unknown as LinkWidgetConfig} size={size} />;
         case 'nft':
-            return <NFTWidget config={config as NFTWidgetConfig} size={size} />;
+            return <NFTWidget config={config as unknown as NFTWidgetConfig} size={size} />;
         case 'spotify':
-            return <SpotifyWidget config={config as SpotifyWidgetConfig} size={size} />;
+            return <SpotifyWidget config={config as unknown as SpotifyWidgetConfig} size={size} />;
         case 'video':
-            return <VideoWidget config={config as VideoWidgetConfig} size={size} />;
+            return <VideoWidget config={config as unknown as VideoWidgetConfig} size={size} />;
         case 'countdown':
-            return <CountdownWidget config={config as CountdownWidgetConfig} size={size} />;
+            return <CountdownWidget config={config as unknown as CountdownWidgetConfig} size={size} />;
         case 'clock':
-            return <ClockWidget config={config as ClockWidgetConfig} size={size} />;
+            return <ClockWidget config={config as unknown as ClockWidgetConfig} size={size} />;
         case 'tech_stack':
-            return <TechStackWidget config={config as TechStackWidgetConfig} size={size} />;
+            return <TechStackWidget config={config as unknown as TechStackWidgetConfig} size={size} />;
         case 'currently':
-            return <CurrentlyWidget config={config as CurrentlyWidgetConfig} size={size} />;
+            return <CurrentlyWidget config={config as unknown as CurrentlyWidgetConfig} size={size} />;
         case 'stats':
-            return <StatsWidget config={config as StatsWidgetConfig} size={size} />;
+            return <StatsWidget config={config as unknown as StatsWidgetConfig} size={size} />;
         default:
             // Fallback for unknown widget types
             return (

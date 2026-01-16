@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session";
+import { getSession } from "@/lib/session";
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-);
+function getSupabaseClient() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_KEY;
+    
+    if (!url || !key) {
+        throw new Error("Supabase not configured");
+    }
+    
+    return createClient(url, key);
+}
 
 // GET - Fetch user's widgets
 export async function GET(request: NextRequest) {
     try {
+        const supabase = getSupabaseClient();
+        
         // Check if fetching for a specific user (public view)
         const { searchParams } = new URL(request.url);
         const userAddress = searchParams.get("address");
@@ -37,17 +44,16 @@ export async function GET(request: NextRequest) {
         }
         
         // Private view - fetch current user's widgets
-        const cookieStore = await cookies();
-        const session = await verifySession(cookieStore);
+        const session = await getSession();
         
-        if (!session?.address) {
+        if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
         
         const { data: widgets, error } = await supabase
             .from("profile_widgets")
             .select("*")
-            .eq("user_address", session.address.toLowerCase())
+            .eq("user_address", session.userAddress.toLowerCase())
             .order("position", { ascending: true });
         
         if (error) throw error;
@@ -56,7 +62,7 @@ export async function GET(request: NextRequest) {
         const { data: theme } = await supabase
             .from("profile_themes")
             .select("*")
-            .eq("user_address", session.address.toLowerCase())
+            .eq("user_address", session.userAddress.toLowerCase())
             .single();
         
         return NextResponse.json({ widgets: widgets || [], theme });
@@ -72,13 +78,13 @@ export async function GET(request: NextRequest) {
 // POST - Create a new widget
 export async function POST(request: NextRequest) {
     try {
-        const cookieStore = await cookies();
-        const session = await verifySession(cookieStore);
+        const session = await getSession();
         
-        if (!session?.address) {
+        if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
         
+        const supabase = getSupabaseClient();
         const body = await request.json();
         const { widget_type, size, position, config } = body;
         
@@ -93,7 +99,7 @@ export async function POST(request: NextRequest) {
         const { data: existing } = await supabase
             .from("profile_widgets")
             .select("position")
-            .eq("user_address", session.address.toLowerCase())
+            .eq("user_address", session.userAddress.toLowerCase())
             .order("position", { ascending: false })
             .limit(1);
         
@@ -102,7 +108,7 @@ export async function POST(request: NextRequest) {
         const { data: widget, error } = await supabase
             .from("profile_widgets")
             .insert({
-                user_address: session.address.toLowerCase(),
+                user_address: session.userAddress.toLowerCase(),
                 widget_type,
                 size: size || '1x1',
                 position: newPosition,
@@ -126,13 +132,13 @@ export async function POST(request: NextRequest) {
 // PUT - Update widgets (bulk update for reordering)
 export async function PUT(request: NextRequest) {
     try {
-        const cookieStore = await cookies();
-        const session = await verifySession(cookieStore);
+        const session = await getSession();
         
-        if (!session?.address) {
+        if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
         
+        const supabase = getSupabaseClient();
         const body = await request.json();
         const { widgets } = body;
         
@@ -154,7 +160,7 @@ export async function PUT(request: NextRequest) {
                     ...(w.is_visible !== undefined && { is_visible: w.is_visible }),
                 })
                 .eq("id", w.id)
-                .eq("user_address", session.address.toLowerCase())
+                .eq("user_address", session.userAddress.toLowerCase())
         );
         
         await Promise.all(updates);
@@ -172,13 +178,13 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete a widget
 export async function DELETE(request: NextRequest) {
     try {
-        const cookieStore = await cookies();
-        const session = await verifySession(cookieStore);
+        const session = await getSession();
         
-        if (!session?.address) {
+        if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
         
+        const supabase = getSupabaseClient();
         const { searchParams } = new URL(request.url);
         const widgetId = searchParams.get("id");
         
@@ -193,7 +199,7 @@ export async function DELETE(request: NextRequest) {
             .from("profile_widgets")
             .delete()
             .eq("id", widgetId)
-            .eq("user_address", session.address.toLowerCase());
+            .eq("user_address", session.userAddress.toLowerCase());
         
         if (error) throw error;
         

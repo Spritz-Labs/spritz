@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session";
+import { getSession } from "@/lib/session";
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-);
+function getSupabaseClient() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_KEY;
+    
+    if (!url || !key) {
+        throw new Error("Supabase not configured");
+    }
+    
+    return createClient(url, key);
+}
 
 // GET - Fetch user's theme
 export async function GET(request: NextRequest) {
@@ -21,6 +26,7 @@ export async function GET(request: NextRequest) {
             );
         }
         
+        const supabase = getSupabaseClient();
         const { data: theme, error } = await supabase
             .from("profile_themes")
             .select("*")
@@ -44,10 +50,9 @@ export async function GET(request: NextRequest) {
 // POST/PUT - Save user's theme
 export async function POST(request: NextRequest) {
     try {
-        const cookieStore = await cookies();
-        const session = await verifySession(cookieStore);
+        const session = await getSession();
         
-        if (!session?.address) {
+        if (!session?.userAddress) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
         
@@ -67,10 +72,11 @@ export async function POST(request: NextRequest) {
         } = body;
         
         // Upsert theme
+        const supabase = getSupabaseClient();
         const { data: theme, error } = await supabase
             .from("profile_themes")
             .upsert({
-                user_address: session.address.toLowerCase(),
+                user_address: session.userAddress.toLowerCase(),
                 background_type: background_type || 'solid',
                 background_value: background_value || '#09090b',
                 accent_color: accent_color || '#f97316',
