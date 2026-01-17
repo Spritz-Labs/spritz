@@ -253,42 +253,45 @@ async function getOrCreateMessagingKeypair(userAddress?: string): Promise<Messag
         throw new Error("Cannot access keypair in SSR");
     }
     
+    let keypair: MessagingKeypair | null = null;
+    let isExisting = false;
+    
     // Check if we already have a keypair locally
     const stored = localStorage.getItem(MESSAGING_KEYPAIR_STORAGE);
     if (stored) {
         try {
-            return JSON.parse(stored) as MessagingKeypair;
+            keypair = JSON.parse(stored) as MessagingKeypair;
+            isExisting = true;
         } catch {
             // Corrupted, regenerate
         }
     }
     
-    // NOTE: We no longer auto-restore from cloud here.
-    // Cloud restore is handled explicitly via KeyBackupModal with PIN verification.
+    // Generate new keypair if needed
+    if (!keypair) {
+        // Generate new ECDH keypair using P-256 curve
+        const keyPair = await crypto.subtle.generateKey(
+            { name: "ECDH", namedCurve: "P-256" },
+            true, // extractable
+            ["deriveBits"]
+        );
+        
+        // Export keys for storage
+        const publicKeyBuffer = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+        const privateKeyBuffer = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+        
+        keypair = {
+            publicKey: btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer))),
+            privateKey: btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer))),
+        };
+        
+        // Store locally
+        localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify(keypair));
+    }
     
-    // Generate new ECDH keypair using P-256 curve
-    const keyPair = await crypto.subtle.generateKey(
-        { name: "ECDH", namedCurve: "P-256" },
-        true, // extractable
-        ["deriveBits"]
-    );
-    
-    // Export keys for storage
-    const publicKeyBuffer = await crypto.subtle.exportKey("raw", keyPair.publicKey);
-    const privateKeyBuffer = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-    
-    const keypair: MessagingKeypair = {
-        publicKey: btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer))),
-        privateKey: btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer))),
-    };
-    
-    // Store locally only - NO automatic cloud backup
-    // Users can opt-in to cloud backup via Settings → Message Encryption Key
-    localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify(keypair));
-    
-    // Store PUBLIC key in Supabase (needed for ECDH key exchange with others)
-    // This is intentionally public - only the public key is uploaded
-    if (userAddress && supabase) {
+    // ALWAYS ensure public key is in Supabase (needed for ECDH key exchange)
+    // This fixes the bug where existing keypairs didn't have their public key uploaded
+    if (userAddress && supabase && keypair) {
         try {
             await supabase
                 .from("shout_user_settings")
@@ -299,6 +302,10 @@ async function getOrCreateMessagingKeypair(userAddress?: string): Promise<Messag
                 }, {
                     onConflict: "wallet_address",
                 });
+            
+            if (isExisting) {
+                log.debug("[Waku] Uploaded existing keypair's public key to Supabase");
+            }
         } catch (err) {
             log.warn("[Waku] Failed to store public key:", err);
         }
@@ -935,8 +942,11 @@ export function WakuProvider({
      * Old (INSECURE): key = SHA256(addresses) - Anyone could compute this!
      * New (SECURE): key = ECDH(myPrivateKey, peerPublicKey)
      *
+     * IMPORTANT: Uses ECDH only if BOTH users have public keys registered.
+     * This ensures sender and receiver always use the same key type.
+     *
      * Returns both keys to enable:
-     * - Encrypting NEW messages with ECDH key (when available)
+     * - Encrypting NEW messages with ECDH key (when BOTH users have public keys)
      * - Decrypting OLD messages with legacy key (backward compatibility)
      */
     const getDmSymmetricKey = useCallback(
@@ -953,13 +963,19 @@ export function WakuProvider({
             let isSecure = false;
             
             try {
-                // Get our keypair (will restore from cloud if on new device)
+                // Get our keypair and ensure our public key is in Supabase
                 const myKeypair = await getOrCreateMessagingKeypair(userAddress);
 
-                // Fetch peer's public key
-                const peerPublicKeyBase64 = await fetchPeerPublicKey(peerAddress);
+                // Fetch BOTH public keys to ensure consistency
+                // We only use ECDH if BOTH users have their public keys registered
+                const [peerPublicKeyBase64, myPublicKeyInDb] = await Promise.all([
+                    fetchPeerPublicKey(peerAddress),
+                    fetchPeerPublicKey(userAddress), // Check our own key is in DB
+                ]);
 
-                if (peerPublicKeyBase64) {
+                // Only use ECDH if BOTH public keys are available
+                // This ensures sender and receiver will use the same key
+                if (peerPublicKeyBase64 && myPublicKeyInDb) {
                     // ECDH key exchange
                     const myPrivateKey = await importPrivateKey(myKeypair.privateKey);
                     const peerPublicKey = await importPublicKey(peerPublicKeyBase64);
@@ -980,16 +996,20 @@ export function WakuProvider({
                     ecdhKey = new Uint8Array(await crypto.subtle.digest("SHA-256", combined));
                     isSecure = true;
 
-                    log.debug("[Waku] ECDH key exchange successful (secure)");
+                    log.debug("[Waku] ECDH key exchange successful (both users have public keys)");
                 } else {
-                    log.debug("[Waku] Peer hasn't registered public key yet, using legacy only");
+                    if (!myPublicKeyInDb) {
+                        log.debug("[Waku] Own public key not in DB yet, using legacy");
+                    } else if (!peerPublicKeyBase64) {
+                        log.debug("[Waku] Peer hasn't registered public key yet, using legacy");
+                    }
                 }
             } catch (err) {
                 log.warn("[Waku] ECDH key derivation failed:", err);
             }
 
             return {
-                encryptionKey: ecdhKey || legacyKey, // Use ECDH for encryption if available
+                encryptionKey: ecdhKey || legacyKey, // Use ECDH only if BOTH users ready
                 legacyKey,
                 isSecure,
                 ecdhKey,
