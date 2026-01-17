@@ -25,6 +25,7 @@ import { ChannelChatModal } from "./ChannelChatModal";
 import { useChannels } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
 import { UsernameClaimModal } from "./UsernameClaimModal";
+import { PasskeyPromptModal } from "./PasskeyPromptModal";
 import { PhoneVerificationModal } from "./PhoneVerificationModal";
 import { XMTPProvider, useXMTPContext } from "@/context/WakuProvider";
 import { useUsername } from "@/hooks/useUsername";
@@ -68,7 +69,6 @@ import { AgentsSection } from "./AgentsSection";
 import { useBetaAccess } from "@/hooks/useBetaAccess";
 import Link from "next/link";
 import { GoLiveModal } from "./GoLiveModal";
-import { PasskeyManager } from "./PasskeyManager";
 import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
@@ -126,9 +126,9 @@ function DashboardContent({
     const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
     const [isUsernameModalOpen, setIsUsernameModalOpen] = useState(false);
     const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+    const [showPasskeyPrompt, setShowPasskeyPrompt] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isQRCodeModalOpen, setIsQRCodeModalOpen] = useState(false);
-    const [isPasskeyManagerOpen, setIsPasskeyManagerOpen] = useState(false);
     const [isSocialsModalOpen, setIsSocialsModalOpen] = useState(false);
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
     const [isInvitesModalOpen, setIsInvitesModalOpen] = useState(false);
@@ -311,15 +311,6 @@ function DashboardContent({
         }
     }, [dailyBonusAvailable, dailyBonusClaimed]);
 
-    // Prevent body scroll when PasskeyManager modal is open (fixes PWA scroll bleed-through)
-    useEffect(() => {
-        if (isPasskeyManagerOpen) {
-            document.body.style.overflow = "hidden";
-        }
-        return () => {
-            document.body.style.overflow = "";
-        };
-    }, [isPasskeyManagerOpen]);
 
     // Handle claiming daily bonus
     const handleClaimDailyBonus = async () => {
@@ -2533,43 +2524,6 @@ function DashboardContent({
                                                     )}
                                                 </button>
 
-                                                {/* Passkeys */}
-                                                <button
-                                                    onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setIsPasskeyManagerOpen(
-                                                            true
-                                                        );
-                                                    }}
-                                                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
-                                                >
-                                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#FF5500]/20">
-                                                        <svg
-                                                            className="w-4 h-4 text-[#FF5500]"
-                                                            fill="none"
-                                                            viewBox="0 0 24 24"
-                                                            stroke="currentColor"
-                                                        >
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={2}
-                                                                d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"
-                                                            />
-                                                        </svg>
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-white text-sm font-medium">
-                                                            Passkeys
-                                                        </p>
-                                                        <p className="text-xs text-zinc-500">
-                                                            Manage biometric login
-                                                        </p>
-                                                    </div>
-                                                </button>
-
                                                 {/* 6. ENS/SNS Name Service */}
                                                 {isSolanaUser ? (
                                                     // Solana users - show SNS link
@@ -4279,9 +4233,38 @@ function DashboardContent({
                 onClose={() => setIsUsernameModalOpen(false)}
                 userAddress={userAddress}
                 currentUsername={reachUsername}
-                onSuccess={(username) => {
-                    // If username is empty string, it was removed
-                    // Otherwise, it was updated/claimed
+                onSuccess={async (username) => {
+                    // If username is empty string, it was removed - just refresh
+                    if (!username) {
+                        window.location.reload();
+                        return;
+                    }
+                    
+                    // Check if user needs passkey prompt (Email, Digital ID, or Solana users)
+                    // Wallet users and existing passkey users don't need this
+                    const needsPasskey = isEmailUser || isSolanaUser || 
+                        // World ID and Alien ID users (identified by non-0x address that's not Solana base58)
+                        (!userAddress.startsWith("0x") && !isSolanaUser);
+                    
+                    if (needsPasskey && !isPasskeyUser) {
+                        // Check if user already has a passkey
+                        try {
+                            const res = await fetch("/api/passkey/credentials", {
+                                credentials: "include",
+                            });
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (!data.credentials || data.credentials.length === 0) {
+                                    // No passkey yet - show the prompt
+                                    setShowPasskeyPrompt(true);
+                                    return;
+                                }
+                            }
+                        } catch {
+                            // Failed to check - proceed without prompt
+                        }
+                    }
+                    
                     // Refresh to update UI
                     window.location.reload();
                 }}
@@ -4295,25 +4278,19 @@ function DashboardContent({
                 onSuccess={() => refreshPhone()}
             />
 
-            {/* Passkey Manager Modal */}
-            <AnimatePresence>
-                {isPasskeyManagerOpen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                        onClick={() => setIsPasskeyManagerOpen(false)}
-                    >
-                        <div onClick={(e) => e.stopPropagation()}>
-                            <PasskeyManager
-                                userAddress={userAddress}
-                                onClose={() => setIsPasskeyManagerOpen(false)}
-                            />
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Passkey Prompt Modal - shown after username claim for non-wallet users */}
+            <PasskeyPromptModal
+                isOpen={showPasskeyPrompt}
+                onClose={() => {
+                    setShowPasskeyPrompt(false);
+                    window.location.reload();
+                }}
+                onSkip={() => {
+                    setShowPasskeyPrompt(false);
+                    window.location.reload();
+                }}
+                userAddress={userAddress}
+            />
 
             {/* Status Modal */}
             <StatusModal
