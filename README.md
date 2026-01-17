@@ -1037,70 +1037,118 @@ Ready to send/receive messages
 
 ### End-to-End Encryption Across All Login Types
 
-Spritz provides E2E encryption for **all users regardless of authentication method**. This works because every auth method produces a deterministic "Spritz ID" (address) used for key derivation.
+Spritz provides E2E encryption for **all users regardless of authentication method**. The encryption system uses ECDH (Elliptic Curve Diffie-Hellman) key exchange for secure key derivation.
 
 **How It Works:**
 
-| Auth Method | Spritz ID Source | E2E Encryption |
-|-------------|------------------|----------------|
-| **EVM Wallet** | Wallet address (0x...) | ✅ Uses wallet address |
-| **Passkey** | Hash of credential ID | ✅ Uses derived address |
-| **Email** | Existing account OR derived from email | ✅ Uses account address |
-| **World ID** | `nullifier_hash` from verification | ✅ Uses nullifier as address |
-| **Alien ID** | `alienAddress` from Alien | ✅ Uses Alien address |
-| **Solana** | Solana wallet address (base58) | ✅ Uses Solana address |
+| Auth Method | Spritz ID Source | E2E Encryption | Multi-Device |
+|-------------|------------------|----------------|--------------|
+| **EVM Wallet** | Wallet address (0x...) | ✅ ECDH | ⚠️ Backup needed |
+| **Passkey** | Hash of credential ID | ✅ ECDH | ⚠️ Backup needed |
+| **Email** | Existing account OR derived | ✅ ECDH | ⚠️ Backup needed |
+| **World ID** | `nullifier_hash` | ✅ ECDH | ⚠️ Backup needed |
+| **Alien ID** | `alienAddress` | ✅ ECDH | ⚠️ Backup needed |
+| **Solana** | Solana address (base58) | ✅ ECDH | ⚠️ Backup needed |
 
 **Key Insight:** The encryption system doesn't care *how* you logged in—it only needs your Spritz ID. Since all auth methods produce a stable, unique identifier, E2E encryption works identically for everyone.
 
+### Encryption Architecture (ECDH)
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              E2E Encryption Key Establishment                    │
+│              ECDH Key Exchange (Secure)                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  User A (any auth method)     User B (any auth method)          │
-│  Spritz ID: 0xABC...          Spritz ID: 0xDEF...               │
-│       │                             │                            │
-│       └──────────┬──────────────────┘                            │
-│                  ↓                                               │
-│  Sort addresses: [0xABC..., 0xDEF...]                           │
-│                  ↓                                               │
-│  Derive key: SHA256("spritz-dm-key-v1:0xABC:0xDEF")            │
-│                  ↓                                               │
-│  Both users derive IDENTICAL symmetric key                      │
-│  (no key exchange needed!)                                      │
-│                  ↓                                               │
+│  User A                           User B                         │
+│  ┌──────────────────┐            ┌──────────────────┐           │
+│  │ Private Key (A)  │            │ Private Key (B)  │           │
+│  │ Public Key (A)   │────────────│ Public Key (B)   │           │
+│  └──────────────────┘            └──────────────────┘           │
+│         │                               │                        │
+│         └───────────┬───────────────────┘                        │
+│                     ↓                                            │
+│  Shared Secret = ECDH(A_private, B_public)                      │
+│                = ECDH(B_private, A_public)  ← Same result!      │
+│                     ↓                                            │
+│  Final Key = SHA256(shared_secret + context)                    │
+│                     ↓                                            │
 │  Messages encrypted with AES-256-GCM                            │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Cross-Auth-Method Example:**
-```
-Alice: Logged in with World ID (nullifier_hash = 0x123...)
-Bob:   Logged in with MetaMask (wallet address = 0x456...)
+**Security Improvement:** Unlike the old deterministic approach where `key = SHA256(addresses)` (anyone could compute!), ECDH requires possession of a private key. Only the two conversation participants can derive the shared secret.
 
-Both can message each other with full E2E encryption:
-1. Alice's app derives key from sorted(0x123, 0x456)
-2. Bob's app derives key from sorted(0x123, 0x456)
-3. Same key → encrypted messages work both directions
+### Encryption Key Storage
+
 ```
+┌─────────────────────────────────────────────────────────────────┐
+│              Key Storage Model                                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  localStorage (device)           Supabase (server)              │
+│  ┌─────────────────────┐        ┌─────────────────────┐         │
+│  │ ECDH Private Key    │        │ ECDH Public Key     │ ← Public│
+│  │ ECDH Public Key     │        │ Encrypted Backup*   │ ← Opt-in│
+│  │ Encryption Key*     │        └─────────────────────┘         │
+│  └─────────────────────┘                                        │
+│                                                                  │
+│  * Only if user enables backup with PIN                         │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Multi-Device Support
+
+⚠️ **Important:** ECDH keypairs are generated per device. Without backup:
+- Each device has a **different keypair**
+- Messages encrypted for one device **won't decrypt on another**
+- Your public key in Supabase gets **overwritten** by the latest device
+
+**Solution: Enable Encryption Key Backup**
+
+Go to **Settings → Privacy & Security → Message Encryption Key** to:
+1. Create a 6-digit PIN
+2. Write down your 12-word recovery phrase
+3. Verify by entering 3 random words
+4. Your keypair is now backed up (encrypted with phrase + PIN)
+
+On a new device:
+1. Go to Settings → Message Encryption Key → Restore
+2. Enter your 12-word phrase + PIN
+3. Keypair restored → all messages decryptable
 
 ### Encryption Key Derivation
 
 **For Direct Messages (DMs):**
 ```typescript
-// Deterministic key from both addresses (sorted)
-const seed = `spritz-dm-key-v1:${address1}:${address2}`;
-const symmetricKey = SHA256(seed);
-// Both parties derive the same key independently
+// ECDH key exchange (both users must have public keys registered)
+const myKeypair = getOrCreateMessagingKeypair();
+const peerPublicKey = fetchPeerPublicKey(peerAddress);
+
+if (myPublicKeyInDb && peerPublicKey) {
+    // SECURE: ECDH key derivation
+    const sharedSecret = ECDH(myPrivateKey, peerPublicKey);
+    const symmetricKey = SHA256(sharedSecret + context);
+} else {
+    // LEGACY FALLBACK: Deterministic (for backward compatibility)
+    const symmetricKey = SHA256("spritz-dm-key-v1:" + sortedAddresses);
+}
 ```
 
 **For Group Chats:**
 ```typescript
 // Random symmetric key generated on group creation
 const symmetricKey = generateSymmetricKey(); // 256-bit AES key
-// Key shared with members via encrypted channel
+// Key stored in Supabase (TODO: distribute via encrypted envelopes)
 ```
+
+### Security Indicator
+
+The chat UI shows encryption status:
+- 🛡️ **Green "Secure key exchange active"** - Both users have ECDH keys
+- 🔒 **Amber "Encrypted (peer hasn't upgraded)"** - Using legacy keys
+- This helps users know when their conversation is fully secured
 
 ### Content Topics
 
@@ -1166,10 +1214,22 @@ Invitee decrypts key and joins group
 | Property | Implementation |
 |----------|----------------|
 | **End-to-End Encryption** | AES-256-GCM symmetric encryption |
+| **Key Exchange** | ECDH P-256 (replaces deterministic derivation) |
 | **Forward Secrecy** | Not currently (would need ratcheting) |
-| **Key Storage** | localStorage (encrypted backup in Supabase) |
+| **Key Storage** | localStorage (opt-in encrypted backup) |
+| **Backup Protection** | 12-word phrase + 6-digit PIN + PBKDF2 (100k iterations) |
 | **Message Authentication** | GCM mode provides authentication |
 | **Sender Verification** | Sender address in signed message |
+
+### Security Model by Feature
+
+| Feature | Security Level | Notes |
+|---------|---------------|-------|
+| **DM Encryption** | 🟢 Strong | ECDH key exchange, requires key possession |
+| **Group Encryption** | 🟡 Moderate | Shared symmetric key in Supabase |
+| **Key Backup** | 🟢 Strong | AES-GCM + PBKDF2, requires phrase + PIN |
+| **Multi-Device** | 🟡 Requires Setup | Must backup/restore to sync keys |
+| **Legacy Compatibility** | 🟡 Moderate | Falls back to deterministic keys if needed |
 
 ### Real-time Updates
 
