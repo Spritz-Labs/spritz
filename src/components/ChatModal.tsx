@@ -91,6 +91,7 @@ export function ChatModal({
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showSearch, setShowSearch] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [securityStatus, setSecurityStatus] = useState<{ isSecure?: boolean; isLoading: boolean }>({ isLoading: true });
 
     // Generate conversation ID for this chat
     const conversationId = [userAddress, peerAddress]
@@ -133,10 +134,41 @@ export function ChatModal({
         canMessage,
         markAsRead,
         setActiveChatPeer,
+        getConversationSecurityStatus,
     } = useXMTPContext();
 
     // Analytics tracking
     const { trackMessageSent } = useAnalytics(userAddress);
+
+    // Check security status of the conversation
+    useEffect(() => {
+        if (!isOpen || !peerAddress || !isInitialized) {
+            setSecurityStatus({ isLoading: true });
+            return;
+        }
+        
+        let cancelled = false;
+        
+        const checkSecurity = async () => {
+            try {
+                const status = await getConversationSecurityStatus(peerAddress);
+                if (!cancelled) {
+                    setSecurityStatus({ isSecure: status.isSecure, isLoading: false });
+                }
+            } catch (err) {
+                log.error("[Chat] Failed to check security status:", err);
+                if (!cancelled) {
+                    setSecurityStatus({ isSecure: undefined, isLoading: false });
+                }
+            }
+        };
+        
+        checkSecurity();
+        
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, peerAddress, isInitialized, getConversationSecurityStatus]);
 
     const formatAddress = (address: string) => {
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -1535,8 +1567,11 @@ export function ChatModal({
                                 )}
                             </div>
 
-                            {/* E2E Encryption Notice */}
-                            <EncryptionIndicator />
+                            {/* E2E Encryption Notice with Security Status */}
+                            <EncryptionIndicator 
+                                isSecure={securityStatus.isSecure}
+                                isLoading={securityStatus.isLoading}
+                            />
 
                             {/* Reply Preview */}
                             {replyingTo && (

@@ -63,3 +63,4 @@ coverage/
 
 # Security Audits
 audits/
+audits/*

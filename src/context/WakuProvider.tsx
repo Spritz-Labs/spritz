@@ -52,6 +52,351 @@ const HIDDEN_GROUPS_KEY = "shout_hidden_groups";
 const GROUPS_STORAGE_KEY = "waku_groups";
 const DM_KEYS_STORAGE = "waku_dm_keys";
 const MESSAGES_STORAGE_KEY = "waku_messages";
+const MESSAGING_KEYPAIR_STORAGE = "waku_messaging_keypair"; // User's ECDH keypair for secure key derivation
+const DM_SHARED_KEYS_STORAGE = "waku_dm_shared_keys"; // Cache of derived shared keys
+const KEYPAIR_ENCRYPTION_KEY_STORAGE = "waku_keypair_encryption_key"; // Key used to encrypt keypair for cloud backup
+
+// ECDH Key Exchange for secure DM key derivation
+// This replaces the insecure deterministic key derivation
+
+interface MessagingKeypair {
+    publicKey: string; // Base64 encoded
+    privateKey: string; // Base64 encoded (stored locally, encrypted backup in cloud)
+}
+
+/**
+ * Derive an encryption key from user's address + a random secret
+ * This key is used to encrypt the ECDH private key for cloud backup
+ */
+async function getOrCreateKeypairEncryptionKey(userAddress: string): Promise<Uint8Array> {
+    if (typeof window === "undefined") {
+        throw new Error("Cannot access in SSR");
+    }
+    
+    // Check if we have an existing encryption key
+    let secretBase64 = localStorage.getItem(KEYPAIR_ENCRYPTION_KEY_STORAGE);
+    
+    if (!secretBase64) {
+        // Generate a new random secret
+        const secret = crypto.getRandomValues(new Uint8Array(32));
+        secretBase64 = btoa(String.fromCharCode(...secret));
+        localStorage.setItem(KEYPAIR_ENCRYPTION_KEY_STORAGE, secretBase64);
+    }
+    
+    // Derive encryption key from secret + user address
+    const secret = Uint8Array.from(atob(secretBase64), c => c.charCodeAt(0));
+    const combined = new TextEncoder().encode(`keypair-encryption:${userAddress.toLowerCase()}:${secretBase64}`);
+    const fullInput = new Uint8Array(secret.length + combined.length);
+    fullInput.set(secret);
+    fullInput.set(combined, secret.length);
+    
+    const keyBuffer = await crypto.subtle.digest("SHA-256", fullInput);
+    return new Uint8Array(keyBuffer);
+}
+
+/**
+ * Encrypt the private key for cloud backup
+ */
+async function encryptPrivateKeyForBackup(
+    privateKeyBase64: string,
+    encryptionKey: Uint8Array
+): Promise<string> {
+    // Create a proper ArrayBuffer copy to satisfy TypeScript
+    const keyBuffer = new ArrayBuffer(encryptionKey.length);
+    new Uint8Array(keyBuffer).set(encryptionKey);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+        "raw",
+        keyBuffer,
+        { name: "AES-GCM" },
+        false,
+        ["encrypt"]
+    );
+    
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const data = new TextEncoder().encode(privateKeyBase64);
+    
+    const encrypted = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        cryptoKey,
+        data
+    );
+    
+    // Combine IV + encrypted data
+    const combined = new Uint8Array(iv.length + encrypted.byteLength);
+    combined.set(iv);
+    combined.set(new Uint8Array(encrypted), iv.length);
+    
+    return btoa(String.fromCharCode(...combined));
+}
+
+/**
+ * Decrypt the private key from cloud backup
+ */
+async function decryptPrivateKeyFromBackup(
+    encryptedBase64: string,
+    encryptionKey: Uint8Array
+): Promise<string | null> {
+    try {
+        const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+        const iv = combined.slice(0, 12);
+        const encrypted = combined.slice(12);
+        
+        // Create a proper ArrayBuffer copy to satisfy TypeScript
+        const keyBuffer = new ArrayBuffer(encryptionKey.length);
+        new Uint8Array(keyBuffer).set(encryptionKey);
+        
+        const cryptoKey = await crypto.subtle.importKey(
+            "raw",
+            keyBuffer,
+            { name: "AES-GCM" },
+            false,
+            ["decrypt"]
+        );
+        
+        const decrypted = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv },
+            cryptoKey,
+            encrypted
+        );
+        
+        return new TextDecoder().decode(decrypted);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Try to restore keypair from Supabase (for multi-device sync)
+ */
+async function tryRestoreKeypairFromCloud(
+    userAddress: string,
+    encryptionKey: Uint8Array
+): Promise<MessagingKeypair | null> {
+    if (!supabase) return null;
+    
+    try {
+        const { data, error } = await supabase
+            .from("shout_user_settings")
+            .select("messaging_public_key, messaging_private_key_encrypted")
+            .eq("wallet_address", userAddress.toLowerCase())
+            .single();
+        
+        if (error || !data?.messaging_public_key || !data?.messaging_private_key_encrypted) {
+            return null;
+        }
+        
+        // Try to decrypt the private key
+        const privateKey = await decryptPrivateKeyFromBackup(
+            data.messaging_private_key_encrypted,
+            encryptionKey
+        );
+        
+        if (!privateKey) {
+            log.warn("[Waku] Failed to decrypt keypair from cloud (encryption key mismatch)");
+            return null;
+        }
+        
+        log.debug("[Waku] Successfully restored keypair from cloud");
+        return {
+            publicKey: data.messaging_public_key,
+            privateKey,
+        };
+    } catch (err) {
+        log.warn("[Waku] Failed to restore keypair from cloud:", err);
+        return null;
+    }
+}
+
+/**
+ * Save encrypted keypair to cloud for multi-device sync
+ */
+async function saveKeypairToCloud(
+    userAddress: string,
+    keypair: MessagingKeypair,
+    encryptionKey: Uint8Array
+): Promise<void> {
+    if (!supabase) return;
+    
+    try {
+        const encryptedPrivateKey = await encryptPrivateKeyForBackup(
+            keypair.privateKey,
+            encryptionKey
+        );
+        
+        await supabase
+            .from("shout_user_settings")
+            .upsert({
+                wallet_address: userAddress.toLowerCase(),
+                messaging_public_key: keypair.publicKey,
+                messaging_private_key_encrypted: encryptedPrivateKey,
+                updated_at: new Date().toISOString(),
+            }, {
+                onConflict: "wallet_address",
+            });
+        
+        log.debug("[Waku] Keypair backed up to cloud");
+    } catch (err) {
+        log.warn("[Waku] Failed to backup keypair to cloud:", err);
+    }
+}
+
+/**
+ * Generate or retrieve user's messaging keypair for ECDH
+ * 
+ * SECURITY: Keys are stored locally by default (maximum security).
+ * Cloud backup is OPT-IN only via Settings → Message Encryption Key.
+ * Cloud backup requires 12-word phrase + 6-digit PIN to restore.
+ */
+async function getOrCreateMessagingKeypair(userAddress?: string): Promise<MessagingKeypair> {
+    if (typeof window === "undefined") {
+        throw new Error("Cannot access keypair in SSR");
+    }
+    
+    // Check if we already have a keypair locally
+    const stored = localStorage.getItem(MESSAGING_KEYPAIR_STORAGE);
+    if (stored) {
+        try {
+            return JSON.parse(stored) as MessagingKeypair;
+        } catch {
+            // Corrupted, regenerate
+        }
+    }
+    
+    // NOTE: We no longer auto-restore from cloud here.
+    // Cloud restore is handled explicitly via KeyBackupModal with PIN verification.
+    
+    // Generate new ECDH keypair using P-256 curve
+    const keyPair = await crypto.subtle.generateKey(
+        { name: "ECDH", namedCurve: "P-256" },
+        true, // extractable
+        ["deriveBits"]
+    );
+    
+    // Export keys for storage
+    const publicKeyBuffer = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+    const privateKeyBuffer = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+    
+    const keypair: MessagingKeypair = {
+        publicKey: btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer))),
+        privateKey: btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer))),
+    };
+    
+    // Store locally only - NO automatic cloud backup
+    // Users can opt-in to cloud backup via Settings → Message Encryption Key
+    localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify(keypair));
+    
+    // Store PUBLIC key in Supabase (needed for ECDH key exchange with others)
+    // This is intentionally public - only the public key is uploaded
+    if (userAddress && supabase) {
+        try {
+            await supabase
+                .from("shout_user_settings")
+                .upsert({
+                    wallet_address: userAddress.toLowerCase(),
+                    messaging_public_key: keypair.publicKey,
+                    updated_at: new Date().toISOString(),
+                }, {
+                    onConflict: "wallet_address",
+                });
+        } catch (err) {
+            log.warn("[Waku] Failed to store public key:", err);
+        }
+    }
+    
+    return keypair;
+}
+
+/**
+ * Import a public key from base64 for ECDH
+ */
+async function importPublicKey(publicKeyBase64: string): Promise<CryptoKey> {
+    const publicKeyBytes = Uint8Array.from(atob(publicKeyBase64), c => c.charCodeAt(0));
+    return crypto.subtle.importKey(
+        "raw",
+        publicKeyBytes,
+        { name: "ECDH", namedCurve: "P-256" },
+        false,
+        []
+    );
+}
+
+/**
+ * Import private key from base64 for ECDH
+ */
+async function importPrivateKey(privateKeyBase64: string): Promise<CryptoKey> {
+    const privateKeyBytes = Uint8Array.from(atob(privateKeyBase64), c => c.charCodeAt(0));
+    return crypto.subtle.importKey(
+        "pkcs8",
+        privateKeyBytes,
+        { name: "ECDH", namedCurve: "P-256" },
+        false,
+        ["deriveBits"]
+    );
+}
+
+/**
+ * Derive shared secret using ECDH
+ * Both parties derive the same secret: ECDH(myPrivate, theirPublic)
+ */
+async function deriveSharedSecret(
+    myPrivateKey: CryptoKey,
+    theirPublicKey: CryptoKey
+): Promise<Uint8Array> {
+    const sharedBits = await crypto.subtle.deriveBits(
+        { name: "ECDH", public: theirPublicKey },
+        myPrivateKey,
+        256 // 256 bits = 32 bytes
+    );
+    return new Uint8Array(sharedBits);
+}
+
+/**
+ * Store user's public key in Supabase for others to fetch
+ */
+async function storePublicKeyInSupabase(
+    userAddress: string,
+    publicKey: string
+): Promise<void> {
+    if (!supabase) return;
+    
+    try {
+        await supabase
+            .from("shout_user_settings")
+            .upsert({
+                wallet_address: userAddress.toLowerCase(),
+                messaging_public_key: publicKey,
+                updated_at: new Date().toISOString(),
+            }, {
+                onConflict: "wallet_address",
+            });
+    } catch (err) {
+        log.error("[Waku] Failed to store public key:", err);
+    }
+}
+
+/**
+ * Fetch peer's public key from Supabase
+ */
+async function fetchPeerPublicKey(peerAddress: string): Promise<string | null> {
+    if (!supabase) return null;
+    
+    try {
+        const { data, error } = await supabase
+            .from("shout_user_settings")
+            .select("messaging_public_key")
+            .eq("wallet_address", peerAddress.toLowerCase())
+            .single();
+        
+        if (error || !data?.messaging_public_key) {
+            return null;
+        }
+        
+        return data.messaging_public_key;
+    } catch {
+        return null;
+    }
+}
 
 // Helper to encrypt content for Supabase storage using AES-GCM
 async function encryptForStorage(
@@ -90,6 +435,20 @@ async function encryptForStorage(
 }
 
 // Helper to decrypt content from Supabase storage
+/**
+ * Result of DM key derivation - includes both keys for migration support
+ */
+interface DmKeyResult {
+    /** Primary key to use for encryption (ECDH if available, otherwise legacy) */
+    encryptionKey: Uint8Array;
+    /** Legacy key for decrypting old messages */
+    legacyKey: Uint8Array;
+    /** Whether ECDH key exchange succeeded (true = secure, false = legacy only) */
+    isSecure: boolean;
+    /** The ECDH key if available (same as encryptionKey when isSecure=true) */
+    ecdhKey: Uint8Array | null;
+}
+
 async function decryptFromStorage(
     encryptedBase64: string,
     symmetricKey: Uint8Array
@@ -127,6 +486,52 @@ async function decryptFromStorage(
         log.error("[Waku] Failed to decrypt message:", err);
         return "[Decryption failed]";
     }
+}
+
+/**
+ * Decrypt message with fallback to legacy key
+ * Tries ECDH key first (if available), then falls back to legacy key
+ * This enables seamless migration - old messages stay readable
+ */
+async function decryptWithFallback(
+    encryptedBase64: string,
+    keys: DmKeyResult
+): Promise<{ content: string; usedLegacy: boolean }> {
+    // If we have ECDH key, try it first
+    if (keys.isSecure && keys.ecdhKey) {
+        try {
+            const content = await decryptFromStorage(encryptedBase64, keys.ecdhKey);
+            if (content !== "[Decryption failed]") {
+                return { content, usedLegacy: false };
+            }
+        } catch {
+            // ECDH key didn't work, try legacy
+        }
+    }
+    
+    // Try legacy key (for old messages or if ECDH not available)
+    const content = await decryptFromStorage(encryptedBase64, keys.legacyKey);
+    return { content, usedLegacy: true };
+}
+
+/**
+ * Compute the legacy (insecure) DM key
+ * This is kept for backward compatibility with existing messages
+ */
+async function computeLegacyDmKey(
+    userAddress: string,
+    peerAddress: string
+): Promise<Uint8Array> {
+    const sortedAddresses = [
+        userAddress.toLowerCase(),
+        peerAddress.toLowerCase(),
+    ].sort();
+
+    const seed = `spritz-dm-key-v1:${sortedAddresses[0]}:${sortedAddresses[1]}`;
+    const encoder = new TextEncoder();
+    const seedBytes = encoder.encode(seed);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", seedBytes);
+    return new Uint8Array(hashBuffer);
 }
 
 // Save message to Supabase (encrypted)
@@ -184,7 +589,7 @@ async function saveMessageToSupabase(
 // Fetch messages from Supabase (decrypted)
 async function fetchMessagesFromSupabase(
     conversationId: string,
-    symmetricKey: Uint8Array
+    keys: DmKeyResult | Uint8Array // Accept either dual keys or single key (for groups)
 ): Promise<
     Array<{
         id: string;
@@ -192,6 +597,7 @@ async function fetchMessagesFromSupabase(
         senderInboxId: string;
         sentAtNs: bigint;
         conversationId: string;
+        usedLegacyKey?: boolean; // Track if legacy decryption was used
     }>
 > {
     if (!supabase) {
@@ -219,13 +625,26 @@ async function fetchMessagesFromSupabase(
 
         log.debug("[Waku] Fetched", data.length, "messages from Supabase");
 
-        // Decrypt messages
+        // Check if we have dual keys or single key
+        const isDualKey = (k: DmKeyResult | Uint8Array): k is DmKeyResult => 
+            (k as DmKeyResult).encryptionKey !== undefined;
+
+        // Decrypt messages with fallback support
         const decrypted = await Promise.all(
             data.map(async (msg) => {
-                const content = await decryptFromStorage(
-                    msg.encrypted_content,
-                    symmetricKey
-                );
+                let content: string;
+                let usedLegacyKey = false;
+                
+                if (isDualKey(keys)) {
+                    // Use dual-key decryption with fallback
+                    const result = await decryptWithFallback(msg.encrypted_content, keys);
+                    content = result.content;
+                    usedLegacyKey = result.usedLegacy;
+                } else {
+                    // Single key (for group chats)
+                    content = await decryptFromStorage(msg.encrypted_content, keys);
+                }
+                
                 return {
                     id: msg.message_id,
                     content,
@@ -234,6 +653,7 @@ async function fetchMessagesFromSupabase(
                         BigInt(new Date(msg.sent_at).getTime()) *
                         BigInt(1000000),
                     conversationId: msg.conversation_id,
+                    usedLegacyKey,
                 };
             })
         );
@@ -313,6 +733,14 @@ function loadPersistedMessages(topic: string): unknown[] {
     }
 }
 
+/** Security status of a DM conversation */
+export type ConversationSecurityStatus = {
+    /** Whether ECDH key exchange is active (both users have registered public keys) */
+    isSecure: boolean;
+    /** Reason if not secure */
+    reason?: 'peer_not_upgraded' | 'key_exchange_failed' | 'not_initialized';
+};
+
 type WakuContextType = {
     isInitialized: boolean;
     isInitializing: boolean;
@@ -344,6 +772,8 @@ type WakuContextType = {
         peerAddress: string,
         onMessage: (message: unknown) => void
     ) => Promise<unknown>;
+    /** Check if a DM conversation is using secure ECDH key exchange */
+    getConversationSecurityStatus: (peerAddress: string) => Promise<ConversationSecurityStatus>;
     canMessage: (address: string) => Promise<boolean>;
     canMessageBatch: (addresses: string[]) => Promise<Record<string, boolean>>;
     markAsRead: (peerAddress: string) => void;
@@ -499,27 +929,85 @@ export function WakuProvider({
 
     // Get or create symmetric key for a DM conversation
     // IMPORTANT: Key must be deterministic so both users derive the same key
+    /**
+     * SECURE DM Key Derivation using ECDH with legacy fallback
+     *
+     * Old (INSECURE): key = SHA256(addresses) - Anyone could compute this!
+     * New (SECURE): key = ECDH(myPrivateKey, peerPublicKey)
+     *
+     * Returns both keys to enable:
+     * - Encrypting NEW messages with ECDH key (when available)
+     * - Decrypting OLD messages with legacy key (backward compatibility)
+     */
     const getDmSymmetricKey = useCallback(
-        async (peerAddress: string): Promise<Uint8Array> => {
-            // Sort addresses to ensure both users generate the same key
-            const sortedAddresses = [
-                (userAddress || "").toLowerCase(),
-                peerAddress.toLowerCase(),
-            ].sort();
+        async (peerAddress: string): Promise<DmKeyResult> => {
+            if (!userAddress) {
+                throw new Error("User address not available");
+            }
 
-            // Create a deterministic seed from both addresses
-            // Using a simple hash-like approach with TextEncoder
-            const seed = `spritz-dm-key-v1:${sortedAddresses[0]}:${sortedAddresses[1]}`;
-            const encoder = new TextEncoder();
-            const seedBytes = encoder.encode(seed);
+            // Always compute legacy key (needed for old message decryption)
+            const legacyKey = await computeLegacyDmKey(userAddress, peerAddress);
+            
+            // Try ECDH key derivation
+            let ecdhKey: Uint8Array | null = null;
+            let isSecure = false;
+            
+            try {
+                // Get our keypair (will restore from cloud if on new device)
+                const myKeypair = await getOrCreateMessagingKeypair(userAddress);
 
-            // Use Web Crypto API to derive a deterministic key
-            const hashBuffer = await crypto.subtle.digest("SHA-256", seedBytes);
-            const key = new Uint8Array(hashBuffer);
+                // Fetch peer's public key
+                const peerPublicKeyBase64 = await fetchPeerPublicKey(peerAddress);
 
-            return key;
+                if (peerPublicKeyBase64) {
+                    // ECDH key exchange
+                    const myPrivateKey = await importPrivateKey(myKeypair.privateKey);
+                    const peerPublicKey = await importPublicKey(peerPublicKeyBase64);
+                    const sharedSecret = await deriveSharedSecret(myPrivateKey, peerPublicKey);
+
+                    // Add conversation-specific context to the key
+                    const sortedAddresses = [
+                        userAddress.toLowerCase(),
+                        peerAddress.toLowerCase(),
+                    ].sort();
+                    const context = `spritz-dm-ecdh-v2:${sortedAddresses[0]}:${sortedAddresses[1]}`;
+
+                    // Combine ECDH secret with context for final key
+                    const combined = new Uint8Array(sharedSecret.length + new TextEncoder().encode(context).length);
+                    combined.set(sharedSecret);
+                    combined.set(new TextEncoder().encode(context), sharedSecret.length);
+
+                    ecdhKey = new Uint8Array(await crypto.subtle.digest("SHA-256", combined));
+                    isSecure = true;
+
+                    log.debug("[Waku] ECDH key exchange successful (secure)");
+                } else {
+                    log.debug("[Waku] Peer hasn't registered public key yet, using legacy only");
+                }
+            } catch (err) {
+                log.warn("[Waku] ECDH key derivation failed:", err);
+            }
+
+            return {
+                encryptionKey: ecdhKey || legacyKey, // Use ECDH for encryption if available
+                legacyKey,
+                isSecure,
+                ecdhKey,
+            };
         },
         [userAddress]
+    );
+    
+    /**
+     * Get just the encryption key (for simple use cases)
+     * Prefer using getDmSymmetricKey directly for full control
+     */
+    const getDmEncryptionKey = useCallback(
+        async (peerAddress: string): Promise<Uint8Array> => {
+            const keys = await getDmSymmetricKey(peerAddress);
+            return keys.encryptionKey;
+        },
+        [getDmSymmetricKey]
     );
 
     // Initialize Waku node
@@ -647,6 +1135,30 @@ export function WakuProvider({
         },
         []
     );
+    
+    /**
+     * Check security status of a DM conversation
+     * Returns whether ECDH key exchange is active (both users have registered public keys)
+     */
+    const getConversationSecurityStatus = useCallback(
+        async (peerAddress: string): Promise<ConversationSecurityStatus> => {
+            if (!userAddress) {
+                return { isSecure: false, reason: 'not_initialized' };
+            }
+            
+            try {
+                const dmKeys = await getDmSymmetricKey(peerAddress);
+                if (dmKeys.isSecure) {
+                    return { isSecure: true };
+                } else {
+                    return { isSecure: false, reason: 'peer_not_upgraded' };
+                }
+            } catch {
+                return { isSecure: false, reason: 'key_exchange_failed' };
+            }
+        },
+        [userAddress, getDmSymmetricKey]
+    );
 
     // Send a DM message
     const sendMessage = useCallback(
@@ -699,8 +1211,9 @@ export function WakuProvider({
                 );
                 log.debug("[Waku] Sending message to topic:", contentTopic);
 
-                // Get symmetric key for this conversation
-                const symmetricKey = await getDmSymmetricKey(peerAddress);
+                // Get symmetric keys for this conversation
+                const dmKeys = await getDmSymmetricKey(peerAddress);
+                const symmetricKey = dmKeys.encryptionKey; // Use ECDH key if available
 
                 // Create routing info for the network (using shard 0)
                 const routingInfo =
@@ -714,6 +1227,8 @@ export function WakuProvider({
                     routingInfo,
                     symKey: symmetricKey,
                 });
+                
+                log.debug(`[Waku] Sending with ${dmKeys.isSecure ? 'ECDH (secure)' : 'legacy'} key`);
 
                 // Create message
                 const messageId = generateMessageId();
@@ -848,18 +1363,25 @@ export function WakuProvider({
                     forceRefresh ? "(force refresh)" : ""
                 );
 
-                // Get symmetric key for decryption
-                const symmetricKey = await getDmSymmetricKey(peerAddress);
+                // Get symmetric keys for decryption (ECDH + legacy fallback)
+                const dmKeys = await getDmSymmetricKey(peerAddress);
 
                 // FETCH FROM SUPABASE FIRST (more reliable than Waku Store)
                 console.log(
                     "[Waku] Fetching from Supabase for topic:",
                     contentTopic
                 );
+                // Pass full keys for dual-key decryption
                 const supabaseMessages = await fetchMessagesFromSupabase(
                     contentTopic,
-                    symmetricKey
+                    dmKeys
                 );
+                
+                // Track security status based on messages
+                const legacyCount = supabaseMessages.filter(m => m.usedLegacyKey).length;
+                if (legacyCount > 0 && dmKeys.isSecure) {
+                    log.debug(`[Waku] ${legacyCount}/${supabaseMessages.length} messages used legacy key (old messages)`);
+                }
                 console.log(
                     "[Waku] Supabase returned:",
                     supabaseMessages.length,
@@ -894,10 +1416,11 @@ export function WakuProvider({
                                     clusterId: 1,
                                 }
                             );
+                        // Use encryption key for Waku Store decoder
                         const decoder = wakuEncryption.createDecoder(
                             contentTopic,
                             routingInfo,
-                            symmetricKey
+                            dmKeys.encryptionKey
                         );
 
                         const storeQuery =
@@ -1061,17 +1584,26 @@ export function WakuProvider({
                     contentTopic
                 );
 
-                // Get symmetric key and create routing info
-                const symmetricKey = await getDmSymmetricKey(peerAddress);
+                // Get symmetric keys and create routing info
+                const dmKeys = await getDmSymmetricKey(peerAddress);
                 const routingInfo =
                     wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
                         clusterId: 1,
                     });
+                
+                // For live messages, we need to listen on BOTH keys
+                // New messages will be encrypted with ECDH (if both users upgraded)
+                // Old messages might still arrive encrypted with legacy key
                 const decoder = wakuEncryption.createDecoder(
                     contentTopic,
                     routingInfo,
-                    symmetricKey
+                    dmKeys.encryptionKey // Primary decoder uses encryption key
                 );
+                
+                // If we have ECDH available but it's different from legacy,
+                // we might miss messages from users who haven't upgraded yet
+                // TODO: Consider dual decoders for transition period
+                log.debug(`[Waku] Listening with ${dmKeys.isSecure ? 'ECDH (secure)' : 'legacy'} key`);
 
                 const callback = (wakuMessage: { payload?: Uint8Array }) => {
                     console.log(
@@ -2318,6 +2850,7 @@ export function WakuProvider({
                 streamMessages,
                 canMessage,
                 canMessageBatch,
+                getConversationSecurityStatus,
                 markAsRead,
                 setActiveChatPeer,
                 onNewMessage,
