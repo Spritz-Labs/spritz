@@ -93,6 +93,8 @@ type DashboardProps = {
     onLogout: () => void;
     isPasskeyUser?: boolean;
     isEmailUser?: boolean;
+    isWorldIdUser?: boolean;
+    isAlienIdUser?: boolean;
     walletType: WalletType;
     isBetaTester?: boolean;
     siweUser?: SiweUser;
@@ -115,11 +117,15 @@ function DashboardContent({
     onLogout,
     isPasskeyUser,
     isEmailUser,
+    isWorldIdUser,
+    isAlienIdUser,
     walletType,
     isBetaTester,
     siweUser,
 }: DashboardProps) {
     const isSolanaUser = walletType === "solana";
+    // Users who need a passkey to access Smart Wallet (non-wallet auth methods)
+    const needsPasskeyForWallet = isEmailUser || isSolanaUser || isWorldIdUser || isAlienIdUser;
     // EVM address for hooks that require it
     // For Solana users, pass null to disable EVM-specific features
     const evmAddress = isSolanaUser ? null : (userAddress as `0x${string}`);
@@ -4242,11 +4248,7 @@ function DashboardContent({
                     
                     // Check if user needs passkey prompt (Email, Digital ID, or Solana users)
                     // Wallet users and existing passkey users don't need this
-                    const needsPasskey = isEmailUser || isSolanaUser || 
-                        // World ID and Alien ID users (identified by non-0x address that's not Solana base58)
-                        (!userAddress.startsWith("0x") && !isSolanaUser);
-                    
-                    if (needsPasskey && !isPasskeyUser) {
+                    if (needsPasskeyForWallet && !isPasskeyUser) {
                         // Check if user already has a passkey
                         try {
                             const res = await fetch("/api/passkey/credentials", {
@@ -4948,6 +4950,8 @@ export function Dashboard({
     onLogout,
     isPasskeyUser,
     isEmailUser,
+    isWorldIdUser,
+    isAlienIdUser,
     walletType,
     isBetaTester,
     siweUser,
@@ -4960,6 +4964,8 @@ export function Dashboard({
                 onLogout={onLogout}
                 isPasskeyUser={isPasskeyUser}
                 isEmailUser={isEmailUser}
+                isWorldIdUser={isWorldIdUser}
+                isAlienIdUser={isAlienIdUser}
                 walletType={walletType}
                 isBetaTester={isBetaTester}
                 siweUser={siweUser}

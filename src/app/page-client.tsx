@@ -519,6 +519,8 @@ export default function Home() {
                     onLogout={handleLogout}
                     isPasskeyUser={isPasskeyAuthenticated}
                     isEmailUser={isEmailAuthenticated}
+                    isWorldIdUser={isWorldIdAuthenticated}
+                    isAlienIdUser={isAlienAuthenticated}
                     walletType={activeWalletType}
                     isBetaTester={isBetaTester}
                     siweUser={siweUser}
