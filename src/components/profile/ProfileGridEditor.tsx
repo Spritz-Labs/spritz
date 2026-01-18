@@ -334,10 +334,71 @@ export function ProfileGridEditor({
 
     return (
         <div className="min-h-screen bg-zinc-950">
-            {/* Top Bar */}
-            <div className="sticky top-0 z-40 bg-zinc-900/95 backdrop-blur border-b border-zinc-800">
-                <div className="max-w-6xl mx-auto px-4 py-3">
-                    <div className="flex items-center justify-between">
+            {/* Top Bar - with safe area for iPhone notch */}
+            <div className="sticky top-0 z-40 bg-zinc-900/95 backdrop-blur border-b border-zinc-800 pt-[env(safe-area-inset-top)]">
+                <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+                    {/* Mobile Layout */}
+                    <div className="flex sm:hidden items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            {backUrl && (
+                                <Link
+                                    href={backUrl}
+                                    className="p-2 -ml-2 text-zinc-400 hover:text-white transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </Link>
+                            )}
+                            <h1 className="text-base font-bold text-white">Edit</h1>
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5">
+                            {/* Compact Mode Toggle */}
+                            <div className="flex items-center gap-0.5 p-0.5 bg-zinc-800 rounded-lg">
+                                <button
+                                    onClick={() => setIsEditing(true)}
+                                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                        isEditing 
+                                            ? 'bg-orange-500 text-white' 
+                                            : 'text-zinc-400'
+                                    }`}
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    onClick={() => setIsEditing(false)}
+                                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                        !isEditing 
+                                            ? 'bg-orange-500 text-white' 
+                                            : 'text-zinc-400'
+                                    }`}
+                                >
+                                    Preview
+                                </button>
+                            </div>
+                            <button
+                                onClick={() => setShowThemePanel(!showThemePanel)}
+                                className={`w-8 h-8 rounded-lg text-sm flex items-center justify-center transition-colors ${
+                                    showThemePanel
+                                        ? 'bg-orange-500 text-white'
+                                        : 'bg-zinc-800 text-zinc-300'
+                                }`}
+                            >
+                                🎨
+                            </button>
+                            <button
+                                onClick={onSave}
+                                disabled={isSaving}
+                                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                            >
+                                {isSaving ? '...' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Desktop Layout */}
+                    <div className="hidden sm:flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             {backUrl && (
                                 <Link

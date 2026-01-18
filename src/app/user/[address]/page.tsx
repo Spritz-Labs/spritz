@@ -203,26 +203,55 @@ export default function PublicUserPage() {
                 }}
             />
             
-            <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
-                {/* Edit Button (only for profile owner) */}
-                {isOwner && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="flex justify-end mb-4"
-                    >
+            {/* Sticky Header - with safe area for iPhone notch */}
+            <div className="sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
+                <div className="bg-black/30 backdrop-blur-lg border-b border-white/10">
+                    <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
                         <Link
-                            href={`/user/${address}/edit`}
-                            className="flex items-center gap-2 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur border border-zinc-700 rounded-xl text-sm text-white transition-colors"
+                            href="/"
+                            className="flex items-center gap-2 text-white/70 hover:text-white transition-colors"
                         >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                             </svg>
-                            Edit Profile
+                            <span className="text-sm font-medium">Spritz</span>
                         </Link>
-                    </motion.div>
-                )}
-
+                        
+                        <div className="flex items-center gap-2">
+                            {/* Message Button */}
+                            <Link
+                                href={`/?chat=${profile.user.address}`}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                                style={{ 
+                                    backgroundColor: activeTheme.accent_color + '30',
+                                    color: activeTheme.accent_color,
+                                }}
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                                <span className="hidden sm:inline">Message</span>
+                            </Link>
+                            
+                            {/* Edit Button (only for profile owner) */}
+                            {isOwner && (
+                                <Link
+                                    href={`/user/${address}/edit`}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium text-white transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    <span className="hidden sm:inline">Edit</span>
+                                </Link>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Main Content */}
+            <div className="max-w-2xl mx-auto px-4 py-6 sm:py-10">
                 {/* Header */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}

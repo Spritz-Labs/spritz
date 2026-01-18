@@ -3219,8 +3219,8 @@ function DashboardContent({
                         {/* Friend Requests Section - only on Friends tab */}
                         {(incomingRequests.length > 0 ||
                             outgoingRequests.length > 0) && (
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6">
-                                <div className="p-6">
+                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
+                                <div className="px-1 py-2 sm:p-4">
                                     <FriendRequests
                                         incomingRequests={incomingRequests}
                                         outgoingRequests={outgoingRequests}
@@ -3234,22 +3234,17 @@ function DashboardContent({
                         )}
                         <div
                             id="friends-section"
-                            className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden"
+                            className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden"
                         >
-                            <div className="p-6 border-b border-zinc-800">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-white">
-                                            Friends
-                                        </h2>
-                                        <p className="text-zinc-500 text-sm mt-1">
-                                            {friends.length}{" "}
-                                            {friends.length === 1
-                                                ? "friend"
-                                                : "friends"}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
+                            <div className="px-1 py-2 sm:p-4 sm:border-b sm:border-zinc-800">
+                                <div className="flex items-center justify-between gap-2">
+                                    <h2 className="text-base sm:text-xl font-bold text-white">
+                                        Friends
+                                        <span className="text-zinc-500 font-normal text-sm ml-2">
+                                            {friends.length}
+                                        </span>
+                                    </h2>
+                                    <div className="flex items-center gap-1 sm:gap-2">
                                         {isPWA && (
                                             <button
                                                 onClick={handleSyncContacts}
@@ -3258,14 +3253,11 @@ function DashboardContent({
                                                     isInvitesLoading ||
                                                     availableInvites === 0
                                                 }
-                                                className="py-2 px-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-medium transition-all hover:shadow-lg hover:shadow-blue-500/25 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-medium transition-all hover:shadow-lg hover:shadow-blue-500/25 flex items-center justify-center sm:justify-start gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 title="Share invite with friends"
                                             >
                                                 {isSyncingContacts ? (
-                                                    <>
-                                                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                        Sharing...
-                                                    </>
+                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                 ) : (
                                                     <>
                                                         <svg
@@ -3281,7 +3273,7 @@ function DashboardContent({
                                                                 d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
                                                             />
                                                         </svg>
-                                                        Share
+                                                        <span className="hidden sm:inline">Share</span>
                                                     </>
                                                 )}
                                             </button>
@@ -3291,7 +3283,8 @@ function DashboardContent({
                                                 setIsAddFriendOpen(true)
                                             }
                                             disabled={!isSupabaseConfigured}
-                                            className="py-2 px-3 rounded-lg bg-gradient-to-r from-[#FF5500] to-[#FF5500] text-white text-sm font-medium transition-all hover:shadow-lg hover:shadow-[#FB8D22]/25 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white text-sm font-medium transition-all hover:shadow-lg hover:shadow-[#FB8D22]/25 flex items-center justify-center sm:justify-start gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title="Add friend"
                                         >
                                             <svg
                                                 className="w-4 h-4"
@@ -3306,7 +3299,7 @@ function DashboardContent({
                                                     d="M12 4v16m8-8H4"
                                                 />
                                             </svg>
-                                            Add Friend
+                                            <span className="hidden sm:inline">Add</span>
                                         </button>
                                     </div>
                                 </div>
@@ -3314,7 +3307,7 @@ function DashboardContent({
 
                             {/* Contacts List - shown after syncing */}
                             {showContactsList && contacts.length > 0 && (
-                                <div className="px-6 pt-4 pb-2 border-b border-zinc-800">
+                                <div className="px-1 pt-2 pb-1 sm:px-4 sm:pt-4 sm:pb-2 sm:border-b sm:border-zinc-800">
                                     <div className="flex items-center justify-between mb-3">
                                         <h3 className="text-sm font-semibold text-white">
                                             Contacts ({contacts.length})
@@ -3376,39 +3369,38 @@ function DashboardContent({
 
                             {/* Daily Bonus Claim Card */}
                             {dailyBonusAvailable && !dailyBonusClaimed && (
-                                <div className="mx-6 mt-4 mb-2">
+                                <div className="mx-1 mt-2 mb-1 sm:mx-4 sm:mt-4 sm:mb-2">
                                     <motion.div
                                         initial={{ opacity: 0, y: -10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4"
+                                        className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-lg sm:rounded-xl p-3 sm:p-4"
                                     >
-                                        <div className="flex items-center justify-between gap-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center">
-                                                    <span className="text-xl">
+                                        <div className="flex items-center justify-between gap-2 sm:gap-4">
+                                            <div className="flex items-center gap-2 sm:gap-3">
+                                                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-base sm:text-xl">
                                                         🎁
                                                     </span>
                                                 </div>
-                                                <div>
-                                                    <p className="text-white font-medium text-sm">
-                                                        Daily Bonus Available!
+                                                <div className="min-w-0">
+                                                    <p className="text-white font-medium text-xs sm:text-sm">
+                                                        Daily Bonus!
                                                     </p>
-                                                    <p className="text-amber-400/70 text-xs">
-                                                        +3 points for logging in
-                                                        today
+                                                    <p className="text-amber-400/70 text-[10px] sm:text-xs">
+                                                        +3 points today
                                                     </p>
                                                 </div>
                                             </div>
                                             <button
                                                 onClick={handleClaimDailyBonus}
                                                 disabled={isClaimingBonus}
-                                                className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-semibold hover:shadow-lg hover:shadow-orange-500/25 transition-all disabled:opacity-50 flex items-center gap-2"
+                                                className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs sm:text-sm font-semibold hover:shadow-lg hover:shadow-orange-500/25 transition-all disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
                                             >
                                                 {isClaimingBonus ? (
-                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                 ) : (
                                                     <>
-                                                        <span>✨</span>
+                                                        <span className="hidden sm:inline">✨</span>
                                                         Claim
                                                     </>
                                                 )}
@@ -3418,7 +3410,7 @@ function DashboardContent({
                                 </div>
                             )}
 
-                            <div className="p-6">
+                            <div className="px-0 sm:p-4">
                                 <FriendsList
                                     friends={friendsListData}
                                     userAddress={userAddress}
@@ -4012,7 +4004,7 @@ function DashboardContent({
                             {/* Friends Tab */}
                             <button
                                 onClick={() => setActiveNavTab("friends")}
-                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all relative ${
                                     activeNavTab === "friends"
                                         ? "text-orange-400 bg-orange-500/20"
                                         : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
@@ -4022,6 +4014,12 @@ function DashboardContent({
                                 <span className="text-[9px] font-medium mt-0.5">
                                     Friends
                                 </span>
+                                {/* Friend request indicator */}
+                                {incomingRequests.length > 0 && (
+                                    <span className="absolute top-0 right-0.5 min-w-[14px] h-[14px] px-0.5 bg-orange-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center animate-pulse">
+                                        {incomingRequests.length > 9 ? "9+" : incomingRequests.length}
+                                    </span>
+                                )}
                             </button>
 
                             {/* Chats Tab */}

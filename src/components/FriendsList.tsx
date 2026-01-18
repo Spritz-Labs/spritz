@@ -112,6 +112,7 @@ type FriendCardProps = {
     friendPhone: string | undefined;
     friendTag: FriendTag | null;
     schedulingEnabled: boolean;
+    publicProfileEnabled: boolean;
     wakuStatus: boolean | undefined;
     unreadCount: number;
     isCallActive: boolean;
@@ -139,6 +140,7 @@ const FriendCard = memo(function FriendCard({
     friendPhone,
     friendTag,
     schedulingEnabled,
+    publicProfileEnabled,
     wakuStatus,
     unreadCount,
     isCallActive,
@@ -154,20 +156,24 @@ const FriendCard = memo(function FriendCard({
     style,
 }: FriendCardProps) {
     const hasUnread = unreadCount > 0;
+    
+    // Detect mobile/touch device for click behavior
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
+    
     return (
-        <div className="group" style={style}>
+        <div className="group select-none" style={style}>
             <div
-                className={`rounded-xl p-3 sm:p-4 transition-all ${
+                className={`rounded-lg sm:rounded-xl px-2 py-2 sm:p-4 transition-all ${
                     hasUnread
                         ? "bg-[#FF5500]/10 hover:bg-[#FF5500]/15 border border-[#FF5500]/30"
-                        : "bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50"
+                        : "bg-zinc-800/30 sm:bg-zinc-800/50 hover:bg-zinc-800 border border-transparent sm:border-zinc-700/50"
                 }`}
             >
-                <div className="flex items-center gap-3">
-                    {/* Favorite Star */}
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                    {/* Favorite Star - hidden on mobile, visible on tablet+ */}
                     <button
                         onClick={onToggleFavorite}
-                        className={`flex-shrink-0 w-6 h-6 flex items-center justify-center transition-colors ${
+                        className={`hidden sm:flex flex-shrink-0 w-6 h-6 items-center justify-center transition-colors ${
                             isFavorite
                                 ? "text-amber-400"
                                 : "text-zinc-600 hover:text-zinc-400"
@@ -193,17 +199,20 @@ const FriendCard = memo(function FriendCard({
                         </svg>
                     </button>
 
-                    {/* Avatar & Info - Clickable to open chat */}
+                    {/* Avatar & Info - Clickable: mobile opens options, desktop opens chat */}
                     <button
                         onClick={() => {
-                            // Open chat if available, otherwise expand
-                            if (onChat && !hideChat && wakuStatus !== false) {
+                            // On mobile, always expand to show options
+                            // On desktop, open chat if available
+                            if (isMobile) {
+                                onToggleExpand(friend.id);
+                            } else if (onChat && !hideChat && wakuStatus !== false) {
                                 onChat(friend);
                             } else {
                                 onToggleExpand(friend.id);
                             }
                         }}
-                        className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
+                        className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 text-left cursor-pointer"
                     >
                         {/* Avatar */}
                         <div className="relative flex-shrink-0">
@@ -211,37 +220,39 @@ const FriendCard = memo(function FriendCard({
                                 <img
                                     src={effectiveAvatar}
                                     alt={getDisplayName(friend)}
-                                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover ${
-                                        unreadCount > 0
-                                            ? "ring-2 ring-[#FF5500] ring-offset-2 ring-offset-zinc-800"
-                                            : ""
+                                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover ${
+                                        unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""
                                     }`}
                                 />
                             ) : (
                                 <div
-                                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center ${
-                                        unreadCount > 0
-                                            ? "ring-2 ring-[#FF5500] ring-offset-2 ring-offset-zinc-800"
-                                            : ""
+                                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center ${
+                                        unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""
                                     }`}
                                 >
                                     <span className="text-white font-bold text-base sm:text-lg">
-                                        {getDisplayName(
-                                            friend
-                                        )[0].toUpperCase()}
+                                        {getDisplayName(friend)[0].toUpperCase()}
                                     </span>
                                 </div>
                             )}
                             {/* Online indicator */}
                             {isOnline && !unreadCount && (
-                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-emerald-500 rounded-full border-2 border-zinc-800" />
+                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-emerald-500 rounded-full border-2 border-zinc-900" />
                             )}
                             {/* Unread message badge on avatar */}
                             {unreadCount > 0 && (
-                                <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-[#FF5500] rounded-full flex items-center justify-center border-2 border-zinc-800 animate-pulse">
-                                    <span className="text-white text-[10px] font-bold">
+                                <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 min-w-[18px] h-[18px] sm:min-w-[20px] sm:h-[20px] px-1 bg-[#FF5500] rounded-full flex items-center justify-center border-2 border-zinc-900">
+                                    <span className="text-white text-[9px] sm:text-[10px] font-bold">
                                         {unreadCount > 9 ? "9+" : unreadCount}
                                     </span>
+                                </div>
+                            )}
+                            {/* Favorite indicator on mobile */}
+                            {isFavorite && (
+                                <div className="sm:hidden absolute -bottom-0.5 -left-0.5 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center border-2 border-zinc-900">
+                                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                    </svg>
                                 </div>
                             )}
                         </div>
@@ -602,33 +613,86 @@ const FriendCard = memo(function FriendCard({
                                 </div>
                             )}
 
-                        {/* Schedule button (if friend has scheduling enabled) */}
-                        {schedulingEnabled && (
-                            <a
-                                href={`/schedule/${friend.address}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mb-3 py-2.5 px-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm transition-colors flex items-center justify-center gap-2"
+                        {/* Profile & Schedule links */}
+                        {(publicProfileEnabled || schedulingEnabled) && (
+                            <div className="flex gap-2 mb-3">
+                                {/* View Profile button (if friend has public profile) */}
+                                {publicProfileEnabled && (
+                                    <a
+                                        href={`/user/${friend.address}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-1 py-2.5 px-3 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-sm transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <svg
+                                            className="w-4 h-4 shrink-0"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                            />
+                                        </svg>
+                                        <span>View Profile</span>
+                                    </a>
+                                )}
+                                {/* Schedule button (if friend has scheduling enabled) */}
+                                {schedulingEnabled && (
+                                    <a
+                                        href={`/schedule/${friend.address}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-1 py-2.5 px-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <svg
+                                            className="w-4 h-4 shrink-0"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                            />
+                                        </svg>
+                                        <span>Schedule a Call</span>
+                                    </a>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Nickname, Tag, Favorite, Copy & Remove buttons */}
+                        <div className="grid grid-cols-5 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                            {/* Favorite toggle - only on mobile */}
+                            <button
+                                onClick={onToggleFavorite}
+                                className={`sm:hidden py-2.5 px-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                                    isFavorite
+                                        ? "bg-amber-500/20 text-amber-400"
+                                        : "bg-zinc-700/50 hover:bg-zinc-700 text-zinc-400"
+                                }`}
+                                title={isFavorite ? "Remove from favorites" : "Add to favorites"}
                             >
                                 <svg
                                     className="w-4 h-4 shrink-0"
-                                    fill="none"
+                                    fill={isFavorite ? "currentColor" : "none"}
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
+                                    strokeWidth={2}
                                 >
                                     <path
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
                                     />
                                 </svg>
-                                <span>Schedule a Call</span>
-                            </a>
-                        )}
-
-                        {/* Nickname, Tag, Copy & Remove buttons */}
-                        <div className="grid grid-cols-4 gap-2">
+                            </button>
                             <button
                                 onClick={onEditNote}
                                 className="py-2.5 px-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5"
@@ -755,6 +819,9 @@ export function FriendsList({
     const [friendScheduling, setFriendScheduling] = useState<Record<string, boolean>>(
         {}
     );
+    const [friendPublicProfiles, setFriendPublicProfiles] = useState<Record<string, boolean>>(
+        {}
+    );
     const [friendCustomAvatars, setFriendCustomAvatars] = useState<Record<string, string | null>>(
         {}
     );
@@ -808,11 +875,11 @@ export function FriendsList({
                 phonesResult,
                 favoritesResult,
             ] = await Promise.all([
-                // Combined query for statuses + online + scheduling + avatar preferences
+                // Combined query for statuses + online + scheduling + avatar preferences + public profile
                 client
                     .from("shout_user_settings")
                     .select(
-                        "wallet_address, status_emoji, status_text, is_dnd, last_seen, scheduling_enabled, scheduling_slug, custom_avatar_url, use_custom_avatar"
+                        "wallet_address, status_emoji, status_text, is_dnd, last_seen, scheduling_enabled, scheduling_slug, custom_avatar_url, use_custom_avatar, public_landing_enabled"
                     )
                     .in("wallet_address", addresses),
                 // Socials
@@ -835,11 +902,12 @@ export function FriendsList({
                     : Promise.resolve({ data: null, error: null }),
             ]);
 
-            // Process user settings (statuses + online + scheduling + avatars)
+            // Process user settings (statuses + online + scheduling + avatars + public profiles)
             if (userSettingsResult.data) {
                 const statuses: Record<string, FriendStatus> = {};
                 const online: Record<string, boolean> = {};
                 const scheduling: Record<string, boolean> = {};
+                const publicProfiles: Record<string, boolean> = {};
                 const customAvatars: Record<string, string | null> = {};
                 const now = Date.now();
                 const ONLINE_THRESHOLD = 120000; // 2 minutes
@@ -860,6 +928,10 @@ export function FriendsList({
                     if (row.scheduling_enabled) {
                         scheduling[row.wallet_address] = true;
                     }
+                    // Check if public profile enabled
+                    if (row.public_landing_enabled) {
+                        publicProfiles[row.wallet_address] = true;
+                    }
                     // Store custom avatar if friend has one enabled
                     if (row.use_custom_avatar && row.custom_avatar_url) {
                         customAvatars[row.wallet_address] = row.custom_avatar_url;
@@ -868,6 +940,7 @@ export function FriendsList({
                 setFriendStatuses(statuses);
                 setOnlineStatuses(online);
                 setFriendScheduling(scheduling);
+                setFriendPublicProfiles(publicProfiles);
                 setFriendCustomAvatars(customAvatars);
             }
 
@@ -1208,7 +1281,7 @@ export function FriendsList({
     }
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-1.5 sm:space-y-3">
             {/* Filter Tabs, Search Toggle & Sort */}
             <div className="flex items-center justify-between gap-2">
                 {/* Filter Tabs - Compact */}
@@ -1546,52 +1619,56 @@ export function FriendsList({
                                     }}
                                     className="pb-2"
                                 >
-                                    <FriendCard
-                                        friend={friend}
-                                        effectiveAvatar={getEffectiveAvatar(friend, friendCustomAvatars)}
-                                        index={virtualItem.index}
-                                        isExpanded={expandedId === friend.id}
-                                        isFavorite={favorites.has(addressLower)}
-                                        isOnline={
-                                            onlineStatuses[addressLower] ||
-                                            false
-                                        }
-                                        friendStatus={
-                                            friendStatuses[addressLower]
-                                        }
-                                        friendSocials={
-                                            friendSocials[addressLower]
-                                        }
-                                        friendPhone={friendPhones[addressLower]}
-                                        friendTag={getTag(addressLower)}
-                                        schedulingEnabled={
-                                            friendScheduling[addressLower] ||
-                                            false
-                                        }
-                                        wakuStatus={
-                                            friendsWakuStatus[addressLower]
-                                        }
-                                        unreadCount={
-                                            unreadCounts[addressLower] || 0
-                                        }
-                                        isCallActive={isCallActive}
-                                        hideChat={hideChat}
-                                        onToggleExpand={toggleExpand}
-                                        onToggleFavorite={() =>
-                                            toggleFavorite(friend.address)
-                                        }
-                                        onEditTag={() =>
-                                            setTagModalFriend(friend)
-                                        }
-                                        onEditNote={() => {
-                                            setNoteText(friend.nickname || "");
-                                            setNoteModalFriend(friend);
-                                        }}
-                                        onCall={onCall}
-                                        onVideoCall={onVideoCall}
-                                        onChat={onChat}
-                                        onRemoveClick={handleRemoveClick}
-                                    />
+                                                <FriendCard
+                                                    friend={friend}
+                                                    effectiveAvatar={getEffectiveAvatar(friend, friendCustomAvatars)}
+                                                    index={virtualItem.index}
+                                                    isExpanded={expandedId === friend.id}
+                                                    isFavorite={favorites.has(addressLower)}
+                                                    isOnline={
+                                                        onlineStatuses[addressLower] ||
+                                                        false
+                                                    }
+                                                    friendStatus={
+                                                        friendStatuses[addressLower]
+                                                    }
+                                                    friendSocials={
+                                                        friendSocials[addressLower]
+                                                    }
+                                                    friendPhone={friendPhones[addressLower]}
+                                                    friendTag={getTag(addressLower)}
+                                                    schedulingEnabled={
+                                                        friendScheduling[addressLower] ||
+                                                        false
+                                                    }
+                                                    publicProfileEnabled={
+                                                        friendPublicProfiles[addressLower] ||
+                                                        false
+                                                    }
+                                                    wakuStatus={
+                                                        friendsWakuStatus[addressLower]
+                                                    }
+                                                    unreadCount={
+                                                        unreadCounts[addressLower] || 0
+                                                    }
+                                                    isCallActive={isCallActive}
+                                                    hideChat={hideChat}
+                                                    onToggleExpand={toggleExpand}
+                                                    onToggleFavorite={() =>
+                                                        toggleFavorite(friend.address)
+                                                    }
+                                                    onEditTag={() =>
+                                                        setTagModalFriend(friend)
+                                                    }
+                                                    onEditNote={() => {
+                                                        setNoteText(friend.nickname || "");
+                                                        setNoteModalFriend(friend);
+                                                    }}
+                                                    onCall={onCall}
+                                                    onVideoCall={onVideoCall}
+                                                    onChat={onChat}
+                                                    onRemoveClick={handleRemoveClick}
+                                                />
                                 </div>
                             );
                         })}
@@ -1599,7 +1676,7 @@ export function FriendsList({
                 </div>
             ) : (
                 // Regular rendering for small lists
-                <div className="space-y-2">
+                <div className="space-y-1 sm:space-y-2">
                     {processedFriends.map((friend, index) => {
                         const addressLower = friend.address.toLowerCase();
                         return (
@@ -1616,6 +1693,7 @@ export function FriendsList({
                                 friendPhone={friendPhones[addressLower]}
                                 friendTag={getTag(addressLower)}
                                 schedulingEnabled={friendScheduling[addressLower] || false}
+                                publicProfileEnabled={friendPublicProfiles[addressLower] || false}
                                 wakuStatus={friendsWakuStatus[addressLower]}
                                 unreadCount={unreadCounts[addressLower] || 0}
                                 isCallActive={isCallActive}

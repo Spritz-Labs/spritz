@@ -913,9 +913,10 @@ export function ChatModal({
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         className={`fixed z-50 ${
                             isFullscreen
-                                ? "top-4 left-0 right-0 bottom-0"
+                                ? "inset-0"
                                 : "left-4 right-4 top-16 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
+                        style={isFullscreen ? { paddingTop: 'env(safe-area-inset-top)' } : undefined}
                     >
                         <div className={`bg-zinc-900 flex flex-col h-full overflow-hidden ${
                             isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"

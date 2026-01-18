@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useChatFolders, DEFAULT_FOLDER_EMOJIS, FOLDER_CATEGORIES, type ChatFolder } from "@/hooks/useChatFolders";
 
@@ -233,8 +233,10 @@ export function UnifiedChatList({
 }: UnifiedChatListProps) {
     const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = "All"
     const [showFolderPicker, setShowFolderPicker] = useState<string | null>(null);
+    const [folderPickerPosition, setFolderPickerPosition] = useState<{ top: number; left: number; openUpward: boolean } | null>(null);
     const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
     const tabsRef = useRef<HTMLDivElement>(null);
+    const folderButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
     
     // Sync external modal state with internal state
     useEffect(() => {
@@ -335,6 +337,30 @@ export function UnifiedChatList({
             activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
         }
     }, [activeFolder]);
+
+    // Calculate folder picker position when it opens
+    useLayoutEffect(() => {
+        if (showFolderPicker && showFolderPicker !== "_new") {
+            const buttonEl = folderButtonRefs.current[showFolderPicker];
+            if (buttonEl) {
+                const rect = buttonEl.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                const pickerHeight = 200; // Approximate height of picker
+                
+                // Check if picker would be cut off at bottom
+                const spaceBelow = viewportHeight - rect.bottom;
+                const openUpward = spaceBelow < pickerHeight && rect.top > pickerHeight;
+                
+                setFolderPickerPosition({
+                    top: openUpward ? rect.top : rect.bottom + 4,
+                    left: Math.max(8, Math.min(rect.right - 200, window.innerWidth - 208)), // Keep within viewport
+                    openUpward,
+                });
+            }
+        } else {
+            setFolderPickerPosition(null);
+        }
+    }, [showFolderPicker]);
 
     // Handle folder tab long press for delete
     const handleFolderTouchStart = useCallback((emoji: string) => {
@@ -593,6 +619,7 @@ export function UnifiedChatList({
                                             
                                             {/* Folder quick-action button */}
                                             <button
+                                                ref={(el) => { folderButtonRefs.current[chat.id] = el; }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     setShowFolderPicker(chat.id);
@@ -616,19 +643,24 @@ export function UnifiedChatList({
                                     </div>
                                 </div>
 
-                                {/* Folder Picker Popup */}
+                                {/* Folder Picker Popup - Rendered via portal-like fixed positioning */}
                                 <AnimatePresence>
-                                    {showFolderPicker === chat.id && (
+                                    {showFolderPicker === chat.id && folderPickerPosition && (
                                         <>
                                             <div 
-                                                className="fixed inset-0 z-40"
+                                                className="fixed inset-0 z-[60]"
                                                 onClick={() => setShowFolderPicker(null)}
                                             />
                                             <motion.div
-                                                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                                initial={{ opacity: 0, scale: 0.95, y: folderPickerPosition.openUpward ? 10 : -10 }}
                                                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                                                exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                                                className="absolute right-0 top-full mt-1 sm:mt-2 z-50 bg-zinc-900 border border-zinc-700 rounded-lg sm:rounded-xl shadow-xl p-1.5 sm:p-2 min-w-[160px] sm:min-w-[200px]"
+                                                exit={{ opacity: 0, scale: 0.95, y: folderPickerPosition.openUpward ? 10 : -10 }}
+                                                className="fixed z-[70] bg-zinc-900 border border-zinc-700 rounded-lg sm:rounded-xl shadow-2xl p-1.5 sm:p-2 min-w-[180px] sm:min-w-[200px] max-h-[280px] overflow-y-auto"
+                                                style={{
+                                                    top: folderPickerPosition.openUpward ? 'auto' : folderPickerPosition.top,
+                                                    bottom: folderPickerPosition.openUpward ? `${window.innerHeight - folderPickerPosition.top + 4}px` : 'auto',
+                                                    left: folderPickerPosition.left,
+                                                }}
                                             >
                                                 <p className="text-[10px] sm:text-xs text-zinc-500 px-1.5 sm:px-2 py-0.5 sm:py-1 mb-0.5 sm:mb-1">Move to folder</p>
                                                 
