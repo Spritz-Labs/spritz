@@ -385,7 +385,7 @@ export default function ElonMuskDemoPage() {
                             <div className="w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-gradient-to-r from-blue-500 via-emerald-500 to-blue-500 opacity-40 blur-xl animate-pulse" />
                         </div>
                         <img
-                            src="https://i.pravatar.cc/300?img=68"
+                            src="https://i.pravatar.cc/300?img=12"
                             alt="Elon Musk"
                             className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 shadow-2xl relative z-10 object-cover"
                             style={{ borderColor: 'rgba(59, 130, 246, 0.4)' }}
