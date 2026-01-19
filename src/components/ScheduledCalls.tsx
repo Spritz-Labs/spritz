@@ -205,19 +205,19 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
+            <div className="flex items-center justify-center py-6 sm:py-8">
+                <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-2 border-zinc-600 border-t-orange-500" />
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="text-center py-8">
-                <p className="text-red-400 mb-4">{error}</p>
+            <div className="text-center py-6 sm:py-8 px-2">
+                <p className="text-red-400 text-sm mb-3 sm:mb-4">{error}</p>
                 <button
                     onClick={fetchCalls}
-                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white transition-colors"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white text-sm transition-colors"
                 >
                     Try Again
                 </button>
@@ -226,12 +226,12 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4 px-1 sm:px-0">
             {/* Tabs */}
-            <div className="flex gap-2 bg-zinc-800/50 p-1 rounded-xl">
+            <div className="flex gap-1.5 sm:gap-2 bg-zinc-800/50 p-0.5 sm:p-1 rounded-lg sm:rounded-xl">
                 <button
                     onClick={() => setActiveTab("upcoming")}
-                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex-1 py-1.5 sm:py-2 px-3 sm:px-4 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-all ${
                         activeTab === "upcoming"
                             ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
                             : "text-zinc-400 hover:text-white hover:bg-zinc-700/50"
@@ -241,7 +241,7 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
                 </button>
                 <button
                     onClick={() => setActiveTab("past")}
-                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex-1 py-1.5 sm:py-2 px-3 sm:px-4 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-all ${
                         activeTab === "past"
                             ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
                             : "text-zinc-400 hover:text-white hover:bg-zinc-700/50"
@@ -253,21 +253,21 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
 
             {/* Calls List */}
             {calls.length === 0 ? (
-                <div className="text-center py-12">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800/50 flex items-center justify-center">
-                        <span className="text-3xl">📅</span>
+                <div className="text-center py-8 sm:py-12 px-2">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full bg-zinc-800/50 flex items-center justify-center">
+                        <span className="text-2xl sm:text-3xl">📅</span>
                     </div>
-                    <h3 className="text-lg font-medium text-white mb-2">
+                    <h3 className="text-base sm:text-lg font-medium text-white mb-1.5 sm:mb-2">
                         {activeTab === "upcoming" ? "No Upcoming Calls" : "No Past Calls"}
                     </h3>
-                    <p className="text-zinc-500 text-sm max-w-xs mx-auto">
+                    <p className="text-zinc-500 text-xs sm:text-sm max-w-xs mx-auto">
                         {activeTab === "upcoming"
                             ? "Schedule calls with others via your booking link or agent."
                             : "Your completed and past scheduled calls will appear here."}
                     </p>
                 </div>
             ) : (
-                <div className="space-y-3">
+                <div className="space-y-1.5 sm:space-y-3">
                     <AnimatePresence mode="popLayout">
                         {calls.map((call, index) => {
                             const avatar = getAvatar(call);
@@ -282,7 +282,7 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -10 }}
                                     transition={{ delay: index * 0.05 }}
-                                    className={`flex items-center gap-4 p-4 rounded-xl transition-colors ${
+                                    className={`flex items-center gap-2.5 sm:gap-4 p-2.5 sm:p-4 rounded-xl transition-colors ${
                                         canJoin
                                             ? "bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20"
                                             : "bg-zinc-800/30 hover:bg-zinc-800/50"
@@ -294,58 +294,58 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
                                             <img
                                                 src={avatar}
                                                 alt=""
-                                                className="w-12 h-12 rounded-full object-cover"
+                                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover"
                                             />
                                         ) : (
-                                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
-                                                <span className="text-lg text-white font-medium">
+                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                                <span className="text-sm sm:text-lg text-white font-medium">
                                                     {getDisplayName(call)[0]?.toUpperCase() || "?"}
                                                 </span>
                                             </div>
                                         )}
                                         {call.is_paid && (
-                                            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
-                                                <span className="text-xs">💰</span>
+                                            <div className="absolute -top-0.5 -right-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                                                <span className="text-[10px] sm:text-xs">💰</span>
                                             </div>
                                         )}
                                     </div>
 
                                     {/* Call Info */}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="text-white font-medium truncate">
+                                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                            <p className="text-sm sm:text-base text-white font-medium truncate">
                                                 {getDisplayName(call)}
                                             </p>
                                             <span
-                                                className={`text-xs px-2 py-0.5 rounded-full border ${status.color} ${
+                                                className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full border ${status.color} ${
                                                     status.pulse ? "animate-pulse" : ""
                                                 }`}
                                             >
                                                 {status.text}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-2 mt-1 text-sm text-zinc-400">
+                                        <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1 text-xs sm:text-sm text-zinc-400">
                                             <span>{date}</span>
                                             <span>•</span>
                                             <span>{time}</span>
-                                            <span>•</span>
-                                            <span>{call.duration_minutes}m</span>
+                                            <span className="hidden sm:inline">•</span>
+                                            <span className="hidden sm:inline">{call.duration_minutes}m</span>
                                         </div>
                                         {call.title && call.title !== "Scheduled Call" && (
-                                            <p className="text-xs text-zinc-500 mt-1 truncate">
+                                            <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5 sm:mt-1 truncate">
                                                 {call.title}
                                             </p>
                                         )}
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                    <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                                         {canJoin && call.invite_token && (
                                             <button
                                                 onClick={() => handleJoinCall(call.invite_token!)}
-                                                className="py-2 px-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium text-sm hover:shadow-lg hover:shadow-green-500/25 transition-all flex items-center gap-2"
+                                                className="py-1.5 sm:py-2 px-2.5 sm:px-4 rounded-lg sm:rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium text-xs sm:text-sm hover:shadow-lg hover:shadow-green-500/25 transition-all flex items-center gap-1 sm:gap-2"
                                             >
-                                                <span>🎥</span>
+                                                <span className="hidden sm:inline">🎥</span>
                                                 Join
                                             </button>
                                         )}
@@ -356,10 +356,10 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
                                                         `https://app.spritz.chat/join/${call.invite_token}`
                                                     );
                                                 }}
-                                                className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                                className="p-1.5 sm:p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
                                                 title="Copy join link"
                                             >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                                 </svg>
                                             </button>
@@ -373,10 +373,10 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
             )}
 
             {/* Refresh button */}
-            <div className="text-center pt-2">
+            <div className="text-center pt-1 sm:pt-2">
                 <button
                     onClick={fetchCalls}
-                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-xs sm:text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
                     ↻ Refresh
                 </button>

@@ -3631,15 +3631,11 @@ function DashboardContent({
 
                     {/* Calls Section */}
                     {activeNavTab === "calls" && (
-                        <div className="space-y-4">
-                            {/* Rooms Section - New Instant and New Scheduled */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                                <div className="p-6">
-                                    <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                                        <span>🚪</span>
-                                        Rooms
-                                    </h2>
-                                    <div className="flex flex-wrap gap-3">
+                        <>
+                            {/* Quick Actions - Consolidated buttons */}
+                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
+                                <div className="px-1 py-3 sm:p-4">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                                         {/* New Instant Room */}
                                         <button
                                             onClick={async () => {
@@ -3664,13 +3660,10 @@ function DashboardContent({
                                                     const data =
                                                         await res.json();
                                                     if (res.ok && data.room) {
-                                                        // Track room creation
                                                         trackRoomCreated();
-                                                        // Copy link to clipboard
                                                         navigator.clipboard.writeText(
                                                             data.room.joinUrl
                                                         );
-                                                        // Check if running as PWA
                                                         const isStandalone =
                                                             window.matchMedia(
                                                                 "(display-mode: standalone)"
@@ -3679,7 +3672,6 @@ function DashboardContent({
                                                                 window.navigator as any
                                                             ).standalone ===
                                                                 true;
-                                                        // Open the room - same page for PWA, new tab for desktop
                                                         if (isStandalone) {
                                                             window.location.href =
                                                                 data.room.joinUrl;
@@ -3702,22 +3694,10 @@ function DashboardContent({
                                                     );
                                                 }
                                             }}
-                                            className="flex-1 min-w-[140px] py-3 px-5 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-medium hover:shadow-lg hover:shadow-purple-500/25 transition-all flex items-center justify-center gap-2"
+                                            className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 transition-all active:scale-95"
                                         >
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M12 4v16m8-8H4"
-                                                />
-                                            </svg>
-                                            New Instant
+                                            <span className="text-xl">🚪</span>
+                                            <span className="text-xs font-medium">Instant Room</span>
                                         </button>
 
                                         {/* New Scheduled */}
@@ -3725,36 +3705,13 @@ function DashboardContent({
                                             onClick={() =>
                                                 setShowNewScheduledModal(true)
                                             }
-                                            className="flex-1 min-w-[140px] py-3 px-5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center justify-center gap-2"
+                                            className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 text-orange-400 transition-all active:scale-95"
                                         >
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M12 4v16m8-8H4"
-                                                />
-                                            </svg>
-                                            New Scheduled
+                                            <span className="text-xl">📅</span>
+                                            <span className="text-xs font-medium">Schedule</span>
                                         </button>
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* New Call Actions - Top Section */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                                <div className="p-6">
-                                    <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                                        <span>📞</span>
-                                        Start a Call
-                                    </h2>
-                                    <div className="flex flex-wrap gap-3">
-                                        {/* New Call */}
+                                        {/* Call Friend */}
                                         <button
                                             onClick={() =>
                                                 setShowNewCallModal(true)
@@ -3763,153 +3720,117 @@ function DashboardContent({
                                                 callState !== "idle" ||
                                                 friendsListData.length === 0
                                             }
-                                            className="flex-1 min-w-[140px] py-3 px-5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:shadow-lg hover:shadow-green-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                            className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 transition-all active:scale-95 disabled:opacity-50"
                                         >
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M12 4v16m8-8H4"
-                                                />
-                                            </svg>
-                                            New Call
+                                            <span className="text-xl">📞</span>
+                                            <span className="text-xs font-medium">Call Friend</span>
+                                        </button>
+
+                                        {/* Open My Room */}
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    const res = await fetch(
+                                                        `/api/rooms/permanent?wallet_address=${userAddress}`
+                                                    );
+                                                    if (res.ok) {
+                                                        const roomUrl = `${window.location.origin}/room/${userAddress}`;
+                                                        window.location.href =
+                                                            roomUrl;
+                                                    } else {
+                                                        alert(
+                                                            "Failed to open room"
+                                                        );
+                                                    }
+                                                } catch (err) {
+                                                    console.error(
+                                                        "Failed to open room:",
+                                                        err
+                                                    );
+                                                    alert(
+                                                        "Failed to open room"
+                                                    );
+                                                }
+                                            }}
+                                            className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 transition-all active:scale-95"
+                                        >
+                                            <span className="text-xl">🔗</span>
+                                            <span className="text-xs font-medium">My Room</span>
                                         </button>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Permanent Room Card */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                                <div className="p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div>
-                                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                                <span>🔗</span>
-                                                Your Permanent Meeting Room
-                                            </h2>
-                                            <p className="text-zinc-500 text-sm mt-1">
-                                                Share this link for instant
-                                                meetings - it never expires
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            {/* Permanent Room Link - Compact */}
+                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
+                                <div className="px-1 py-2 sm:p-4">
+                                    <div className="flex items-center gap-2 bg-zinc-800/50 sm:bg-zinc-800/30 rounded-xl p-2.5 sm:p-3">
                                         <input
                                             type="text"
-                                            value={`https://app.spritz.chat/room/${userAddress}`}
+                                            value={`app.spritz.chat/room/${userAddress?.slice(0, 8)}...`}
                                             readOnly
-                                            className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm font-mono"
+                                            className="flex-1 min-w-0 bg-transparent text-zinc-400 text-xs sm:text-sm font-mono truncate outline-none"
                                         />
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (!userAddress) return;
-                                                    const link = `${
-                                                        window.location.origin
-                                                    }/room/${userAddress.toLowerCase()}`;
-                                                    navigator.clipboard.writeText(
-                                                        link
-                                                    );
-                                                    const btn =
-                                                        document.querySelector(
-                                                            "[data-room-copy-btn]"
-                                                        ) as HTMLElement;
-                                                    if (btn) {
-                                                        const original =
-                                                            btn.textContent;
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (!userAddress) return;
+                                                const link = `${
+                                                    window.location.origin
+                                                }/room/${userAddress.toLowerCase()}`;
+                                                navigator.clipboard.writeText(
+                                                    link
+                                                );
+                                                const btn =
+                                                    document.querySelector(
+                                                        "[data-room-copy-btn]"
+                                                    ) as HTMLElement;
+                                                if (btn) {
+                                                    const original =
+                                                        btn.textContent;
+                                                    btn.textContent =
+                                                        "Copied!";
+                                                    setTimeout(() => {
                                                         btn.textContent =
-                                                            "Copied!";
-                                                        setTimeout(() => {
-                                                            btn.textContent =
-                                                                original ||
-                                                                "Copy Link";
-                                                        }, 2000);
-                                                    }
-                                                }}
-                                                data-room-copy-btn
-                                                className="flex-1 sm:flex-none px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors whitespace-nowrap"
-                                            >
-                                                Copy Link
-                                            </button>
-                                            <button
-                                                onClick={async () => {
-                                                    try {
-                                                        // Ensure permanent room exists
-                                                        const res = await fetch(
-                                                            `/api/rooms/permanent?wallet_address=${userAddress}`
-                                                        );
-                                                        if (res.ok) {
-                                                            // Use window.location.origin instead of hardcoded URL
-                                                            const roomUrl = `${window.location.origin}/room/${userAddress}`;
-                                                            window.location.href =
-                                                                roomUrl; // Use same-page navigation instead of new tab
-                                                        } else {
-                                                            alert(
-                                                                "Failed to open room"
-                                                            );
-                                                        }
-                                                    } catch (err) {
-                                                        console.error(
-                                                            "Failed to open room:",
-                                                            err
-                                                        );
-                                                        alert(
-                                                            "Failed to open room"
-                                                        );
-                                                    }
-                                                }}
-                                                className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-sm rounded-lg transition-all whitespace-nowrap"
-                                            >
-                                                Open Room
-                                            </button>
-                                        </div>
+                                                            original ||
+                                                            "Copy";
+                                                    }, 2000);
+                                                }
+                                            }}
+                                            data-room-copy-btn
+                                            className="shrink-0 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs sm:text-sm rounded-lg transition-colors"
+                                        >
+                                            Copy
+                                        </button>
                                     </div>
+                                    <p className="text-zinc-500 text-[10px] sm:text-xs mt-1.5 px-1">
+                                        Your permanent room link - share for instant meetings
+                                    </p>
                                 </div>
                             </div>
 
-                            {/* Scheduled Calls Card */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                                <div className="p-6 border-b border-zinc-800">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                                📅 Scheduled Calls
-                                            </h2>
-                                            <p className="text-zinc-500 text-sm mt-1">
-                                                Your upcoming and past scheduled
-                                                meetings
-                                            </p>
-                                        </div>
-                                    </div>
+                            {/* Scheduled Calls */}
+                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
+                                <div className="px-1 py-2 sm:p-4 sm:border-b sm:border-zinc-800">
+                                    <h2 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
+                                        <span>📅</span>
+                                        Scheduled Calls
+                                    </h2>
                                 </div>
-                                <div className="p-6">
+                                <div className="px-0 sm:p-4">
                                     <ScheduledCalls userAddress={userAddress} />
                                 </div>
                             </div>
 
-                            {/* Call History Card */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
-                                <div className="p-6 border-b border-zinc-800">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                                📞 Call History
-                                            </h2>
-                                            <p className="text-zinc-500 text-sm mt-1">
-                                                Voice and video calls with
-                                                friends
-                                            </p>
-                                        </div>
-                                    </div>
+                            {/* Call History */}
+                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
+                                <div className="px-1 py-2 sm:p-4 sm:border-b sm:border-zinc-800">
+                                    <h2 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
+                                        <span>📞</span>
+                                        Call History
+                                    </h2>
                                 </div>
-                                <div className="p-6">
+                                <div className="px-0 sm:p-4">
                                     <CallHistory
                                         userAddress={userAddress}
                                         friends={friendsListData}
@@ -3922,7 +3843,7 @@ function DashboardContent({
                                     />
                                 </div>
                             </div>
-                        </div>
+                        </>
                     )}
 
                     {/* Leaderboard Section */}
