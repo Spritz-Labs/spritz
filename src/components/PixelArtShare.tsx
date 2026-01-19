@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { upscalePixelArt, downloadPixelArt } from "./PixelArtImage";
 
 interface PixelArtShareProps {
     imageUrl: string;
@@ -32,6 +33,7 @@ export function PixelArtShare({ imageUrl, className = "", compact = false, showQ
     const [showMenu, setShowMenu] = useState(false);
     const [copiedType, setCopiedType] = useState<"link" | "image" | null>(null);
     const [isSharing, setIsSharing] = useState(false);
+    const [isDownloadingHD, setIsDownloadingHD] = useState(false);
 
     const spritzUrl = "https://spritz.chat";
     const callToAction = "🍊 Create your own pixel art on Spritz!";
@@ -184,6 +186,41 @@ export function PixelArtShare({ imageUrl, className = "", compact = false, showQ
         setShowMenu(false);
     };
 
+    // Download HD version (upscaled 16x)
+    const downloadHD = useCallback(async () => {
+        setIsDownloadingHD(true);
+        try {
+            // Create an image element to load the pixel art
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            
+            // Wait for image to load
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error("Failed to load image"));
+                img.src = imageUrl;
+            });
+            
+            // Upscale the image (16x is a good HD size for pixel art)
+            const upscaledDataUrl = upscalePixelArt(img, 16);
+            
+            // Generate filename from IPFS hash if available
+            const filename = ipfsHash 
+                ? `pixel-art-hd-${ipfsHash.slice(0, 8)}.png` 
+                : "pixel-art-hd.png";
+            
+            // Download it
+            downloadPixelArt(upscaledDataUrl, filename);
+            setShowMenu(false);
+        } catch (err) {
+            console.error("Failed to download HD:", err);
+            // Fallback to regular download
+            downloadImage();
+        } finally {
+            setIsDownloadingHD(false);
+        }
+    }, [imageUrl, ipfsHash]);
+
     // Check if native sharing is available
     const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
 
@@ -265,6 +302,14 @@ export function PixelArtShare({ imageUrl, className = "", compact = false, showQ
                                     <button onClick={downloadImage} className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-3">
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                                         Download
+                                    </button>
+                                    <button onClick={downloadHD} disabled={isDownloadingHD} className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors flex items-center gap-3 disabled:opacity-50">
+                                        {isDownloadingHD ? (
+                                            <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+                                        ) : (
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                        )}
+                                        {isDownloadingHD ? "Upscaling..." : "Download HD ✨"}
                                     </button>
                                 </div>
                             </motion.div>
@@ -389,7 +434,21 @@ export function PixelArtShare({ imageUrl, className = "", compact = false, showQ
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                     </svg>
-                                    Download Image
+                                    Download
+                                </button>
+                                <button
+                                    onClick={downloadHD}
+                                    disabled={isDownloadingHD}
+                                    className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors flex items-center gap-3 disabled:opacity-50"
+                                >
+                                    {isDownloadingHD ? (
+                                        <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+                                    ) : (
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                    )}
+                                    {isDownloadingHD ? "Upscaling..." : "Download HD ✨"}
                                 </button>
                                 <button
                                     onClick={copyShareLink}
