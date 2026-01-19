@@ -1128,8 +1128,9 @@ export function WakuProvider({
                     setInitStatus("");
                     
                     const errorMessage = err instanceof Error ? err.message : "Failed to connect";
-                    if (errorMessage.includes("timeout")) {
-                        setError("Network timeout. Check your connection and try again.");
+                    if (errorMessage.includes("timeout") || errorMessage.includes("Peer")) {
+                        // Waku network nodes may be temporarily unavailable
+                        setError("Waku network temporarily unavailable. Your messages are still saved - try again later.");
                     } else {
                         setError(errorMessage);
                     }

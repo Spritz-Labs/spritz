@@ -92,7 +92,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     };
 
     // Resize image for avatar (ensure high quality)
-    const resizeImageForAvatar = (file: File, maxSize: number = 512): Promise<Blob> => {
+    // Increased to 1024px and 95% quality for sharper profile photos
+    const resizeImageForAvatar = (file: File, maxSize: number = 1024): Promise<Blob> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
             const canvas = document.createElement('canvas');
@@ -109,7 +110,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 const sx = (img.width - size) / 2;
                 const sy = (img.height - size) / 2;
                 
-                // Set canvas to target size
+                // Set canvas to target size (use original size if smaller than max)
                 const targetSize = Math.min(size, maxSize);
                 canvas.width = targetSize;
                 canvas.height = targetSize;
@@ -121,7 +122,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 // Draw cropped and resized image
                 ctx.drawImage(img, sx, sy, size, size, 0, 0, targetSize, targetSize);
                 
-                // Convert to blob
+                // Convert to blob with high quality
                 canvas.toBlob(
                     (blob) => {
                         if (blob) {
@@ -131,7 +132,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                         }
                     },
                     'image/jpeg',
-                    0.9 // High quality
+                    0.95 // Higher quality (was 0.9)
                 );
             };
             
@@ -642,8 +643,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                                             setError(null);
 
                                                             try {
-                                                                // Resize image for better quality (512x512)
-                                                                const resizedBlob = await resizeImageForAvatar(file, 512);
+                                                                // Resize image for better quality (1024x1024)
+                                                                const resizedBlob = await resizeImageForAvatar(file, 1024);
                                                                 const resizedFile = new File([resizedBlob], 'avatar.jpg', { type: 'image/jpeg' });
                                                                 
                                                                 const formData = new FormData();
