@@ -93,10 +93,10 @@ export async function GET(
             .order("is_creator", { ascending: false })
             .order("joined_at", { ascending: true });
 
-        // Get profiles for members
+        // Get user info for members (from shout_users)
         const memberAddresses = (members || []).map(m => m.member_address);
-        const { data: profiles } = await supabase
-            .from("shout_profiles")
+        const { data: users } = await supabase
+            .from("shout_users")
             .select("wallet_address, avatar_url")
             .in("wallet_address", memberAddresses);
 
@@ -105,8 +105,8 @@ export async function GET(
             .select("wallet_address, username")
             .in("wallet_address", memberAddresses);
 
-        const profileMap = (profiles || []).reduce((acc, p) => {
-            acc[p.wallet_address.toLowerCase()] = { avatar: p.avatar_url };
+        const profileMap = (users || []).reduce((acc, u) => {
+            acc[u.wallet_address.toLowerCase()] = { avatar: u.avatar_url };
             return acc;
         }, {} as Record<string, { avatar: string | null }>);
 

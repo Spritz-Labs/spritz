@@ -10,12 +10,23 @@ type VaultListProps = {
     onCreateNew: () => void;
 };
 
+// Common emojis for vaults
+const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "🔒", "💼", "🏠", "🎮", "🌈"];
+
 export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
-    const { vaults, isLoading, getVault, deleteVault } = useVaults(userAddress);
+    const { vaults, isLoading, getVault, updateVault, deleteVault } = useVaults(userAddress);
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    
+    // Edit state
+    const [isEditing, setIsEditing] = useState(false);
+    const [editName, setEditName] = useState("");
+    const [editDescription, setEditDescription] = useState("");
+    const [editEmoji, setEditEmoji] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
     const handleViewVault = async (vault: VaultListItem) => {
         setIsLoadingDetails(true);
@@ -49,6 +60,47 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const truncateAddress = (addr: string) => 
         `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
+    // Check if current user is the creator
+    const isCreator = selectedVault?.creatorAddress.toLowerCase() === userAddress.toLowerCase();
+
+    const startEditing = () => {
+        if (!selectedVault) return;
+        setEditName(selectedVault.name);
+        setEditDescription(selectedVault.description || "");
+        setEditEmoji(selectedVault.emoji);
+        setIsEditing(true);
+        setShowEmojiPicker(false);
+    };
+
+    const cancelEditing = () => {
+        setIsEditing(false);
+        setShowEmojiPicker(false);
+    };
+
+    const saveEdits = async () => {
+        if (!selectedVault || !editName.trim()) return;
+        
+        setIsSaving(true);
+        try {
+            await updateVault(selectedVault.id, {
+                name: editName.trim(),
+                description: editDescription.trim() || undefined,
+                emoji: editEmoji,
+            });
+            
+            // Refresh vault details
+            const updated = await getVault(selectedVault.id);
+            if (updated) {
+                setSelectedVault(updated);
+            }
+            setIsEditing(false);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Failed to update vault");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     // Details view
     if (selectedVault) {
         const chainInfo = getChainById(selectedVault.chainId);
@@ -57,7 +109,11 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             <div className="space-y-4">
                 {/* Back button */}
                 <button
-                    onClick={() => setSelectedVault(null)}
+                    onClick={() => {
+                        setIsEditing(false);
+                        setShowEmojiPicker(false);
+                        setSelectedVault(null);
+                    }}
                     className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,19 +124,129 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
                 {/* Vault header */}
                 <div className="p-4 bg-zinc-800/50 rounded-xl">
-                    <div className="flex items-center gap-3">
-                        <span className="text-3xl">{selectedVault.emoji}</span>
-                        <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-white">{selectedVault.name}</h3>
-                            {selectedVault.description && (
-                                <p className="text-sm text-zinc-400">{selectedVault.description}</p>
-                            )}
+                    {isEditing ? (
+                        // Edit mode
+                        <div className="space-y-3">
+                            {/* Emoji picker */}
+                            <div>
+                                <label className="block text-xs text-zinc-400 mb-1">Emoji</label>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                        className="w-14 h-14 text-3xl bg-zinc-900 rounded-xl hover:bg-zinc-900/70 transition-colors flex items-center justify-center"
+                                    >
+                                        {editEmoji}
+                                    </button>
+                                    <AnimatePresence>
+                                        {showEmojiPicker && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: -10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -10 }}
+                                                className="absolute top-full left-0 mt-2 p-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl z-10 grid grid-cols-6 gap-1"
+                                            >
+                                                {VAULT_EMOJIS.map((emoji) => (
+                                                    <button
+                                                        key={emoji}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditEmoji(emoji);
+                                                            setShowEmojiPicker(false);
+                                                        }}
+                                                        className={`w-10 h-10 text-xl rounded-lg hover:bg-zinc-700 transition-colors ${
+                                                            editEmoji === emoji ? "bg-orange-500/20 ring-2 ring-orange-500" : ""
+                                                        }`}
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            </div>
+                            
+                            {/* Name input */}
+                            <div>
+                                <label className="block text-xs text-zinc-400 mb-1">Name</label>
+                                <input
+                                    type="text"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    placeholder="Vault name"
+                                    maxLength={50}
+                                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
+                                />
+                            </div>
+                            
+                            {/* Description input */}
+                            <div>
+                                <label className="block text-xs text-zinc-400 mb-1">Description (optional)</label>
+                                <input
+                                    type="text"
+                                    value={editDescription}
+                                    onChange={(e) => setEditDescription(e.target.value)}
+                                    placeholder="What's this vault for?"
+                                    maxLength={200}
+                                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
+                                />
+                            </div>
+                            
+                            {/* Action buttons */}
+                            <div className="flex items-center gap-2 pt-2">
+                                <button
+                                    onClick={cancelEditing}
+                                    disabled={isSaving}
+                                    className="flex-1 px-3 py-2 bg-zinc-700 text-white text-sm font-medium rounded-lg hover:bg-zinc-600 transition-colors disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={saveEdits}
+                                    disabled={isSaving || !editName.trim()}
+                                    className="flex-1 px-3 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {isSaving ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        "Save Changes"
+                                    )}
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                            <span className="text-lg">{chainInfo?.icon}</span>
-                            <span className="text-sm text-zinc-400">{chainInfo?.name}</span>
+                    ) : (
+                        // View mode
+                        <div className="flex items-center gap-3">
+                            <span className="text-3xl">{selectedVault.emoji}</span>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-white">{selectedVault.name}</h3>
+                                {selectedVault.description && (
+                                    <p className="text-sm text-zinc-400">{selectedVault.description}</p>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {isCreator && (
+                                    <button
+                                        onClick={startEditing}
+                                        className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+                                        title="Edit vault"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </button>
+                                )}
+                                <div className="flex items-center gap-1">
+                                    <span className="text-lg">{chainInfo?.icon}</span>
+                                    <span className="text-sm text-zinc-400">{chainInfo?.name}</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Safe address */}
