@@ -115,14 +115,8 @@ export async function GET(request: NextRequest) {
             organizer: e.organizer?.email,
         }));
 
-        // Get list of all calendars
-        const calendarListResponse = await calendar.calendarList.list();
-        const calendars = (calendarListResponse.data.items || []).map(c => ({
-            id: c.id,
-            summary: c.summary,
-            primary: c.primary,
-            accessRole: c.accessRole,
-        }));
+        // Note: Skipping calendarList.list() as it requires calendar.readonly scope
+        // which we don't request to minimize permissions
 
         return NextResponse.json({
             query: {
@@ -134,7 +128,7 @@ export async function GET(request: NextRequest) {
                 endISO,
             },
             connection: {
-                calendarId: connection.calendar_id,
+                calendarId: connection.calendar_id || "primary",
                 lastSyncAt: connection.last_sync_at,
                 isActive: connection.is_active,
             },
@@ -144,7 +138,6 @@ export async function GET(request: NextRequest) {
                 isBusy: busyPeriods.length > 0,
             },
             events,
-            availableCalendars: calendars,
         });
     } catch (error) {
         console.error("[Debug Calendar] Error:", error);
