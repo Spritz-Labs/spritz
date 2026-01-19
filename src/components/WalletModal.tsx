@@ -14,7 +14,10 @@ import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import { useOnramp } from "@/hooks/useOnramp";
+import { useVaults } from "@/hooks/useVaults";
 import { PasskeyManager } from "./PasskeyManager";
+import { CreateVaultModal } from "./CreateVaultModal";
+import { VaultList } from "./VaultList";
 import { RecoverySignerManager } from "./RecoverySignerManager";
 import { MultiChainSecurity } from "./MultiChainSecurity";
 import type { ChainBalance, TokenBalance } from "@/app/api/wallet/balances/route";
@@ -581,7 +584,7 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
     );
 }
 
-type TabType = "balances" | "send" | "history" | "receive" | "security";
+type TabType = "balances" | "send" | "history" | "receive" | "security" | "vaults";
 
 export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authMethod }: WalletModalProps) {
     // Check if wallet is connected (for sending)
@@ -627,6 +630,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const [showPasskeyManager, setShowPasskeyManager] = useState(false);
     const [hasAcknowledgedChainWarning, setHasAcknowledgedChainWarning] = useState(false);
     const [showNetworksInfo, setShowNetworksInfo] = useState(false);
+    const [showCreateVaultModal, setShowCreateVaultModal] = useState(false);
+    
+    // Vaults hook
+    const { vaults, createVault } = useVaults(isOpen ? userAddress : null);
     
     // Selected chain for viewing balances and sending (default to Base)
     const [selectedChainId, setSelectedChainId] = useState<number>(8453);
@@ -1049,6 +1056,34 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     </div>
                                 )}
                             </div>
+
+                            {/* Vault Section */}
+                            {smartWalletAddress && (
+                                <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-sm">
+                                            🔐
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm text-zinc-300 font-medium">
+                                                Vault
+                                            </p>
+                                            <p className="text-xs text-zinc-500">
+                                                {vaults.length > 0 
+                                                    ? `${vaults.length} vault${vaults.length !== 1 ? "s" : ""}`
+                                                    : "Tap to Create a Spritz Social Vault"
+                                                }
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => setActiveTab("vaults")}
+                                            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-orange-500/20 text-orange-400 hover:bg-orange-500/30"
+                                        >
+                                            {vaults.length > 0 ? "View" : "Create"}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Total Balance across all chains */}
@@ -2113,6 +2148,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 </div>
                             )}
 
+                            {/* Vaults Tab */}
+                            {activeTab === "vaults" && (
+                                <div className="flex-1 p-4 overflow-y-auto">
+                                    <VaultList
+                                        userAddress={userAddress}
+                                        onCreateNew={() => setShowCreateVaultModal(true)}
+                                    />
+                                </div>
+                            )}
+
                             {/* Settings/Backup moved to menu - keeping backup tab hidden for now */}
                             {false && activeTab === "backup" as never && (
                                 <div className="p-6">
@@ -2229,6 +2274,17 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                     smartWalletAddress={smartWalletAddress}
                 />
             )}
+
+            {/* Create Vault Modal */}
+            <CreateVaultModal
+                isOpen={showCreateVaultModal}
+                onClose={() => setShowCreateVaultModal(false)}
+                userAddress={userAddress}
+                onCreate={async (params) => {
+                    await createVault(params);
+                    setShowCreateVaultModal(false);
+                }}
+            />
 
         </AnimatePresence>
     );
