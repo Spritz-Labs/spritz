@@ -35,7 +35,7 @@ interface EditAgentModalProps {
         personality?: string;
         avatarEmoji?: string;
         avatarUrl?: string | null;
-        visibility?: "private" | "friends" | "public";
+        visibility?: "private" | "friends" | "public" | "official";
         tags?: string[];
         webSearchEnabled?: boolean;
         useKnowledgeBase?: boolean;
@@ -51,11 +51,12 @@ interface EditAgentModalProps {
         apiTools?: APITool[];
     }) => Promise<void>;
     userAddress?: string;
+    isAdmin?: boolean;
 }
 
 type TabType = "general" | "capabilities" | "mcp" | "api";
 
-export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: EditAgentModalProps) {
+export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, isAdmin = false }: EditAgentModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("general");
     
     // General settings
@@ -64,7 +65,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
     const [emoji, setEmoji] = useState("🤖");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-    const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
+    const [visibility, setVisibility] = useState<"private" | "friends" | "public" | "official">("private");
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
     
@@ -197,7 +198,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
         personality: string;
         emoji: string;
         avatarUrl: string | null;
-        visibility: "private" | "friends" | "public";
+        visibility: "private" | "friends" | "public" | "official";
         tags: string[];
         webSearchEnabled: boolean;
         useKnowledgeBase: boolean;
@@ -719,18 +720,21 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                     {/* Visibility */}
                                     <div>
                                         <label className="block text-sm font-medium text-zinc-300 mb-2">Visibility</label>
-                                        <div className="grid grid-cols-3 gap-2">
+                                        <div className={`grid gap-2 ${isAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
                                             {[
                                                 { value: "private", label: "🔒 Private" },
                                                 { value: "friends", label: "👥 Friends" },
                                                 { value: "public", label: "🌍 Public" },
+                                                ...(isAdmin ? [{ value: "official", label: "⭐ Official" }] : []),
                                             ].map(opt => (
                                                 <button
                                                     key={opt.value}
                                                     onClick={() => setVisibility(opt.value as typeof visibility)}
                                                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                                                         visibility === opt.value
-                                                            ? "bg-purple-500/20 border-2 border-purple-500 text-purple-400"
+                                                            ? opt.value === "official" 
+                                                                ? "bg-orange-500/20 border-2 border-orange-500 text-orange-400"
+                                                                : "bg-purple-500/20 border-2 border-purple-500 text-purple-400"
                                                             : "bg-zinc-800 border border-zinc-700 text-zinc-400"
                                                     }`}
                                                 >
@@ -741,7 +745,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress }: 
                                     </div>
 
                                     {/* Tags */}
-                                    {(visibility === "friends" || visibility === "public") && (
+                                    {(visibility === "friends" || visibility === "public" || visibility === "official") && (
                                         <div>
                                             <label className="block text-sm font-medium text-zinc-300 mb-2">
                                                 Tags <span className="text-zinc-500 font-normal">({tags.length}/5)</span>

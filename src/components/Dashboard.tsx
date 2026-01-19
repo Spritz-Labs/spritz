@@ -3208,6 +3208,7 @@ function DashboardContent({
                                 <AgentsSection
                                     userAddress={userAddress}
                                     hasBetaAccess={hasBetaAccess}
+                                    isAdmin={isAdmin}
                                 />
                             </div>
                         </div>

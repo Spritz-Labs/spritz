@@ -66,7 +66,8 @@ const AGENT_TEMPLATES = [
 interface CreateAgentModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onCreate: (name: string, personality: string, emoji: string, visibility: "private" | "friends" | "public", tags: string[]) => Promise<void>;
+    onCreate: (name: string, personality: string, emoji: string, visibility: "private" | "friends" | "public" | "official", tags: string[]) => Promise<void>;
+    isAdmin?: boolean;
 }
 
 // Popular tag suggestions
@@ -76,11 +77,11 @@ const TAG_SUGGESTIONS = [
     "art", "science", "business", "education", "assistant", "fun",
 ];
 
-export function CreateAgentModal({ isOpen, onClose, onCreate }: CreateAgentModalProps) {
+export function CreateAgentModal({ isOpen, onClose, onCreate, isAdmin = false }: CreateAgentModalProps) {
     const [name, setName] = useState("");
     const [personality, setPersonality] = useState("");
     const [emoji, setEmoji] = useState("🤖");
-    const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
+    const [visibility, setVisibility] = useState<"private" | "friends" | "public" | "official">("private");
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
     const [isCreating, setIsCreating] = useState(false);
@@ -309,7 +310,7 @@ export function CreateAgentModal({ isOpen, onClose, onCreate }: CreateAgentModal
                                 <label className="block text-sm font-medium text-zinc-300 mb-2">
                                     Visibility
                                 </label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className={`grid gap-2 ${isAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
                                     <button
                                         onClick={() => setVisibility("private")}
                                         className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -340,16 +341,29 @@ export function CreateAgentModal({ isOpen, onClose, onCreate }: CreateAgentModal
                                     >
                                         🌍 Public
                                     </button>
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => setVisibility("official")}
+                                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                                visibility === "official"
+                                                    ? "bg-orange-500/20 border-2 border-orange-500 text-orange-400"
+                                                    : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                                            }`}
+                                        >
+                                            ⭐ Official
+                                        </button>
+                                    )}
                                 </div>
                                 <p className="text-xs text-zinc-500 mt-2">
                                     {visibility === "private" && "Only you can use this agent"}
                                     {visibility === "friends" && "Your friends can also use this agent"}
                                     {visibility === "public" && "Anyone can discover and use this agent"}
+                                    {visibility === "official" && "Official Spritz agent - public & managed by admins"}
                                 </p>
                             </div>
 
                             {/* Tags */}
-                            {(visibility === "friends" || visibility === "public") && (
+                            {(visibility === "friends" || visibility === "public" || visibility === "official") && (
                                 <div>
                                     <label className="block text-sm font-medium text-zinc-300 mb-2">
                                         Tags <span className="text-zinc-500 font-normal">({tags.length}/5)</span>

@@ -12,10 +12,11 @@ import { ExploreAgentsModal } from "./ExploreAgentsModal";
 interface AgentsSectionProps {
     userAddress: string;
     hasBetaAccess: boolean;
+    isAdmin?: boolean;
 }
 
-export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps) {
-    const { agents, isLoading, error, createAgent, updateAgent, deleteAgent } = useAgents(userAddress);
+export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: AgentsSectionProps) {
+    const { agents, isLoading, error, createAgent, updateAgent, deleteAgent } = useAgents(userAddress, isAdmin);
     const { favorites, removeFavorite, refresh: refreshFavorites } = useFavoriteAgents(userAddress);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -63,7 +64,7 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
         name: string,
         personality: string,
         emoji: string,
-        visibility: "private" | "friends" | "public",
+        visibility: "private" | "friends" | "public" | "official",
         tags: string[]
     ) => {
         await createAgent(name, personality, emoji, visibility, tags);
@@ -113,7 +114,7 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
         personality?: string;
         avatarEmoji?: string;
         avatarUrl?: string | null;
-        visibility?: "private" | "friends" | "public";
+        visibility?: "private" | "friends" | "public" | "official";
         tags?: string[];
         webSearchEnabled?: boolean;
         useKnowledgeBase?: boolean;
@@ -346,8 +347,12 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                 <div className="flex items-center gap-1.5 sm:gap-2">
                                                     <h3 className="text-sm sm:text-base font-medium text-white truncate">{agent.name}</h3>
                                                     {agent.visibility !== "private" && (
-                                                        <span className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-zinc-700 rounded text-zinc-400">
-                                                            {agent.visibility === "friends" ? "👥" : "🌍"}
+                                                        <span className={`text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded ${
+                                                            agent.visibility === "official" 
+                                                                ? "bg-orange-500/20 text-orange-400 border border-orange-500/30" 
+                                                                : "bg-zinc-700 text-zinc-400"
+                                                        }`}>
+                                                            {agent.visibility === "friends" ? "👥" : agent.visibility === "official" ? "⭐" : "🌍"}
                                                         </span>
                                                     )}
                                                     {agent.x402_enabled && (
@@ -518,6 +523,7 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                 isOpen={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 onCreate={handleCreateAgent}
+                isAdmin={isAdmin}
             />
             <AgentChatModal
                 isOpen={isChatOpen}
@@ -538,6 +544,7 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                 agent={selectedAgent}
                 onSave={handleSaveAgent}
                 userAddress={userAddress}
+                isAdmin={isAdmin}
             />
             <AgentKnowledgeModal
                 isOpen={isKnowledgeModalOpen}
@@ -582,7 +589,7 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                         <div className="p-2 sm:p-3 bg-zinc-800/50 rounded-lg sm:rounded-xl border border-zinc-700/50">
                             <p className="text-[10px] sm:text-xs text-zinc-400 mb-0.5 sm:mb-1">Public</p>
                             <p className="text-sm sm:text-lg font-bold text-emerald-400">
-                                {agents.filter(a => a.visibility === "public").length}
+                                {agents.filter(a => a.visibility === "public" || a.visibility === "official").length}
                             </p>
                         </div>
                         <div className="p-2 sm:p-3 bg-zinc-800/50 rounded-lg sm:rounded-xl border border-zinc-700/50">
@@ -614,14 +621,14 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                     )}
 
                     {/* Public Agent URLs & Embed Code - Hidden on mobile, too detailed */}
-                    {agents.filter(a => a.visibility === "public").length > 0 && (
+                    {agents.filter(a => a.visibility === "public" || a.visibility === "official").length > 0 && (
                         <div className="hidden sm:block space-y-4">
                             <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
                                 <span>🔗</span>
                                 Public Agent URLs & Embed Code
                             </h4>
                             {agents
-                                .filter(a => a.visibility === "public")
+                                .filter(a => a.visibility === "public" || a.visibility === "official")
                                 .map((agent) => {
                                     const publicUrl = `${typeof window !== "undefined" ? window.location.origin : "https://app.spritz.chat"}/agent/${agent.id}`;
                                     const embedCode = `<iframe 
@@ -1528,7 +1535,7 @@ export default function SpritzAgent() {
                     )}
 
                     {/* No Public Agents Message - Desktop only */}
-                    {agents.filter(a => a.visibility === "public").length === 0 && (
+                    {agents.filter(a => a.visibility === "public" || a.visibility === "official").length === 0 && (
                         <div className="hidden sm:block p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl text-center">
                             <p className="text-sm text-zinc-400">
                                 Make an agent public to get a shareable URL and embed code

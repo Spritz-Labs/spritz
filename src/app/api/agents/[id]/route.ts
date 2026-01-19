@@ -110,15 +110,36 @@ export async function PATCH(
 
         const normalizedAddress = userAddress.toLowerCase();
 
-        // Check ownership
+        // Check if user is an admin
+        const { data: adminData } = await supabase
+            .from("shout_admins")
+            .select("wallet_address")
+            .eq("wallet_address", normalizedAddress)
+            .single();
+        const isAdmin = !!adminData;
+
+        // Check ownership (or admin status for official agents)
         const { data: existingAgent } = await supabase
             .from("shout_agents")
-            .select("owner_address, name")
+            .select("owner_address, name, visibility")
             .eq("id", id)
             .single();
 
-        if (!existingAgent || existingAgent.owner_address !== normalizedAddress) {
+        if (!existingAgent) {
+            return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+        }
+
+        // Allow access if: user owns the agent OR (user is admin AND agent is official)
+        const isOwner = existingAgent.owner_address === normalizedAddress;
+        const canEditOfficial = isAdmin && existingAgent.visibility === "official";
+        
+        if (!isOwner && !canEditOfficial) {
             return NextResponse.json({ error: "Access denied" }, { status: 403 });
+        }
+
+        // Only admins can set visibility to "official"
+        if (visibility === "official" && !isAdmin) {
+            return NextResponse.json({ error: "Only admins can set official visibility" }, { status: 403 });
         }
 
         // Build update object
@@ -213,14 +234,30 @@ export async function DELETE(
 
         const normalizedAddress = userAddress.toLowerCase();
 
-        // Check ownership
+        // Check if user is an admin
+        const { data: adminData } = await supabase
+            .from("shout_admins")
+            .select("wallet_address")
+            .eq("wallet_address", normalizedAddress)
+            .single();
+        const isAdmin = !!adminData;
+
+        // Check ownership (or admin status for official agents)
         const { data: existingAgent } = await supabase
             .from("shout_agents")
-            .select("owner_address")
+            .select("owner_address, visibility")
             .eq("id", id)
             .single();
 
-        if (!existingAgent || existingAgent.owner_address !== normalizedAddress) {
+        if (!existingAgent) {
+            return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+        }
+
+        // Allow deletion if: user owns the agent OR (user is admin AND agent is official)
+        const isOwner = existingAgent.owner_address === normalizedAddress;
+        const canDeleteOfficial = isAdmin && existingAgent.visibility === "official";
+        
+        if (!isOwner && !canDeleteOfficial) {
             return NextResponse.json({ error: "Access denied" }, { status: 403 });
         }
 

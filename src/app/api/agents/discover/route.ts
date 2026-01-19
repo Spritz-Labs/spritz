@@ -69,8 +69,10 @@ export async function GET(request: NextRequest) {
             .limit(limit);
 
         // Apply visibility filter
+        // Note: "official" agents are always discoverable like public agents
         if (filter === "public") {
-            query = query.eq("visibility", "public");
+            // Public and official agents
+            query = query.in("visibility", ["public", "official"]);
         } else if (filter === "friends") {
             // Only friends' agents that are visible to friends
             if (friendAddresses.size > 0) {
@@ -84,15 +86,15 @@ export async function GET(request: NextRequest) {
                 return NextResponse.json({ agents: [], total: 0 });
             }
         } else {
-            // All discoverable agents (public + friends' shared)
+            // All discoverable agents (public + official + friends' shared)
             if (friendAddresses.size > 0) {
-                // Public agents OR friends' agents with friends/public visibility
+                // Public/official agents OR friends' agents with friends/public visibility
                 query = query.or(
-                    `visibility.eq.public,and(owner_address.in.(${Array.from(friendAddresses).join(",")}),visibility.in.(friends,public))`
+                    `visibility.in.(public,official),and(owner_address.in.(${Array.from(friendAddresses).join(",")}),visibility.in.(friends,public))`
                 );
             } else {
-                // No friends, only public agents
-                query = query.eq("visibility", "public");
+                // No friends, only public and official agents
+                query = query.in("visibility", ["public", "official"]);
             }
         }
 

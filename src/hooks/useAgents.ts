@@ -39,7 +39,7 @@ export type Agent = {
     model: string;
     avatar_emoji: string;
     avatar_url?: string | null;
-    visibility: "private" | "friends" | "public";
+    visibility: "private" | "friends" | "public" | "official";
     web_search_enabled: boolean;
     use_knowledge_base: boolean;
     mcp_enabled: boolean;
@@ -90,12 +90,12 @@ export type ChatMessage = {
     scheduling?: SchedulingData;
 };
 
-export function useAgents(userAddress: string | null) {
+export function useAgents(userAddress: string | null, isAdmin: boolean = false) {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch user's agents
+    // Fetch user's agents (and official agents if admin)
     const fetchAgents = useCallback(async () => {
         if (!userAddress) {
             setAgents([]);
@@ -107,7 +107,12 @@ export function useAgents(userAddress: string | null) {
         setError(null);
 
         try {
-            const res = await fetch(`/api/agents?userAddress=${encodeURIComponent(userAddress)}`);
+            // Build URL with optional includeOfficial param for admins
+            const url = isAdmin 
+                ? `/api/agents?userAddress=${encodeURIComponent(userAddress)}&includeOfficial=true`
+                : `/api/agents?userAddress=${encodeURIComponent(userAddress)}`;
+            
+            const res = await fetch(url);
             const data = await res.json();
 
             if (!res.ok) {
@@ -121,14 +126,14 @@ export function useAgents(userAddress: string | null) {
         } finally {
             setIsLoading(false);
         }
-    }, [userAddress]);
+    }, [userAddress, isAdmin]);
 
     // Create a new agent
     const createAgent = useCallback(async (
         name: string,
         personality?: string,
         avatarEmoji?: string,
-        visibility?: "private" | "friends" | "public",
+        visibility?: "private" | "friends" | "public" | "official",
         tags?: string[]
     ): Promise<Agent | null> => {
         if (!userAddress) return null;
@@ -172,7 +177,7 @@ export function useAgents(userAddress: string | null) {
             personality?: string;
             avatarEmoji?: string;
             avatarUrl?: string | null;
-            visibility?: "private" | "friends" | "public";
+            visibility?: "private" | "friends" | "public" | "official";
             tags?: string[];
             webSearchEnabled?: boolean;
             useKnowledgeBase?: boolean;

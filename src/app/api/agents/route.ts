@@ -16,13 +16,13 @@ export type Agent = {
     system_instructions: string | null;
     model: string;
     avatar_emoji: string;
-    visibility: "private" | "friends" | "public";
+    visibility: "private" | "friends" | "public" | "official";
     message_count: number;
     created_at: string;
     updated_at: string;
 };
 
-// GET: List user's agents
+// GET: List user's agents (and official agents if admin)
 export async function GET(request: NextRequest) {
     if (!supabase) {
         return NextResponse.json({ error: "Database not configured" }, { status: 500 });
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const userAddress = searchParams.get("userAddress");
+        const includeOfficial = searchParams.get("includeOfficial") === "true";
 
         if (!userAddress) {
             return NextResponse.json({ error: "User address required" }, { status: 400 });
@@ -39,18 +40,44 @@ export async function GET(request: NextRequest) {
         const normalizedAddress = userAddress.toLowerCase();
 
         // Get user's own agents
-        const { data: agents, error } = await supabase
+        const { data: userAgents, error: userError } = await supabase
             .from("shout_agents")
             .select("*")
             .eq("owner_address", normalizedAddress)
             .order("created_at", { ascending: false });
 
-        if (error) {
-            console.error("[Agents] Error fetching agents:", error);
+        if (userError) {
+            console.error("[Agents] Error fetching user agents:", userError);
             return NextResponse.json({ error: "Failed to fetch agents" }, { status: 500 });
         }
 
-        return NextResponse.json({ agents: agents || [] });
+        let allAgents = userAgents || [];
+
+        // If admin, also fetch official agents (not already owned by this user)
+        if (includeOfficial) {
+            // Verify the user is actually an admin
+            const { data: adminData } = await supabase
+                .from("shout_admins")
+                .select("wallet_address")
+                .eq("wallet_address", normalizedAddress)
+                .single();
+
+            if (adminData) {
+                const { data: officialAgents, error: officialError } = await supabase
+                    .from("shout_agents")
+                    .select("*")
+                    .eq("visibility", "official")
+                    .neq("owner_address", normalizedAddress) // Exclude user's own (already included)
+                    .order("created_at", { ascending: false });
+
+                if (!officialError && officialAgents) {
+                    // Merge official agents into the list
+                    allAgents = [...allAgents, ...officialAgents];
+                }
+            }
+        }
+
+        return NextResponse.json({ agents: allAgents });
     } catch (error) {
         console.error("[Agents] Error:", error);
         return NextResponse.json({ error: "Failed to fetch agents" }, { status: 500 });
@@ -99,17 +126,36 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check agent limit (max 5 agents per user for now)
-        const { count } = await supabase
-            .from("shout_agents")
-            .select("*", { count: "exact", head: true })
-            .eq("owner_address", normalizedAddress);
+        // If visibility is "official", check that user is an admin
+        if (visibility === "official") {
+            const { data: adminData } = await supabase
+                .from("shout_admins")
+                .select("wallet_address")
+                .eq("wallet_address", normalizedAddress)
+                .single();
+            
+            if (!adminData) {
+                return NextResponse.json(
+                    { error: "Only admins can create official agents" },
+                    { status: 403 }
+                );
+            }
+        }
 
-        if ((count || 0) >= 5) {
-            return NextResponse.json(
-                { error: "Maximum of 5 agents allowed per user" },
-                { status: 400 }
-            );
+        // Check agent limit (max 5 agents per user for now)
+        // Skip limit for official agents
+        if (visibility !== "official") {
+            const { count } = await supabase
+                .from("shout_agents")
+                .select("*", { count: "exact", head: true })
+                .eq("owner_address", normalizedAddress);
+
+            if ((count || 0) >= 5) {
+                return NextResponse.json(
+                    { error: "Maximum of 5 agents allowed per user" },
+                    { status: 400 }
+                );
+            }
         }
 
         // Generate system instructions from personality
