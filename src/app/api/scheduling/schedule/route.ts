@@ -193,8 +193,20 @@ export async function POST(request: NextRequest) {
         });
 
         if (hasConflict) {
+            const conflictingCall = existingCalls?.find((call) => {
+                const callStart = new Date(call.scheduled_at).getTime();
+                const callDuration = (call.duration_minutes || 30) * 60 * 1000;
+                const callEnd = callStart + callDuration;
+                return (
+                    (slotStart >= callStart && slotStart < callEnd) ||
+                    (slotEndTime > callStart && slotEndTime <= callEnd) ||
+                    (slotStart <= callStart && slotEndTime >= callEnd)
+                );
+            });
+            
             console.log("[Schedule] Database conflict detected:", {
                 requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
+                conflictingCall,
                 existingCalls: existingCalls?.map(c => ({
                     id: c.id,
                     scheduledAt: c.scheduled_at,
@@ -202,7 +214,13 @@ export async function POST(request: NextRequest) {
                 })),
             });
             return NextResponse.json(
-                { error: "This time slot is no longer available", source: "database" },
+                { 
+                    error: "This time slot is no longer available", 
+                    source: "database",
+                    details: conflictingCall 
+                        ? `Existing call at ${conflictingCall.scheduled_at} (${conflictingCall.duration_minutes}min)`
+                        : "Conflicting scheduled call found",
+                },
                 { status: 409 }
             );
         }
