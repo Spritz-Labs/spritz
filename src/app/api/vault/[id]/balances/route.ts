@@ -239,7 +239,7 @@ export async function GET(
             .from("shout_vault_members")
             .select("id")
             .eq("vault_id", vaultId)
-            .eq("user_address", user.userAddress.toLowerCase())
+            .eq("member_address", user.userAddress.toLowerCase())
             .single();
 
         if (!membership) {
