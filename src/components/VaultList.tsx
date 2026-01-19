@@ -47,14 +47,23 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
+        console.log("[VaultList] Fetching balances for vault:", vaultId);
         setIsLoadingBalances(true);
         try {
             const response = await fetch(`/api/vault/${vaultId}/balances`, {
                 credentials: "include",
             });
+            console.log("[VaultList] Balance response status:", response.status);
             if (response.ok) {
                 const data = await response.json();
+                console.log("[VaultList] Balance data received:", JSON.stringify(data, null, 2));
+                console.log("[VaultList] Tokens count:", data.tokens?.length || 0);
+                console.log("[VaultList] Native balance:", data.nativeBalance);
+                console.log("[VaultList] Total USD:", data.totalUsd);
                 setBalances(data);
+            } else {
+                const errorText = await response.text();
+                console.error("[VaultList] Balance fetch failed:", response.status, errorText);
             }
         } catch (err) {
             console.error("[VaultList] Error fetching balances:", err);
