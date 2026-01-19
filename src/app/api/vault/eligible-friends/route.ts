@@ -9,7 +9,7 @@ const supabase = createClient(
 
 /**
  * GET /api/vault/eligible-friends
- * Returns friends who have Spritz Smart Wallets and can be added as vault signers
+ * Returns friends who have Spritz Smart Wallets (from shout_users) and can be added as vault signers
  */
 export async function GET(request: NextRequest) {
     try {
@@ -44,25 +44,25 @@ export async function GET(request: NextRequest) {
 
         const friendAddresses = friendsData.map(f => f.friend_address.toLowerCase());
 
-        // Get profiles of friends who have smart wallets
-        const { data: profiles, error: profilesError } = await supabase
-            .from("shout_profiles")
+        // Get users who have smart wallets (stored in shout_users table)
+        const { data: users, error: usersError } = await supabase
+            .from("shout_users")
             .select("wallet_address, smart_wallet_address, avatar_url")
             .in("wallet_address", friendAddresses)
             .not("smart_wallet_address", "is", null);
 
-        if (profilesError) {
-            console.error("[Vault] Error fetching profiles:", profilesError);
+        if (usersError) {
+            console.error("[Vault] Error fetching users:", usersError);
             return NextResponse.json(
-                { error: "Failed to fetch profiles" },
+                { error: "Failed to fetch users" },
                 { status: 500 }
             );
         }
 
         // Filter to only those with valid smart wallet addresses
-        const eligibleAddresses = (profiles || [])
-            .filter(p => p.smart_wallet_address && p.smart_wallet_address.length === 42)
-            .map(p => p.wallet_address.toLowerCase());
+        const eligibleAddresses = (users || [])
+            .filter(u => u.smart_wallet_address && u.smart_wallet_address.length === 42)
+            .map(u => u.wallet_address.toLowerCase());
 
         if (eligibleAddresses.length === 0) {
             return NextResponse.json({ friends: [] });
@@ -80,13 +80,13 @@ export async function GET(request: NextRequest) {
         }, {} as Record<string, string>);
 
         // Format response
-        const eligibleFriends = (profiles || [])
-            .filter(p => p.smart_wallet_address && p.smart_wallet_address.length === 42)
-            .map(p => ({
-                address: p.wallet_address,
-                smartWalletAddress: p.smart_wallet_address,
-                username: usernameMap[p.wallet_address.toLowerCase()],
-                avatar: p.avatar_url,
+        const eligibleFriends = (users || [])
+            .filter(u => u.smart_wallet_address && u.smart_wallet_address.length === 42)
+            .map(u => ({
+                address: u.wallet_address,
+                smartWalletAddress: u.smart_wallet_address,
+                username: usernameMap[u.wallet_address.toLowerCase()],
+                avatar: u.avatar_url,
             }));
 
         return NextResponse.json({ friends: eligibleFriends });
