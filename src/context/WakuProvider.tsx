@@ -751,6 +751,7 @@ export type ConversationSecurityStatus = {
 type WakuContextType = {
     isInitialized: boolean;
     isInitializing: boolean;
+    initStatus: string; // Current initialization step for UI feedback
     error: string | null;
     userInboxId: string | null;
     unreadCounts: Record<string, number>;
@@ -1031,6 +1032,9 @@ export function WakuProvider({
     );
 
     // Initialize Waku node
+    // Track initialization status for UI feedback
+    const [initStatus, setInitStatus] = useState<string>("");
+    
     const initialize = useCallback(async (): Promise<boolean> => {
         if (!userAddress) {
             setError("Wallet not connected");
@@ -1039,6 +1043,7 @@ export function WakuProvider({
 
         // Wait for SDK to load if not ready
         if (!wakuSdk || !wakuEncryption || !wakuUtils) {
+            setInitStatus("Loading SDK...");
             log.debug("[Waku] SDK not loaded yet, waiting...");
             // Try to wait for SDK
             for (let i = 0; i < 50; i++) {
@@ -1047,6 +1052,7 @@ export function WakuProvider({
             }
             if (!wakuSdk || !wakuEncryption || !wakuUtils) {
                 setError("Waku SDK not loaded yet. Please try again.");
+                setInitStatus("");
                 return false;
             }
         }
@@ -1065,53 +1071,78 @@ export function WakuProvider({
         setIsInitializing(true);
         setError(null);
 
-        try {
-            log.debug("[Waku] Creating light node...");
+        // Retry logic for better reliability
+        const MAX_RETRIES = 2;
+        const PEER_TIMEOUT = 15000; // 15 seconds per attempt
+        
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                setInitStatus(`Creating node... (attempt ${attempt}/${MAX_RETRIES})`);
+                log.debug(`[Waku] Creating light node (attempt ${attempt})...`);
 
-            // Create and start a Light Node
-            const node = await wakuSdk.createLightNode({
-                defaultBootstrap: true,
-                networkConfig: {
-                    clusterId: 1,
-                },
-            });
+                // Create and start a Light Node
+                const node = await wakuSdk.createLightNode({
+                    defaultBootstrap: true,
+                    networkConfig: {
+                        clusterId: 1,
+                    },
+                });
 
-            await node.start();
-            log.debug("[Waku] Node started");
+                setInitStatus("Starting node...");
+                await node.start();
+                log.debug("[Waku] Node started");
 
-            // Wait for peer connections with timeout
-            log.debug("[Waku] Waiting for peers...");
-            const peerPromise = node.waitForPeers([
-                wakuSdk.Protocols.LightPush,
-                wakuSdk.Protocols.Filter,
-            ]);
+                // Wait for peer connections with timeout
+                setInitStatus("Connecting to peers...");
+                log.debug("[Waku] Waiting for peers...");
+                const peerPromise = node.waitForPeers([
+                    wakuSdk.Protocols.LightPush,
+                    wakuSdk.Protocols.Filter,
+                ]);
 
-            // Add timeout for peer connection
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(
-                    () => reject(new Error("Peer connection timeout")),
-                    30000
-                )
-            );
+                // Add timeout for peer connection
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(
+                        () => reject(new Error("Peer connection timeout")),
+                        PEER_TIMEOUT
+                    )
+                );
 
-            await Promise.race([peerPromise, timeoutPromise]);
-            log.debug("[Waku] Connected to peers");
+                await Promise.race([peerPromise, timeoutPromise]);
+                log.debug("[Waku] Connected to peers");
 
-            nodeRef.current = node;
-            setIsInitialized(true);
-            setIsInitializing(false);
-            setError(null);
+                nodeRef.current = node;
+                setIsInitialized(true);
+                setIsInitializing(false);
+                setInitStatus("");
+                setError(null);
 
-            return true;
-        } catch (err) {
-            log.error("[Waku] Failed to initialize:", err);
-            setIsInitialized(false);
-            setIsInitializing(false);
-            setError(
-                err instanceof Error ? err.message : "Failed to initialize Waku"
-            );
-            return false;
+                return true;
+            } catch (err) {
+                log.error(`[Waku] Initialization attempt ${attempt} failed:`, err);
+                
+                // If this was the last attempt, set error
+                if (attempt === MAX_RETRIES) {
+                    setIsInitialized(false);
+                    setIsInitializing(false);
+                    setInitStatus("");
+                    
+                    const errorMessage = err instanceof Error ? err.message : "Failed to connect";
+                    if (errorMessage.includes("timeout")) {
+                        setError("Network timeout. Check your connection and try again.");
+                    } else {
+                        setError(errorMessage);
+                    }
+                    return false;
+                }
+                
+                // Wait before retrying
+                setInitStatus(`Retrying in 2s... (${attempt}/${MAX_RETRIES})`);
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
         }
+        
+        return false;
     }, [userAddress, isInitialized, isInitializing]);
 
     // Auto-initialize Waku when SDK is loaded and we have a user address
@@ -2860,6 +2891,7 @@ export function WakuProvider({
             value={{
                 isInitialized,
                 isInitializing,
+                initStatus,
                 error,
                 userInboxId,
                 unreadCounts,
