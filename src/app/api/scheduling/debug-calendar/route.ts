@@ -70,14 +70,39 @@ export async function GET(request: NextRequest) {
         const calendar = google.calendar({ version: "v3", auth: oauth2Client });
 
         // Calculate time range (1 hour slot)
+        // We need to interpret the time in the user's timezone and convert to UTC
+        // Using a simple offset calculation based on common US timezones
+        const timezoneOffsets: Record<string, number> = {
+            "America/New_York": -5,    // EST (winter) / EDT (summer: -4)
+            "America/Chicago": -6,      // CST (winter) / CDT (summer: -5)
+            "America/Denver": -7,       // MST
+            "America/Los_Angeles": -8,  // PST
+            "UTC": 0,
+        };
+        
+        // Get offset (default to Chicago if unknown)
+        // Note: This is simplified and doesn't handle DST automatically
+        // January is winter, so use standard time offsets
+        const offsetHours = timezoneOffsets[timezone] ?? -6;
+        
+        // Parse the local time
         const [hours, minutes] = time.split(":").map(Number);
-        const startDate = new Date(`${date}T${time}:00`);
+        
+        // Create date in UTC by adding the offset
+        // If user says 9am Chicago (CST, UTC-6), we need 9am + 6 hours = 15:00 UTC
+        const utcHours = hours - offsetHours;
+        const startDate = new Date(`${date}T${String(utcHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00.000Z`);
         const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // +1 hour
 
-        // Convert to UTC for the API
-        // Note: The date string is interpreted in local time, we need to account for timezone
         const startISO = startDate.toISOString();
         const endISO = endDate.toISOString();
+        
+        console.log("[Debug Calendar] Time conversion:", {
+            inputTime: time,
+            inputTimezone: timezone,
+            offsetHours,
+            calculatedUTC: startISO,
+        });
 
         // Query freebusy
         const busyResponse = await calendar.freebusy.query({
