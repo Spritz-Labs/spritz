@@ -1059,7 +1059,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {/* Vault Section */}
                             {smartWalletAddress && (
-                                <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                                <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3 mt-3">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-sm">
                                             🔐
