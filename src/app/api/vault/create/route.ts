@@ -110,14 +110,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get creator's smart wallet address
-        const { data: creatorWallet } = await supabase
-            .from("shout_profiles")
+        // Get creator's smart wallet address from shout_users
+        const { data: creatorUser } = await supabase
+            .from("shout_users")
             .select("smart_wallet_address")
             .eq("wallet_address", session.userAddress.toLowerCase())
             .single();
 
-        if (!creatorWallet?.smart_wallet_address) {
+        if (!creatorUser?.smart_wallet_address) {
             return NextResponse.json(
                 { error: "You need a Spritz Smart Wallet to create a vault" },
                 { status: 400 }
@@ -126,15 +126,15 @@ export async function POST(request: NextRequest) {
 
         // Verify all members have smart wallets
         const memberAddresses = members.map((m: { address: string }) => m.address.toLowerCase());
-        const { data: memberProfiles } = await supabase
-            .from("shout_profiles")
+        const { data: memberUsers } = await supabase
+            .from("shout_users")
             .select("wallet_address, smart_wallet_address")
             .in("wallet_address", memberAddresses);
 
         const memberWalletMap: Record<string, string> = {};
-        for (const profile of memberProfiles || []) {
-            if (profile.smart_wallet_address) {
-                memberWalletMap[profile.wallet_address.toLowerCase()] = profile.smart_wallet_address;
+        for (const user of memberUsers || []) {
+            if (user.smart_wallet_address) {
+                memberWalletMap[user.wallet_address.toLowerCase()] = user.smart_wallet_address;
             }
         }
 
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
 
         // Collect all signer addresses (smart wallet addresses)
         const signerAddresses: Address[] = [
-            creatorWallet.smart_wallet_address as Address,
+            creatorUser.smart_wallet_address as Address,
             ...members.map((m: { address: string }) => memberWalletMap[m.address.toLowerCase()] as Address),
         ];
 
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
             {
                 vault_id: vault.id,
                 member_address: session.userAddress.toLowerCase(),
-                smart_wallet_address: creatorWallet.smart_wallet_address.toLowerCase(),
+                smart_wallet_address: creatorUser.smart_wallet_address.toLowerCase(),
                 is_creator: true,
                 nickname: null as string | null,
                 status: "active",
