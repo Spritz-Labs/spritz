@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useVaults, type VaultListItem, type VaultDetails } from "@/hooks/useVaults";
 import { getChainById } from "@/config/chains";
 import { QRCodeSVG } from "qrcode.react";
+import { useEnsResolver } from "@/hooks/useEnsResolver";
 import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
 
 type VaultListProps = {
@@ -39,7 +40,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     
     // Send state
-    const [sendTo, setSendTo] = useState("");
+    const ensResolver = useEnsResolver();
     const [sendAmount, setSendAmount] = useState("");
     const [sendToken, setSendToken] = useState<VaultTokenBalance | null>(null);
     const [isSending, setIsSending] = useState(false);
@@ -177,13 +178,16 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
     // Handle send (placeholder for now)
     const handleSendTransaction = async () => {
-        if (!selectedVault || !sendTo || !sendAmount || !sendToken) return;
+        if (!selectedVault || !ensResolver.resolvedAddress || !sendAmount || !sendToken) return;
         
         setIsSending(true);
         try {
             // For now, just show a message - actual transaction creation will come later
-            alert(`Transaction proposal feature coming soon!\n\nTo: ${sendTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`);
-            setSendTo("");
+            const displayTo = ensResolver.ensName 
+                ? `${ensResolver.ensName} (${ensResolver.resolvedAddress})`
+                : ensResolver.resolvedAddress;
+            alert(`Transaction proposal feature coming soon!\n\nTo: ${displayTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`);
+            ensResolver.clear();
             setSendAmount("");
             setSendToken(null);
         } catch (err) {
@@ -207,6 +211,9 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         setSelectedVault(null);
                         setBalances(null);
                         setActiveTab("assets");
+                        ensResolver.clear();
+                        setSendAmount("");
+                        setSendToken(null);
                     }}
                     className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
@@ -588,16 +595,53 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         </div>
                                     </div>
 
-                                    {/* Recipient input */}
+                                    {/* Recipient input with ENS support */}
                                     <div>
-                                        <label className="block text-xs text-zinc-400 mb-2">Recipient Address</label>
-                                        <input
-                                            type="text"
-                                            value={sendTo}
-                                            onChange={(e) => setSendTo(e.target.value)}
-                                            placeholder="0x..."
-                                            className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 font-mono text-sm"
-                                        />
+                                        <label className="block text-xs text-zinc-400 mb-2">Recipient Address or ENS</label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={ensResolver.input}
+                                                onChange={(e) => ensResolver.setInput(e.target.value)}
+                                                placeholder="0x... or vitalik.eth"
+                                                className={`w-full px-3 py-3 bg-zinc-900 border rounded-lg text-white placeholder-zinc-500 focus:outline-none font-mono text-sm ${
+                                                    ensResolver.error 
+                                                        ? "border-red-500 focus:border-red-500" 
+                                                        : ensResolver.isValid
+                                                            ? "border-emerald-500 focus:border-emerald-500"
+                                                            : "border-zinc-700 focus:border-orange-500"
+                                                }`}
+                                            />
+                                            {/* Loading indicator */}
+                                            {ensResolver.isResolving && (
+                                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                    <div className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
+                                                </div>
+                                            )}
+                                            {/* Valid indicator */}
+                                            {!ensResolver.isResolving && ensResolver.isValid && (
+                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400">
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Show resolved info */}
+                                        {ensResolver.ensName && ensResolver.resolvedAddress && (
+                                            <p className="mt-1 text-xs text-emerald-400 flex items-center gap-1">
+                                                <span>✓</span>
+                                                <span className="font-medium">{ensResolver.ensName}</span>
+                                                <span className="text-zinc-500">→</span>
+                                                <span className="font-mono text-zinc-400">
+                                                    {ensResolver.resolvedAddress.slice(0, 6)}...{ensResolver.resolvedAddress.slice(-4)}
+                                                </span>
+                                            </p>
+                                        )}
+                                        {/* Error message */}
+                                        {ensResolver.error && (
+                                            <p className="mt-1 text-xs text-red-400">{ensResolver.error}</p>
+                                        )}
                                     </div>
 
                                     {/* Info box */}
@@ -610,7 +654,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                     {/* Send button */}
                                     <button
                                         onClick={handleSendTransaction}
-                                        disabled={!sendTo || !sendAmount || !sendToken || isSending}
+                                        disabled={!ensResolver.isValid || !sendAmount || !sendToken || isSending || ensResolver.isResolving}
                                         className="w-full py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {isSending ? (
