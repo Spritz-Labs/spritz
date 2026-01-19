@@ -27,6 +27,26 @@ type VaultTransaction = {
     tokenName?: string;
 };
 
+// Pending transaction type (from database)
+type PendingTransaction = {
+    id: string;
+    vault_id: string;
+    safe_tx_hash: string;
+    to_address: string;
+    value: string;
+    data: string;
+    nonce: number;
+    status: "pending" | "executed" | "cancelled";
+    description: string;
+    created_by: string;
+    created_at: string;
+    confirmations: {
+        id: string;
+        signer_address: string;
+        signed_at: string;
+    }[];
+};
+
 // Common emojis for vaults
 const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "🔒", "💼", "🏠", "🎮", "🌈"];
 
@@ -62,6 +82,11 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     // Activity state
     const [transactions, setTransactions] = useState<VaultTransaction[]>([]);
     const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+    
+    // Pending transactions state
+    const [pendingTxs, setPendingTxs] = useState<PendingTransaction[]>([]);
+    const [isLoadingPendingTxs, setIsLoadingPendingTxs] = useState(false);
+    const [isProposing, setIsProposing] = useState(false);
 
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
@@ -181,14 +206,16 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         setActiveTab("assets");
         setBalances(null);
         setTransactions([]);
+        setPendingTxs([]);
         const details = await getVault(vault.id);
         setSelectedVault(details);
         setIsLoadingDetails(false);
         
-        // Fetch balances and transactions after getting vault details
+        // Fetch balances, transactions, and pending txs after getting vault details
         if (details) {
             fetchBalances(details.id);
             fetchTransactions(details.safeAddress, details.chainId);
+            fetchPendingTxs(details.id);
         }
     };
 
@@ -229,6 +256,69 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         if (diffHours < 24) return `${diffHours}h ago`;
         if (diffDays < 7) return `${diffDays}d ago`;
         return date.toLocaleDateString();
+    };
+
+    // Fetch pending transactions from database
+    const fetchPendingTxs = useCallback(async (vaultId: string) => {
+        setIsLoadingPendingTxs(true);
+        try {
+            const response = await fetch(`/api/vault/${vaultId}/transactions`, {
+                credentials: "include",
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setPendingTxs(data.transactions?.filter((tx: PendingTransaction) => tx.status === "pending") || []);
+            }
+        } catch (err) {
+            console.error("[VaultList] Error fetching pending txs:", err);
+        } finally {
+            setIsLoadingPendingTxs(false);
+        }
+    }, []);
+
+    // Propose a new transaction
+    const proposeTransaction = async () => {
+        if (!selectedVault || !sendToken || !sendAmount || !ensResolver.resolvedAddress) {
+            alert("Please fill in all fields");
+            return;
+        }
+
+        setIsProposing(true);
+        try {
+            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    toAddress: ensResolver.resolvedAddress,
+                    amount: sendAmount,
+                    tokenAddress: sendToken.contractAddress === "native" ? null : sendToken.contractAddress,
+                    tokenDecimals: sendToken.decimals,
+                    tokenSymbol: sendToken.symbol,
+                    description: `Send ${sendAmount} ${sendToken.symbol} to ${ensResolver.input}`,
+                }),
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                alert(data.message || "Transaction proposed!");
+                // Reset form
+                setSendAmount("");
+                setSendToken(null);
+                ensResolver.clear();
+                // Refresh pending txs and switch to activity tab
+                fetchPendingTxs(selectedVault.id);
+                setActiveTab("activity");
+            } else {
+                alert(data.error || "Failed to propose transaction");
+            }
+        } catch (err) {
+            console.error("[VaultList] Propose error:", err);
+            alert("Failed to propose transaction");
+        } finally {
+            setIsProposing(false);
+        }
     };
 
     // Check if current user is the creator
@@ -782,11 +872,11 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
                                     {/* Send button */}
                                     <button
-                                        onClick={handleSendTransaction}
-                                        disabled={!ensResolver.isValid || !sendAmount || !sendToken || isSending || ensResolver.isResolving}
+                                        onClick={proposeTransaction}
+                                        disabled={!ensResolver.isValid || !sendAmount || !sendToken || isProposing || ensResolver.isResolving}
                                         className="w-full py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        {isSending ? (
+                                        {isProposing ? (
                                             <>
                                                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                 Creating Proposal...
@@ -867,17 +957,67 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         {/* Activity Tab */}
                         {activeTab === "activity" && (
                             <div className="space-y-4">
+                                {/* Pending Transactions */}
+                                {pendingTxs.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                            Pending Transactions ({pendingTxs.length})
+                                        </h4>
+                                        {pendingTxs.map((tx) => (
+                                            <div
+                                                key={tx.id}
+                                                className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-white truncate">
+                                                            {tx.description}
+                                                        </p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="text-xs text-zinc-500">
+                                                                {tx.confirmations.length}/{selectedVault.threshold} signatures
+                                                            </span>
+                                                            <span className="text-xs text-zinc-600">•</span>
+                                                            <span className="text-xs text-zinc-500">
+                                                                {getTimeAgo(new Date(tx.created_at))}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {tx.confirmations.length >= selectedVault.threshold ? (
+                                                        <button className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors">
+                                                            Execute
+                                                        </button>
+                                                    ) : (
+                                                        <button className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors">
+                                                            Sign
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
                                 {/* Transaction History */}
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                         <h4 className="text-sm font-medium text-zinc-300">Recent Activity</h4>
                                         <button
-                                            onClick={() => fetchTransactions(selectedVault.safeAddress, selectedVault.chainId)}
-                                            disabled={isLoadingTransactions}
+                                            onClick={() => {
+                                                fetchTransactions(selectedVault.safeAddress, selectedVault.chainId);
+                                                fetchPendingTxs(selectedVault.id);
+                                            }}
+                                            disabled={isLoadingTransactions || isLoadingPendingTxs}
                                             className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
                                         >
                                             <svg
-                                                className={`w-3.5 h-3.5 ${isLoadingTransactions ? "animate-spin" : ""}`}
+                                                className={`w-3.5 h-3.5 ${isLoadingTransactions || isLoadingPendingTxs ? "animate-spin" : ""}`}
                                                 fill="none"
                                                 stroke="currentColor"
                                                 viewBox="0 0 24 24"
