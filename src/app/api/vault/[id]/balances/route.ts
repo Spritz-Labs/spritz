@@ -132,6 +132,8 @@ async function getTokenBalanceRpc(
         const paddedWallet = walletAddress.toLowerCase().replace("0x", "").padStart(64, "0");
         const data = `0x70a08231${paddedWallet}`;
         
+        console.log("[Vault RPC] Calling:", { rpcUrl, tokenAddress, walletAddress, data: data.substring(0, 20) + "..." });
+        
         const response = await fetch(rpcUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -144,11 +146,14 @@ async function getTokenBalanceRpc(
         });
         
         const result = await response.json();
+        console.log("[Vault RPC] Result:", result);
+        
         if (result.result && result.result !== "0x") {
             return BigInt(result.result);
         }
         return BigInt(0);
-    } catch {
+    } catch (err) {
+        console.error("[Vault RPC] Error:", err);
         return BigInt(0);
     }
 }
@@ -353,11 +358,20 @@ export async function GET(
                     const rpcUrl = RPC_URLS[vault.chain_id];
                     const knownTokens = KNOWN_TOKENS[vault.chain_id] || [];
                     
+                    console.log("[Vault Balances] RPC Fallback Debug:", {
+                        chainId: vault.chain_id,
+                        safeAddress: vault.safe_address,
+                        rpcUrl,
+                        knownTokensCount: knownTokens.length,
+                    });
+                    
                     if (rpcUrl && knownTokens.length > 0) {
                         console.log("[Vault Balances] Blockscout returned no tokens, trying RPC fallback");
                         
                         for (const token of knownTokens) {
+                            console.log(`[Vault Balances] Checking ${token.symbol} at ${token.address}`);
                             const balance = await getTokenBalanceRpc(rpcUrl, token.address, vault.safe_address);
+                            console.log(`[Vault Balances] ${token.symbol} balance: ${balance.toString()}`);
                             
                             if (balance > BigInt(0)) {
                                 const balanceFormatted = Number(balance) / Math.pow(10, token.decimals);
