@@ -584,7 +584,8 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
     );
 }
 
-type TabType = "balances" | "send" | "history" | "receive" | "security" | "vaults";
+type MainSection = "wallet" | "vaults";
+type WalletTabType = "balances" | "send" | "history" | "receive" | "security";
 
 export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authMethod }: WalletModalProps) {
     // Check if wallet is connected (for sending)
@@ -626,7 +627,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     );
 
     const [copied, setCopied] = useState(false);
-    const [activeTab, setActiveTab] = useState<TabType>("balances");
+    const [mainSection, setMainSection] = useState<MainSection>("wallet");
+    const [activeTab, setActiveTab] = useState<WalletTabType>("balances");
     const [showPasskeyManager, setShowPasskeyManager] = useState(false);
     const [hasAcknowledgedChainWarning, setHasAcknowledgedChainWarning] = useState(false);
     const [showNetworksInfo, setShowNetworksInfo] = useState(false);
@@ -997,28 +999,60 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         )}
                         
                         {/* Header */}
-                        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                        <div className="p-4 border-b border-zinc-800">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
                                     <span className="text-xl">💳</span>
-                                </div>
-                                <div>
                                     <h2 className="text-lg font-semibold text-white">Spritz Wallets</h2>
                                     <span className="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded-full">
                                         Beta
                                     </span>
                                 </div>
+                                <button
+                                    onClick={onClose}
+                                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
                             </div>
-                            <button
-                                onClick={onClose}
-                                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            
+                            {/* Main Section Toggle */}
+                            <div className="flex gap-1 p-1 bg-zinc-800/70 rounded-xl">
+                                <button
+                                    onClick={() => setMainSection("wallet")}
+                                    className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                                        mainSection === "wallet"
+                                            ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
+                                            : "text-zinc-400 hover:text-zinc-200"
+                                    }`}
+                                >
+                                    <span className="text-base">💎</span>
+                                    Smart Wallet
+                                </button>
+                                <button
+                                    onClick={() => setMainSection("vaults")}
+                                    className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                                        mainSection === "vaults"
+                                            ? "bg-orange-500/20 text-orange-400 shadow-sm"
+                                            : "text-zinc-400 hover:text-zinc-200"
+                                    }`}
+                                >
+                                    <span className="text-base">🔐</span>
+                                    Vaults
+                                    {vaults.length > 0 && (
+                                        <span className="px-1.5 py-0.5 text-[10px] bg-orange-500/30 rounded-full">
+                                            {vaults.length}
+                                        </span>
+                                    )}
+                                </button>
+                            </div>
                         </div>
 
+                        {/* Smart Wallet Section */}
+                        {mainSection === "wallet" && (
+                            <>
                         {/* Wallet Address Card */}
                         <div className="px-4 pt-4">
                             <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3">
@@ -1037,10 +1071,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm text-zinc-300 font-medium">
-                                                Smart Wallet
+                                                Your Wallet Address
                                             </p>
-                                            <p className="text-xs text-zinc-500">
-                                                Tap Receive to view address
+                                            <p className="text-xs text-zinc-500 font-mono">
+                                                {smartWalletAddress.slice(0, 6)}...{smartWalletAddress.slice(-4)}
                                             </p>
                                         </div>
                                         <button
@@ -1056,34 +1090,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     </div>
                                 )}
                             </div>
-
-                            {/* Vault Section */}
-                            {smartWalletAddress && (
-                                <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3 mt-3">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-sm">
-                                            🔐
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm text-zinc-300 font-medium">
-                                                Vault
-                                            </p>
-                                            <p className="text-xs text-zinc-500">
-                                                {vaults.length > 0 
-                                                    ? `${vaults.length} vault${vaults.length !== 1 ? "s" : ""}`
-                                                    : "Tap to Create a Spritz Social Vault"
-                                                }
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={() => setActiveTab("vaults")}
-                                            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-orange-500/20 text-orange-400 hover:bg-orange-500/30"
-                                        >
-                                            {vaults.length > 0 ? "View" : "Create"}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         {/* Total Balance across all chains */}
@@ -2148,16 +2154,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 </div>
                             )}
 
-                            {/* Vaults Tab */}
-                            {activeTab === "vaults" && (
-                                <div className="flex-1 p-4 overflow-y-auto">
-                                    <VaultList
-                                        userAddress={userAddress}
-                                        onCreateNew={() => setShowCreateVaultModal(true)}
-                                    />
-                                </div>
-                            )}
-
                             {/* Settings/Backup moved to menu - keeping backup tab hidden for now */}
                             {false && activeTab === "backup" as never && (
                                 <div className="p-6">
@@ -2255,6 +2251,42 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 </div>
                             )}
                         </div>
+                            </>
+                        )}
+
+                        {/* Vaults Section */}
+                        {mainSection === "vaults" && (
+                            <div className="flex-1 flex flex-col overflow-hidden">
+                                {/* Vaults Header */}
+                                <div className="px-4 py-4 border-b border-zinc-800/50">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-white">Social Vaults</h3>
+                                            <p className="text-xs text-zinc-500 mt-0.5">
+                                                Shared wallets with friends
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowCreateVaultModal(true)}
+                                            className="px-3 py-2 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            New Vault
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                {/* Vaults List */}
+                                <div className="flex-1 p-4 overflow-y-auto">
+                                    <VaultList
+                                        userAddress={userAddress}
+                                        onCreateNew={() => setShowCreateVaultModal(true)}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </motion.div>
                 </motion.div>
             )}
