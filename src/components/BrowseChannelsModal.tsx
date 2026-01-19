@@ -14,12 +14,18 @@ type BrowseChannelsModalProps = {
 
 const CATEGORIES = [
     { id: "all", name: "All", emoji: "🌐" },
+    { id: "cities", name: "Cities", emoji: "🏙️" },
     { id: "crypto", name: "Crypto", emoji: "₿" },
     { id: "tech", name: "Tech", emoji: "💻" },
+    { id: "gaming", name: "Gaming", emoji: "🎮" },
+    { id: "sports", name: "Sports", emoji: "⚽" },
+    { id: "music", name: "Music", emoji: "🎵" },
+    { id: "art", name: "Art", emoji: "🎨" },
     { id: "finance", name: "Finance", emoji: "📈" },
     { id: "science", name: "Science", emoji: "🔬" },
     { id: "lifestyle", name: "Lifestyle", emoji: "🌟" },
     { id: "entertainment", name: "Entertainment", emoji: "🎬" },
+    { id: "languages", name: "Languages", emoji: "🗣️" },
     { id: "community", name: "Community", emoji: "👥" },
 ];
 
