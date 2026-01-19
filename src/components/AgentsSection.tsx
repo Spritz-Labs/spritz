@@ -162,35 +162,35 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
         <div>
             {/* Section Header */}
             <div 
-                className="flex items-center justify-between mb-3 cursor-pointer"
+                className="flex items-center justify-between mb-2 sm:mb-3 cursor-pointer"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
-                <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                    <h2 className="text-sm sm:text-lg font-semibold text-white flex items-center gap-1.5 sm:gap-2">
                         <span className="text-purple-400">✨</span>
                         AI Agents
-                        <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
+                        <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
                             Beta
                         </span>
                     </h2>
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-[10px] sm:text-xs text-zinc-500">
                         {agents.length}/5
                         {favorites.length > 0 && (
                             <span className="ml-1 text-yellow-400">⭐{favorites.length}</span>
                         )}
                     </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2">
                     {/* Explore Button */}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             setIsExploreModalOpen(true);
                         }}
-                        className="p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                        className="p-1 sm:p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors"
                         title="Explore Agents"
                     >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </button>
@@ -201,17 +201,17 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                 e.stopPropagation();
                                 setIsCreateModalOpen(true);
                             }}
-                            className="p-1.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                            className="p-1 sm:p-1.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
                             title="Create Agent"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
                         </button>
                     )}
                     <motion.svg
                         animate={{ rotate: isExpanded ? 180 : 0 }}
-                        className="w-5 h-5 text-zinc-400"
+                        className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-400"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -232,37 +232,37 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                         className="overflow-hidden"
                     >
                         {isLoading ? (
-                            <div className="flex items-center justify-center py-8">
-                                <svg className="animate-spin w-6 h-6 text-purple-400" fill="none" viewBox="0 0 24 24">
+                            <div className="flex items-center justify-center py-6 sm:py-8">
+                                <svg className="animate-spin w-5 h-5 sm:w-6 sm:h-6 text-purple-400" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                 </svg>
                             </div>
                         ) : error ? (
-                            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+                            <div className="p-3 sm:p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs sm:text-sm">
                                 {error}
                             </div>
                         ) : !hasBetaAccess ? (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-center"
+                                className="p-4 sm:p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-center"
                             >
-                                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                                    <span className="text-2xl">{hasApplied ? "⏳" : "✨"}</span>
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                                    <span className="text-xl sm:text-2xl">{hasApplied ? "⏳" : "✨"}</span>
                                 </div>
-                                <h3 className="text-white font-medium mb-1">
+                                <h3 className="text-sm sm:text-base text-white font-medium mb-1">
                                     {hasApplied ? "Application Pending" : "AI Agents (Beta)"}
                                 </h3>
                                 {isCheckingBetaStatus ? (
-                                    <div className="flex items-center justify-center py-4">
-                                        <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                                    <div className="flex items-center justify-center py-3 sm:py-4">
+                                        <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
                                     </div>
                                 ) : hasApplied ? (
-                                    <div className="space-y-3 mb-4">
-                                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-                                            <p className="text-amber-400 text-sm font-medium mb-1">Application Submitted</p>
-                                            <p className="text-zinc-400 text-xs">
+                                    <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
+                                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 sm:p-4">
+                                            <p className="text-amber-400 text-xs sm:text-sm font-medium mb-1">Application Submitted</p>
+                                            <p className="text-zinc-400 text-[10px] sm:text-xs">
                                                 {appliedAt
                                                     ? `Applied on ${new Date(appliedAt).toLocaleDateString("en-US", {
                                                           month: "long",
@@ -272,12 +272,12 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                     : "Your application is being reviewed"}
                                             </p>
                                         </div>
-                                        <p className="text-sm text-zinc-400">
+                                        <p className="text-xs sm:text-sm text-zinc-400">
                                             We&apos;re reviewing applications and granting access in batches. You&apos;ll be notified when your access is approved!
                                         </p>
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-zinc-400 mb-4">
+                                    <p className="text-xs sm:text-sm text-zinc-400 mb-3 sm:mb-4">
                                         Apply for beta access to create and interact with AI agents
                                     </p>
                                 )}
@@ -285,7 +285,7 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                     <button
                                         onClick={handleApplyForBetaAccess}
                                         disabled={isApplying}
-                                        className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="px-4 sm:px-6 py-1.5 sm:py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-sm font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {isApplying ? "Applying..." : "Apply for Beta Access"}
                                     </button>
@@ -295,82 +295,82 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-center"
+                                className="p-4 sm:p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-center"
                             >
-                                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                                    <span className="text-2xl">🤖</span>
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                                    <span className="text-xl sm:text-2xl">🤖</span>
                                 </div>
-                                <h3 className="text-white font-medium mb-1">Create Your First AI Agent</h3>
-                                <p className="text-sm text-zinc-400 mb-4">
+                                <h3 className="text-sm sm:text-base text-white font-medium mb-1">Create Your First AI Agent</h3>
+                                <p className="text-xs sm:text-sm text-zinc-400 mb-3 sm:mb-4">
                                     Build custom AI assistants with unique personalities
                                 </p>
                                 <div className="flex gap-2 justify-center">
                                     <button
                                         onClick={() => setIsCreateModalOpen(true)}
-                                        className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium rounded-xl transition-all"
+                                        className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-sm font-medium rounded-xl transition-all"
                                     >
                                         Create Agent
                                     </button>
                                     <button
                                         onClick={() => setIsExploreModalOpen(true)}
-                                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-xl transition-all"
+                                        className="px-3 sm:px-4 py-1.5 sm:py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-all"
                                     >
                                         Explore Agents
                                     </button>
                                 </div>
                             </motion.div>
                         ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-1.5 sm:space-y-2">
                                 {/* User's own agents */}
                                 {agents.map((agent) => (
                                     <motion.div
                                         key={agent.id}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className="group p-3 bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 hover:border-zinc-600 rounded-xl transition-all cursor-pointer"
+                                        className="group p-2.5 sm:p-3 bg-zinc-800/30 sm:bg-zinc-800/50 hover:bg-zinc-800 border border-transparent sm:border-zinc-700/50 hover:border-zinc-600 rounded-xl transition-all cursor-pointer"
                                         onClick={() => handleOpenChat(agent)}
                                     >
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2.5 sm:gap-3">
                                             {agent.avatar_url ? (
                                                 <img
                                                     src={agent.avatar_url}
                                                     alt={agent.name}
-                                                    className="w-10 h-10 rounded-xl object-cover shrink-0"
+                                                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
                                                 />
                                             ) : (
-                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-xl shrink-0">
+                                                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-lg sm:text-xl shrink-0">
                                                     {agent.avatar_emoji}
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="font-medium text-white truncate">{agent.name}</h3>
+                                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                                    <h3 className="text-sm sm:text-base font-medium text-white truncate">{agent.name}</h3>
                                                     {agent.visibility !== "private" && (
-                                                        <span className="text-xs px-1.5 py-0.5 bg-zinc-700 rounded text-zinc-400">
+                                                        <span className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-zinc-700 rounded text-zinc-400">
                                                             {agent.visibility === "friends" ? "👥" : "🌍"}
                                                         </span>
                                                     )}
                                                     {agent.x402_enabled && (
-                                                        <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 rounded text-emerald-400 font-medium" title={`x402 API: $${((agent.x402_price_cents || 1) / 100).toFixed(2)}/msg`}>
+                                                        <span className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-emerald-500/20 rounded text-emerald-400 font-medium" title={`x402 API: $${((agent.x402_price_cents || 1) / 100).toFixed(2)}/msg`}>
                                                             💰
                                                         </span>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-zinc-500 truncate">
+                                                <p className="text-[10px] sm:text-xs text-zinc-500 truncate">
                                                     {agent.personality || "AI Assistant"}
                                                 </p>
                                             </div>
                                             {/* Action buttons - always visible on mobile, hover on desktop */}
-                                            <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                            <div className="flex items-center gap-0.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleOpenChat(agent);
                                                     }}
-                                                    className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                                                    className="p-1.5 sm:p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
                                                     title="Chat"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                                     </svg>
                                                 </button>
@@ -379,10 +379,10 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                         e.stopPropagation();
                                                         handleOpenKnowledge(agent);
                                                     }}
-                                                    className="p-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors"
+                                                    className="hidden sm:block p-1.5 sm:p-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors"
                                                     title="Knowledge Base"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                                                     </svg>
                                                 </button>
@@ -391,10 +391,10 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                         e.stopPropagation();
                                                         handleEditAgent(agent);
                                                     }}
-                                                    className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                                    className="p-1.5 sm:p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
                                                     title="Edit"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                     </svg>
                                                 </button>
@@ -403,17 +403,17 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                         e.stopPropagation();
                                                         handleDeleteAgent(agent);
                                                     }}
-                                                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    className="hidden sm:block p-1.5 sm:p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
                                                     title="Delete"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                     </svg>
                                                 </button>
                                             </div>
                                         </div>
-                                        {/* Stats */}
-                                        <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
+                                        {/* Stats - hidden on mobile for compactness */}
+                                        <div className="hidden sm:flex items-center gap-3 mt-2 text-xs text-zinc-500">
                                             <span>{agent.message_count} messages</span>
                                             <span>•</span>
                                             <span>Created {new Date(agent.created_at).toLocaleDateString()}</span>
@@ -424,9 +424,9 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                 {/* Favorite agents from others */}
                                 {favorites.length > 0 && (
                                     <>
-                                        <div className="flex items-center gap-2 mt-4 mb-2">
-                                            <span className="text-yellow-400">⭐</span>
-                                            <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+                                        <div className="flex items-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 mb-1.5 sm:mb-2">
+                                            <span className="text-yellow-400 text-sm">⭐</span>
+                                            <span className="text-[10px] sm:text-xs font-medium text-zinc-400 uppercase tracking-wide">
                                                 Favorites ({favorites.length})
                                             </span>
                                         </div>
@@ -435,36 +435,36 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                 key={fav.id}
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
-                                                className="group p-3 bg-zinc-800/30 hover:bg-zinc-800/50 border border-yellow-500/20 hover:border-yellow-500/40 rounded-xl transition-all cursor-pointer"
+                                                className="group p-2.5 sm:p-3 bg-zinc-800/20 sm:bg-zinc-800/30 hover:bg-zinc-800/50 border border-yellow-500/10 sm:border-yellow-500/20 hover:border-yellow-500/40 rounded-xl transition-all cursor-pointer"
                                                 onClick={() => handleOpenFavoriteChat(fav.agent)}
                                             >
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2.5 sm:gap-3">
                                                     {fav.agent.avatar_url ? (
                                                         <img
                                                             src={fav.agent.avatar_url}
                                                             alt={fav.agent.name}
-                                                            className="w-10 h-10 rounded-xl object-cover shrink-0"
+                                                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
                                                         />
                                                     ) : (
-                                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center text-xl shrink-0">
+                                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center text-lg sm:text-xl shrink-0">
                                                             {fav.agent.avatar_emoji}
                                                         </div>
                                                     )}
                                                     <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <h3 className="font-medium text-white truncate">{fav.agent.name}</h3>
+                                                        <div className="flex items-center gap-1.5 sm:gap-2">
+                                                            <h3 className="text-sm sm:text-base font-medium text-white truncate">{fav.agent.name}</h3>
                                                             {fav.agent.isFriendsAgent && (
-                                                                <span className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">
+                                                                <span className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">
                                                                     👥
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <p className="text-xs text-zinc-500 truncate">
+                                                        <p className="text-[10px] sm:text-xs text-zinc-500 truncate">
                                                             by {fav.agent.owner?.username ? `@${fav.agent.owner.username}` : fav.agent.owner_address.slice(0, 10) + "..."}
                                                         </p>
-                                                        {/* Tags */}
+                                                        {/* Tags - hidden on mobile */}
                                                         {fav.agent.tags && fav.agent.tags.length > 0 && (
-                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                            <div className="hidden sm:flex flex-wrap gap-1 mt-1">
                                                                 {fav.agent.tags.slice(0, 3).map(tag => (
                                                                     <span
                                                                         key={tag}
@@ -479,25 +479,25 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-0.5 sm:gap-1">
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 handleOpenFavoriteChat(fav.agent);
                                                             }}
-                                                            className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors md:opacity-0 md:group-hover:opacity-100"
+                                                            className="p-1.5 sm:p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors sm:opacity-0 sm:group-hover:opacity-100"
                                                             title="Chat"
                                                         >
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                                             </svg>
                                                         </button>
                                                         <button
                                                             onClick={(e) => handleRemoveFavorite(e, fav.agent.id)}
-                                                            className="p-2 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 rounded-lg transition-colors"
+                                                            className="p-1.5 sm:p-2 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 rounded-lg transition-colors"
                                                             title="Remove from favorites"
                                                         >
-                                                            <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                                                             </svg>
                                                         </button>
@@ -559,53 +559,53 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                 onSelectAgent={handleSelectDiscoveredAgent}
             />
 
-            {/* Metrics & Public URLs Section */}
+            {/* Metrics & Public URLs Section - Desktop only or collapsible on mobile */}
             {agents.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+                <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-zinc-800">
+                    <h3 className="text-xs sm:text-sm font-semibold text-zinc-300 mb-3 sm:mb-4 flex items-center gap-2">
                         <span>📊</span>
                         Agent Metrics & Integration
                     </h3>
                     
-                    {/* Overall Metrics */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-                            <p className="text-xs text-zinc-400 mb-1">Total Agents</p>
-                            <p className="text-lg font-bold text-white">{agents.length}</p>
+                    {/* Overall Metrics - Compact on mobile */}
+                    <div className="grid grid-cols-4 gap-1.5 sm:gap-3 mb-4 sm:mb-6">
+                        <div className="p-2 sm:p-3 bg-zinc-800/50 rounded-lg sm:rounded-xl border border-zinc-700/50">
+                            <p className="text-[10px] sm:text-xs text-zinc-400 mb-0.5 sm:mb-1">Agents</p>
+                            <p className="text-sm sm:text-lg font-bold text-white">{agents.length}</p>
                         </div>
-                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-                            <p className="text-xs text-zinc-400 mb-1">Total Messages</p>
-                            <p className="text-lg font-bold text-white">
+                        <div className="p-2 sm:p-3 bg-zinc-800/50 rounded-lg sm:rounded-xl border border-zinc-700/50">
+                            <p className="text-[10px] sm:text-xs text-zinc-400 mb-0.5 sm:mb-1">Messages</p>
+                            <p className="text-sm sm:text-lg font-bold text-white">
                                 {agents.reduce((sum, a) => sum + (a.message_count || 0), 0).toLocaleString()}
                             </p>
                         </div>
-                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-                            <p className="text-xs text-zinc-400 mb-1">Public Agents</p>
-                            <p className="text-lg font-bold text-emerald-400">
+                        <div className="p-2 sm:p-3 bg-zinc-800/50 rounded-lg sm:rounded-xl border border-zinc-700/50">
+                            <p className="text-[10px] sm:text-xs text-zinc-400 mb-0.5 sm:mb-1">Public</p>
+                            <p className="text-sm sm:text-lg font-bold text-emerald-400">
                                 {agents.filter(a => a.visibility === "public").length}
                             </p>
                         </div>
-                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-                            <p className="text-xs text-zinc-400 mb-1">API Enabled</p>
-                            <p className="text-lg font-bold text-purple-400">
+                        <div className="p-2 sm:p-3 bg-zinc-800/50 rounded-lg sm:rounded-xl border border-zinc-700/50">
+                            <p className="text-[10px] sm:text-xs text-zinc-400 mb-0.5 sm:mb-1">API</p>
+                            <p className="text-sm sm:text-lg font-bold text-purple-400">
                                 {agents.filter(a => a.api_enabled).length}
                             </p>
                         </div>
                     </div>
 
-                    {/* x402 Earnings (if any) */}
+                    {/* x402 Earnings (if any) - Compact on mobile */}
                     {agents.some(a => a.x402_enabled && (a.x402_total_earnings_cents || 0) > 0) && (
-                        <div className="mb-6 p-4 bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20 rounded-xl">
+                        <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20 rounded-xl">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-emerald-400 mb-1">💰 Total x402 Earnings</p>
-                                    <p className="text-xl font-bold text-emerald-400">
+                                    <p className="text-[10px] sm:text-xs text-emerald-400 mb-0.5 sm:mb-1">💰 x402 Earnings</p>
+                                    <p className="text-base sm:text-xl font-bold text-emerald-400">
                                         ${(agents.reduce((sum, a) => sum + ((a.x402_total_earnings_cents || 0) / 100), 0)).toFixed(2)}
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs text-zinc-400 mb-1">Paid Messages</p>
-                                    <p className="text-lg font-semibold text-white">
+                                    <p className="text-[10px] sm:text-xs text-zinc-400 mb-0.5 sm:mb-1">Paid Msgs</p>
+                                    <p className="text-sm sm:text-lg font-semibold text-white">
                                         {agents.reduce((sum, a) => sum + (a.x402_message_count_paid || 0), 0).toLocaleString()}
                                     </p>
                                 </div>
@@ -613,9 +613,9 @@ export function AgentsSection({ userAddress, hasBetaAccess }: AgentsSectionProps
                         </div>
                     )}
 
-                    {/* Public Agent URLs & Embed Code */}
+                    {/* Public Agent URLs & Embed Code - Hidden on mobile, too detailed */}
                     {agents.filter(a => a.visibility === "public").length > 0 && (
-                        <div className="space-y-4">
+                        <div className="hidden sm:block space-y-4">
                             <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
                                 <span>🔗</span>
                                 Public Agent URLs & Embed Code
@@ -1527,9 +1527,9 @@ export default function SpritzAgent() {
                         </div>
                     )}
 
-                    {/* No Public Agents Message */}
+                    {/* No Public Agents Message - Desktop only */}
                     {agents.filter(a => a.visibility === "public").length === 0 && (
-                        <div className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl text-center">
+                        <div className="hidden sm:block p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl text-center">
                             <p className="text-sm text-zinc-400">
                                 Make an agent public to get a shareable URL and embed code
                             </p>

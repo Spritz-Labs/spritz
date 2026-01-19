@@ -3202,9 +3202,9 @@ function DashboardContent({
                     {activeNavTab === "agents" && (
                         <div
                             id="agents-section"
-                            className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mb-6"
+                            className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6"
                         >
-                            <div className="p-6">
+                            <div className="px-1 py-2 sm:p-6">
                                 <AgentsSection
                                     userAddress={userAddress}
                                     hasBetaAccess={hasBetaAccess}
