@@ -37,14 +37,32 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Format the leaderboard
-        const leaderboard = (users || []).map((user, index) => ({
-            rank: index + 1,
-            address: user.wallet_address,
-            username: user.username,
-            ensName: user.ens_name,
-            points: user.points || 0,
-        }));
+        // Also fetch Spritz usernames from shout_usernames table
+        const addresses = (users || []).map(u => u.wallet_address);
+        const { data: spritzUsernames } = await supabase
+            .from("shout_usernames")
+            .select("wallet_address, username")
+            .in("wallet_address", addresses);
+        
+        // Create a map for quick lookup
+        const usernameMap = new Map(
+            spritzUsernames?.map(u => [u.wallet_address.toLowerCase(), u.username]) || []
+        );
+
+        // Format the leaderboard with Spritz username priority
+        const leaderboard = (users || []).map((user, index) => {
+            // Get Spritz username from the usernames table
+            const spritzUsername = usernameMap.get(user.wallet_address.toLowerCase());
+            
+            return {
+                rank: index + 1,
+                address: user.wallet_address,
+                // Priority: Spritz username > legacy username field > null
+                username: spritzUsername || user.username || null,
+                ensName: user.ens_name,
+                points: user.points || 0,
+            };
+        });
 
         return NextResponse.json({
             leaderboard,

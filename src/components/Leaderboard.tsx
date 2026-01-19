@@ -171,8 +171,8 @@ export function Leaderboard({ userAddress, limit = 10 }: LeaderboardProps) {
         `${address.slice(0, 6)}...${address.slice(-4)}`;
 
     const getDisplayName = (entry: LeaderboardEntry) => {
-        // Priority: username > ENS from DB > resolved ENS > formatted address
-        if (entry.username) return entry.username;
+        // Priority: Spritz username > ENS from DB > resolved ENS > formatted address
+        if (entry.username) return `@${entry.username}`;
         if (entry.ensName) return entry.ensName;
         const resolved = resolvedNames[entry.address.toLowerCase()];
         if (resolved) return resolved;
