@@ -4794,7 +4794,7 @@ function DashboardContent({
                                     <span className="text-3xl">{walletBetaApplied ? "⏳" : "💳"}</span>
                                 </div>
                                 <h3 className="text-xl text-white font-semibold mb-2">
-                                    {walletBetaApplied ? "Application Pending" : "Spritz Smart Wallets (Beta)"}
+                                    {walletBetaApplied ? "Application Pending" : "Spritz Wallets (Beta)"}
                                 </h3>
                                 {isCheckingBetaStatus ? (
                                     <div className="flex items-center justify-center py-4">
@@ -4820,7 +4820,7 @@ function DashboardContent({
                                     </div>
                                 ) : (
                                     <p className="text-sm text-zinc-400 mb-6">
-                                        Apply for beta access to use Spritz Smart Wallets - send crypto with free gas, passkey signing, and multi-chain support.
+                                        Apply for beta access to use Spritz Wallets - send crypto with free gas, passkey signing, multi-chain support, and shared vaults.
                                     </p>
                                 )}
                                 {!walletBetaApplied && !isCheckingBetaStatus && (

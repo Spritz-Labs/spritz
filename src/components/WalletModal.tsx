@@ -1003,7 +1003,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     <span className="text-xl">💳</span>
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-semibold text-white">Spritz Smart Wallets</h2>
+                                    <h2 className="text-lg font-semibold text-white">Spritz Wallets</h2>
                                     <span className="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded-full">
                                         Beta
                                     </span>
