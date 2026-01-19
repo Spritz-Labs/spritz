@@ -158,18 +158,18 @@ const TAYLOR_WIDGETS: BaseWidget[] = [
         is_visible: true,
     },
     
-    // Row 4: Photo Carousel + Color Palette
+    // Row 4: Mood Board (aesthetic vibes) + Color Palette
     {
-        id: "ts-carousel",
-        widget_type: "photo_carousel",
+        id: "ts-moodboard",
+        widget_type: "mood_board",
         config: {
             images: [
-                { url: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600", caption: "On Stage" },
-                { url: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=600", caption: "Studio Time" },
-                { url: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600", caption: "Eras Tour" },
+                { url: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400", size: "large" }, // Starry mountain
+                { url: "https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=300", size: "medium" }, // Purple sunset
+                { url: "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=300", size: "small" }, // Purple gradient
+                { url: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=300", size: "medium" }, // Ocean waves
             ],
-            autoPlay: true,
-            interval: 4,
+            title: "✨ Aesthetic",
         },
         size: "2x2",
         position: 11,
