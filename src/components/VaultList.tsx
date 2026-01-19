@@ -918,7 +918,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 return (
                                                     <a
                                                         key={tx.hash}
-                                                        href={`${chainInfo?.blockExplorer}/tx/${tx.hash}`}
+                                                        href={`${chainInfo?.explorerUrl}/tx/${tx.hash}`}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="block p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl hover:border-zinc-600 transition-colors"
