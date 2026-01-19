@@ -7,6 +7,7 @@ import Link from "next/link";
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
 import { normalize } from "viem/ens";
+import { AdminLayout, AdminAuthWrapper, AdminLoading } from "@/components/AdminLayout";
 
 // ENS Cache with 24hr TTL
 const ENS_CACHE_KEY = "spritz_admin_ens_cache";
@@ -531,107 +532,61 @@ export default function UsersPage() {
 
     // Loading
     if (isLoading) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5500]"></div>
-            </div>
-        );
+        return <AdminLoading />;
     }
 
-    // Not authenticated - need to connect wallet or sign
+    // Not authenticated
     if (!isAuthenticated) {
         const needsWalletConnection = !isConnected;
         
         return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold text-white mb-4">
-                        Admin Access
-                    </h1>
-                    
-                    {needsWalletConnection ? (
-                        <>
-                            <p className="text-zinc-400 mb-6">
-                                Connect your wallet and sign to view users.
-                            </p>
-                            <div className="mb-4">
-                                <appkit-button />
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-zinc-400 mb-6">
-                                Sign in to view users.
-                            </p>
-                            <button
-                                onClick={signIn}
-                                className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4"
-                            >
-                                Sign In with Ethereum
-                            </button>
-                        </>
-                    )}
-
-                    <Link
-                        href="/"
-                        className="text-zinc-500 hover:text-zinc-300 text-sm"
-                    >
-                        ← Back to Home
-                    </Link>
-                </div>
-            </div>
+            <AdminAuthWrapper>
+                {needsWalletConnection ? (
+                    <>
+                        <p className="text-zinc-400 mb-6">
+                            Connect your wallet and sign to view users.
+                        </p>
+                        <div className="mb-4">
+                            <appkit-button />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-zinc-400 mb-6">
+                            Sign in to view users.
+                        </p>
+                        <button
+                            onClick={signIn}
+                            className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4"
+                        >
+                            Sign In with Ethereum
+                        </button>
+                    </>
+                )}
+            </AdminAuthWrapper>
         );
     }
 
     // Not an admin
     if (!isAdmin) {
         return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold text-white mb-4">
-                        Access Denied
-                    </h1>
-                    <p className="text-zinc-400 mb-6">
-                        Your wallet is not authorized as an admin.
-                    </p>
-                    <Link href="/" className="text-[#FF5500] hover:underline">
-                        ← Back to Home
-                    </Link>
-                </div>
-            </div>
+            <AdminAuthWrapper title="Access Denied">
+                <p className="text-zinc-400 mb-6">
+                    Your wallet is not authorized as an admin.
+                </p>
+            </AdminAuthWrapper>
         );
     }
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-white">
-            {/* Header */}
-            <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-lg sticky top-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Link
-                            href="/admin"
-                            className="text-[#FF5500] hover:text-[#FF7733]"
-                        >
-                            ← Admin Panel
-                        </Link>
-                        <h1 className="text-xl font-bold">Users ({total})</h1>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-zinc-500 text-sm">
-                            {formatAddress(address || "")}
-                        </span>
-                        <button
-                            onClick={signOut}
-                            className="text-zinc-400 hover:text-white text-sm"
-                        >
-                            Sign Out
-                        </button>
-                    </div>
-                </div>
-            </header>
-
+        <AdminLayout
+            title="Users"
+            subtitle={`${total} total users`}
+            address={address || undefined}
+            onSignOut={signOut}
+        >
             {/* Filters */}
-            <div className="max-w-7xl mx-auto px-4 py-6">
+            <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
                 <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 mb-6">
                     <div className="flex flex-wrap gap-4 items-center">
                         <div className="flex-1 min-w-[200px]">
@@ -1410,6 +1365,6 @@ export default function UsersPage() {
                     </motion.div>
                 </div>
             )}
-        </div>
+        </AdminLayout>
     );
 }

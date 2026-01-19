@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
+import { AdminLayout, AdminAuthWrapper, AdminLoading } from "@/components/AdminLayout";
 
 const INVITE_BASE_URL = "https://app.spritz.chat";
 const MARKETING_BLURB = `🚀 You're invited to Spritz - the censorship resistant chat app for Web3!
@@ -236,206 +237,77 @@ export default function AdminPage() {
 
     // Loading - show this first to give credentials time to load
     if (isLoading) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5500] mx-auto mb-4"></div>
-                    <p className="text-zinc-500 text-sm">Checking credentials...</p>
-                </div>
-            </div>
-        );
+        return <AdminLoading />;
     }
 
     // Not authenticated - show sign in
-    // This handles both: wallet connected but not signed, OR wallet disconnected and needs to reconnect
     if (!isAuthenticated) {
         const needsWalletConnection = !isConnected;
         
         return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold text-white mb-4">
-                        Admin Access
-                    </h1>
-                    
-                    {needsWalletConnection ? (
-                        <>
-                            <p className="text-zinc-400 mb-6">
-                                Connect your wallet and sign to access the admin panel.
-                            </p>
-                            
-                            {error && (
-                                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-6">
-                                    <p className="text-red-400 text-sm">{error}</p>
-                                </div>
-                            )}
-
-                            {/* AppKit Button - renders the WalletConnect modal */}
-                            <div className="mb-4">
-                                <appkit-button />
+            <AdminAuthWrapper>
+                {needsWalletConnection ? (
+                    <>
+                        <p className="text-zinc-400 mb-6">
+                            Connect your wallet and sign to access the admin panel.
+                        </p>
+                        
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-6">
+                                <p className="text-red-400 text-sm">{error}</p>
                             </div>
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-zinc-400 mb-2">Connected as:</p>
-                            <p className="text-white font-mono mb-6">
-                                {formatAddress(address || "")}
-                            </p>
+                        )}
 
-                            {error && (
-                                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-6">
-                                    <p className="text-red-400 text-sm">{error}</p>
-                                </div>
-                            )}
+                        <div className="mb-4">
+                            <appkit-button />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-zinc-400 mb-2">Connected as:</p>
+                        <p className="text-white font-mono mb-6">
+                            {formatAddress(address || "")}
+                        </p>
 
-                            <button
-                                onClick={signIn}
-                                className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors"
-                            >
-                                Sign In with Ethereum
-                            </button>
-                        </>
-                    )}
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-6">
+                                <p className="text-red-400 text-sm">{error}</p>
+                            </div>
+                        )}
 
-                    <Link
-                        href="/"
-                        className="block mt-4 text-zinc-500 hover:text-zinc-300 text-sm"
-                    >
-                        ← Back to Home
-                    </Link>
-                </div>
-            </div>
+                        <button
+                            onClick={signIn}
+                            className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors"
+                        >
+                            Sign In with Ethereum
+                        </button>
+                    </>
+                )}
+            </AdminAuthWrapper>
         );
     }
 
     // Not an admin
     if (!isAdmin) {
         return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold text-white mb-4">
-                        Access Denied
-                    </h1>
-                    <p className="text-zinc-400 mb-6">
-                        Your wallet ({formatAddress(address || "")}) is not
-                        authorized as an admin.
-                    </p>
-                    <Link href="/" className="text-[#FF5500] hover:underline">
-                        ← Back to Home
-                    </Link>
-                </div>
-            </div>
+            <AdminAuthWrapper title="Access Denied">
+                <p className="text-zinc-400 mb-6">
+                    Your wallet ({formatAddress(address || "")}) is not
+                    authorized as an admin.
+                </p>
+            </AdminAuthWrapper>
         );
     }
 
     // Admin dashboard
     return (
-        <div className="min-h-screen bg-zinc-950 text-white">
-            {/* Header - with safe area padding for iPhone notch */}
-            <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-lg sticky top-0 z-10 pt-[env(safe-area-inset-top)]">
-                <div className="max-w-7xl mx-auto px-4 py-4">
-                    {/* Desktop layout */}
-                    <div className="hidden sm:flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <Link
-                                href="/"
-                                className="text-[#FF5500] hover:text-[#FF7733]"
-                            >
-                                ← Back
-                            </Link>
-                            <h1 className="text-xl font-bold">Admin Panel</h1>
-                            {isSuperAdmin && (
-                                <span className="px-2 py-1 bg-[#FF5500]/20 text-[#FF5500] text-xs rounded-full">
-                                    Super Admin
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <Link
-                                href="/admin/users"
-                                className="text-zinc-400 hover:text-white transition-colors"
-                            >
-                                Users
-                            </Link>
-                            <Link
-                                href="/admin/analytics"
-                                className="text-zinc-400 hover:text-white transition-colors"
-                            >
-                                Analytics
-                            </Link>
-                            <Link
-                                href="/admin/bug-reports"
-                                className="text-zinc-400 hover:text-white transition-colors"
-                            >
-                                Bug Reports
-                            </Link>
-                            <span className="text-zinc-500 text-sm">
-                                {formatAddress(address || "")}
-                            </span>
-                            <button
-                                onClick={signOut}
-                                className="text-zinc-400 hover:text-white text-sm"
-                            >
-                                Sign Out
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Mobile layout */}
-                    <div className="sm:hidden space-y-3">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <Link
-                                    href="/"
-                                    className="text-[#FF5500] hover:text-[#FF7733]"
-                                >
-                                    ←
-                                </Link>
-                                <h1 className="text-lg font-bold">Admin</h1>
-                                {isSuperAdmin && (
-                                    <span className="px-2 py-0.5 bg-[#FF5500]/20 text-[#FF5500] text-xs rounded-full">
-                                        Super
-                                    </span>
-                                )}
-                            </div>
-                            <button
-                                onClick={signOut}
-                                className="text-zinc-400 hover:text-white text-sm"
-                            >
-                                Sign Out
-                            </button>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="text-zinc-500">
-                                {formatAddress(address || "")}
-                            </span>
-                            <div className="flex gap-2">
-                                <Link
-                                    href="/admin/analytics"
-                                    className="px-3 py-1.5 bg-zinc-800 text-white rounded-lg font-medium"
-                                >
-                                    📊
-                                </Link>
-                                <Link
-                                    href="/admin/users"
-                                    className="px-3 py-1.5 bg-[#FF5500] text-white rounded-lg font-medium"
-                                >
-                                    👥
-                                </Link>
-                                <Link
-                                    href="/admin/bug-reports"
-                                    className="px-3 py-1.5 bg-zinc-800 text-white rounded-lg font-medium"
-                                >
-                                    🐛
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </header>
-
-            {/* Tabs */}
-            <div className="max-w-7xl mx-auto px-4 py-6">
+        <AdminLayout
+            title="Invite Codes & Admins"
+            address={address || undefined}
+            isSuperAdmin={isSuperAdmin}
+            onSignOut={signOut}
+        >
+            <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
                 <div className="flex gap-2 mb-6">
                     <button
                         onClick={() => setActiveTab("invites")}
@@ -833,6 +705,6 @@ export default function AdminPage() {
                     )}
                 </AnimatePresence>
             </div>
-        </div>
+        </AdminLayout>
     );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
+import { AdminLayout, AdminAuthWrapper, AdminLoading } from "@/components/AdminLayout";
 
 type BugReport = {
     id: string;
@@ -186,78 +187,48 @@ export default function BugReportsPage() {
     ).sort();
 
     if (!isReady || isLoading) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
+        return <AdminLoading />;
     }
 
     if (!isAuthenticated || !isAdmin) {
         const needsWalletConnection = !isConnected;
         
         return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold text-white mb-4">
-                        Admin Access Required
-                    </h1>
-                    
-                    {needsWalletConnection ? (
-                        <>
-                            <p className="text-zinc-400 mb-6">
-                                Connect your wallet and sign to view bug reports.
-                            </p>
-                            <div className="mb-4">
-                                <appkit-button />
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-zinc-400 mb-6">
-                                Sign in to view bug reports.
-                            </p>
-                            <button
-                                onClick={signIn}
-                                className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl transition-colors mb-4"
-                            >
-                                Sign In with Ethereum
-                            </button>
-                        </>
-                    )}
-                    
-                    <Link
-                        href="/admin"
-                        className="text-zinc-500 hover:text-zinc-300 text-sm"
-                    >
-                        ← Back to Admin
-                    </Link>
-                </div>
-            </div>
+            <AdminAuthWrapper title="Admin Access Required">
+                {needsWalletConnection ? (
+                    <>
+                        <p className="text-zinc-400 mb-6">
+                            Connect your wallet and sign to view bug reports.
+                        </p>
+                        <div className="mb-4">
+                            <appkit-button />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-zinc-400 mb-6">
+                            Sign in to view bug reports.
+                        </p>
+                        <button
+                            onClick={signIn}
+                            className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl transition-colors mb-4"
+                        >
+                            Sign In with Ethereum
+                        </button>
+                    </>
+                )}
+            </AdminAuthWrapper>
         );
     }
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-white">
-            <div className="max-w-7xl mx-auto px-4 py-6">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h1 className="text-2xl font-bold mb-2">Bug Reports</h1>
-                        <p className="text-zinc-400 text-sm">
-                            {filteredReports.length} of {bugReports.length} reports
-                        </p>
-                    </div>
-                    <Link
-                        href="/admin"
-                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
-                    >
-                        Back to Admin
-                    </Link>
-                </div>
-
+        <AdminLayout
+            title="Bug Reports"
+            subtitle={`${filteredReports.length} of ${bugReports.length} reports`}
+        >
+            <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
                 {/* Filters */}
-                <div className="flex gap-4 mb-6">
+                <div className="flex flex-wrap gap-3 mb-4 sm:mb-6">
                     <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
@@ -646,7 +617,7 @@ export default function BugReportsPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
+        </AdminLayout>
     );
 }
 

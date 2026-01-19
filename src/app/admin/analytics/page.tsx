@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
+import { AdminLayout, AdminAuthWrapper, AdminLoading } from "@/components/AdminLayout";
 import {
     LineChart,
     Line,
@@ -244,116 +245,91 @@ export default function AnalyticsPage() {
 
     // Loading state
     if (isLoading) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
-                    <p className="text-zinc-400">Loading...</p>
-                </div>
-            </div>
-        );
+        return <AdminLoading />;
     }
 
     // Auth states
     if (!isAuthenticated) {
         return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold mb-4">Analytics Dashboard</h1>
-                    {!isConnected ? (
-                        <>
-                            <p className="text-zinc-400 mb-6">Connect your wallet to view analytics.</p>
-                            <div className="mb-4"><appkit-button /></div>
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-zinc-400 mb-6">Sign in to view analytics.</p>
-                            <button onClick={signIn} className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4">
-                                Sign In with Ethereum
-                            </button>
-                        </>
-                    )}
-                    <Link href="/" className="text-zinc-500 hover:text-zinc-300 text-sm">← Back to Home</Link>
-                </div>
-            </div>
+            <AdminAuthWrapper title="Analytics Dashboard">
+                {!isConnected ? (
+                    <>
+                        <p className="text-zinc-400 mb-6">Connect your wallet to view analytics.</p>
+                        <div className="mb-4"><appkit-button /></div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-zinc-400 mb-6">Sign in to view analytics.</p>
+                        <button onClick={signIn} className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4">
+                            Sign In with Ethereum
+                        </button>
+                    </>
+                )}
+            </AdminAuthWrapper>
         );
     }
 
     if (!isReady || !isAdmin) {
         return (
-            <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-                <div className="bg-zinc-900 rounded-2xl p-8 max-w-md w-full text-center border border-zinc-800">
-                    <h1 className="text-2xl font-bold mb-4 text-red-400">{!isAdmin ? "Access Denied" : "Loading..."}</h1>
-                    <p className="text-zinc-400 mb-6">{!isAdmin ? "You do not have permission to view analytics." : "Please wait..."}</p>
-                    {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
-                    <Link href="/" className="text-zinc-500 hover:text-zinc-300 text-sm">← Back to Home</Link>
-                </div>
-            </div>
+            <AdminAuthWrapper title={!isAdmin ? "Access Denied" : "Loading..."}>
+                <p className="text-zinc-400 mb-6">{!isAdmin ? "You do not have permission to view analytics." : "Please wait..."}</p>
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+            </AdminAuthWrapper>
         );
     }
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-white">
-            {/* Sticky Header */}
-            <div className="sticky top-0 z-50 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-800">
-                <div className="max-w-7xl mx-auto px-4 py-3">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <Link href="/admin" className="text-zinc-400 hover:text-white transition-colors text-sm">
-                                ← Admin
-                            </Link>
-                            <h1 className="text-lg font-bold">Analytics</h1>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {/* Period Selector - Compact */}
-                            <div className="flex bg-zinc-800 rounded-lg p-0.5">
-                                {PERIODS.map((period) => (
-                                    <button
-                                        key={period.value}
-                                        onClick={() => setSelectedPeriod(period.value)}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                                            selectedPeriod === period.value
-                                                ? "bg-[#FF5500] text-white"
-                                                : "text-zinc-400 hover:text-white"
-                                        }`}
-                                    >
-                                        {period.label}
-                                    </button>
-                                ))}
-                            </div>
+        <AdminLayout title="Analytics">
+            {/* Period & Section Controls */}
+            <div className="max-w-7xl mx-auto px-4 py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    {/* Period Selector */}
+                    <div className="flex bg-zinc-800 rounded-lg p-0.5 w-fit">
+                        {PERIODS.map((period) => (
                             <button
-                                onClick={fetchAnalytics}
-                                disabled={isLoadingData}
-                                className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                                {isLoadingData ? (
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Section Tabs */}
-                    <div className="flex gap-1 mt-3 overflow-x-auto pb-1">
-                        {SECTION_TABS.map((tab) => (
-                            <button
-                                key={tab.value}
-                                onClick={() => setActiveSection(tab.value)}
-                                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                                    activeSection === tab.value
-                                        ? "bg-zinc-800 text-white"
-                                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
+                                key={period.value}
+                                onClick={() => setSelectedPeriod(period.value)}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    selectedPeriod === period.value
+                                        ? "bg-[#FF5500] text-white"
+                                        : "text-zinc-400 hover:text-white"
                                 }`}
                             >
-                                <span>{tab.icon}</span>
-                                {tab.label}
+                                {period.label}
                             </button>
                         ))}
                     </div>
+                    <button
+                        onClick={fetchAnalytics}
+                        disabled={isLoadingData}
+                        className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 w-fit"
+                    >
+                        {isLoadingData ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        )}
+                    </button>
+                </div>
+
+                {/* Section Tabs */}
+                <div className="flex gap-1 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0">
+                    {SECTION_TABS.map((tab) => (
+                        <button
+                            key={tab.value}
+                            onClick={() => setActiveSection(tab.value)}
+                            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                                activeSection === tab.value
+                                    ? "bg-zinc-800 text-white"
+                                    : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
+                            }`}
+                        >
+                            <span>{tab.icon}</span>
+                            <span className="hidden sm:inline">{tab.label}</span>
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -369,7 +345,7 @@ export default function AnalyticsPage() {
 
             {/* Content */}
             {data && (
-                <div className="max-w-7xl mx-auto px-4 py-6 pb-20">
+                <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={activeSection}
@@ -387,7 +363,7 @@ export default function AnalyticsPage() {
                     </AnimatePresence>
                 </div>
             )}
-        </div>
+        </AdminLayout>
     );
 }
 
