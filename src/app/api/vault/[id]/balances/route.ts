@@ -21,7 +21,63 @@ const BLOCKSCOUT_URLS: Record<number, string> = {
     130: "https://unichain.blockscout.com",
 };
 
-// Trusted tokens by chain ID
+// RPC URLs for each chain
+const RPC_URLS: Record<number, string> = {
+    1: "https://eth.llamarpc.com",
+    8453: "https://mainnet.base.org",
+    42161: "https://arb1.arbitrum.io/rpc",
+    10: "https://mainnet.optimism.io",
+    137: "https://polygon-rpc.com",
+    56: "https://bsc-dataseed.binance.org",
+    43114: "https://api.avax.network/ext/bc/C/rpc",
+    130: "https://mainnet.unichain.org",
+};
+
+// Token info for direct RPC queries (used as fallback when Blockscout is slow)
+type TokenInfo = {
+    address: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+    logoUrl?: string;
+};
+
+const KNOWN_TOKENS: Record<number, TokenInfo[]> = {
+    1: [
+        { address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", symbol: "USDC", name: "USD Coin", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/6319/small/usdc.png" },
+        { address: "0xdac17f958d2ee523a2206206994597c13d831ec7", symbol: "USDT", name: "Tether USD", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/325/small/Tether.png" },
+        { address: "0x6b175474e89094c44da98b954eedeac495271d0f", symbol: "DAI", name: "Dai Stablecoin", decimals: 18, logoUrl: "https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png" },
+    ],
+    8453: [
+        { address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", symbol: "USDC", name: "USD Coin", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/6319/small/usdc.png" },
+        { address: "0x50c5725949a6f0c72e6c4a641f24049a917db0cb", symbol: "DAI", name: "Dai Stablecoin", decimals: 18, logoUrl: "https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png" },
+    ],
+    42161: [
+        { address: "0xaf88d065e77c8cc2239327c5edb3a432268e5831", symbol: "USDC", name: "USD Coin", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/6319/small/usdc.png" },
+        { address: "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9", symbol: "USDT", name: "Tether USD", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/325/small/Tether.png" },
+        { address: "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1", symbol: "DAI", name: "Dai Stablecoin", decimals: 18, logoUrl: "https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png" },
+    ],
+    10: [
+        { address: "0x0b2c639c533813f4aa9d7837caf62653d097ff85", symbol: "USDC", name: "USD Coin", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/6319/small/usdc.png" },
+        { address: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58", symbol: "USDT", name: "Tether USD", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/325/small/Tether.png" },
+        { address: "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1", symbol: "DAI", name: "Dai Stablecoin", decimals: 18, logoUrl: "https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png" },
+    ],
+    137: [
+        { address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", symbol: "USDC", name: "USD Coin", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/6319/small/usdc.png" },
+        { address: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", symbol: "USDT", name: "Tether USD", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/325/small/Tether.png" },
+        { address: "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063", symbol: "DAI", name: "Dai Stablecoin", decimals: 18, logoUrl: "https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png" },
+    ],
+    56: [
+        { address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", symbol: "USDC", name: "USD Coin", decimals: 18, logoUrl: "https://assets.coingecko.com/coins/images/6319/small/usdc.png" },
+        { address: "0x55d398326f99059ff775485246999027b3197955", symbol: "USDT", name: "Tether USD", decimals: 18, logoUrl: "https://assets.coingecko.com/coins/images/325/small/Tether.png" },
+    ],
+    43114: [
+        { address: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e", symbol: "USDC", name: "USD Coin", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/6319/small/usdc.png" },
+        { address: "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7", symbol: "USDT", name: "Tether USD", decimals: 6, logoUrl: "https://assets.coingecko.com/coins/images/325/small/Tether.png" },
+    ],
+};
+
+// Trusted tokens by chain ID (for Blockscout filtering)
 const TRUSTED_TOKENS: Record<number, Set<string>> = {
     1: new Set([
         "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
@@ -64,6 +120,38 @@ const TRUSTED_TOKENS: Record<number, Set<string>> = {
         "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab", // WETH
     ]),
 };
+
+// Helper: Get token balance via RPC
+async function getTokenBalanceRpc(
+    rpcUrl: string,
+    tokenAddress: string,
+    walletAddress: string
+): Promise<bigint> {
+    try {
+        // balanceOf(address) function selector: 0x70a08231
+        const paddedWallet = walletAddress.toLowerCase().replace("0x", "").padStart(64, "0");
+        const data = `0x70a08231${paddedWallet}`;
+        
+        const response = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                method: "eth_call",
+                params: [{ to: tokenAddress, data }, "latest"],
+                id: 1,
+            }),
+        });
+        
+        const result = await response.json();
+        if (result.result && result.result !== "0x") {
+            return BigInt(result.result);
+        }
+        return BigInt(0);
+    } catch {
+        return BigInt(0);
+    }
+}
 
 export type VaultTokenBalance = {
     contractAddress: string;
@@ -204,7 +292,8 @@ export async function GET(
                     }
                 }
 
-                // Process token balances
+                // Process token balances from Blockscout
+                let foundTokensFromBlockscout = false;
                 if (tokensResponse.ok) {
                     const tokensData: BlockscoutTokenBalance[] = await tokensResponse.json();
                     const trustedSet = TRUSTED_TOKENS[vault.chain_id] || new Set();
@@ -225,6 +314,8 @@ export async function GET(
 
                         // Skip zero balances
                         if (balanceFormatted <= 0) continue;
+
+                        foundTokensFromBlockscout = true;
 
                         // Calculate USD value
                         let balanceUsd: number | null = null;
@@ -252,6 +343,45 @@ export async function GET(
 
                         if (balanceUsd) {
                             totalUsd += balanceUsd;
+                        }
+                    }
+                }
+                
+                // Fallback: If Blockscout returned no tokens, query known tokens via RPC
+                // This handles cases where Blockscout indexing is delayed
+                if (!foundTokensFromBlockscout) {
+                    const rpcUrl = RPC_URLS[vault.chain_id];
+                    const knownTokens = KNOWN_TOKENS[vault.chain_id] || [];
+                    
+                    if (rpcUrl && knownTokens.length > 0) {
+                        console.log("[Vault Balances] Blockscout returned no tokens, trying RPC fallback");
+                        
+                        for (const token of knownTokens) {
+                            const balance = await getTokenBalanceRpc(rpcUrl, token.address, vault.safe_address);
+                            
+                            if (balance > BigInt(0)) {
+                                const balanceFormatted = Number(balance) / Math.pow(10, token.decimals);
+                                
+                                // For stablecoins, USD value = balance
+                                const stablecoins = ["USDC", "USDT", "DAI", "BUSD"];
+                                const balanceUsd = stablecoins.includes(token.symbol) ? balanceFormatted : null;
+                                
+                                tokens.push({
+                                    contractAddress: token.address,
+                                    symbol: token.symbol,
+                                    name: token.name,
+                                    decimals: token.decimals,
+                                    balance: balance.toString(),
+                                    balanceFormatted: balanceFormatted.toString(),
+                                    balanceUsd,
+                                    tokenType: "erc20",
+                                    logoUrl: token.logoUrl,
+                                });
+                                
+                                if (balanceUsd) {
+                                    totalUsd += balanceUsd;
+                                }
+                            }
                         }
                     }
                 }
