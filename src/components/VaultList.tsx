@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useVaults, type VaultListItem, type VaultDetails } from "@/hooks/useVaults";
 import { getChainById } from "@/config/chains";
+import { QRCodeSVG } from "qrcode.react";
+import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
 
 type VaultListProps = {
     userAddress: string;
@@ -13,12 +15,20 @@ type VaultListProps = {
 // Common emojis for vaults
 const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "🔒", "💼", "🏠", "🎮", "🌈"];
 
+// Tab types for vault detail view
+type VaultTab = "assets" | "send" | "receive" | "activity";
+
 export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const { vaults, isLoading, getVault, updateVault, deleteVault } = useVaults(userAddress);
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const [activeTab, setActiveTab] = useState<VaultTab>("assets");
+    
+    // Balance state
+    const [balances, setBalances] = useState<VaultBalanceResponse | null>(null);
+    const [isLoadingBalances, setIsLoadingBalances] = useState(false);
     
     // Edit state
     const [isEditing, setIsEditing] = useState(false);
@@ -27,12 +37,43 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [editEmoji, setEditEmoji] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    
+    // Send state
+    const [sendTo, setSendTo] = useState("");
+    const [sendAmount, setSendAmount] = useState("");
+    const [sendToken, setSendToken] = useState<VaultTokenBalance | null>(null);
+    const [isSending, setIsSending] = useState(false);
+
+    // Fetch balances when vault is selected
+    const fetchBalances = useCallback(async (vaultId: string) => {
+        setIsLoadingBalances(true);
+        try {
+            const response = await fetch(`/api/vault/${vaultId}/balances`, {
+                credentials: "include",
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setBalances(data);
+            }
+        } catch (err) {
+            console.error("[VaultList] Error fetching balances:", err);
+        } finally {
+            setIsLoadingBalances(false);
+        }
+    }, []);
 
     const handleViewVault = async (vault: VaultListItem) => {
         setIsLoadingDetails(true);
+        setActiveTab("assets");
+        setBalances(null);
         const details = await getVault(vault.id);
         setSelectedVault(details);
         setIsLoadingDetails(false);
+        
+        // Fetch balances after getting vault details
+        if (details) {
+            fetchBalances(details.id);
+        }
     };
 
     const handleDelete = async (vaultId: string) => {
@@ -101,6 +142,57 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         }
     };
 
+    // Format currency
+    const formatUsd = (value: number | null) => {
+        if (value === null) return "—";
+        return new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(value);
+    };
+
+    // Format token balance
+    const formatBalance = (balance: string, decimals = 4) => {
+        const num = parseFloat(balance);
+        if (num === 0) return "0";
+        if (num < 0.0001) return "<0.0001";
+        return num.toLocaleString(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: decimals,
+        });
+    };
+
+    // Get all tokens for send
+    const getAllTokens = (): VaultTokenBalance[] => {
+        if (!balances) return [];
+        const tokens: VaultTokenBalance[] = [];
+        if (balances.nativeBalance) {
+            tokens.push(balances.nativeBalance);
+        }
+        tokens.push(...balances.tokens);
+        return tokens;
+    };
+
+    // Handle send (placeholder for now)
+    const handleSendTransaction = async () => {
+        if (!selectedVault || !sendTo || !sendAmount || !sendToken) return;
+        
+        setIsSending(true);
+        try {
+            // For now, just show a message - actual transaction creation will come later
+            alert(`Transaction proposal feature coming soon!\n\nTo: ${sendTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`);
+            setSendTo("");
+            setSendAmount("");
+            setSendToken(null);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Failed to create transaction");
+        } finally {
+            setIsSending(false);
+        }
+    };
+
     // Details view
     if (selectedVault) {
         const chainInfo = getChainById(selectedVault.chainId);
@@ -113,6 +205,8 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         setIsEditing(false);
                         setShowEmojiPicker(false);
                         setSelectedVault(null);
+                        setBalances(null);
+                        setActiveTab("assets");
                     }}
                     className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
@@ -249,10 +343,17 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                     )}
                 </div>
 
-                {/* Safe address */}
-                <div className="p-4 bg-zinc-800/50 rounded-xl">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-zinc-400">Vault Address</span>
+                {/* Total Balance */}
+                <div className="p-4 bg-gradient-to-br from-orange-500/10 to-pink-500/10 border border-orange-500/20 rounded-xl">
+                    <p className="text-xs text-zinc-400 mb-1">Total Balance</p>
+                    {isLoadingBalances ? (
+                        <div className="h-8 w-32 bg-zinc-700/50 rounded animate-pulse" />
+                    ) : (
+                        <p className="text-2xl font-bold text-white">
+                            {formatUsd(balances?.totalUsd ?? 0)}
+                        </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                             selectedVault.isDeployed
                                 ? "bg-emerald-500/20 text-emerald-400"
@@ -260,87 +361,436 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         }`}>
                             {selectedVault.isDeployed ? "Deployed" : "Not Deployed"}
                         </span>
-                    </div>
-                    <button
-                        onClick={() => copyAddress(selectedVault.safeAddress)}
-                        className="w-full flex items-center justify-between p-3 bg-zinc-900 rounded-lg hover:bg-zinc-900/70 transition-colors"
-                    >
-                        <span className="font-mono text-sm text-white">
-                            {truncateAddress(selectedVault.safeAddress)}
-                        </span>
                         <span className="text-xs text-zinc-500">
-                            {copied ? "Copied!" : "Copy"}
-                        </span>
-                    </button>
-                    {chainInfo?.explorerUrl && (
-                        <a
-                            href={`${chainInfo.explorerUrl}/address/${selectedVault.safeAddress}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-2 text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1"
-                        >
-                            View on {chainInfo.name} Explorer
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                        </a>
-                    )}
-                </div>
-
-                {/* Threshold */}
-                <div className="p-4 bg-zinc-800/50 rounded-xl">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-zinc-400">Required Signatures</span>
-                        <span className="text-lg font-bold text-orange-400">
-                            {selectedVault.threshold} of {selectedVault.members.length}
+                            {selectedVault.threshold}/{selectedVault.members.length} signatures required
                         </span>
                     </div>
                 </div>
 
-                {/* Members */}
-                <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-zinc-300">Vault Members</h4>
-                    {selectedVault.members.map((member) => (
-                        <div
-                            key={member.address}
-                            className={`p-3 rounded-xl border flex items-center gap-3 ${
-                                member.isCreator
-                                    ? "bg-emerald-500/10 border-emerald-500/30"
-                                    : "bg-zinc-800/50 border-zinc-700"
+                {/* Tab Navigation */}
+                <div className="flex gap-1 p-1 bg-zinc-800/50 rounded-xl">
+                    {(["assets", "send", "receive", "activity"] as VaultTab[]).map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all capitalize ${
+                                activeTab === tab
+                                    ? "bg-zinc-700 text-white shadow-sm"
+                                    : "text-zinc-400 hover:text-zinc-200"
                             }`}
                         >
-                            {member.avatar ? (
-                                <img
-                                    src={member.avatar}
-                                    alt=""
-                                    className="w-10 h-10 rounded-full object-cover"
-                                />
-                            ) : (
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold">
-                                    {(member.username || member.address).slice(0, 2).toUpperCase()}
-                                </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <p className="text-sm font-medium text-white truncate">
-                                        {member.nickname || member.username || truncateAddress(member.address)}
-                                    </p>
-                                    {member.isCreator && (
-                                        <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
-                                            Creator
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-xs text-zinc-500 font-mono truncate">
-                                    Signer: {truncateAddress(member.smartWalletAddress)}
-                                </p>
-                            </div>
-                        </div>
+                            {tab === "assets" && "💰"}
+                            {tab === "send" && "📤"}
+                            {tab === "receive" && "📥"}
+                            {tab === "activity" && "📜"}
+                            <span className="ml-1.5 hidden sm:inline">{tab}</span>
+                        </button>
                     ))}
                 </div>
 
-                {/* Actions */}
-                {!selectedVault.isDeployed && (
+                {/* Tab Content */}
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={activeTab}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.15 }}
+                    >
+                        {/* Assets Tab */}
+                        {activeTab === "assets" && (
+                            <div className="space-y-2">
+                                {isLoadingBalances ? (
+                                    <div className="space-y-2">
+                                        {[1, 2, 3].map((i) => (
+                                            <div key={i} className="p-3 bg-zinc-800/50 rounded-xl animate-pulse">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-zinc-700 rounded-full" />
+                                                    <div className="flex-1">
+                                                        <div className="h-4 w-20 bg-zinc-700 rounded mb-1" />
+                                                        <div className="h-3 w-16 bg-zinc-700/50 rounded" />
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="h-4 w-24 bg-zinc-700 rounded mb-1" />
+                                                        <div className="h-3 w-16 bg-zinc-700/50 rounded" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : balances?.nativeBalance || (balances?.tokens && balances.tokens.length > 0) ? (
+                                    <>
+                                        {/* Native Balance */}
+                                        {balances?.nativeBalance && (
+                                            <div className="p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-lg">
+                                                        {chainInfo?.icon || "💎"}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-medium text-white">
+                                                            {balances.nativeBalance.symbol}
+                                                        </p>
+                                                        <p className="text-xs text-zinc-500">Native Token</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-sm font-medium text-white">
+                                                            {formatBalance(balances.nativeBalance.balanceFormatted)}
+                                                        </p>
+                                                        <p className="text-xs text-zinc-500">
+                                                            {formatUsd(balances.nativeBalance.balanceUsd)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* ERC20 Tokens */}
+                                        {balances?.tokens.map((token) => (
+                                            <div
+                                                key={token.contractAddress}
+                                                className="p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    {token.logoUrl ? (
+                                                        <img
+                                                            src={token.logoUrl}
+                                                            alt={token.symbol}
+                                                            className="w-10 h-10 rounded-full"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-300">
+                                                            {token.symbol.slice(0, 2)}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-medium text-white">
+                                                            {token.symbol}
+                                                        </p>
+                                                        <p className="text-xs text-zinc-500">{token.name}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-sm font-medium text-white">
+                                                            {formatBalance(token.balanceFormatted)}
+                                                        </p>
+                                                        <p className="text-xs text-zinc-500">
+                                                            {formatUsd(token.balanceUsd)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center text-3xl">
+                                            💸
+                                        </div>
+                                        <h4 className="text-sm font-medium text-white mb-1">No Assets Yet</h4>
+                                        <p className="text-xs text-zinc-500">
+                                            Deposit funds to this vault to get started
+                                        </p>
+                                        <button
+                                            onClick={() => setActiveTab("receive")}
+                                            className="mt-3 px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                                        >
+                                            Get Deposit Address
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Refresh button */}
+                                <button
+                                    onClick={() => fetchBalances(selectedVault.id)}
+                                    disabled={isLoadingBalances}
+                                    className="w-full p-2 text-sm text-zinc-400 hover:text-white transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <svg
+                                        className={`w-4 h-4 ${isLoadingBalances ? "animate-spin" : ""}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                        />
+                                    </svg>
+                                    Refresh Balances
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Send Tab */}
+                        {activeTab === "send" && (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-zinc-800/50 rounded-xl space-y-4">
+                                    {/* Token selector */}
+                                    <div>
+                                        <label className="block text-xs text-zinc-400 mb-2">Token</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {getAllTokens().map((token) => (
+                                                <button
+                                                    key={token.contractAddress}
+                                                    onClick={() => setSendToken(token)}
+                                                    className={`p-2 rounded-lg border text-left transition-all ${
+                                                        sendToken?.contractAddress === token.contractAddress
+                                                            ? "border-orange-500 bg-orange-500/10"
+                                                            : "border-zinc-700 bg-zinc-900 hover:border-zinc-600"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        {token.logoUrl ? (
+                                                            <img src={token.logoUrl} alt="" className="w-6 h-6 rounded-full" />
+                                                        ) : (
+                                                            <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
+                                                                {token.symbol.slice(0, 2)}
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <p className="text-xs font-medium text-white">{token.symbol}</p>
+                                                            <p className="text-[10px] text-zinc-500">
+                                                                {formatBalance(token.balanceFormatted, 2)}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                            {getAllTokens().length === 0 && (
+                                                <p className="col-span-full text-sm text-zinc-500 text-center py-4">
+                                                    No tokens available to send
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Amount input */}
+                                    <div>
+                                        <label className="block text-xs text-zinc-400 mb-2">Amount</label>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                value={sendAmount}
+                                                onChange={(e) => setSendAmount(e.target.value)}
+                                                placeholder="0.00"
+                                                className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 pr-16"
+                                            />
+                                            {sendToken && (
+                                                <button
+                                                    onClick={() => setSendAmount(sendToken.balanceFormatted)}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-orange-400 hover:text-orange-300"
+                                                >
+                                                    MAX
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Recipient input */}
+                                    <div>
+                                        <label className="block text-xs text-zinc-400 mb-2">Recipient Address</label>
+                                        <input
+                                            type="text"
+                                            value={sendTo}
+                                            onChange={(e) => setSendTo(e.target.value)}
+                                            placeholder="0x..."
+                                            className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 font-mono text-sm"
+                                        />
+                                    </div>
+
+                                    {/* Info box */}
+                                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                                        <p className="text-xs text-blue-300">
+                                            <span className="font-medium">Multisig Required:</span> This transaction will require {selectedVault.threshold} of {selectedVault.members.length} members to sign before it can be executed.
+                                        </p>
+                                    </div>
+
+                                    {/* Send button */}
+                                    <button
+                                        onClick={handleSendTransaction}
+                                        disabled={!sendTo || !sendAmount || !sendToken || isSending}
+                                        className="w-full py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {isSending ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                Creating Proposal...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                                </svg>
+                                                Propose Transaction
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Receive Tab */}
+                        {activeTab === "receive" && (
+                            <div className="space-y-4">
+                                <div className="p-6 bg-zinc-800/50 rounded-xl">
+                                    <div className="flex flex-col items-center">
+                                        {/* QR Code */}
+                                        <div className="p-4 bg-white rounded-2xl mb-4">
+                                            <QRCodeSVG
+                                                value={selectedVault.safeAddress}
+                                                size={180}
+                                                level="H"
+                                                includeMargin={false}
+                                            />
+                                        </div>
+
+                                        {/* Chain badge */}
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="text-lg">{chainInfo?.icon}</span>
+                                            <span className="text-sm text-zinc-400">{chainInfo?.name} Network</span>
+                                        </div>
+
+                                        {/* Address */}
+                                        <button
+                                            onClick={() => copyAddress(selectedVault.safeAddress)}
+                                            className="w-full p-3 bg-zinc-900 rounded-lg hover:bg-zinc-900/70 transition-colors"
+                                        >
+                                            <p className="font-mono text-sm text-white break-all">
+                                                {selectedVault.safeAddress}
+                                            </p>
+                                            <p className="text-xs text-orange-400 mt-2">
+                                                {copied ? "✓ Copied!" : "Tap to copy"}
+                                            </p>
+                                        </button>
+
+                                        {/* Warning */}
+                                        <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg w-full">
+                                            <p className="text-xs text-yellow-300 text-center">
+                                                <span className="font-medium">⚠️ Important:</span> Only send {chainInfo?.name} network assets to this address
+                                            </p>
+                                        </div>
+
+                                        {/* Explorer link */}
+                                        {chainInfo?.explorerUrl && (
+                                            <a
+                                                href={`${chainInfo.explorerUrl}/address/${selectedVault.safeAddress}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="mt-4 text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
+                                            >
+                                                View on Explorer
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Activity Tab */}
+                        {activeTab === "activity" && (
+                            <div className="space-y-4">
+                                {/* Pending Transactions */}
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                        Pending Transactions
+                                    </h4>
+                                    <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl text-center">
+                                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-700/50 flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-sm text-zinc-400">No pending transactions</p>
+                                        <p className="text-xs text-zinc-500 mt-1">
+                                            Transactions requiring signatures will appear here
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Transaction History */}
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-zinc-300">Recent Activity</h4>
+                                    <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl text-center">
+                                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-700/50 flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-sm text-zinc-400">No activity yet</p>
+                                        <p className="text-xs text-zinc-500 mt-1">
+                                            Transaction history will appear here
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
+                </AnimatePresence>
+
+                {/* Members section (collapsed by default) */}
+                <details className="group">
+                    <summary className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-xl cursor-pointer hover:bg-zinc-800/70 transition-colors">
+                        <span className="text-sm font-medium text-zinc-300">
+                            Vault Members ({selectedVault.members.length})
+                        </span>
+                        <svg
+                            className="w-5 h-5 text-zinc-500 transition-transform group-open:rotate-180"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                        {selectedVault.members.map((member) => (
+                            <div
+                                key={member.address}
+                                className={`p-3 rounded-xl border flex items-center gap-3 ${
+                                    member.isCreator
+                                        ? "bg-emerald-500/10 border-emerald-500/30"
+                                        : "bg-zinc-800/50 border-zinc-700"
+                                }`}
+                            >
+                                {member.avatar ? (
+                                    <img
+                                        src={member.avatar}
+                                        alt=""
+                                        className="w-10 h-10 rounded-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold">
+                                        {(member.username || member.address).slice(0, 2).toUpperCase()}
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-sm font-medium text-white truncate">
+                                            {member.nickname || member.username || truncateAddress(member.address)}
+                                        </p>
+                                        {member.isCreator && (
+                                            <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
+                                                Creator
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-zinc-500 font-mono truncate">
+                                        Signer: {truncateAddress(member.smartWalletAddress)}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </details>
+
+                {/* Delete button for undeployed vaults */}
+                {!selectedVault.isDeployed && isCreator && (
                     <button
                         onClick={() => handleDelete(selectedVault.id)}
                         disabled={isDeleting === selectedVault.id}
