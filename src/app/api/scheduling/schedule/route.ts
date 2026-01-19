@@ -48,6 +48,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Debug: Log incoming request
+        console.log("[Schedule] Incoming request:", {
+            recipientAddress,
+            scheduledAt,
+            timezone,
+            durationMinutes,
+            isPaid,
+        });
+
         // Get recipient's scheduling settings
         const { data: settings } = await supabase
             .from("shout_user_settings")
@@ -184,8 +193,16 @@ export async function POST(request: NextRequest) {
         });
 
         if (hasConflict) {
+            console.log("[Schedule] Database conflict detected:", {
+                requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
+                existingCalls: existingCalls?.map(c => ({
+                    id: c.id,
+                    scheduledAt: c.scheduled_at,
+                    duration: c.duration_minutes,
+                })),
+            });
             return NextResponse.json(
-                { error: "This time slot is no longer available" },
+                { error: "This time slot is no longer available", source: "database" },
                 { status: 409 }
             );
         }
@@ -280,6 +297,7 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json(
                         { 
                             error: "This time slot conflicts with an existing calendar event",
+                            source: "google_calendar",
                             details: `Blocked by: "${eventDetails}" (${busyPeriods[0]?.start} to ${busyPeriods[0]?.end})`,
                         },
                         { status: 409 }
