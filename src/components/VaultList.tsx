@@ -13,6 +13,20 @@ type VaultListProps = {
     onCreateNew: () => void;
 };
 
+// Transaction types for activity tab
+type VaultTransaction = {
+    hash: string;
+    from: string;
+    to: string;
+    value: string;
+    timestamp: string;
+    type: "incoming" | "outgoing";
+    status: "confirmed" | "pending" | "failed";
+    tokenSymbol?: string;
+    tokenDecimals?: number;
+    tokenName?: string;
+};
+
 // Common emojis for vaults
 const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "🔒", "💼", "🏠", "🎮", "🌈"];
 
@@ -44,6 +58,10 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [sendAmount, setSendAmount] = useState("");
     const [sendToken, setSendToken] = useState<VaultTokenBalance | null>(null);
     const [isSending, setIsSending] = useState(false);
+    
+    // Activity state
+    const [transactions, setTransactions] = useState<VaultTransaction[]>([]);
+    const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
 
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
@@ -72,17 +90,105 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         }
     }, []);
 
+    // Fetch transaction history from Blockscout
+    const fetchTransactions = useCallback(async (safeAddress: string, chainId: number) => {
+        console.log("[VaultList] Fetching transactions for:", safeAddress, "chain:", chainId);
+        setIsLoadingTransactions(true);
+        try {
+            const blockscoutUrls: Record<number, string> = {
+                1: "https://eth.blockscout.com",
+                8453: "https://base.blockscout.com",
+                42161: "https://arbitrum.blockscout.com",
+                10: "https://optimism.blockscout.com",
+                137: "https://polygon.blockscout.com",
+            };
+            
+            const blockscoutUrl = blockscoutUrls[chainId];
+            if (!blockscoutUrl) {
+                console.log("[VaultList] No blockscout URL for chain:", chainId);
+                return;
+            }
+            
+            // Fetch both regular transactions and token transfers
+            const [txResponse, tokenResponse] = await Promise.all([
+                fetch(`${blockscoutUrl}/api/v2/addresses/${safeAddress}/transactions?filter=to%20%7C%20from`, {
+                    headers: { Accept: "application/json" },
+                }),
+                fetch(`${blockscoutUrl}/api/v2/addresses/${safeAddress}/token-transfers?type=ERC-20`, {
+                    headers: { Accept: "application/json" },
+                }),
+            ]);
+            
+            const allTransactions: VaultTransaction[] = [];
+            const safeAddrLower = safeAddress.toLowerCase();
+            
+            // Process regular transactions (ETH transfers)
+            if (txResponse.ok) {
+                const txData = await txResponse.json();
+                console.log("[VaultList] Regular transactions:", txData.items?.length || 0);
+                for (const tx of txData.items || []) {
+                    // Only include if there was actual value transfer
+                    if (tx.value && tx.value !== "0") {
+                        allTransactions.push({
+                            hash: tx.hash,
+                            from: tx.from?.hash || "",
+                            to: tx.to?.hash || "",
+                            value: tx.value,
+                            timestamp: tx.timestamp,
+                            type: tx.to?.hash?.toLowerCase() === safeAddrLower ? "incoming" : "outgoing",
+                            status: tx.status === "ok" ? "confirmed" : tx.status === "error" ? "failed" : "pending",
+                        });
+                    }
+                }
+            }
+            
+            // Process token transfers
+            if (tokenResponse.ok) {
+                const tokenData = await tokenResponse.json();
+                console.log("[VaultList] Token transfers:", tokenData.items?.length || 0);
+                for (const transfer of tokenData.items || []) {
+                    allTransactions.push({
+                        hash: transfer.tx_hash,
+                        from: transfer.from?.hash || "",
+                        to: transfer.to?.hash || "",
+                        value: transfer.total?.value || "0",
+                        timestamp: transfer.timestamp,
+                        type: transfer.to?.hash?.toLowerCase() === safeAddrLower ? "incoming" : "outgoing",
+                        status: "confirmed",
+                        tokenSymbol: transfer.token?.symbol,
+                        tokenDecimals: parseInt(transfer.token?.decimals || "18"),
+                        tokenName: transfer.token?.name,
+                    });
+                }
+            }
+            
+            // Sort by timestamp descending
+            allTransactions.sort((a, b) => 
+                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+            
+            console.log("[VaultList] Total transactions:", allTransactions.length);
+            setTransactions(allTransactions.slice(0, 20)); // Limit to 20 most recent
+        } catch (err) {
+            console.error("[VaultList] Error fetching transactions:", err);
+        } finally {
+            setIsLoadingTransactions(false);
+        }
+    }, []);
+
     const handleViewVault = async (vault: VaultListItem) => {
         setIsLoadingDetails(true);
         setActiveTab("assets");
         setBalances(null);
+        setTransactions([]);
         const details = await getVault(vault.id);
         setSelectedVault(details);
         setIsLoadingDetails(false);
         
-        // Fetch balances after getting vault details
+        // Fetch balances and transactions after getting vault details
         if (details) {
             fetchBalances(details.id);
+            fetchTransactions(details.safeAddress, details.chainId);
         }
     };
 
@@ -110,6 +216,20 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
     const truncateAddress = (addr: string) => 
         `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+
+    const getTimeAgo = (date: Date): string => {
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        if (diffMins < 1) return "Just now";
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    };
 
     // Check if current user is the creator
     const isCreator = selectedVault?.creatorAddress.toLowerCase() === userAddress.toLowerCase();
@@ -747,39 +867,114 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         {/* Activity Tab */}
                         {activeTab === "activity" && (
                             <div className="space-y-4">
-                                {/* Pending Transactions */}
-                                <div className="space-y-2">
-                                    <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                                        Pending Transactions
-                                    </h4>
-                                    <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl text-center">
-                                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-700/50 flex items-center justify-center">
-                                            <svg className="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                        </div>
-                                        <p className="text-sm text-zinc-400">No pending transactions</p>
-                                        <p className="text-xs text-zinc-500 mt-1">
-                                            Transactions requiring signatures will appear here
-                                        </p>
-                                    </div>
-                                </div>
-
                                 {/* Transaction History */}
                                 <div className="space-y-2">
-                                    <h4 className="text-sm font-medium text-zinc-300">Recent Activity</h4>
-                                    <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl text-center">
-                                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-700/50 flex items-center justify-center">
-                                            <svg className="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-sm font-medium text-zinc-300">Recent Activity</h4>
+                                        <button
+                                            onClick={() => fetchTransactions(selectedVault.safeAddress, selectedVault.chainId)}
+                                            disabled={isLoadingTransactions}
+                                            className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
+                                        >
+                                            <svg
+                                                className={`w-3.5 h-3.5 ${isLoadingTransactions ? "animate-spin" : ""}`}
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                             </svg>
-                                        </div>
-                                        <p className="text-sm text-zinc-400">No activity yet</p>
-                                        <p className="text-xs text-zinc-500 mt-1">
-                                            Transaction history will appear here
-                                        </p>
+                                            Refresh
+                                        </button>
                                     </div>
+                                    
+                                    {isLoadingTransactions ? (
+                                        <div className="space-y-2">
+                                            {[1, 2, 3].map((i) => (
+                                                <div key={i} className="p-3 bg-zinc-800/50 rounded-xl animate-pulse">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-zinc-700" />
+                                                        <div className="flex-1">
+                                                            <div className="h-4 bg-zinc-700 rounded w-32 mb-2" />
+                                                            <div className="h-3 bg-zinc-700 rounded w-24" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : transactions.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {transactions.map((tx) => {
+                                                const chainInfo = getChainById(selectedVault.chainId);
+                                                const isToken = !!tx.tokenSymbol;
+                                                const decimals = tx.tokenDecimals || 18;
+                                                const formattedValue = (Number(tx.value) / Math.pow(10, decimals)).toFixed(
+                                                    isToken && tx.tokenDecimals === 6 ? 2 : 4
+                                                );
+                                                const symbol = tx.tokenSymbol || chainInfo?.symbol || "ETH";
+                                                const date = new Date(tx.timestamp);
+                                                const timeAgo = getTimeAgo(date);
+                                                
+                                                return (
+                                                    <a
+                                                        key={tx.hash}
+                                                        href={`${chainInfo?.blockExplorer}/tx/${tx.hash}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl hover:border-zinc-600 transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                                                tx.type === "incoming" 
+                                                                    ? "bg-emerald-500/20 text-emerald-400" 
+                                                                    : "bg-orange-500/20 text-orange-400"
+                                                            }`}>
+                                                                {tx.type === "incoming" ? (
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                                    </svg>
+                                                                ) : (
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                                                    </svg>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center justify-between">
+                                                                    <p className="text-sm font-medium text-white">
+                                                                        {tx.type === "incoming" ? "Received" : "Sent"}
+                                                                    </p>
+                                                                    <p className={`text-sm font-medium ${
+                                                                        tx.type === "incoming" ? "text-emerald-400" : "text-orange-400"
+                                                                    }`}>
+                                                                        {tx.type === "incoming" ? "+" : "-"}{formattedValue} {symbol}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex items-center justify-between mt-1">
+                                                                    <p className="text-xs text-zinc-500 truncate">
+                                                                        {tx.type === "incoming" ? "From" : "To"}: {truncateAddress(tx.type === "incoming" ? tx.from : tx.to)}
+                                                                    </p>
+                                                                    <p className="text-xs text-zinc-500">{timeAgo}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl text-center">
+                                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-700/50 flex items-center justify-center">
+                                                <svg className="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </div>
+                                            <p className="text-sm text-zinc-400">No activity yet</p>
+                                            <p className="text-xs text-zinc-500 mt-1">
+                                                Transaction history will appear here
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
