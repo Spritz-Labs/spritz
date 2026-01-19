@@ -3,12 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
+import { getMultiSigSafeAddress } from "@/lib/safeWallet";
 import { 
     type Address,
     type Chain,
-    keccak256,
-    encodeAbiParameters,
-    parseAbiParameters,
 } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from "viem/chains";
 
@@ -29,28 +27,6 @@ const VAULT_SUPPORTED_CHAINS: Record<number, { chain: Chain; name: string }> = {
 };
 
 // Note: Safe contract deployment will be handled via Safe SDK when first transaction is made
-
-/**
- * Calculate a deterministic vault identifier
- * Note: The actual Safe address will be determined when deploying via Safe SDK
- * This is a placeholder that ensures uniqueness for the vault
- */
-function calculateVaultId(
-    owners: Address[],
-    threshold: number,
-    saltNonce: bigint
-): Address {
-    // Create a deterministic identifier based on owners, threshold, and nonce
-    const vaultHash = keccak256(
-        encodeAbiParameters(
-            parseAbiParameters("address[], uint256, uint256"),
-            [owners, BigInt(threshold), saltNonce]
-        )
-    );
-    
-    // Use first 20 bytes as a pseudo-address (not a real Safe address)
-    return ("0x" + vaultHash.slice(26)) as Address;
-}
 
 export async function POST(request: NextRequest) {
     // Rate limit
@@ -158,7 +134,7 @@ export async function POST(request: NextRequest) {
             ...members.map((m: { address: string }) => memberWalletMap[m.address.toLowerCase()] as Address),
         ];
 
-        // Sort addresses for deterministic vault ID calculation
+        // Sort addresses for deterministic Safe address calculation
         const sortedSigners = [...signerAddresses].sort((a, b) => 
             a.toLowerCase().localeCompare(b.toLowerCase())
         );
@@ -166,9 +142,24 @@ export async function POST(request: NextRequest) {
         // Generate a unique salt nonce based on timestamp and creator
         const saltNonce = BigInt(Date.now());
 
-        // Generate a deterministic vault identifier
-        // The actual Safe address will be determined when deploying via Safe SDK
-        const vaultId = calculateVaultId(sortedSigners, threshold, saltNonce);
+        // Calculate the actual Safe multi-sig address using the Safe SDK
+        // This is the REAL address where the Safe will be deployed
+        let safeAddress: Address;
+        try {
+            safeAddress = await getMultiSigSafeAddress(
+                sortedSigners,
+                threshold,
+                chainId,
+                saltNonce
+            );
+            console.log("[Vault] Calculated Safe address:", safeAddress);
+        } catch (safeError) {
+            console.error("[Vault] Error calculating Safe address:", safeError);
+            return NextResponse.json(
+                { error: "Failed to calculate vault address" },
+                { status: 500 }
+            );
+        }
 
         // Sanitize inputs
         const sanitizedName = sanitizeInput(name, INPUT_LIMITS.SHORT_TEXT);
@@ -183,11 +174,12 @@ export async function POST(request: NextRequest) {
                 name: sanitizedName,
                 description: sanitizedDescription,
                 emoji: emoji?.slice(0, 10) || "🔐",
-                safe_address: vaultId.toLowerCase(),
+                safe_address: safeAddress.toLowerCase(),
                 chain_id: chainId,
                 threshold,
                 creator_address: session.userAddress.toLowerCase(),
                 is_deployed: false,
+                salt_nonce: saltNonce.toString(), // Store salt for future deployment
             })
             .select()
             .single();

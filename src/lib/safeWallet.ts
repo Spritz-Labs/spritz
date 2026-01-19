@@ -387,6 +387,62 @@ export async function getSafeAddress(config: SafeWalletConfig): Promise<Address>
 }
 
 /**
+ * Calculate the deterministic address for a multi-sig Safe (vault)
+ * Uses the same Safe SDK under the hood but with multiple owners
+ * 
+ * @param owners - Array of owner addresses (must be sorted)
+ * @param threshold - Number of required signatures
+ * @param chainId - The chain ID
+ * @param saltNonce - Salt nonce for unique addresses (default 0)
+ */
+export async function getMultiSigSafeAddress(
+    owners: Address[],
+    threshold: number,
+    chainId: number,
+    saltNonce: bigint = BigInt(0)
+): Promise<Address> {
+    const chain = SAFE_SUPPORTED_CHAINS[chainId];
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    if (owners.length === 0) {
+        throw new Error("At least one owner is required");
+    }
+
+    if (threshold < 1 || threshold > owners.length) {
+        throw new Error(`Invalid threshold: ${threshold} for ${owners.length} owners`);
+    }
+
+    const publicClient = getPublicClient(chainId);
+    
+    // Sort owners for deterministic address
+    const sortedOwners = [...owners].sort((a, b) => 
+        a.toLowerCase().localeCompare(b.toLowerCase())
+    );
+
+    log(`[SafeWallet] Calculating multi-sig Safe address for ${sortedOwners.length} owners, threshold ${threshold}`);
+    
+    // Create Safe account with multiple owners
+    // Note: For address calculation, we use "local" type for all owners
+    const safeAccount = await toSafeSmartAccount({
+        client: publicClient,
+        owners: sortedOwners.map(addr => ({ address: addr, type: "local" } as any)),
+        threshold: BigInt(threshold),
+        version: "1.4.1",
+        entryPoint: {
+            address: entryPoint07Address,
+            version: "0.7",
+        },
+        saltNonce,
+    });
+
+    log(`[SafeWallet] Multi-sig Safe address: ${safeAccount.address}`);
+
+    return safeAccount.address;
+}
+
+/**
  * Check if a Safe is deployed at the given address
  */
 export async function isSafeDeployed(
