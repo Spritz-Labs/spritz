@@ -31,32 +31,33 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `No blockscout URL for chain ${chainId}` }, { status: 400 });
     }
     
+    const steps: Record<string, unknown>[] = [];
     const debugInfo: Record<string, unknown> = {
         input: { address, chainId, blockscoutUrl },
-        steps: [],
+        steps,
     };
     
     try {
         // Step 1: Fetch token balances
         const url = `${blockscoutUrl}/api/v2/addresses/${address}/token-balances`;
-        debugInfo.steps.push({ step: 1, action: "fetch", url });
+        steps.push({ step: 1, action: "fetch", url });
         
         const response = await fetch(url, {
             headers: { Accept: "application/json" },
             cache: "no-store",
         });
         
-        debugInfo.steps.push({ step: 2, action: "response", status: response.status, ok: response.ok });
+        steps.push({ step: 2, action: "response", status: response.status, ok: response.ok });
         
         if (!response.ok) {
             const errorText = await response.text();
-            debugInfo.steps.push({ step: 3, action: "error", errorText });
+            steps.push({ step: 3, action: "error", errorText });
             return NextResponse.json({ ...debugInfo, error: "Blockscout fetch failed" });
         }
         
         // Step 2: Parse response
         const tokensData = await response.json();
-        debugInfo.steps.push({ step: 3, action: "parse", tokenCount: tokensData.length });
+        steps.push({ step: 3, action: "parse", tokenCount: tokensData.length });
         debugInfo.rawTokens = tokensData;
         
         // Step 3: Filter tokens
