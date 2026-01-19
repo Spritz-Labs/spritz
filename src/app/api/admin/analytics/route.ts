@@ -127,9 +127,21 @@ export async function GET(request: NextRequest) {
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
 
-        // Fetch friend requests in period
-        const { data: friendRequests } = await supabase
+        // Fetch friendships created in period (shout_friends stores accepted friendships only)
+        const { data: friendships } = await supabase
             .from("shout_friends")
+            .select("created_at")
+            .gte("created_at", startDate.toISOString())
+            .order("created_at", { ascending: true });
+        
+        // Fetch all friendships for total count
+        const { data: allFriendships } = await supabase
+            .from("shout_friends")
+            .select("id");
+        
+        // Fetch friend requests in period (includes pending, accepted, rejected)
+        const { data: friendRequests } = await supabase
+            .from("shout_friend_requests")
             .select("created_at, status")
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
@@ -196,21 +208,63 @@ export async function GET(request: NextRequest) {
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
 
+        // Fetch DM messages in period
+        const { data: dmMessages } = await supabase
+            .from("shout_messages")
+            .select("created_at, sender_address")
+            .gte("created_at", startDate.toISOString())
+            .order("created_at", { ascending: true });
+
+        // Fetch channel messages in period
+        const { data: channelMessages } = await supabase
+            .from("shout_channel_messages")
+            .select("created_at, sender_address")
+            .gte("created_at", startDate.toISOString())
+            .order("created_at", { ascending: true });
+
+        // Fetch total message counts
+        const { count: totalDmMessages } = await supabase
+            .from("shout_messages")
+            .select("*", { count: "exact", head: true });
+
+        const { count: totalChannelMessages } = await supabase
+            .from("shout_channel_messages")
+            .select("*", { count: "exact", head: true });
+        
+        const { count: totalAlphaMessages } = await supabase
+            .from("shout_alpha_messages")
+            .select("*", { count: "exact", head: true });
+
+        // Fetch public profile stats
+        const { data: publicProfiles } = await supabase
+            .from("shout_user_settings")
+            .select("wallet_address, public_landing_enabled")
+            .eq("public_landing_enabled", true);
+
         // Calculate summary stats
         const totalUsers = allUsers?.length || 0;
         const newUsersCount = newUsers?.length || 0;
         const activeUsers = loginData?.length || 0;
-        const totalMessages = allUsers?.reduce((sum, u) => sum + (u.messages_sent || 0), 0) || 0;
-        const messagesInPeriod = alphaMessages?.length || 0;
+        const totalMessages = (totalDmMessages || 0) + (totalChannelMessages || 0) + (totalAlphaMessages || 0);
+        const messagesInPeriod = (alphaMessages?.length || 0) + (dmMessages?.length || 0) + (channelMessages?.length || 0);
         const totalCalls = allUsers?.reduce((sum, u) => sum + (u.total_calls || 0), 0) || 0;
         const totalVoiceMinutes = allUsers?.reduce((sum, u) => sum + (u.voice_minutes || 0), 0) || 0;
         const totalVideoMinutes = allUsers?.reduce((sum, u) => sum + (u.video_minutes || 0), 0) || 0;
         const totalPoints = allUsers?.reduce((sum, u) => sum + (u.points || 0), 0) || 0;
         const pointsInPeriod = pointsHistory?.reduce((sum, p) => sum + (p.points || 0), 0) || 0;
         const friendRequestsCount = friendRequests?.length || 0;
-        const acceptedFriendships = friendRequests?.filter(f => f.status === "accepted").length || 0;
+        const acceptedFriendships = (allFriendships?.length || 0) / 2; // Divided by 2 since friendships are stored bidirectionally
+        const newFriendshipsInPeriod = (friendships?.length || 0) / 2;
         const groupsCreated = groups?.length || 0;
         const invitesUsed = usedInvites?.length || 0;
+
+        // Public profile stats
+        const publicProfilesCount = publicProfiles?.length || 0;
+        
+        // Message breakdown for display
+        const dmMessagesInPeriod = dmMessages?.length || 0;
+        const channelMessagesInPeriod = channelMessages?.length || 0;
+        const alphaMessagesInPeriod = alphaMessages?.length || 0;
 
         // Agent stats
         const totalAgents = allAgents?.length || 0;
@@ -218,6 +272,7 @@ export async function GET(request: NextRequest) {
         const publicAgents = allAgents?.filter(a => a.visibility === "public").length || 0;
         const friendsAgents = allAgents?.filter(a => a.visibility === "friends").length || 0;
         const privateAgents = allAgents?.filter(a => a.visibility === "private").length || 0;
+        const officialAgents = allAgents?.filter(a => a.visibility === "official").length || 0;
         const totalAgentMessages = allAgents?.reduce((sum, a) => sum + (a.message_count || 0), 0) || 0;
         const agentMessagesInPeriod = agentChats?.filter(c => c.role === "user").length || 0;
         const uniqueAgentUsers = new Set(agentChats?.map(c => c.user_address) || []).size;
@@ -420,6 +475,7 @@ export async function GET(request: NextRequest) {
             { visibility: "Private", count: privateAgents },
             { visibility: "Friends", count: friendsAgents },
             { visibility: "Public", count: publicAgents },
+            { visibility: "Official", count: officialAgents },
         ].filter(v => v.count > 0);
 
         // Points breakdown
@@ -436,21 +492,32 @@ export async function GET(request: NextRequest) {
                 activeUsers,
                 totalMessages,
                 messagesInPeriod,
+                // Message breakdown
+                dmMessagesInPeriod,
+                channelMessagesInPeriod,
+                alphaMessagesInPeriod,
+                totalDmMessages: totalDmMessages || 0,
+                totalChannelMessages: totalChannelMessages || 0,
+                totalAlphaMessages: totalAlphaMessages || 0,
                 totalCalls,
                 totalVoiceMinutes,
                 totalVideoMinutes,
                 totalPoints,
                 pointsInPeriod,
                 friendRequestsCount,
-                acceptedFriendships,
+                acceptedFriendships: Math.floor(acceptedFriendships),
+                newFriendshipsInPeriod: Math.floor(newFriendshipsInPeriod),
                 groupsCreated,
                 invitesUsed,
+                // Public profile stats
+                publicProfilesCount,
                 // Agent stats
                 totalAgents,
                 newAgentsCount,
                 publicAgents,
                 friendsAgents,
                 privateAgents,
+                officialAgents,
                 totalAgentMessages,
                 agentMessagesInPeriod,
                 uniqueAgentUsers,

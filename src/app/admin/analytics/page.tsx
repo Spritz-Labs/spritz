@@ -101,13 +101,24 @@ type AnalyticsData = {
         pointsInPeriod: number;
         friendRequestsCount: number;
         acceptedFriendships: number;
+        newFriendshipsInPeriod: number;
         groupsCreated: number;
         invitesUsed: number;
+        // Public profile stats
+        publicProfilesCount: number;
+        // Message breakdown
+        dmMessagesInPeriod: number;
+        channelMessagesInPeriod: number;
+        alphaMessagesInPeriod: number;
+        totalDmMessages: number;
+        totalChannelMessages: number;
+        totalAlphaMessages: number;
         totalAgents: number;
         newAgentsCount: number;
         publicAgents: number;
         friendsAgents: number;
         privateAgents: number;
+        officialAgents: number;
         totalAgentMessages: number;
         agentMessagesInPeriod: number;
         uniqueAgentUsers: number;
@@ -393,7 +404,26 @@ function OverviewSection({ data, period }: { data: AnalyticsData; period: Period
                 <SmallMetric label="Messages" value={data.summary.totalMessages} />
                 <SmallMetric label="Points" value={data.summary.totalPoints} />
                 <SmallMetric label="Friendships" value={data.summary.acceptedFriendships} />
-                <SmallMetric label="Invites Used" value={data.summary.invitesUsed} />
+                <SmallMetric label="Public Profiles" value={data.summary.publicProfilesCount} />
+            </div>
+            
+            {/* Message Breakdown */}
+            <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                <h3 className="text-sm font-semibold text-zinc-400 mb-3">Message Breakdown (in {period})</h3>
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
+                        <p className="text-2xl font-bold text-blue-400">{data.summary.dmMessagesInPeriod}</p>
+                        <p className="text-xs text-zinc-500 mt-1">DMs ({data.summary.totalDmMessages} total)</p>
+                    </div>
+                    <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
+                        <p className="text-2xl font-bold text-purple-400">{data.summary.channelMessagesInPeriod}</p>
+                        <p className="text-xs text-zinc-500 mt-1">Channels ({data.summary.totalChannelMessages} total)</p>
+                    </div>
+                    <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
+                        <p className="text-2xl font-bold text-orange-400">{data.summary.alphaMessagesInPeriod}</p>
+                        <p className="text-xs text-zinc-500 mt-1">Alpha ({data.summary.totalAlphaMessages} total)</p>
+                    </div>
+                </div>
             </div>
 
             {/* Charts Row */}
@@ -714,12 +744,13 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
     return (
         <div className="space-y-6">
             {/* Agent Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <MetricCard label="Total Agents" value={data.summary.totalAgents} icon="🤖" />
                 <MetricCard label="New Agents" value={data.summary.newAgentsCount} icon="✨" subtext={`in ${period}`} />
                 <MetricCard label="Agent Messages" value={data.summary.agentMessagesInPeriod} icon="💬" subtext={`(${data.summary.totalAgentMessages} total)`} />
                 <MetricCard label="Unique Users" value={data.summary.uniqueAgentUsers} icon="👤" subtext="using agents" />
                 <MetricCard label="Knowledge Items" value={data.summary.knowledgeItemsCount} icon="📚" subtext={`${data.summary.indexedKnowledgeItems} indexed`} />
+                <MetricCard label="Official Agents" value={data.summary.officialAgents} icon="⭐" subtext="platform agents" />
             </div>
 
             {/* Charts Row */}
@@ -760,9 +791,15 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie data={data.agentVisibilityBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="count" nameKey="visibility" label>
-                                        {data.agentVisibilityBreakdown.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={["#6B7280", "#3B82F6", "#10B981"][index % 3]} />
-                                        ))}
+                                        {data.agentVisibilityBreakdown.map((entry, index) => {
+                                            const colors: Record<string, string> = {
+                                                "Private": "#6B7280",
+                                                "Friends": "#3B82F6", 
+                                                "Public": "#10B981",
+                                                "Official": "#F97316"
+                                            };
+                                            return <Cell key={`cell-${index}`} fill={colors[entry.visibility] || PIE_COLORS[index % PIE_COLORS.length]} />;
+                                        })}
                                     </Pie>
                                     <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
                                     <Legend />
