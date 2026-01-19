@@ -15,7 +15,7 @@ export function ScheduleWidget({ config, size }: ScheduleWidgetProps) {
     
     return (
         <Link
-            href={`/book/${slug}`}
+            href={`/cal/${slug}`}
             className="block w-full h-full p-4 sm:p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:bg-zinc-800/80 hover:border-emerald-500/50 transition-all group"
         >
             <div className={`flex ${isCompact ? 'flex-col items-center justify-center h-full' : 'items-center gap-3'}`}>

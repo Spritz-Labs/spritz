@@ -19,7 +19,7 @@ const viemClient = createPublicClient({
  * Resolve a slug to a wallet address
  * Supports: wallet addresses, ENS names, Spritz usernames
  * 
- * NOTE: Custom booking slugs are handled by /api/public/book/[slug] instead
+ * NOTE: Custom booking slugs are handled by /api/public/cal/[slug] instead
  * to avoid collisions with usernames
  */
 async function resolveSlugToWalletAddress(slug: string): Promise<string | null> {
@@ -62,7 +62,7 @@ async function resolveSlugToWalletAddress(slug: string): Promise<string | null> 
     }
     
     // Custom scheduling slugs are NOT supported here
-    // Use /book/[slug] for custom booking URLs to avoid username collisions
+    // Use /cal/[slug] for custom booking URLs to avoid username collisions
     console.log(`[Schedule] Could not resolve slug: ${slug}`);
     return null;
 }

@@ -6,7 +6,7 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/public/book/[slug] - Get scheduling profile by custom booking slug only
+// GET /api/public/cal/[slug] - Get scheduling profile by custom booking slug only
 // This is separate from /schedule/[slug] to avoid collisions with usernames/ENS
 export async function GET(
     request: NextRequest,
@@ -119,7 +119,7 @@ export async function GET(
             },
         });
     } catch (error) {
-        console.error("[Book] Profile error:", error);
+        console.error("[Cal] Profile error:", error);
         return NextResponse.json(
             { error: "Failed to fetch booking profile" },
             { status: 500 }

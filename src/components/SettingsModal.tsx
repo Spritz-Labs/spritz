@@ -320,9 +320,9 @@ export function SettingsModal({
     };
     
     const copySchedulingLink = () => {
-        // Custom slugs use /book/, usernames/addresses use /schedule/
+        // Custom slugs use /cal/, usernames/addresses use /schedule/
         const link = schedulingSlug
-            ? `${window.location.origin}/book/${schedulingSlug}`
+            ? `${window.location.origin}/cal/${schedulingSlug}`
             : `${window.location.origin}/schedule/${userAddress}`;
         navigator.clipboard.writeText(link);
         setLinkCopied(true);
@@ -1270,7 +1270,7 @@ export function SettingsModal({
                                                 </label>
                                                 <div className="flex items-center gap-0">
                                                     <span className="px-3 py-2 rounded-l-lg bg-zinc-900/50 border border-r-0 border-zinc-700 text-zinc-500 text-sm">
-                                                        /schedule/
+                                                        /cal/
                                                     </span>
                                                     <input
                                                         type="text"

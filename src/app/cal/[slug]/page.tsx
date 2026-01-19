@@ -118,7 +118,7 @@ const ERC20_ABI = [
     },
 ] as const;
 
-export default function BookPage({ params }: { params: Promise<{ slug: string }> }) {
+export default function CalPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = use(params);
     const [profile, setProfile] = useState<SchedulingProfile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -280,7 +280,7 @@ export default function BookPage({ params }: { params: Promise<{ slug: string }>
 
     const fetchProfile = async () => {
         try {
-            const res = await fetch(`/api/public/book/${slug}`);
+            const res = await fetch(`/api/public/cal/${slug}`);
             const data = await res.json();
 
             if (!res.ok) {
