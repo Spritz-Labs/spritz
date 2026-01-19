@@ -182,12 +182,48 @@ export function PWAInstallPrompt() {
             handleControllerChange
         );
 
-        // Check for updates periodically (every 5 minutes when app is active)
+        // Check for updates periodically (every 2 minutes when app is active)
+        // More frequent on iOS since it has issues with service worker updates
+        const updateInterval = isIOSDevice ? 2 * 60 * 1000 : 5 * 60 * 1000;
         const intervalId = setInterval(() => {
             if (document.visibilityState === "visible") {
                 checkForUpdates("interval");
             }
-        }, 5 * 60 * 1000);
+        }, updateInterval);
+        
+        // iOS-specific: Also check immediately when page loads from bfcache
+        // iOS is notorious for not properly resuming PWAs
+        if (isIOSDevice) {
+            // Force check on every navigation
+            const handleNavigate = () => {
+                console.log("[PWA] iOS navigation detected, checking for updates...");
+                checkForUpdates("navigate");
+            };
+            window.addEventListener("popstate", handleNavigate);
+            
+            // Check on touch start (user is actively using the app)
+            let lastTouchCheck = 0;
+            const handleTouch = () => {
+                const now = Date.now();
+                // Only check once every 30 seconds on touch
+                if (now - lastTouchCheck > 30000) {
+                    lastTouchCheck = now;
+                    console.log("[PWA] iOS touch activity, checking for updates...");
+                    checkForUpdates("touch");
+                }
+            };
+            window.addEventListener("touchstart", handleTouch, { passive: true });
+            
+            return () => {
+                clearInterval(intervalId);
+                document.removeEventListener("visibilitychange", handleVisibilityChange);
+                window.removeEventListener("focus", handleFocus);
+                window.removeEventListener("pageshow", handlePageShow);
+                window.removeEventListener("popstate", handleNavigate);
+                window.removeEventListener("touchstart", handleTouch);
+                navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+            };
+        }
 
         return () => {
             clearInterval(intervalId);

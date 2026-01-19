@@ -1006,6 +1006,51 @@ export function SettingsModal({
                                             )}
                                         </div>
                                     )}
+                                    
+                                    {/* Check for App Updates - only show for PWA */}
+                                    {typeof window !== "undefined" && 
+                                     (window.matchMedia("(display-mode: standalone)").matches || 
+                                      // @ts-expect-error - iOS Safari specific
+                                      window.navigator.standalone === true) && (
+                                        <div className="mt-2">
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        const registration = await navigator.serviceWorker.ready;
+                                                        await registration.update();
+                                                        
+                                                        if (registration.waiting) {
+                                                            // New version available - reload
+                                                            registration.waiting.postMessage({ type: "SKIP_WAITING" });
+                                                            window.location.reload();
+                                                        } else {
+                                                            // No update available
+                                                            alert("You're on the latest version! ✓");
+                                                        }
+                                                    } catch (err) {
+                                                        console.error("[Settings] Update check failed:", err);
+                                                        alert("Could not check for updates. Try again later.");
+                                                    }
+                                                }}
+                                                className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xl">🔄</span>
+                                                    <div className="text-left">
+                                                        <p className="text-white font-medium">
+                                                            Check for Updates
+                                                        </p>
+                                                        <p className="text-zinc-500 text-xs">
+                                                            Manually check for app updates
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Availability Section */}
