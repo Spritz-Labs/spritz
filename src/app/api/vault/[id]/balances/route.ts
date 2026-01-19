@@ -204,15 +204,19 @@ export async function GET(
 ) {
     try {
         const { id: vaultId } = await params;
+        console.log("[Vault Balances] ====== START ======");
+        console.log("[Vault Balances] Request for vault:", vaultId);
         
         // Authenticate user
         const user = await getAuthenticatedUser(request);
         if (!user) {
+            console.log("[Vault Balances] ERROR: Unauthorized - no user");
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
             );
         }
+        console.log("[Vault Balances] User authenticated:", user.userAddress);
 
         // Get vault details
         const { data: vault, error: vaultError } = await supabase
@@ -222,11 +226,13 @@ export async function GET(
             .single();
 
         if (vaultError || !vault) {
+            console.log("[Vault Balances] ERROR: Vault not found", vaultError);
             return NextResponse.json(
                 { error: "Vault not found" },
                 { status: 404 }
             );
         }
+        console.log("[Vault Balances] Vault found:", { id: vault.id, safeAddress: vault.safe_address, chainId: vault.chain_id });
 
         // Verify user is a member of this vault
         const { data: membership } = await supabase
@@ -237,14 +243,17 @@ export async function GET(
             .single();
 
         if (!membership) {
+            console.log("[Vault Balances] ERROR: Not a member");
             return NextResponse.json(
                 { error: "Not a member of this vault" },
                 { status: 403 }
             );
         }
+        console.log("[Vault Balances] User is member of vault");
 
         const chainInfo = getChainById(vault.chain_id);
         const blockscoutUrl = BLOCKSCOUT_URLS[vault.chain_id];
+        console.log("[Vault Balances] Chain info:", { chainId: vault.chain_id, blockscoutUrl, chainName: chainInfo?.name });
         
         let nativeBalance: VaultTokenBalance | null = null;
         const tokens: VaultTokenBalance[] = [];
@@ -252,6 +261,7 @@ export async function GET(
 
         if (blockscoutUrl) {
             try {
+                console.log("[Vault Balances] Fetching from Blockscout...");
                 // Fetch native balance and token balances in parallel
                 const [addressResponse, tokensResponse] = await Promise.all([
                     fetch(`${blockscoutUrl}/api/v2/addresses/${vault.safe_address}`, {
@@ -263,10 +273,12 @@ export async function GET(
                         cache: "no-store",
                     }),
                 ]);
+                console.log("[Vault Balances] Blockscout responses:", { addressOk: addressResponse.ok, tokensOk: tokensResponse.ok });
 
                 // Process native balance
                 if (addressResponse.ok) {
                     const addressData: BlockscoutAddressResponse = await addressResponse.json();
+                    console.log("[Vault Balances] Native balance data:", addressData);
                     const rawBalance = addressData.coin_balance || "0";
                     const balanceWei = BigInt(rawBalance);
 
@@ -290,37 +302,63 @@ export async function GET(
                             tokenType: "native",
                             logoUrl: NATIVE_TOKEN_LOGOS[chainInfo?.symbol || "ETH"],
                         };
+                        console.log("[Vault Balances] Native balance processed:", nativeBalance);
 
                         if (balanceUsd) {
                             totalUsd += balanceUsd;
                         }
                     }
+                } else {
+                    console.log("[Vault Balances] Native balance fetch failed:", addressResponse.status);
                 }
 
                 // Process token balances from Blockscout
                 let foundTokensFromBlockscout = false;
                 if (tokensResponse.ok) {
                     const tokensData: BlockscoutTokenBalance[] = await tokensResponse.json();
+                    console.log("[Vault Balances] Blockscout tokens received:", tokensData.length, "tokens");
+                    console.log("[Vault Balances] Raw token data:", JSON.stringify(tokensData, null, 2));
+                    
                     const trustedSet = TRUSTED_TOKENS[vault.chain_id] || new Set();
+                    console.log("[Vault Balances] Trusted tokens for chain", vault.chain_id, ":", Array.from(trustedSet));
 
                     for (const tokenData of tokensData) {
                         const token = tokenData.token;
+                        console.log("[Vault Balances] Processing token:", { 
+                            symbol: token.symbol, 
+                            address: token.address_hash, 
+                            type: token.type, 
+                            value: tokenData.value,
+                            addressLower: token.address_hash.toLowerCase(),
+                            isTrusted: trustedSet.has(token.address_hash.toLowerCase())
+                        });
 
                         // Skip non-ERC20 tokens
-                        if (token.type !== "ERC-20") continue;
+                        if (token.type !== "ERC-20") {
+                            console.log("[Vault Balances] Skipping - not ERC-20");
+                            continue;
+                        }
 
                         // Skip untrusted tokens
-                        if (!trustedSet.has(token.address_hash.toLowerCase())) continue;
+                        if (!trustedSet.has(token.address_hash.toLowerCase())) {
+                            console.log("[Vault Balances] Skipping - not trusted");
+                            continue;
+                        }
 
                         const rawBalance = tokenData.value || "0";
                         const decimals = parseInt(token.decimals) || 18;
                         const balanceFormatted =
                             Number(BigInt(rawBalance)) / Math.pow(10, decimals);
+                        console.log("[Vault Balances] Token balance:", { rawBalance, decimals, balanceFormatted });
 
                         // Skip zero balances
-                        if (balanceFormatted <= 0) continue;
+                        if (balanceFormatted <= 0) {
+                            console.log("[Vault Balances] Skipping - zero balance");
+                            continue;
+                        }
 
                         foundTokensFromBlockscout = true;
+                        console.log("[Vault Balances] Token PASSED all filters!");
 
                         // Calculate USD value
                         let balanceUsd: number | null = null;
@@ -345,15 +383,19 @@ export async function GET(
                             tokenType: "erc20",
                             logoUrl: token.icon_url || getTokenLogo(token.symbol, token.address_hash, chainInfo?.network || ""),
                         });
+                        console.log("[Vault Balances] Token added to response:", token.symbol);
 
                         if (balanceUsd) {
                             totalUsd += balanceUsd;
                         }
                     }
+                } else {
+                    console.log("[Vault Balances] Token balances fetch failed:", tokensResponse.status);
                 }
                 
                 // Fallback: If Blockscout returned no tokens, query known tokens via RPC
                 // This handles cases where Blockscout indexing is delayed
+                console.log("[Vault Balances] foundTokensFromBlockscout:", foundTokensFromBlockscout);
                 if (!foundTokensFromBlockscout) {
                     const rpcUrl = RPC_URLS[vault.chain_id];
                     const knownTokens = KNOWN_TOKENS[vault.chain_id] || [];
@@ -391,6 +433,7 @@ export async function GET(
                                     tokenType: "erc20",
                                     logoUrl: token.logoUrl,
                                 });
+                                console.log("[Vault Balances] RPC: Token added:", token.symbol, balanceFormatted);
                                 
                                 if (balanceUsd) {
                                     totalUsd += balanceUsd;
@@ -398,11 +441,21 @@ export async function GET(
                             }
                         }
                     }
+                } else {
+                    console.log("[Vault Balances] Skipping RPC fallback - already found tokens from Blockscout");
                 }
             } catch (fetchError) {
                 console.error("[Vault Balances] Blockscout fetch error:", fetchError);
             }
+        } else {
+            console.log("[Vault Balances] No blockscout URL for chain:", vault.chain_id);
         }
+
+        console.log("[Vault Balances] ====== FINAL RESULT ======");
+        console.log("[Vault Balances] Native balance:", nativeBalance ? `${nativeBalance.balanceFormatted} ${nativeBalance.symbol}` : "none");
+        console.log("[Vault Balances] Tokens count:", tokens.length);
+        console.log("[Vault Balances] Tokens:", tokens.map(t => `${t.balanceFormatted} ${t.symbol}`));
+        console.log("[Vault Balances] Total USD:", totalUsd);
 
         const response: VaultBalanceResponse = {
             vaultId: vault.id,
@@ -416,7 +469,7 @@ export async function GET(
 
         return NextResponse.json(response);
     } catch (error) {
-        console.error("[Vault Balances] Error:", error);
+        console.error("[Vault Balances] FATAL Error:", error);
         return NextResponse.json(
             { error: "Failed to fetch vault balances" },
             { status: 500 }
