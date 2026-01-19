@@ -238,9 +238,15 @@ export async function POST(request: NextRequest) {
 
                 const busyPeriods = busyResponse.data.calendars?.[calendarConnection.calendar_id || "primary"]?.busy || [];
                 if (busyPeriods.length > 0) {
-                    console.log("[Schedule] Google Calendar conflict detected:", busyPeriods);
+                    console.log("[Schedule] Google Calendar conflict detected:", {
+                        requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
+                        busyPeriods: busyPeriods.map(b => ({ start: b.start, end: b.end })),
+                    });
                     return NextResponse.json(
-                        { error: "This time slot conflicts with an existing calendar event" },
+                        { 
+                            error: "This time slot conflicts with an existing calendar event",
+                            details: `Your Google Calendar shows busy from ${busyPeriods[0]?.start} to ${busyPeriods[0]?.end}`,
+                        },
                         { status: 409 }
                     );
                 }
