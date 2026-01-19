@@ -237,15 +237,50 @@ export async function POST(request: NextRequest) {
                 });
 
                 const busyPeriods = busyResponse.data.calendars?.[calendarConnection.calendar_id || "primary"]?.busy || [];
+                
+                // Log detailed info about the freebusy response
+                console.log("[Schedule] Google Calendar freebusy check:", {
+                    calendarId: calendarConnection.calendar_id || "primary",
+                    requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
+                    busyPeriodsCount: busyPeriods.length,
+                    busyPeriods: busyPeriods.map(b => ({ start: b.start, end: b.end })),
+                    rawResponse: JSON.stringify(busyResponse.data),
+                });
+                
                 if (busyPeriods.length > 0) {
-                    console.log("[Schedule] Google Calendar conflict detected:", {
-                        requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
-                        busyPeriods: busyPeriods.map(b => ({ start: b.start, end: b.end })),
-                    });
+                    // Try to get more details about what's blocking
+                    let eventDetails = "Unknown event";
+                    try {
+                        // Query actual events to find what's blocking
+                        const eventsResponse = await calendar.events.list({
+                            calendarId: calendarConnection.calendar_id || "primary",
+                            timeMin: scheduledTime.toISOString(),
+                            timeMax: slotEnd.toISOString(),
+                            singleEvents: true,
+                            orderBy: "startTime",
+                        });
+                        
+                        const events = eventsResponse.data.items || [];
+                        console.log("[Schedule] Found blocking events:", events.map(e => ({
+                            summary: e.summary,
+                            start: e.start,
+                            end: e.end,
+                            status: e.status,
+                            transparency: e.transparency,
+                        })));
+                        
+                        if (events.length > 0) {
+                            const event = events[0];
+                            eventDetails = event.summary || "Busy (no title)";
+                        }
+                    } catch (eventsError) {
+                        console.error("[Schedule] Could not fetch event details:", eventsError);
+                    }
+                    
                     return NextResponse.json(
                         { 
                             error: "This time slot conflicts with an existing calendar event",
-                            details: `Your Google Calendar shows busy from ${busyPeriods[0]?.start} to ${busyPeriods[0]?.end}`,
+                            details: `Blocked by: "${eventDetails}" (${busyPeriods[0]?.start} to ${busyPeriods[0]?.end})`,
                         },
                         { status: 409 }
                     );
