@@ -395,12 +395,15 @@ export default function ElonMuskDemoPage() {
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-gradient-to-r from-blue-500 via-emerald-500 to-blue-500 opacity-40 blur-xl animate-pulse" />
                         </div>
-                        <img
-                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg/440px-Elon_Musk_Royal_Society_%28crop2%29.jpg"
-                            alt="Elon Musk"
-                            className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 shadow-2xl relative z-10 object-cover bg-zinc-800"
-                            style={{ borderColor: 'rgba(59, 130, 246, 0.4)' }}
-                        />
+                        <div 
+                            className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 shadow-2xl relative z-10 flex items-center justify-center text-4xl sm:text-5xl font-bold text-white font-mono"
+                            style={{ 
+                                background: 'linear-gradient(135deg, #3B82F6 0%, #10B981 100%)',
+                                borderColor: 'rgba(59, 130, 246, 0.4)',
+                            }}
+                        >
+                            EM
+                        </div>
                     </div>
 
                     {/* Name */}

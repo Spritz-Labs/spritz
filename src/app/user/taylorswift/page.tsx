@@ -363,12 +363,15 @@ export default function TaylorSwiftDemoPage() {
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 opacity-50 blur-xl animate-pulse" />
                         </div>
-                        <img
-                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Taylor_Swift_at_the_2023_MTV_Video_Music_Awards_%284%29.png/440px-Taylor_Swift_at_the_2023_MTV_Video_Music_Awards_%284%29.png"
-                            alt="Taylor Swift"
-                            className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 shadow-2xl relative z-10 object-cover"
-                            style={{ borderColor: 'rgba(168, 85, 247, 0.5)' }}
-                        />
+                        <div 
+                            className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 shadow-2xl relative z-10 flex items-center justify-center text-4xl sm:text-5xl font-bold text-white"
+                            style={{ 
+                                background: 'linear-gradient(135deg, #A855F7 0%, #EC4899 50%, #F472B6 100%)',
+                                borderColor: 'rgba(168, 85, 247, 0.5)',
+                            }}
+                        >
+                            TS
+                        </div>
                     </div>
 
                     {/* Name */}
