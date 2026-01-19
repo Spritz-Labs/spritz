@@ -321,15 +321,6 @@ export default function TaylorSwiftDemoPage() {
                 color: TAYLOR_THEME.text_color,
             }}
         >
-            {/* Sparkle overlay effect */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-20 left-10 w-2 h-2 bg-purple-400 rounded-full animate-pulse opacity-60" />
-                <div className="absolute top-40 right-20 w-1.5 h-1.5 bg-pink-400 rounded-full animate-pulse opacity-50" style={{ animationDelay: '0.5s' }} />
-                <div className="absolute top-60 left-1/4 w-1 h-1 bg-purple-300 rounded-full animate-pulse opacity-40" style={{ animationDelay: '1s' }} />
-                <div className="absolute bottom-40 right-1/3 w-2 h-2 bg-pink-300 rounded-full animate-pulse opacity-50" style={{ animationDelay: '1.5s' }} />
-                <div className="absolute bottom-20 left-1/3 w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse opacity-60" style={{ animationDelay: '2s' }} />
-            </div>
-
             {/* Sticky Header */}
             <div className="sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
                 <div className="bg-purple-950/60 backdrop-blur-xl border-b border-purple-500/20">
@@ -363,15 +354,12 @@ export default function TaylorSwiftDemoPage() {
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 opacity-50 blur-xl animate-pulse" />
                         </div>
-                        <div 
-                            className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 shadow-2xl relative z-10 flex items-center justify-center text-4xl sm:text-5xl font-bold text-white"
-                            style={{ 
-                                background: 'linear-gradient(135deg, #A855F7 0%, #EC4899 50%, #F472B6 100%)',
-                                borderColor: 'rgba(168, 85, 247, 0.5)',
-                            }}
-                        >
-                            TS
-                        </div>
+                        <img
+                            src="https://i.pravatar.cc/300?img=47"
+                            alt="Taylor Swift"
+                            className="w-28 h-28 sm:w-32 sm:h-32 rounded-full mx-auto border-4 shadow-2xl relative z-10 object-cover"
+                            style={{ borderColor: 'rgba(168, 85, 247, 0.5)' }}
+                        />
                     </div>
 
                     {/* Name */}
