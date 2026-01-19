@@ -31,8 +31,11 @@ import {
     getAspectRatio,
     ProfileTheme,
     DEFAULT_THEMES,
+    BACKGROUND_EFFECTS,
+    BackgroundEffectType,
 } from "./ProfileWidgetTypes";
 import { renderWidget } from "./ProfileWidgetRenderer";
+import { BackgroundEffects } from "./BackgroundEffects";
 
 // Profile data for pre-populating widget configs
 type ProfileData = {
@@ -465,9 +468,19 @@ export function ProfileGridEditor({
                 <div className="flex-1 p-4 sm:p-6">
                     {/* Profile Preview Container */}
                     <div 
-                        className="max-w-2xl mx-auto rounded-2xl overflow-hidden min-h-[500px] p-6 transition-all"
+                        className="max-w-2xl mx-auto rounded-2xl overflow-hidden min-h-[500px] p-6 transition-all relative"
                         style={backgroundStyle}
                     >
+                        {/* Background Effects */}
+                        {activeTheme.background_effect && activeTheme.background_effect !== 'none' && (
+                            <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+                                <BackgroundEffects 
+                                    effect={activeTheme.background_effect} 
+                                    accentColor={activeTheme.accent_color}
+                                />
+                            </div>
+                        )}
+                        
                         {/* Add Widget Button */}
                         {isEditing && (
                             <button
@@ -626,6 +639,28 @@ export function ProfileGridEditor({
                                                 }`}
                                             >
                                                 {style}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Background Effects */}
+                                <div>
+                                    <label className="text-sm text-zinc-400 mb-2 block">Background Effect</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(Object.entries(BACKGROUND_EFFECTS) as [BackgroundEffectType, { name: string; icon: string; description: string }][]).map(([effectKey, effectData]) => (
+                                            <button
+                                                key={effectKey}
+                                                onClick={() => onThemeChange({ background_effect: effectKey })}
+                                                className={`p-2 rounded-lg text-center transition-colors ${
+                                                    (activeTheme.background_effect || 'none') === effectKey
+                                                        ? 'bg-orange-500/20 border-2 border-orange-500 text-white'
+                                                        : 'bg-zinc-800 border-2 border-transparent text-zinc-400 hover:text-white hover:border-zinc-600'
+                                                }`}
+                                                title={effectData.description}
+                                            >
+                                                <span className="text-lg block mb-0.5">{effectData.icon}</span>
+                                                <span className="text-xs">{effectData.name}</span>
                                             </button>
                                         ))}
                                     </div>

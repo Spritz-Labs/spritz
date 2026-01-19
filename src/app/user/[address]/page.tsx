@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { ProfileWidgetRenderer } from "@/components/profile/ProfileWidgetRenderer";
 import { BaseWidget, ProfileTheme, DEFAULT_THEMES } from "@/components/profile/ProfileWidgetTypes";
+import { BackgroundEffects } from "@/components/profile/BackgroundEffects";
 
 // Check if current user is the profile owner
 function useIsProfileOwner(profileAddress: string | null) {
@@ -190,12 +191,20 @@ export default function PublicUserPage() {
 
     return (
         <div 
-            className="min-h-screen text-white"
+            className="min-h-screen text-white relative"
             style={{
                 ...backgroundStyle,
                 color: activeTheme.text_color,
             }}
         >
+            {/* Background Effects */}
+            {activeTheme.background_effect && activeTheme.background_effect !== 'none' && (
+                <BackgroundEffects 
+                    effect={activeTheme.background_effect} 
+                    accentColor={activeTheme.accent_color}
+                />
+            )}
+            
             <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{

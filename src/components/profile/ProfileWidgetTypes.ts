@@ -479,6 +479,9 @@ export interface LanguagesWidgetConfig {
     showFlags?: boolean;
 }
 
+// Background effect types
+export type BackgroundEffectType = 'none' | 'sparkles' | 'stars' | 'particles' | 'bubbles' | 'snow';
+
 // Profile Theme
 export interface ProfileTheme {
     background_type: 'solid' | 'gradient' | 'image' | 'mesh';
@@ -492,7 +495,18 @@ export interface ProfileTheme {
     font_family: 'system' | 'inter' | 'mono' | 'serif';
     show_spritz_badge: boolean;
     custom_css?: string;
+    background_effect?: BackgroundEffectType;
 }
+
+// Background effect metadata for editor
+export const BACKGROUND_EFFECTS: Record<BackgroundEffectType, { name: string; icon: string; description: string }> = {
+    none: { name: 'None', icon: '🚫', description: 'No animated effect' },
+    sparkles: { name: 'Sparkles', icon: '✨', description: 'Twinkling sparkle particles' },
+    stars: { name: 'Stars', icon: '⭐', description: 'Starfield effect' },
+    particles: { name: 'Particles', icon: '🔮', description: 'Floating particles' },
+    bubbles: { name: 'Bubbles', icon: '🫧', description: 'Rising bubble effect' },
+    snow: { name: 'Snow', icon: '❄️', description: 'Falling snowflakes' },
+};
 
 // Widget category type
 export type WidgetCategory = 'spritz' | 'location' | 'social' | 'media' | 'personal' | 'web3' | 'utility' | 'interactive' | 'aesthetic' | 'entertainment' | 'productivity' | 'fun';
