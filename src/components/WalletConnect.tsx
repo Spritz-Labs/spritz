@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useAccount } from "wagmi";
 import {
     useAppKit,
+    useAppKitState,
     useDisconnect as useAppKitDisconnect,
     useAppKitAccount,
     useAppKitNetwork,
@@ -19,7 +21,31 @@ export function WalletConnect() {
     const { caipNetwork } = useAppKitNetwork();
     const { disconnect: appKitDisconnect } = useAppKitDisconnect();
     const { disconnect: wagmiDisconnect } = useWagmiDisconnect();
-    const { open } = useAppKit();
+    const { open, close } = useAppKit();
+    const { open: isModalOpen } = useAppKitState();
+    
+    // Track if we've attempted to open the modal
+    const [hasAttemptedConnect, setHasAttemptedConnect] = useState(false);
+    
+    // Reset attempt state when modal closes
+    useEffect(() => {
+        if (!isModalOpen) {
+            setHasAttemptedConnect(false);
+        }
+    }, [isModalOpen]);
+    
+    // Handle opening the wallet modal
+    const handleOpenModal = () => {
+        setHasAttemptedConnect(true);
+        open();
+    };
+    
+    // Handle canceling/closing the modal
+    const handleCancel = () => {
+        console.log("[WalletConnect] Canceling connection...");
+        close();
+        setHasAttemptedConnect(false);
+    };
 
     // Disconnect handler that works for both EVM and Solana
     const handleDisconnect = async () => {
@@ -155,7 +181,7 @@ export function WalletConnect() {
             className="w-full flex flex-col items-center justify-center gap-4"
         >
             <button
-                onClick={() => open()}
+                onClick={handleOpenModal}
                 className="w-full group py-4 px-6 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-[#FF5500]/50 text-white font-semibold transition-all hover:bg-zinc-900 hover:shadow-xl hover:shadow-[#FF5500]/10"
             >
                 <span className="flex items-center justify-center gap-3">
@@ -169,9 +195,33 @@ export function WalletConnect() {
                     <span>Connect Wallet</span>
                 </span>
             </button>
+            
+            {/* Show cancel option when modal is open or has been attempted */}
+            {(isModalOpen || hasAttemptedConnect) && (
+                <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    onClick={handleCancel}
+                    className="text-zinc-400 hover:text-white text-sm underline transition-colors"
+                >
+                    Cancel and go back
+                </motion.button>
+            )}
+            
             <p className="text-center text-zinc-500 text-xs">
                 MetaMask, Coinbase, Phantom, Solflare & more
             </p>
+            
+            {/* Helpful tip for stuck users */}
+            {hasAttemptedConnect && !isModalOpen && (
+                <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-center text-amber-500/80 text-xs mt-2"
+                >
+                    Modal not showing? Try clicking &quot;Cancel and go back&quot; then try the Passkey tab instead.
+                </motion.p>
+            )}
         </motion.div>
     );
 }
