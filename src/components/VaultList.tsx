@@ -154,6 +154,20 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             console.log("[VaultList] Chain:", deployInfo.chainId, "Owners:", deployInfo.owners.length);
             console.log("[VaultList] Using EOA:", useEOAForDeploy, "Sponsored:", gasCost.isSponsored);
 
+            // Double-check on-chain status before deploying (in case previous attempt succeeded)
+            // This prevents "Create2 call failed" errors when Safe already exists
+            if (deployInfo.isDeployed) {
+                console.log("[VaultList] Safe already deployed on-chain, updating database...");
+                await confirmDeployment(vaultId, "");
+                const updatedVault = await getVault(vaultId);
+                if (updatedVault) {
+                    setSelectedVault(updatedVault);
+                }
+                await fetchVaults();
+                setIsDeploying(false);
+                return;
+            }
+
             let txHash: Hex;
             let safeAddress: Address;
 
@@ -219,21 +233,30 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             // Poll for on-chain deployment with retries (bundler transactions can have slight delays)
             let deployed = false;
             let retries = 0;
-            const maxRetries = 10;
-            const retryDelay = 2000; // 2 seconds
+            const maxRetries = 15;
+            const retryDelay = 3000; // 3 seconds
+
+            console.log("[VaultList] Polling for on-chain deployment confirmation...");
 
             while (!deployed && retries < maxRetries) {
                 // Small delay before checking
                 await new Promise(resolve => setTimeout(resolve, retryDelay));
+                retries++;
                 
                 try {
                     // Use the deploy API to check and update status
                     await confirmDeployment(vaultId, txHash);
                     deployed = true;
                     console.log("[VaultList] Vault deployment confirmed!");
-                } catch (confirmError) {
-                    retries++;
-                    console.log(`[VaultList] Deployment check attempt ${retries}/${maxRetries}...`);
+                } catch (confirmError: unknown) {
+                    // Check if it's a "pending" response (202) vs actual error
+                    const errorMessage = confirmError instanceof Error ? confirmError.message : "";
+                    if (errorMessage.includes("pending") || errorMessage.includes("not yet deployed")) {
+                        console.log(`[VaultList] Deployment check attempt ${retries}/${maxRetries} - still pending...`);
+                    } else {
+                        console.error(`[VaultList] Deployment check error:`, confirmError);
+                    }
+                    
                     if (retries >= maxRetries) {
                         throw new Error("Deployment verification timed out. The transaction was sent - please refresh to check status.");
                     }

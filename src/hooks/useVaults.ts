@@ -181,6 +181,12 @@ export function useVaults(userAddress: string | null) {
             body: JSON.stringify({ txHash }),
         });
 
+        // Handle 202 (Accepted but pending) - Safe not yet visible on-chain
+        if (response.status === 202) {
+            const data = await response.json();
+            throw new Error(data.error || "Deployment pending - not yet deployed on-chain");
+        }
+
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.error || "Failed to confirm deployment");

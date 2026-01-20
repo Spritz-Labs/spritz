@@ -67,9 +67,12 @@ export async function POST(
         const deployed = await isSafeDeployed(vault.safe_address as Address, vault.chain_id);
         
         if (!deployed) {
+            // Return 202 (Accepted) instead of 400 to indicate pending state
+            // The client can retry after a delay
             return NextResponse.json({ 
-                error: "Safe not yet deployed on-chain. Please wait for transaction confirmation." 
-            }, { status: 400 });
+                error: "Safe not yet deployed on-chain. Please wait for transaction confirmation.",
+                status: "pending"
+            }, { status: 202 });
         }
 
         // Update vault as deployed
