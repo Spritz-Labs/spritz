@@ -264,6 +264,19 @@ function AlienAuthInner({ children }: { children: ReactNode }) {
             }
         }
 
+        // SECURITY: Clear ALL user data to prevent data leaking to next user
+        try {
+            const keysToRemove = Object.keys(localStorage).filter(k => 
+                k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                k.startsWith("shout_") || // Clear group data
+                k.startsWith("spritz_") // Clear other spritz data
+            );
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            console.log("[AlienAuth] Cleared user data keys:", keysToRemove.length);
+        } catch (e) {
+            console.error("[AlienAuth] Failed to clear user data:", e);
+        }
+
         setState({
             isLoading: false,
             isAuthenticated: false,

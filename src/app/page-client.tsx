@@ -380,7 +380,8 @@ export default function Home() {
             // worldIdLogout already reloads, so return early
             return;
         }
-        // Clear wallet-related localStorage to ensure clean state
+        // Clear ALL user-related localStorage to ensure clean state
+        // IMPORTANT: This prevents data leaking between users
         try {
             const keysToRemove = Object.keys(localStorage).filter(k => 
                 k.startsWith("wagmi") || 
@@ -388,6 +389,8 @@ export default function Home() {
                 k.startsWith("wc@") ||
                 k.includes("walletconnect") ||
                 k.startsWith("spritz_") || // Clear ALL spritz keys
+                k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                k.startsWith("shout_") || // Clear group data
                 k === AUTH_CREDENTIALS_KEY ||
                 k === SOLANA_AUTH_CREDENTIALS_KEY
             );
@@ -411,10 +414,12 @@ export default function Home() {
     const handleClearAuth = async () => {
         console.log("[Recovery] Clearing all auth data...");
         try {
-            // Clear localStorage
+            // Clear localStorage (including ALL user data to prevent data leakage)
             const keysToRemove = Object.keys(localStorage).filter(k => 
                 k.startsWith("wagmi") || 
-                k.startsWith("@reown") || 
+                k.startsWith("@reown") ||
+                k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                k.startsWith("shout_") || // Clear group data 
                 k.startsWith("wc@") ||
                 k.includes("walletconnect") ||
                 k === AUTH_CREDENTIALS_KEY ||

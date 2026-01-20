@@ -63,7 +63,8 @@ type VaultTab = "assets" | "send" | "receive" | "activity";
 
 export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const { vaults, isLoading, getVault, updateVault, deleteVault, getDeploymentInfo, confirmDeployment, fetchVaults } = useVaults(userAddress);
-    const vaultExecution = useVaultExecution();
+    // Pass the userAddress to support passkey users who don't have a wagmi wallet connected
+    const vaultExecution = useVaultExecution(userAddress as Address | undefined);
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);

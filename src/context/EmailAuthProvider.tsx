@@ -412,6 +412,20 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(EMAIL_ADDRESS_STORAGE_KEY);
         localStorage.removeItem(EMAIL_SESSION_KEY);
         
+        // SECURITY: Clear ALL user data to prevent data leaking to next user
+        // This is critical - without this, a new user could see the previous user's messages
+        try {
+            const keysToRemove = Object.keys(localStorage).filter(k => 
+                k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                k.startsWith("shout_") || // Clear group data
+                k.startsWith("spritz_") // Clear other spritz data
+            );
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            console.log("[EmailAuthProvider] Cleared user data keys:", keysToRemove.length);
+        } catch (e) {
+            console.error("[EmailAuthProvider] Failed to clear user data:", e);
+        }
+        
         // Verify they're cleared
         const keyStillExists = localStorage.getItem(EMAIL_STORAGE_KEY) !== null;
         const addressStillExists = localStorage.getItem(EMAIL_ADDRESS_STORAGE_KEY) !== null;

@@ -119,6 +119,19 @@ export function WorldIdProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(WORLD_ID_ADDRESS_KEY);
         localStorage.removeItem(WORLD_ID_SESSION_KEY);
 
+        // SECURITY: Clear ALL user data to prevent data leaking to next user
+        try {
+            const keysToRemove = Object.keys(localStorage).filter(k => 
+                k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                k.startsWith("shout_") || // Clear group data
+                k.startsWith("spritz_") // Clear other spritz data
+            );
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            console.log("[WorldId] Cleared user data keys:", keysToRemove.length);
+        } catch (e) {
+            console.error("[WorldId] Failed to clear user data:", e);
+        }
+
         setState({
             isLoading: false,
             isAuthenticated: false,

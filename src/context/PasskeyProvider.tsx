@@ -306,6 +306,11 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                     log.debug("[Passkey] Found recovery token, will restore account:", recoveryAddress?.slice(0, 15) + "...");
                 }
                 
+                // SECURITY FIX: When registering a NEW account, explicitly tell server
+                // to ignore any existing session. This prevents account contamination
+                // on shared devices where a previous user's session cookie might exist.
+                const isNewAccountRegistration = !recoveryToken; // New account if no recovery token
+                
                 const verifyResponse = await fetch("/api/passkey/register/verify", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -315,6 +320,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                         credential,
                         challenge: options.challenge,
                         recoveryToken: recoveryToken || undefined, // Include recovery token if present
+                        isNewAccount: isNewAccountRegistration, // Tell server this is a new account
                     }),
                     credentials: "include", // Important for PWA to receive/store cookies
                 });
@@ -332,6 +338,26 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 // Use the address returned by the server (derived from credential ID on server)
                 // Or the recovered address if this was a recovery registration
                 const walletAddress = serverUserAddress as Address;
+                
+                // SECURITY: Check if a DIFFERENT user's data is present - if so, clear it
+                // This prevents data leakage when a new user registers on a device that had another user
+                const previousAddress = localStorage.getItem(USER_ADDRESS_KEY);
+                if (previousAddress && previousAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+                    log.debug("[Passkey] New user registering, clearing previous user data...");
+                    
+                    // Clear ALL previous user's cached data
+                    try {
+                        const keysToRemove = Object.keys(localStorage).filter(k => 
+                            k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                            k.startsWith("shout_") || // Clear group data
+                            (k.startsWith("spritz_") && !k.includes("passkey")) // Clear spritz data except passkey auth
+                        );
+                        keysToRemove.forEach(k => localStorage.removeItem(k));
+                        log.debug("[Passkey] Cleared previous user's data keys:", keysToRemove.length);
+                    } catch (e) {
+                        log.error("[Passkey] Failed to clear previous user data:", e);
+                    }
+                }
                 
                 // Clear recovery tokens after successful registration
                 localStorage.removeItem("spritz_recovery_token");
@@ -553,6 +579,27 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             // This ensures we use the correct address associated with this passkey
             const walletAddress = serverUserAddress as Address;
 
+            // SECURITY: Check if a DIFFERENT user is logging in - if so, clear the old user's data
+            // This prevents data leakage when User A's session expires and User B logs in
+            const previousAddress = localStorage.getItem(USER_ADDRESS_KEY);
+            if (previousAddress && previousAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+                log.debug("[Passkey] Different user logging in, clearing previous user data...");
+                log.debug("[Passkey] Previous:", previousAddress.slice(0, 15) + "...", "New:", walletAddress.slice(0, 15) + "...");
+                
+                // Clear ALL previous user's cached data
+                try {
+                    const keysToRemove = Object.keys(localStorage).filter(k => 
+                        k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                        k.startsWith("shout_") || // Clear group data
+                        (k.startsWith("spritz_") && !k.includes("passkey")) // Clear spritz data except passkey auth
+                    );
+                    keysToRemove.forEach(k => localStorage.removeItem(k));
+                    log.debug("[Passkey] Cleared previous user's data keys:", keysToRemove.length);
+                } catch (e) {
+                    log.error("[Passkey] Failed to clear previous user data:", e);
+                }
+            }
+
             // Store session
             localStorage.setItem(SESSION_STORAGE_KEY, sessionToken);
             localStorage.setItem(USER_ADDRESS_KEY, walletAddress);
@@ -681,7 +728,7 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
     const logout = useCallback(async () => {
         log.debug("[Passkey] Logging out...");
         
-        // Clear localStorage
+        // Clear passkey-specific localStorage
         localStorage.removeItem(SESSION_STORAGE_KEY);
         localStorage.removeItem(USER_ADDRESS_KEY);
         
@@ -692,6 +739,20 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         // Clear recovery tokens if any
         localStorage.removeItem("spritz_recovery_token");
         localStorage.removeItem("spritz_recovery_address");
+        
+        // SECURITY: Clear ALL user data to prevent data leaking to next user
+        // This is critical - without this, a new user could see the previous user's messages
+        try {
+            const keysToRemove = Object.keys(localStorage).filter(k => 
+                k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                k.startsWith("shout_") || // Clear group data
+                k.startsWith("spritz_") // Clear other spritz data
+            );
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            log.debug("[Passkey] Cleared user data keys:", keysToRemove.length);
+        } catch (e) {
+            log.error("[Passkey] Failed to clear user data:", e);
+        }
         
         log.debug("[Passkey] Cleared localStorage");
 

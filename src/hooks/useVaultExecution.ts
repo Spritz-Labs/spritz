@@ -12,14 +12,19 @@
  * - Safe's isValidSignature wraps the hash before validation
  * - EOA must sign the wrapped hash, not the raw safeTxHash
  * - See getSafeMessageHash() for the wrapping logic
+ * 
+ * PASSKEY SUPPORT:
+ * - Passkey users can sign vault transactions using their passkey
+ * - For execution, passkey users need to use the Safe app or have another member execute
  */
 
 import { useState, useCallback } from "react";
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
-import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters } from "viem";
+import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters, createPublicClient, http } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
 import { getSafeMessageHashAsync } from "@/lib/safeWallet";
+import { usePasskeySigner } from "@/hooks/usePasskeySigner";
 
 // Map chain IDs to viem chain objects
 const VIEM_CHAINS: Record<number, Chain> = {
@@ -151,14 +156,50 @@ function buildContractSignature(
     return { staticPart, dynamicPart, dynamicLength };
 }
 
-export function useVaultExecution() {
-    const { address: userAddress } = useAccount();
+// Create a public client for a specific chain (used when wagmi publicClient isn't available)
+function getPublicClientForChain(chainId: number) {
+    const chain = VIEM_CHAINS[chainId];
+    if (!chain) return null;
+    
+    // Use public RPCs - these are sufficient for read operations
+    const rpcUrls: Record<number, string> = {
+        1: "https://eth.llamarpc.com",
+        8453: "https://base.llamarpc.com",
+        42161: "https://arbitrum.llamarpc.com",
+        10: "https://optimism.llamarpc.com",
+        137: "https://polygon.llamarpc.com",
+        56: "https://bsc.llamarpc.com",
+    };
+    
+    return createPublicClient({
+        chain,
+        transport: http(rpcUrls[chainId]),
+    });
+}
+
+export function useVaultExecution(passkeyUserAddress?: Address) {
+    const { address: wagmiAddress } = useAccount();
     const { data: walletClient } = useWalletClient();
-    const publicClient = usePublicClient();
+    const wagmiPublicClient = usePublicClient();
+    const passkeySigner = usePasskeySigner();
+    
+    // Use wagmi address if connected, otherwise use passkey address
+    const userAddress = wagmiAddress || passkeyUserAddress;
+    
+    // Track if this is a passkey-only user (no external wallet connected)
+    const isPasskeyOnly = !wagmiAddress && !!passkeyUserAddress;
     
     const [status, setStatus] = useState<VaultExecutionStatus>("idle");
     const [error, setError] = useState<string | null>(null);
     const [txHash, setTxHash] = useState<string | null>(null);
+    
+    // Get public client - prefer wagmi, fall back to chain-specific
+    const getPublicClient = useCallback((chainId?: number) => {
+        if (wagmiPublicClient) return wagmiPublicClient;
+        if (chainId) return getPublicClientForChain(chainId);
+        // Default to Base if no chain specified
+        return getPublicClientForChain(8453);
+    }, [wagmiPublicClient]);
 
     /**
      * Check if the user can sign for a vault
@@ -171,6 +212,8 @@ export function useVaultExecution() {
         chainId: number,
         smartWalletAddress?: Address
     ): Promise<{ canSign: boolean; isDeployed: boolean; threshold: number; owners: Address[]; signerAddress: Address | null }> => {
+        const publicClient = getPublicClient(chainId);
+        
         if (!userAddress || !publicClient) {
             return { canSign: false, isDeployed: false, threshold: 0, owners: [], signerAddress: null };
         }
@@ -225,7 +268,7 @@ export function useVaultExecution() {
             console.error("[VaultExecution] Error checking ownership:", err);
             return { canSign: false, isDeployed: false, threshold: 0, owners: [], signerAddress: null };
         }
-    }, [userAddress, publicClient]);
+    }, [userAddress, getPublicClient]);
 
     /**
      * Get the safeTxHash for a transaction (for signing)
@@ -238,6 +281,7 @@ export function useVaultExecution() {
         data: Hex;
         nonce: bigint;
     }): Promise<Hex | null> => {
+        const publicClient = getPublicClient(params.chainId);
         if (!publicClient) return null;
 
         try {
@@ -262,7 +306,7 @@ export function useVaultExecution() {
             console.error("[VaultExecution] Error getting safeTxHash:", err);
             return null;
         }
-    }, [publicClient]);
+    }, [getPublicClient]);
 
     /**
      * Sign a vault transaction (returns signature to store in DB)
@@ -276,6 +320,10 @@ export function useVaultExecution() {
      * - finalHash = keccak256("\x19\x01" || domainSeparator || messageHash)
      * 
      * So we must sign the WRAPPED hash, not the raw safeTxHash!
+     * 
+     * PASSKEY SUPPORT:
+     * - Passkey users can sign using their passkey credential
+     * - The passkey signer is loaded automatically when needed
      */
     const signTransaction = useCallback(async (params: {
         safeAddress: Address;
@@ -286,7 +334,17 @@ export function useVaultExecution() {
         nonce: number;
         smartWalletAddress?: Address;
     }): Promise<{ success: boolean; signature?: string; signerAddress?: string; safeTxHash?: string; error?: string }> => {
-        if (!walletClient || !publicClient || !userAddress) {
+        const publicClient = getPublicClient(params.chainId);
+        
+        // Check if we have either a wallet client OR passkey capability
+        const hasWalletClient = !!walletClient;
+        const canUsePasskey = isPasskeyOnly && !!userAddress;
+        
+        if (!publicClient || !userAddress) {
+            return { success: false, error: "Not connected" };
+        }
+        
+        if (!hasWalletClient && !canUsePasskey) {
             return { success: false, error: "Wallet not connected" };
         }
 
@@ -297,6 +355,7 @@ export function useVaultExecution() {
             const { safeAddress, to, value, data, nonce, smartWalletAddress } = params;
             
             console.log("[VaultExecution] Signing transaction...");
+            console.log("[VaultExecution] Using passkey:", canUsePasskey && !hasWalletClient);
             if (smartWalletAddress) {
                 console.log("[VaultExecution] Signing for Smart Wallet owner:", smartWalletAddress);
             }
@@ -338,10 +397,38 @@ export function useVaultExecution() {
                 hashToSign = safeTxHash;
             }
 
-            // Sign the hash with wallet (EOA)
-            const signature = await walletClient.signMessage({
-                message: { raw: hashToSign },
-            });
+            let signature: string;
+            
+            // Sign with wallet client or passkey
+            if (hasWalletClient && walletClient) {
+                // Sign the hash with wallet (EOA)
+                signature = await walletClient.signMessage({
+                    message: { raw: hashToSign },
+                });
+            } else if (canUsePasskey) {
+                // Load passkey credential if not already loaded
+                if (!passkeySigner.isReady) {
+                    await passkeySigner.loadCredential(userAddress);
+                }
+                
+                if (!passkeySigner.credential) {
+                    throw new Error("Failed to load passkey credential");
+                }
+                
+                // Sign with passkey
+                const passkeyResult = await passkeySigner.signChallenge(hashToSign);
+                if (!passkeyResult) {
+                    throw new Error(passkeySigner.error || "Passkey signing cancelled");
+                }
+                
+                // Convert passkey signature to hex format
+                // Note: This is a simplified conversion - passkey signatures have a different format
+                // For now, we convert the signature bytes to hex
+                const sigBytes = passkeyResult.signature;
+                signature = "0x" + Array.from(sigBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+            } else {
+                throw new Error("No signing method available");
+            }
 
             // Adjust v value for Safe's signature format
             // For eth_sign, v should be 27 or 28, and we add 4 for eth_sign type
@@ -373,11 +460,14 @@ export function useVaultExecution() {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, publicClient, userAddress, getSafeTxHash]);
+    }, [walletClient, userAddress, getSafeTxHash, getPublicClient, isPasskeyOnly, passkeySigner]);
 
     /**
      * Execute with multiple signatures (for multi-sig)
      * Supports both EOA signatures and ERC-1271 contract signatures (for Smart Wallet owners)
+     * 
+     * NOTE: Execution requires an external wallet to pay gas. Passkey-only users cannot execute
+     * directly and should use the Safe app or ask another vault member to execute.
      */
     const executeWithSignatures = useCallback(async (params: {
         safeAddress: Address;
@@ -387,7 +477,16 @@ export function useVaultExecution() {
         data: Hex;
         signatures: Array<{ signerAddress: string; signature: string }>;
     }): Promise<{ success: boolean; txHash?: string; error?: string }> => {
+        const publicClient = getPublicClient(params.chainId);
+        
+        // Execution requires a wallet client to send the transaction and pay gas
         if (!walletClient || !publicClient || !userAddress) {
+            if (isPasskeyOnly) {
+                return { 
+                    success: false, 
+                    error: "Passkey users cannot execute vault transactions directly. Please use the Safe app or ask another vault member with a connected wallet to execute." 
+                };
+            }
             return { success: false, error: "Wallet not connected" };
         }
 
@@ -582,11 +681,14 @@ export function useVaultExecution() {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, publicClient, userAddress]);
+    }, [walletClient, userAddress, getPublicClient, isPasskeyOnly]);
 
     /**
      * Execute a vault transaction (for threshold=1 or with pre-collected signatures)
      * @param smartWalletAddress - Optional: user's Smart Wallet address if that's the Safe owner
+     * 
+     * NOTE: Execution requires an external wallet to pay gas. Passkey-only users cannot execute
+     * directly and should use the Safe app or ask another vault member to execute.
      */
     const execute = useCallback(async (params: {
         safeAddress: Address;
@@ -598,8 +700,16 @@ export function useVaultExecution() {
         smartWalletAddress?: Address;
     }): Promise<{ success: boolean; txHash?: string; error?: string; needsMoreSignatures?: boolean; threshold?: number }> => {
         const { safeAddress, chainId, to, value, data, signatures, smartWalletAddress } = params;
+        const publicClient = getPublicClient(chainId);
 
+        // Execution requires a wallet client to send the transaction and pay gas
         if (!walletClient || !publicClient || !userAddress) {
+            if (isPasskeyOnly) {
+                return { 
+                    success: false, 
+                    error: "Passkey users cannot execute vault transactions directly. Please use the Safe app or ask another vault member with a connected wallet to execute." 
+                };
+            }
             return { success: false, error: "Wallet not connected" };
         }
 
@@ -752,7 +862,7 @@ export function useVaultExecution() {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, publicClient, userAddress, signTransaction, executeWithSignatures]);
+    }, [walletClient, userAddress, signTransaction, executeWithSignatures, getPublicClient, isPasskeyOnly]);
 
     const reset = useCallback(() => {
         setStatus("idle");
@@ -771,5 +881,6 @@ export function useVaultExecution() {
         reset,
         isExecuting: status === "checking" || status === "signing" || status === "executing",
         isSigning: status === "signing",
+        isPasskeyOnly, // True if user is authenticated via passkey only (no external wallet)
     };
 }

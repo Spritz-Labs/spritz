@@ -83,12 +83,14 @@ export async function POST(request: NextRequest) {
             credential,
             challenge,
             recoveryToken, // Optional: if provided, link to recovered account
+            isNewAccount, // SECURITY: If true, ignore any existing session (new account registration)
         }: {
             userAddress: string;
             displayName?: string;
             credential: RegistrationResponseJSON;
             challenge: string;
             recoveryToken?: string;
+            isNewAccount?: boolean;
         } = await request.json();
 
         if (!userAddress || !credential || !challenge) {
@@ -261,6 +263,15 @@ export async function POST(request: NextRequest) {
             // Recovery flow - link to recovered account
             finalUserAddress = recoveredAddress;
             addressSource = "RECOVERED";
+        } else if (isNewAccount) {
+            // SECURITY FIX: User explicitly indicated this is a NEW account registration
+            // Ignore any existing session to prevent account contamination on shared devices
+            console.log("[Passkey] New account registration requested - ignoring any existing session");
+            
+            // Generate unique address from credential ID for the new account
+            finalUserAddress = generateWalletAddressFromCredential(credentialId);
+            addressSource = "NEW";
+            console.log("[Passkey] New passkey account created, generated address:", finalUserAddress.slice(0, 10));
         } else {
             // Check if user is already authenticated (adding passkey to existing account)
             const { getAuthenticatedUser } = await import("@/lib/session");

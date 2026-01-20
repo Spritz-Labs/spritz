@@ -22,11 +22,15 @@ type AdminCredentials = {
     signature: string;
     message: string;
     timestamp?: number;
+    verifiedAt?: number; // When credentials were last verified with the server
+    isSuperAdmin?: boolean; // Cached from verification response
 };
 
 const ADMIN_CREDENTIALS_KEY_LOCAL = "spritz_admin_credentials";
 // Admin credentials last 30 days (longer than main app)
 const ADMIN_TTL = 30 * 24 * 60 * 60 * 1000;
+// Skip re-verification for 24 hours after successful verification
+const VERIFICATION_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export function useAdmin() {
     const { address, isConnected, isReconnecting } = useAccount();
@@ -130,12 +134,27 @@ export function useAdmin() {
             return;
         }
 
-        // Skip if we've already verified these credentials
+        // Skip if we've already verified these credentials in this session
         if (verificationAttempted.current && state.isAuthenticated) {
             // Make sure loading is false if already authenticated
             if (state.isLoading) {
                 setState(prev => ({ ...prev, isLoading: false }));
             }
+            return;
+        }
+
+        // Check if we have a recent verification cached - skip API call if so
+        // This prevents "nonce already used" errors when navigating between admin pages
+        if (credentials.verifiedAt && (Date.now() - credentials.verifiedAt) < VERIFICATION_CACHE_TTL) {
+            console.log("[Admin] Using cached verification (verified", Math.round((Date.now() - credentials.verifiedAt) / 60000), "minutes ago)");
+            verificationAttempted.current = true;
+            setState({
+                isAdmin: true,
+                isSuperAdmin: credentials.isSuperAdmin || false,
+                isLoading: false,
+                isAuthenticated: true,
+                error: null,
+            });
             return;
         }
 
@@ -161,6 +180,15 @@ export function useAdmin() {
                 const data = await response.json();
 
                 if (response.ok && data.isAdmin) {
+                    // Update credentials with verification timestamp to cache the result
+                    const updatedCredentials: AdminCredentials = {
+                        ...credentials,
+                        verifiedAt: Date.now(),
+                        isSuperAdmin: data.isSuperAdmin || false,
+                    };
+                    localStorage.setItem(ADMIN_CREDENTIALS_KEY_LOCAL, JSON.stringify(updatedCredentials));
+                    setCredentials(updatedCredentials);
+                    
                     setState({
                         isAdmin: true,
                         isSuperAdmin: data.isSuperAdmin || false,
