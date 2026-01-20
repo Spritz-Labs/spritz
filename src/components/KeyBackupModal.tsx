@@ -156,6 +156,60 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
     }
   };
 
+  // Generate a new messaging keypair if one doesn't exist
+  const ensureKeypairExists = async (): Promise<string> => {
+    let keypairJson = localStorage.getItem(MESSAGING_KEYPAIR_STORAGE);
+    
+    if (!keypairJson) {
+      if (!userAddress) {
+        throw new Error("Not connected - please try again");
+      }
+      
+      // Generate new ECDH keypair using P-256 curve
+      const keyPair = await crypto.subtle.generateKey(
+        { name: "ECDH", namedCurve: "P-256" },
+        true,
+        ["deriveBits"]
+      );
+      
+      // Export keys for storage
+      const publicKeyBuffer = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+      const privateKeyBuffer = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+      
+      const keypair = {
+        publicKey: btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer))),
+        privateKey: btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer))),
+      };
+      
+      // Store locally
+      keypairJson = JSON.stringify(keypair);
+      localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, keypairJson);
+      
+      // Also upload public key to Supabase for ECDH key exchange
+      if (supabase) {
+        try {
+          await supabase
+            .from("shout_user_settings")
+            .upsert({
+              wallet_address: userAddress.toLowerCase(),
+              messaging_public_key: keypair.publicKey,
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: "wallet_address",
+            });
+          console.log("[KeyBackup] Public key uploaded to Supabase");
+        } catch (err) {
+          console.warn("[KeyBackup] Failed to upload public key:", err);
+          // Continue anyway - local backup still works
+        }
+      }
+      
+      console.log("[KeyBackup] Generated new messaging keypair for backup");
+    }
+    
+    return keypairJson;
+  };
+
   // Step 3: Verify words
   const handleVerify = async () => {
     setVerifyError(null);
@@ -177,11 +231,8 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
       // Store the salt
       storeSalt(derived.salt);
       
-      // Get the ECDH keypair from localStorage
-      const keypairJson = localStorage.getItem(MESSAGING_KEYPAIR_STORAGE);
-      if (!keypairJson) {
-        throw new Error("No keypair to backup");
-      }
+      // Get or create the ECDH keypair
+      const keypairJson = await ensureKeypairExists();
       
       // Encrypt the keypair
       const keypairBytes = new TextEncoder().encode(keypairJson);

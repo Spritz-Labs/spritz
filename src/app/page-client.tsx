@@ -573,8 +573,13 @@ export default function Home() {
         return (
             <>
                 <PWAInstallPrompt />
-                {/* Show wallet connection status banner for PWA users */}
-                <WalletConnectionStatus />
+                {/* Show wallet connection status banner for wallet-connected PWA users only */}
+                <WalletConnectionStatus 
+                    isPasskeyUser={isPasskeyAuthenticated}
+                    isEmailUser={isEmailAuthenticated}
+                    isWorldIdUser={isWorldIdAuthenticated}
+                    isAlienIdUser={isAlienAuthenticated}
+                />
                 <Dashboard
                     userAddress={userAddress}
                     onLogout={handleLogout}
