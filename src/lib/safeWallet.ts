@@ -717,41 +717,31 @@ export async function getSafeMessageHashAsync(
 /**
  * Internal helper to compute the Safe message hash given a domain separator
  * 
- * When isValidSignature(bytes32 _dataHash, bytes) is called on a Safe:
- * 1. It wraps the input: abi.encode(_dataHash) -> message bytes
- * 2. Calls getMessageHashForSafe(safe, message)
- * 3. getMessageHashForSafe computes:
- *    - messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(message)))
- *    - return keccak256("\x19\x01" || domainSeparator || messageHash)
+ * When Vault Safe calls checkSignatures, it passes txHashData (the encoded tx bytes)
+ * to isValidSignature(bytes memory _data, bytes memory _signature) on the Smart Wallet.
  * 
- * So for a bytes32 dataHash (like safeTxHash), the full computation is:
- *   message = abi.encode(dataHash)           // 32 bytes
- *   messageHashInput = keccak256(message)    // Hash the encoded dataHash
- *   safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, messageHashInput))
+ * The Smart Wallet's getMessageHashForSafe then computes:
+ *   messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(_data)))
+ *   return keccak256("\x19\x01" || domainSeparator || messageHash)
+ * 
+ * Since keccak256(txHashData) = safeTxHash, the computation simplifies to:
+ *   safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, safeTxHash))
  *   finalHash = keccak256("\x19\x01" || domainSeparator || safeMessageHash)
  */
 function computeSafeMessageHash(domainSeparator: Hex, dataHash: Hex): Hex {
     // SafeMessage type hash: keccak256("SafeMessage(bytes message)")
     const SAFE_MSG_TYPEHASH = keccak256(toHex("SafeMessage(bytes message)"));
     
-    // Step 1: message = abi.encode(dataHash)
-    const message = encodeAbiParameters(
-        [{ type: "bytes32" }],
-        [dataHash]
-    );
-    
-    // Step 2: messageHashInput = keccak256(message)
-    const messageHashInput = keccak256(message);
-    
-    // Step 3: safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, messageHashInput))
+    // safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, dataHash))
+    // dataHash is keccak256 of the original message bytes (txHashData), which equals safeTxHash
     const safeMessageHash = keccak256(
         encodeAbiParameters(
             [{ type: "bytes32" }, { type: "bytes32" }],
-            [SAFE_MSG_TYPEHASH, messageHashInput]
+            [SAFE_MSG_TYPEHASH, dataHash]
         )
     );
     
-    // Step 4: Final EIP-712 hash
+    // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || safeMessageHash)
     const finalHash = keccak256(
         concat([
             toHex("\x19\x01", { size: 2 }),
@@ -762,8 +752,6 @@ function computeSafeMessageHash(domainSeparator: Hex, dataHash: Hex): Hex {
     
     console.log("[SafeMessageHash] Computed hash:", {
         dataHash,
-        message,
-        messageHashInput,
         safeMessageHash,
         domainSeparator,
         finalHash,
