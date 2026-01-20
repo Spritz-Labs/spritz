@@ -8,6 +8,22 @@
     --accent-light: #ffbba7;
     --accent-cream: #fff0e0;
     --accent-green: #004921;
+    
+    /* Accessibility: Semantic colors */
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-error: #ef4444;
+    --color-info: #3b82f6;
+    
+    /* Accessibility: Focus ring */
+    --focus-ring-color: rgba(255, 85, 0, 0.5);
+    --focus-ring-offset: 2px;
+    
+    /* Accessibility: Improved contrast colors */
+    /* zinc-400 (#a1a1aa) passes WCAG AA on dark backgrounds */
+    --text-secondary: #a1a1aa;
+    /* zinc-500 (#71717a) is too low contrast - avoid for important text */
+    --text-muted: #a1a1aa;
 }
 
 @theme inline {
@@ -184,10 +200,48 @@ body {
     animation: pulse-glow 4s ease-in-out infinite;
 }
 
-/* Focus states */
-input:focus,
-button:focus {
+/* ============================================
+   ACCESSIBILITY: Focus States
+   ============================================
+   P0 Fix: Visible focus rings for keyboard navigation
+   - Uses :focus-visible to only show on keyboard focus (not mouse clicks)
+   - Orange ring matches brand color
+   - High contrast for visibility
+   ============================================ */
+
+/* Remove default outline but add custom focus-visible ring */
+*:focus {
     outline: none;
+}
+
+/* Visible focus ring for keyboard users */
+*:focus-visible {
+    outline: 2px solid var(--focus-ring-color, rgba(255, 85, 0, 0.7));
+    outline-offset: var(--focus-ring-offset, 2px);
+}
+
+/* Enhanced focus for interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Focus ring for buttons with rounded corners */
+button:focus-visible {
+    border-radius: 8px;
+}
+
+/* Focus within for composite components */
+.focus-within-ring:focus-within {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
 }
 
 /* Selection color */
@@ -262,4 +316,77 @@ w3m-connector-wrapper:not([data-social]) {
     to {
         opacity: 1;
     }
+}
+
+/* ============================================
+   ACCESSIBILITY: Reduced Motion Support
+   ============================================
+   P1 Fix: Respect user's motion preferences
+   - Disables animations for users who prefer reduced motion
+   - Keeps essential transitions but removes decorative ones
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    
+    .animate-float,
+    .animate-pulse-glow,
+    .gradient-bg {
+        animation: none !important;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY: Color Contrast Improvements
+   ============================================
+   P0 Fix: Ensure text meets WCAG AA standards
+   - zinc-500 (#71717a) fails contrast on dark backgrounds
+   - Use zinc-400 (#a1a1aa) for secondary text
+   ============================================ */
+
+/* Improved placeholder contrast */
+::placeholder {
+    color: var(--text-secondary, #a1a1aa) !important;
+    opacity: 1;
+}
+
+/* Utility class for accessible secondary text */
+.text-secondary-accessible {
+    color: var(--text-secondary, #a1a1aa);
+}
+
+/* Override zinc-500 text in common patterns */
+.text-zinc-500 {
+    color: #a1a1aa; /* Upgrade to zinc-400 for better contrast */
+}
+
+/* ============================================
+   ACCESSIBILITY: Skip Navigation Link
+   ============================================
+   Visually hidden until focused, then visible
+   ============================================ */
+
+.skip-nav {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--accent-primary);
+    color: white;
+    padding: 8px 16px;
+    z-index: 9999;
+    text-decoration: none;
+    font-weight: 600;
+    border-radius: 0 0 8px 0;
+    transition: top 0.2s ease;
+}
+
+.skip-nav:focus {
+    top: 0;
 }

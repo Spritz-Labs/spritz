@@ -8,6 +8,7 @@ import { AlienAuthProvider } from "@/context/AlienAuthProvider";
 import { WorldIdProvider } from "@/context/WorldIdProvider";
 import { AuthProvider } from "@/context/AuthProvider";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
+import { Toaster } from "@/components/Toaster";
 
 const dmSans = DM_Sans({
     subsets: ["latin"],
@@ -256,6 +257,11 @@ export default function RootLayout({
             <body
                 className={`${dmSans.variable} ${jetbrainsMono.variable} font-sans antialiased`}
             >
+                {/* P0 Accessibility: Skip navigation link for keyboard users */}
+                <a href="#main-content" className="skip-nav">
+                    Skip to main content
+                </a>
+                
                 {/* SRE-012 FIX: Root Error Boundary catches unhandled errors */}
                 <RootErrorBoundary>
                     <Web3Provider>
@@ -263,7 +269,13 @@ export default function RootLayout({
                             <PasskeyProvider>
                                 <EmailAuthProvider>
                                     <AlienAuthProvider>
-                                        <WorldIdProvider>{children}</WorldIdProvider>
+                                        <WorldIdProvider>
+                                            <main id="main-content">
+                                                {children}
+                                            </main>
+                                            {/* P1 UX: Global toast notification system */}
+                                            <Toaster />
+                                        </WorldIdProvider>
                                     </AlienAuthProvider>
                                 </EmailAuthProvider>
                             </PasskeyProvider>

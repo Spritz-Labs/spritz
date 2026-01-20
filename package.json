@@ -72,6 +72,7 @@
         "recharts": "^3.6.0",
         "remark-gfm": "^4.0.1",
         "resend": "^6.6.0",
+        "sonner": "^2.0.7",
         "three": "^0.182.0",
         "tweetnacl": "^1.0.3",
         "viem": "^2.44.1",
