@@ -3,11 +3,15 @@
  * 
  * For threshold=1 vaults: Sign and execute in one step
  * For threshold>1 vaults: Each signer signs, then anyone can execute when threshold met
+ * 
+ * IMPORTANT: Vaults use Smart Wallet addresses as owners.
+ * Smart Wallets are Safe contracts that implement EIP-1271 (isValidSignature).
+ * When executing, we use contract signature format where v=0.
  */
 
 import { useState, useCallback } from "react";
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
-import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex } from "viem";
+import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
 
@@ -98,6 +102,50 @@ const ERC20_TRANSFER_ABI = [
 
 export type VaultExecutionStatus = "idle" | "checking" | "signing" | "executing" | "success" | "error";
 
+/**
+ * Build an EIP-1271 contract signature for Safe
+ * 
+ * Safe's signature format for contract signers (v=0):
+ * - r: address of contract owner (padded to 32 bytes, left-padded with zeros)  
+ * - s: offset to dynamic data from start of signatures (32 bytes)
+ * - v: 0x00 (indicates contract signature)
+ * - Dynamic part: 32-byte length + actual signature bytes
+ * 
+ * @param contractAddress - The contract owner address (Smart Wallet)
+ * @param signature - The actual signature (from EOA owner of the Smart Wallet)
+ * @param dynamicOffset - Byte offset from start of signatures to where dynamic data begins
+ */
+function buildContractSignature(
+    contractAddress: Address,
+    signature: string,
+    dynamicOffset: number
+): { staticPart: string; dynamicPart: string; dynamicLength: number } {
+    // r = verifier address (Smart Wallet), left-padded to 32 bytes
+    const r = contractAddress.slice(2).toLowerCase().padStart(64, "0");
+    
+    // s = offset to dynamic data (from the very start of the signatures bytes)
+    const s = dynamicOffset.toString(16).padStart(64, "0");
+    
+    // v = 0 indicates contract signature
+    const v = "00";
+    
+    // Static part (65 bytes = 130 hex chars)
+    const staticPart = r + s + v;
+    
+    // Dynamic part: length (32 bytes) + signature
+    const sigHex = signature.startsWith("0x") ? signature.slice(2) : signature;
+    const sigLengthBytes = sigHex.length / 2;
+    const lengthHex = sigLengthBytes.toString(16).padStart(64, "0");
+    
+    // Signature must be padded to 32-byte boundary
+    const paddedSigHex = sigHex.padEnd(Math.ceil(sigLengthBytes / 32) * 64, "0");
+    
+    const dynamicPart = lengthHex + paddedSigHex;
+    const dynamicLength = 32 + Math.ceil(sigLengthBytes / 32) * 32; // length field + padded sig
+    
+    return { staticPart, dynamicPart, dynamicLength };
+}
+
 export function useVaultExecution() {
     const { address: userAddress } = useAccount();
     const { data: walletClient } = useWalletClient();
@@ -147,12 +195,12 @@ export function useVaultExecution() {
                 }) as Promise<bigint>,
             ]);
 
-            // Check if user's EOA is an owner
+            // Check if user's EOA is an owner (rare for vaults, but possible)
             const eoaIsOwner = owners.some(
                 (owner) => owner.toLowerCase() === userAddress.toLowerCase()
             );
             
-            // Check if user's Smart Wallet is an owner (Safe was deployed with SW addresses)
+            // Check if user's Smart Wallet is an owner (standard for vaults)
             const swIsOwner = smartWalletAddress ? owners.some(
                 (owner) => owner.toLowerCase() === smartWalletAddress.toLowerCase()
             ) : false;
@@ -213,6 +261,8 @@ export function useVaultExecution() {
 
     /**
      * Sign a vault transaction (returns signature to store in DB)
+     * @param smartWalletAddress - If the Safe owner is a Smart Wallet (not EOA), provide the SW address
+     *                            The signature is still created by the EOA, but stored under the SW address
      */
     const signTransaction = useCallback(async (params: {
         safeAddress: Address;
@@ -221,6 +271,7 @@ export function useVaultExecution() {
         value: string;
         data: Hex;
         nonce: number;
+        smartWalletAddress?: Address;
     }): Promise<{ success: boolean; signature?: string; signerAddress?: string; safeTxHash?: string; error?: string }> => {
         if (!walletClient || !publicClient || !userAddress) {
             return { success: false, error: "Wallet not connected" };
@@ -230,9 +281,12 @@ export function useVaultExecution() {
         setError(null);
 
         try {
-            const { safeAddress, to, value, data, nonce } = params;
+            const { safeAddress, to, value, data, nonce, smartWalletAddress } = params;
             
             console.log("[VaultExecution] Signing transaction...");
+            if (smartWalletAddress) {
+                console.log("[VaultExecution] Signing for Smart Wallet owner:", smartWalletAddress);
+            }
 
             // Get safeTxHash
             const safeTxHash = await getSafeTxHash({
@@ -250,12 +304,13 @@ export function useVaultExecution() {
 
             console.log("[VaultExecution] Safe tx hash:", safeTxHash);
 
-            // Sign the hash with wallet
+            // Sign the hash with wallet (EOA)
             const signature = await walletClient.signMessage({
                 message: { raw: safeTxHash },
             });
 
             // Adjust v value for Safe's signature format
+            // For eth_sign, v should be 27 or 28, and we add 4 for eth_sign type
             let v = parseInt(signature.slice(-2), 16);
             if (v < 27) {
                 v += 27;
@@ -263,13 +318,18 @@ export function useVaultExecution() {
             v += 4; // Safe adds 4 for eth_sign signatures
             const adjustedSignature = signature.slice(0, -2) + v.toString(16).padStart(2, "0");
 
-            console.log("[VaultExecution] Signature generated");
+            console.log("[VaultExecution] Signature generated (eth_sign format)");
             setStatus("idle");
+
+            // Return the Smart Wallet address as signer if provided (for ERC-1271 contract signatures)
+            // The signature is from EOA but the Safe owner is the Smart Wallet
+            const signerAddress = smartWalletAddress?.toLowerCase() || userAddress.toLowerCase();
+            console.log("[VaultExecution] Signer address recorded as:", signerAddress);
 
             return {
                 success: true,
                 signature: adjustedSignature,
-                signerAddress: userAddress.toLowerCase(),
+                signerAddress,
                 safeTxHash,
             };
         } catch (err) {
@@ -283,6 +343,7 @@ export function useVaultExecution() {
 
     /**
      * Execute with multiple signatures (for multi-sig)
+     * Supports both EOA signatures and ERC-1271 contract signatures (for Smart Wallet owners)
      */
     const executeWithSignatures = useCallback(async (params: {
         safeAddress: Address;
@@ -305,7 +366,7 @@ export function useVaultExecution() {
             
             console.log("[VaultExecution] Executing with", signatures.length, "signatures");
 
-            // Verify Safe is deployed by trying to read nonce (more reliable than getCode)
+            // Verify Safe is deployed by trying to read nonce
             try {
                 await publicClient.readContract({
                     address: safeAddress,
@@ -314,25 +375,88 @@ export function useVaultExecution() {
                 });
             } catch (readErr) {
                 console.error("[VaultExecution] Cannot read Safe nonce:", readErr);
-                // Fallback to getCode check
                 const code = await publicClient.getCode({ address: safeAddress });
                 if (!code || code === "0x" || code.length <= 2) {
                     throw new Error("Safe is not deployed yet. If you just deployed it, please wait and try again.");
                 }
             }
 
-            // Sort signatures by signer address (Safe requires this)
+            // Get Safe owners to determine which signers are contracts vs EOAs
+            const owners = await publicClient.readContract({
+                address: safeAddress,
+                abi: SAFE_ABI,
+                functionName: "getOwners",
+            }) as Address[];
+            
+            console.log("[VaultExecution] Safe owners:", owners);
+
+            // Sort signatures by signer address (Safe requires ascending order)
             const sortedSigs = [...signatures].sort((a, b) => 
                 a.signerAddress.toLowerCase().localeCompare(b.signerAddress.toLowerCase())
             );
 
-            // Concatenate signatures
-            // Each signature is 65 bytes (r: 32, s: 32, v: 1) = 130 hex chars
-            const concatenatedSigs = ("0x" + sortedSigs.map(s => 
-                s.signature.startsWith("0x") ? s.signature.slice(2) : s.signature
-            ).join("")) as Hex;
+            // Determine which signers are contracts (Smart Wallets)
+            const signerInfo: Array<{
+                signerAddress: string;
+                signature: string;
+                isContract: boolean;
+                isOwner: boolean;
+            }> = [];
 
-            console.log("[VaultExecution] Concatenated signatures:", concatenatedSigs.slice(0, 50) + "...");
+            for (const sig of sortedSigs) {
+                const signerAddr = sig.signerAddress.toLowerCase() as Address;
+                const isOwner = owners.some(o => o.toLowerCase() === signerAddr);
+                
+                // Check if the signer is a contract
+                const signerCode = await publicClient.getCode({ address: signerAddr });
+                const isContract = signerCode !== undefined && signerCode !== "0x" && signerCode.length > 2;
+                
+                console.log(`[VaultExecution] Signer ${signerAddr.slice(0, 10)}... isOwner=${isOwner}, isContract=${isContract}`);
+                
+                if (isOwner) {
+                    signerInfo.push({
+                        signerAddress: sig.signerAddress,
+                        signature: sig.signature,
+                        isContract,
+                        isOwner,
+                    });
+                } else {
+                    console.warn(`[VaultExecution] Skipping signer ${signerAddr} - not an owner`);
+                }
+            }
+
+            // Build the signature bytes
+            // For contract signers: static part points to dynamic data
+            // For EOA signers: just the 65-byte signature
+            
+            let staticParts = "";
+            let dynamicParts = "";
+            
+            // Calculate where dynamic data starts (after all static 65-byte parts)
+            let dynamicOffset = signerInfo.length * 65;
+            
+            for (const info of signerInfo) {
+                if (info.isContract) {
+                    // Contract signature (EIP-1271) - v=0 format
+                    const { staticPart, dynamicPart, dynamicLength } = buildContractSignature(
+                        info.signerAddress as Address,
+                        info.signature,
+                        dynamicOffset
+                    );
+                    staticParts += staticPart;
+                    dynamicParts += dynamicPart;
+                    dynamicOffset += dynamicLength;
+                } else {
+                    // EOA signature - just append the 65-byte signature
+                    const sigHex = info.signature.startsWith("0x") ? info.signature.slice(2) : info.signature;
+                    staticParts += sigHex;
+                }
+            }
+            
+            const concatenatedSigs = ("0x" + staticParts + dynamicParts) as Hex;
+            
+            console.log("[VaultExecution] Final signatures length:", concatenatedSigs.length / 2 - 1, "bytes");
+            console.log("[VaultExecution] Signatures (first 100 chars):", concatenatedSigs.slice(0, 100) + "...");
 
             const operation = 0;
             const safeTxGas = BigInt(0);
@@ -406,9 +530,11 @@ export function useVaultExecution() {
 
         try {
             console.log("[VaultExecution] Starting execution...");
+            console.log("[VaultExecution] Safe address:", safeAddress);
+            console.log("[VaultExecution] User EOA:", userAddress);
+            console.log("[VaultExecution] User Smart Wallet:", smartWalletAddress);
 
             // Try to get threshold - this will fail if Safe is not deployed
-            // This is more reliable than getCode() which can have RPC caching issues
             let threshold: bigint;
             try {
                 threshold = await publicClient.readContract({
@@ -419,7 +545,6 @@ export function useVaultExecution() {
                 console.log("[VaultExecution] Threshold:", threshold);
             } catch (thresholdErr) {
                 console.error("[VaultExecution] Failed to get threshold:", thresholdErr);
-                // Fallback: check getCode
                 const code = await publicClient.getCode({ address: safeAddress });
                 const isDeployed = code !== undefined && code !== "0x" && code.length > 2;
                 console.log("[VaultExecution] getCode check - deployed:", isDeployed, "code length:", code?.length);
@@ -429,7 +554,6 @@ export function useVaultExecution() {
                     setError("Vault Safe is not deployed yet. If you just deployed it, please wait a moment and try again.");
                     return { success: false, error: "Vault Safe is not deployed yet" };
                 }
-                // If we got here, getCode shows deployed but readContract failed - RPC issue
                 throw new Error("Safe appears deployed but unable to read contract. Please try again.");
             }
 
@@ -448,14 +572,14 @@ export function useVaultExecution() {
             // For threshold=1, sign and execute in one step
             if (Number(threshold) === 1) {
                 // Check if user's EOA is an owner
-                let eoaIsOwner = await publicClient.readContract({
+                const eoaIsOwner = await publicClient.readContract({
                     address: safeAddress,
                     abi: SAFE_ABI,
                     functionName: "isOwner",
                     args: [userAddress],
                 }) as boolean;
                 
-                // Check if user's Smart Wallet is an owner (vaults may use SW addresses)
+                // Check if user's Smart Wallet is an owner
                 let swIsOwner = false;
                 if (smartWalletAddress) {
                     swIsOwner = await publicClient.readContract({
@@ -466,14 +590,29 @@ export function useVaultExecution() {
                     }) as boolean;
                 }
 
+                console.log("[VaultExecution] EOA is owner:", eoaIsOwner, "SW is owner:", swIsOwner);
+
                 if (!eoaIsOwner && !swIsOwner) {
+                    // Get actual owners for debugging
+                    try {
+                        const owners = await publicClient.readContract({
+                            address: safeAddress,
+                            abi: SAFE_ABI,
+                            functionName: "getOwners",
+                        }) as Address[];
+                        console.error("[VaultExecution] Safe owners:", owners);
+                    } catch (e) {
+                        console.error("[VaultExecution] Could not fetch owners:", e);
+                    }
                     setStatus("error");
                     setError("You are not an owner of this vault");
                     return { success: false, error: "You are not an owner of this vault" };
                 }
                 
-                // Use Smart Wallet as signer if that's the owner
+                // Determine signer: prefer Smart Wallet if it's the owner (uses EIP-1271)
                 const signerAddress = swIsOwner ? smartWalletAddress! : userAddress;
+
+                console.log("[VaultExecution] Using signer:", signerAddress);
 
                 setStatus("signing");
 
@@ -484,7 +623,10 @@ export function useVaultExecution() {
                     functionName: "nonce",
                 }) as bigint;
 
-                // Sign
+                console.log("[VaultExecution] Safe nonce:", nonce);
+
+                // Sign with EOA
+                // If Smart Wallet is the owner, we pass smartWalletAddress so it's recorded as the signer
                 const signResult = await signTransaction({
                     safeAddress,
                     chainId,
@@ -492,6 +634,7 @@ export function useVaultExecution() {
                     value,
                     data,
                     nonce: Number(nonce),
+                    smartWalletAddress: swIsOwner ? smartWalletAddress : undefined,
                 });
 
                 if (!signResult.success || !signResult.signature) {
@@ -499,13 +642,17 @@ export function useVaultExecution() {
                 }
 
                 // Execute with single signature
+                // executeWithSignatures will detect if signer is a contract and format accordingly
                 return await executeWithSignatures({
                     safeAddress,
                     chainId,
                     to,
                     value,
                     data,
-                    signatures: [{ signerAddress: signResult.signerAddress!, signature: signResult.signature }],
+                    signatures: [{ 
+                        signerAddress: signerAddress.toLowerCase(), 
+                        signature: signResult.signature,
+                    }],
                 });
             }
 

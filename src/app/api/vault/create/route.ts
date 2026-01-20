@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Collect all signer addresses (smart wallet addresses)
+        // These Smart Wallets implement EIP-1271 isValidSignature
         const signerAddresses: Address[] = [
             creatorUser.smart_wallet_address as Address,
             ...members.map((m: { address: string }) => memberWalletMap[m.address.toLowerCase()] as Address),
@@ -193,6 +194,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Add members (including creator)
+        // member_address = EOA address, smart_wallet_address = Safe owner (for EIP-1271 signing)
         const memberInserts = [
             {
                 vault_id: vault.id,
