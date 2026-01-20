@@ -158,8 +158,8 @@ const nextConfig = {
                             "connect-src 'self' https: wss: ws: blob:",
                             // Media: self + blob for video/audio
                             "media-src 'self' blob: https:",
-                            // Frame: self only (X-Frame-Options also set)
-                            "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
+                            // Frame: self + WalletConnect + Cloudflare + Alien SSO
+                            "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://sso.alien-api.com https://*.alien-api.com",
                             // Object: none (no plugins)
                             "object-src 'none'",
                             // Base URI: self only

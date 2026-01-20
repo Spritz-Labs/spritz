@@ -390,3 +390,22 @@ w3m-connector-wrapper:not([data-social]) {
 .skip-nav:focus {
     top: 0;
 }
+
+/* Alien SSO SDK - Ensure modal appears above everything */
+/* The SDK creates modals dynamically, ensure they have highest z-index */
+[data-alien-modal],
+[class*="alien"],
+[id*="alien"],
+.alien-sso-modal,
+.alien-modal,
+[class*="sso-modal"],
+[role="dialog"][aria-modal="true"] {
+    z-index: 99999 !important;
+}
+
+/* Alien SDK iframe/popup container */
+iframe[src*="alien"],
+iframe[src*="sso.alien"] {
+    z-index: 99999 !important;
+    position: fixed !important;
+}
