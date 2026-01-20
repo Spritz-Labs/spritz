@@ -11,7 +11,7 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { useAccount, useSignMessage } from "wagmi";
+import { useAccount, useSignMessage, useConnect, useConnectors } from "wagmi";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
 
 type AuthMethod = "wallet" | "passkey" | "email" | "solana" | "world_id" | "alien_id";
@@ -31,10 +31,13 @@ export function SessionLockScreen({
     walletAddress,
     authMethod = "wallet",
 }: SessionLockScreenProps) {
-    const { address } = useAccount();
+    const { address, isConnected } = useAccount();
     const { signMessageAsync } = useSignMessage();
     const { login: passkeyLogin } = usePasskeyContext();
+    const { connectAsync } = useConnect();
+    const connectors = useConnectors();
     const [isUnlocking, setIsUnlocking] = useState(false);
+    const [isReconnecting, setIsReconnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Determine if this user should use passkey for unlock
@@ -42,7 +45,37 @@ export function SessionLockScreen({
                              authMethod === "solana" || authMethod === "world_id" || 
                              authMethod === "alien_id";
 
+    // Check if wallet is connected
+    const walletConnected = isConnected && address;
+
+    const handleReconnectWallet = useCallback(async () => {
+        setIsReconnecting(true);
+        setError(null);
+
+        try {
+            // Try to reconnect with the first available connector
+            const connector = connectors[0];
+            if (connector) {
+                await connectAsync({ connector });
+                console.log("[SessionLock] Wallet reconnected");
+            } else {
+                setError("No wallet connector available");
+            }
+        } catch (err) {
+            console.error("[SessionLock] Wallet reconnect failed:", err);
+            setError("Failed to reconnect wallet");
+        } finally {
+            setIsReconnecting(false);
+        }
+    }, [connectors, connectAsync]);
+
     const handleWalletUnlock = useCallback(async () => {
+        // Check if wallet is connected first
+        if (!walletConnected) {
+            setError("Wallet not connected. Please reconnect or skip unlock.");
+            return;
+        }
+
         setIsUnlocking(true);
         setError(null);
 
@@ -61,15 +94,19 @@ export function SessionLockScreen({
             }
         } catch (err) {
             console.error("[SessionLock] Wallet unlock failed:", err);
-            if (err instanceof Error && err.message.includes("User rejected")) {
+            const errorMessage = err instanceof Error ? err.message : "Unknown error";
+            
+            if (errorMessage.includes("User rejected") || errorMessage.includes("rejected")) {
                 setError("Signature cancelled. Please try again.");
+            } else if (errorMessage.includes("disconnected") || errorMessage.includes("not connected")) {
+                setError("Wallet disconnected. Please reconnect.");
             } else {
-                setError("Failed to unlock. Please try again.");
+                setError("Failed to unlock. Try reconnecting wallet or skip.");
             }
         } finally {
             setIsUnlocking(false);
         }
-    }, [address, walletAddress, signMessageAsync, onUnlock]);
+    }, [address, walletAddress, walletConnected, signMessageAsync, onUnlock]);
 
     const handlePasskeyUnlock = useCallback(async () => {
         setIsUnlocking(true);
@@ -159,11 +196,44 @@ export function SessionLockScreen({
                             </div>
                         )}
 
+                        {/* Reconnect Wallet Button (only for wallet users when disconnected) */}
+                        {!usePasskeyUnlock && !walletConnected && (
+                            <button
+                                onClick={handleReconnectWallet}
+                                disabled={isReconnecting}
+                                className="w-full py-4 px-6 mb-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-3"
+                            >
+                                {isReconnecting ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Reconnecting...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                            />
+                                        </svg>
+                                        Reconnect Wallet
+                                    </>
+                                )}
+                            </button>
+                        )}
+
                         {/* Unlock Button */}
                         <button
                             onClick={handleUnlock}
-                            disabled={isUnlocking}
-                            className="w-full py-4 px-6 bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-3"
+                            disabled={isUnlocking || (!usePasskeyUnlock && !walletConnected)}
+                            className="w-full py-4 px-6 bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-400 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-3"
                         >
                             {isUnlocking ? (
                                 <>
@@ -202,15 +272,25 @@ export function SessionLockScreen({
                                             d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"
                                         />
                                     </svg>
-                                    Unlock with Wallet
+                                    {walletConnected ? "Unlock with Wallet" : "Connect Wallet First"}
                                 </>
                             )}
+                        </button>
+
+                        {/* Skip Button - emergency escape */}
+                        <button
+                            onClick={onUnlock}
+                            className="w-full py-3 px-6 mt-3 bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300 text-sm font-medium rounded-xl transition-colors"
+                        >
+                            Skip (Continue without verification)
                         </button>
 
                         <p className="text-xs text-zinc-500 text-center mt-4">
                             {usePasskeyUnlock 
                                 ? "Use your passkey to verify your identity and unlock your session."
-                                : "Sign a message to verify your identity and unlock your session."
+                                : walletConnected 
+                                    ? "Sign a message to verify your identity and unlock your session."
+                                    : "Reconnect your wallet or skip to continue."
                             }
                         </p>
                     </motion.div>
