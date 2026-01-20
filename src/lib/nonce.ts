@@ -12,6 +12,9 @@ const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_RE
 const NONCE_PREFIX = "auth:nonce:";
 const NONCE_EXPIRY_SECONDS = 300; // 5 minutes
 
+// Check if we're in production (Vercel sets this)
+const isProduction = process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
+
 /**
  * Generate a cryptographically secure nonce
  */
@@ -24,8 +27,13 @@ export function generateSecureNonce(): string {
  */
 export async function storeNonce(address: string, nonce: string): Promise<boolean> {
     if (!redis) {
-        console.warn("[Nonce] Redis not configured - nonce verification disabled");
-        return true; // Allow without verification if Redis not configured
+        if (isProduction) {
+            console.error("[Nonce] CRITICAL: Redis not configured in production! Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN");
+            // In production, fail closed - don't allow auth without nonce verification
+            return false;
+        }
+        console.warn("[Nonce] Redis not configured - nonce verification disabled (dev mode)");
+        return true; // Allow without verification only in development
     }
 
     try {
@@ -44,8 +52,13 @@ export async function storeNonce(address: string, nonce: string): Promise<boolea
  */
 export async function verifyAndConsumeNonce(address: string, nonce: string): Promise<boolean> {
     if (!redis) {
-        console.warn("[Nonce] Redis not configured - nonce verification disabled");
-        return true; // Allow without verification if Redis not configured
+        if (isProduction) {
+            console.error("[Nonce] CRITICAL: Redis not configured in production! Rejecting auth request.");
+            // In production, fail closed - reject without nonce verification
+            return false;
+        }
+        console.warn("[Nonce] Redis not configured - nonce verification disabled (dev mode)");
+        return true; // Allow without verification only in development
     }
 
     try {
