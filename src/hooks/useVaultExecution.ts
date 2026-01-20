@@ -291,12 +291,20 @@ export function useVaultExecution() {
             
             console.log("[VaultExecution] Executing with", signatures.length, "signatures");
 
-            // Check if Safe is deployed
-            const code = await publicClient.getCode({ address: safeAddress });
-            const isDeployed = code !== undefined && code !== "0x";
-
-            if (!isDeployed) {
-                throw new Error("Safe is not deployed yet");
+            // Verify Safe is deployed by trying to read nonce (more reliable than getCode)
+            try {
+                await publicClient.readContract({
+                    address: safeAddress,
+                    abi: SAFE_ABI,
+                    functionName: "nonce",
+                });
+            } catch (readErr) {
+                console.error("[VaultExecution] Cannot read Safe nonce:", readErr);
+                // Fallback to getCode check
+                const code = await publicClient.getCode({ address: safeAddress });
+                if (!code || code === "0x" || code.length <= 2) {
+                    throw new Error("Safe is not deployed yet. If you just deployed it, please wait and try again.");
+                }
             }
 
             // Sort signatures by signer address (Safe requires this)
@@ -383,24 +391,31 @@ export function useVaultExecution() {
         try {
             console.log("[VaultExecution] Starting execution...");
 
-            // Check if Safe is deployed
-            const code = await publicClient.getCode({ address: safeAddress });
-            const isDeployed = code !== undefined && code !== "0x";
-
-            if (!isDeployed) {
-                setStatus("error");
-                setError("Vault Safe is not deployed yet");
-                return { success: false, error: "Vault Safe is not deployed yet" };
+            // Try to get threshold - this will fail if Safe is not deployed
+            // This is more reliable than getCode() which can have RPC caching issues
+            let threshold: bigint;
+            try {
+                threshold = await publicClient.readContract({
+                    address: safeAddress,
+                    abi: SAFE_ABI,
+                    functionName: "getThreshold",
+                }) as bigint;
+                console.log("[VaultExecution] Threshold:", threshold);
+            } catch (thresholdErr) {
+                console.error("[VaultExecution] Failed to get threshold:", thresholdErr);
+                // Fallback: check getCode
+                const code = await publicClient.getCode({ address: safeAddress });
+                const isDeployed = code !== undefined && code !== "0x" && code.length > 2;
+                console.log("[VaultExecution] getCode check - deployed:", isDeployed, "code length:", code?.length);
+                
+                if (!isDeployed) {
+                    setStatus("error");
+                    setError("Vault Safe is not deployed yet. If you just deployed it, please wait a moment and try again.");
+                    return { success: false, error: "Vault Safe is not deployed yet" };
+                }
+                // If we got here, getCode shows deployed but readContract failed - RPC issue
+                throw new Error("Safe appears deployed but unable to read contract. Please try again.");
             }
-
-            // Get threshold
-            const threshold = await publicClient.readContract({
-                address: safeAddress,
-                abi: SAFE_ABI,
-                functionName: "getThreshold",
-            }) as bigint;
-
-            console.log("[VaultExecution] Threshold:", threshold);
 
             // If we have pre-collected signatures, use them
             if (signatures && signatures.length >= Number(threshold)) {
