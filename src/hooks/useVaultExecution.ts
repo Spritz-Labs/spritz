@@ -109,13 +109,17 @@ export function useVaultExecution() {
 
     /**
      * Check if the user can sign for a vault
+     * @param safeAddress - The Safe contract address
+     * @param chainId - The chain ID
+     * @param smartWalletAddress - Optional: user's Smart Wallet address (if different from EOA)
      */
     const canSign = useCallback(async (
         safeAddress: Address,
-        chainId: number
-    ): Promise<{ canSign: boolean; isDeployed: boolean; threshold: number; owners: Address[] }> => {
+        chainId: number,
+        smartWalletAddress?: Address
+    ): Promise<{ canSign: boolean; isDeployed: boolean; threshold: number; owners: Address[]; signerAddress: Address | null }> => {
         if (!userAddress || !publicClient) {
-            return { canSign: false, isDeployed: false, threshold: 0, owners: [] };
+            return { canSign: false, isDeployed: false, threshold: 0, owners: [], signerAddress: null };
         }
 
         try {
@@ -126,7 +130,7 @@ export function useVaultExecution() {
             if (!isDeployed) {
                 // For undeployed Safes, we can't verify ownership on-chain
                 // Trust the database for now
-                return { canSign: true, isDeployed: false, threshold: 0, owners: [] };
+                return { canSign: true, isDeployed: false, threshold: 0, owners: [], signerAddress: smartWalletAddress || userAddress };
             }
 
             // Get owners and threshold
@@ -143,20 +147,30 @@ export function useVaultExecution() {
                 }) as Promise<bigint>,
             ]);
 
-            // Check if user is an owner
-            const isOwner = owners.some(
+            // Check if user's EOA is an owner
+            const eoaIsOwner = owners.some(
                 (owner) => owner.toLowerCase() === userAddress.toLowerCase()
             );
+            
+            // Check if user's Smart Wallet is an owner (Safe was deployed with SW addresses)
+            const swIsOwner = smartWalletAddress ? owners.some(
+                (owner) => owner.toLowerCase() === smartWalletAddress.toLowerCase()
+            ) : false;
+
+            const isOwner = eoaIsOwner || swIsOwner;
+            // Use Smart Wallet address for signing if that's the owner, otherwise EOA
+            const signerAddress = swIsOwner ? smartWalletAddress! : (eoaIsOwner ? userAddress : null);
 
             return {
                 canSign: isOwner,
                 isDeployed: true,
                 threshold: Number(threshold),
                 owners,
+                signerAddress,
             };
         } catch (err) {
             console.error("[VaultExecution] Error checking ownership:", err);
-            return { canSign: false, isDeployed: false, threshold: 0, owners: [] };
+            return { canSign: false, isDeployed: false, threshold: 0, owners: [], signerAddress: null };
         }
     }, [userAddress, publicClient]);
 
@@ -369,6 +383,7 @@ export function useVaultExecution() {
 
     /**
      * Execute a vault transaction (for threshold=1 or with pre-collected signatures)
+     * @param smartWalletAddress - Optional: user's Smart Wallet address if that's the Safe owner
      */
     const execute = useCallback(async (params: {
         safeAddress: Address;
@@ -377,8 +392,9 @@ export function useVaultExecution() {
         value: string;
         data: Hex;
         signatures?: Array<{ signerAddress: string; signature: string }>;
+        smartWalletAddress?: Address;
     }): Promise<{ success: boolean; txHash?: string; error?: string; needsMoreSignatures?: boolean; threshold?: number }> => {
-        const { safeAddress, chainId, to, value, data, signatures } = params;
+        const { safeAddress, chainId, to, value, data, signatures, smartWalletAddress } = params;
 
         if (!walletClient || !publicClient || !userAddress) {
             return { success: false, error: "Wallet not connected" };
@@ -431,19 +447,33 @@ export function useVaultExecution() {
 
             // For threshold=1, sign and execute in one step
             if (Number(threshold) === 1) {
-                // Check if user is an owner
-                const isOwner = await publicClient.readContract({
+                // Check if user's EOA is an owner
+                let eoaIsOwner = await publicClient.readContract({
                     address: safeAddress,
                     abi: SAFE_ABI,
                     functionName: "isOwner",
                     args: [userAddress],
-                });
+                }) as boolean;
+                
+                // Check if user's Smart Wallet is an owner (vaults may use SW addresses)
+                let swIsOwner = false;
+                if (smartWalletAddress) {
+                    swIsOwner = await publicClient.readContract({
+                        address: safeAddress,
+                        abi: SAFE_ABI,
+                        functionName: "isOwner",
+                        args: [smartWalletAddress],
+                    }) as boolean;
+                }
 
-                if (!isOwner) {
+                if (!eoaIsOwner && !swIsOwner) {
                     setStatus("error");
                     setError("You are not an owner of this vault");
                     return { success: false, error: "You are not an owner of this vault" };
                 }
+                
+                // Use Smart Wallet as signer if that's the owner
+                const signerAddress = swIsOwner ? smartWalletAddress! : userAddress;
 
                 setStatus("signing");
 

@@ -629,6 +629,12 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             
             console.log("[VaultList] Executing with", signatures.length, "signatures");
             
+            // Find the current user's smart wallet address (Safe owners are Smart Wallets, not EOAs)
+            const userMember = selectedVault.members.find(
+                (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+            );
+            const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
+            
             // Execute on-chain with collected signatures
             const result = await vaultExecution.execute({
                 safeAddress: selectedVault.safeAddress as Address,
@@ -637,6 +643,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 value: tx.value || "0",
                 data: (tx.data || "0x") as Hex,
                 signatures: signatures.length > 0 ? signatures : undefined,
+                smartWalletAddress: userSmartWalletAddress,
             });
             
             if (result.success && result.txHash) {
