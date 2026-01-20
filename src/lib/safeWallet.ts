@@ -717,32 +717,41 @@ export async function getSafeMessageHashAsync(
 /**
  * Internal helper to compute the Safe message hash given a domain separator
  * 
- * Safe's getMessageHashForSafe computes:
- *   bytes32 messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(message)));
- *   return keccak256(abi.encodePacked("\x19\x01", domainSeparator, messageHash));
+ * When isValidSignature(bytes32 _dataHash, bytes) is called on a Safe:
+ * 1. It wraps the input: abi.encode(_dataHash) -> message bytes
+ * 2. Calls getMessageHashForSafe(safe, message)
+ * 3. getMessageHashForSafe computes:
+ *    - messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(message)))
+ *    - return keccak256("\x19\x01" || domainSeparator || messageHash)
  * 
- * Where `message` is the raw bytes being signed, and keccak256(message) = dataHash.
- * For EIP-1271 validation of Safe transactions, the input `dataHash` is already
- * the safeTxHash (which is keccak256 of the transaction data).
- * 
- * So we compute:
- *   safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, dataHash))
- *   finalHash = keccak256(0x19 || 0x01 || domainSeparator || safeMessageHash)
+ * So for a bytes32 dataHash (like safeTxHash), the full computation is:
+ *   message = abi.encode(dataHash)           // 32 bytes
+ *   messageHashInput = keccak256(message)    // Hash the encoded dataHash
+ *   safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, messageHashInput))
+ *   finalHash = keccak256("\x19\x01" || domainSeparator || safeMessageHash)
  */
 function computeSafeMessageHash(domainSeparator: Hex, dataHash: Hex): Hex {
     // SafeMessage type hash: keccak256("SafeMessage(bytes message)")
     const SAFE_MSG_TYPEHASH = keccak256(toHex("SafeMessage(bytes message)"));
     
-    // safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, dataHash))
-    // Note: dataHash is already the keccak256 of the original message bytes
+    // Step 1: message = abi.encode(dataHash)
+    const message = encodeAbiParameters(
+        [{ type: "bytes32" }],
+        [dataHash]
+    );
+    
+    // Step 2: messageHashInput = keccak256(message)
+    const messageHashInput = keccak256(message);
+    
+    // Step 3: safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, messageHashInput))
     const safeMessageHash = keccak256(
         encodeAbiParameters(
             [{ type: "bytes32" }, { type: "bytes32" }],
-            [SAFE_MSG_TYPEHASH, dataHash]
+            [SAFE_MSG_TYPEHASH, messageHashInput]
         )
     );
     
-    // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || safeMessageHash)
+    // Step 4: Final EIP-712 hash
     const finalHash = keccak256(
         concat([
             toHex("\x19\x01", { size: 2 }),
@@ -753,6 +762,8 @@ function computeSafeMessageHash(domainSeparator: Hex, dataHash: Hex): Hex {
     
     console.log("[SafeMessageHash] Computed hash:", {
         dataHash,
+        message,
+        messageHashInput,
         safeMessageHash,
         domainSeparator,
         finalHash,
