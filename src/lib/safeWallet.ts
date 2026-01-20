@@ -457,8 +457,11 @@ export async function isSafeDeployed(
     
     try {
         const code = await publicClient.getCode({ address });
-        return code !== undefined && code !== "0x" && code.length > 2;
-    } catch {
+        const isDeployed = code !== undefined && code !== "0x" && code.length > 2;
+        log(`[SafeWallet] isSafeDeployed check for ${address.slice(0, 10)}... on chain ${chainId}: ${isDeployed} (code length: ${code?.length || 0})`);
+        return isDeployed;
+    } catch (error) {
+        console.error(`[SafeWallet] Error checking if Safe is deployed at ${address}:`, error);
         return false;
     }
 }

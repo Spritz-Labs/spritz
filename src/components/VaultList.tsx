@@ -273,8 +273,26 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         } catch (err) {
             console.error("[VaultList] Deploy error:", err);
             const errorMsg = err instanceof Error ? err.message : "Failed to deploy vault";
-            // Clean up common error messages
-            if (errorMsg.includes("User rejected") || errorMsg.includes("User denied")) {
+            
+            // "Create2 call failed" means the Safe already exists at that address!
+            // This happens when a previous deployment succeeded but DB wasn't updated
+            if (errorMsg.includes("Create2 call failed") || errorMsg.includes("437265617465322063616c6c206661696c6564")) {
+                console.log("[VaultList] Create2 failed = Safe already exists! Marking as deployed...");
+                try {
+                    // Mark as deployed in the database
+                    await confirmDeployment(vaultId, "");
+                    const updatedVault = await getVault(vaultId);
+                    if (updatedVault) {
+                        setSelectedVault(updatedVault);
+                    }
+                    await fetchVaults();
+                    setDeployError(null); // Clear error since we fixed it
+                    console.log("[VaultList] Vault marked as deployed successfully!");
+                } catch (syncErr) {
+                    console.error("[VaultList] Failed to mark vault as deployed:", syncErr);
+                    setDeployError("Safe is deployed but failed to update database. Try the Sync button.");
+                }
+            } else if (errorMsg.includes("User rejected") || errorMsg.includes("User denied")) {
                 setDeployError("Transaction cancelled");
             } else {
                 setDeployError(errorMsg);
