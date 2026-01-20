@@ -33,8 +33,8 @@ export type InactivityConfig = {
     enabled?: boolean;
 };
 
-const DEFAULT_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-const DEFAULT_BACKGROUND_TIMEOUT = 60 * 1000; // 1 minute
+const DEFAULT_TIMEOUT = 30 * 60 * 1000; // 30 minutes (increased for PWA)
+const DEFAULT_BACKGROUND_TIMEOUT = 5 * 60 * 1000; // 5 minutes (increased for PWA - users often switch apps briefly)
 const DEFAULT_WARNING_THRESHOLD = 60 * 1000; // 1 minute before lock
 
 export function useInactivityMonitor({

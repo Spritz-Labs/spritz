@@ -13,6 +13,7 @@ import { Dashboard } from "@/components/Dashboard";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { Globe } from "@/components/Globe";
 import { SpritzLogo } from "@/components/SpritzLogo";
+import { WalletConnectionStatus } from "@/components/WalletConnectionStatus";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
 import { useEmailAuthContext } from "@/context/EmailAuthProvider";
 import { useAlienAuthContext } from "@/context/AlienAuthProvider";
@@ -567,6 +568,8 @@ export default function Home() {
         return (
             <>
                 <PWAInstallPrompt />
+                {/* Show wallet connection status banner for PWA users */}
+                <WalletConnectionStatus />
                 <Dashboard
                     userAddress={userAddress}
                     onLogout={handleLogout}

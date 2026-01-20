@@ -519,6 +519,28 @@ export function useVaultExecution() {
                 concatenatedSigs,
             ] as const;
 
+            // Get current gas prices to ensure transaction is properly priced
+            let maxFeePerGas: bigint | undefined;
+            let maxPriorityFeePerGas: bigint | undefined;
+            try {
+                const feeData = await publicClient.estimateFeesPerGas();
+                maxFeePerGas = feeData.maxFeePerGas;
+                maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+                // Add 10% buffer to gas prices to help with network congestion
+                if (maxFeePerGas) {
+                    maxFeePerGas = (maxFeePerGas * BigInt(110)) / BigInt(100);
+                }
+                console.log("[VaultExecution] Gas prices:", {
+                    maxFeePerGas: maxFeePerGas?.toString(),
+                    maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+                });
+            } catch (feeErr) {
+                console.warn("[VaultExecution] Fee estimation failed, using defaults:", feeErr);
+                // Fallback to reasonable defaults for Base
+                maxFeePerGas = BigInt(100000000); // 0.1 gwei
+                maxPriorityFeePerGas = BigInt(50000000); // 0.05 gwei
+            }
+
             // Estimate gas first to help wallets that have issues with complex Safe transactions
             let gasEstimate: bigint | undefined;
             try {
@@ -536,7 +558,7 @@ export function useVaultExecution() {
                 console.warn("[VaultExecution] Gas estimation failed, letting wallet estimate:", gasErr);
             }
 
-            // Execute the transaction with explicit gas if estimation succeeded
+            // Execute the transaction with explicit gas parameters
             const hash = await walletClient.writeContract({
                 address: safeAddress,
                 abi: SAFE_ABI,
@@ -544,6 +566,8 @@ export function useVaultExecution() {
                 args: txArgs,
                 chain,
                 ...(gasEstimate ? { gas: gasEstimate } : {}),
+                ...(maxFeePerGas ? { maxFeePerGas } : {}),
+                ...(maxPriorityFeePerGas ? { maxPriorityFeePerGas } : {}),
             });
 
             console.log("[VaultExecution] Transaction sent:", hash);
