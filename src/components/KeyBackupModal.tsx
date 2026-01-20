@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   generateRecoveryPhrase,
@@ -18,6 +18,16 @@ import {
   getWordAtIndex,
 } from "@/lib/keyRecovery";
 import { supabase } from "@/config/supabase";
+
+// Helper to shuffle an array (Fisher-Yates)
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
 type KeyBackupModalProps = {
   isOpen: boolean;
@@ -47,6 +57,13 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
   const [verifyIndices, setVerifyIndices] = useState<number[]>([]);
   const [verifyInputs, setVerifyInputs] = useState<string[]>(["", "", ""]);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [currentVerifyIndex, setCurrentVerifyIndex] = useState(0); // Track which word we're verifying (0, 1, or 2)
+  
+  // Get shuffled words for the word picker
+  const shuffledWords = useMemo(() => {
+    if (!phrase) return [];
+    return shuffleArray(phrase.split(" "));
+  }, [phrase]);
   
   // Restore state
   const [restorePhrase, setRestorePhrase] = useState("");
@@ -74,6 +91,7 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
     setVerifyIndices([]);
     setVerifyInputs(["", "", ""]);
     setVerifyError(null);
+    setCurrentVerifyIndex(0);
     setRestorePhrase("");
     setRestorePin("");
     setRestoreError(null);
@@ -106,7 +124,36 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
     const indices = getVerificationIndices();
     setVerifyIndices(indices);
     setVerifyInputs(["", "", ""]);
+    setCurrentVerifyIndex(0);
     setStep("verify");
+  };
+  
+  // Handle word selection in verification
+  const handleWordSelect = (word: string) => {
+    const newInputs = [...verifyInputs];
+    newInputs[currentVerifyIndex] = word;
+    setVerifyInputs(newInputs);
+    setVerifyError(null);
+    
+    // Check if this word is correct
+    const correctWord = getWordAtIndex(phrase, verifyIndices[currentVerifyIndex]);
+    if (word.toLowerCase() !== correctWord.toLowerCase()) {
+      setVerifyError("Incorrect word. Please try again.");
+      // Clear the selection after a brief delay
+      setTimeout(() => {
+        const clearedInputs = [...newInputs];
+        clearedInputs[currentVerifyIndex] = "";
+        setVerifyInputs(clearedInputs);
+      }, 800);
+      return;
+    }
+    
+    // Move to next word or finish
+    if (currentVerifyIndex < 2) {
+      setTimeout(() => {
+        setCurrentVerifyIndex(currentVerifyIndex + 1);
+      }, 300);
+    }
   };
 
   // Step 3: Verify words
@@ -483,32 +530,80 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
             {step === "verify" && (
               <div className="space-y-4">
                 <p className="text-zinc-400 text-sm">
-                  Enter the following words from your recovery phrase to verify you&apos;ve saved it correctly.
+                  Tap the correct words from your recovery phrase to verify you&apos;ve saved it.
                 </p>
 
-                {verifyIndices.map((idx, i) => (
-                  <div key={idx}>
-                    <label className="block text-sm text-zinc-400 mb-2">
-                      Word #{idx}
-                    </label>
-                    <input
-                      type="text"
-                      value={verifyInputs[i]}
-                      onChange={(e) => {
-                        const newInputs = [...verifyInputs];
-                        newInputs[i] = e.target.value;
-                        setVerifyInputs(newInputs);
-                      }}
-                      placeholder={`Enter word #${idx}`}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-                ))}
+                {/* Progress indicator */}
+                <div className="flex items-center justify-center gap-2">
+                  {verifyIndices.map((idx, i) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                          verifyInputs[i]
+                            ? "bg-green-500 text-white"
+                            : i === currentVerifyIndex
+                            ? "bg-orange-500 text-white"
+                            : "bg-zinc-700 text-zinc-400"
+                        }`}
+                      >
+                        {verifyInputs[i] ? (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          i + 1
+                        )}
+                      </div>
+                      {i < 2 && (
+                        <div className={`w-8 h-0.5 ${verifyInputs[i] ? "bg-green-500" : "bg-zinc-700"}`} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Current word to select */}
+                <div className="bg-zinc-800/50 rounded-xl p-4 text-center">
+                  <p className="text-zinc-500 text-sm mb-1">Select word</p>
+                  <p className="text-white text-2xl font-bold">#{verifyIndices[currentVerifyIndex]}</p>
+                  {verifyInputs[currentVerifyIndex] && (
+                    <p className="text-green-400 text-sm mt-1 font-medium">
+                      ✓ {verifyInputs[currentVerifyIndex]}
+                    </p>
+                  )}
+                </div>
+
+                {/* Word grid - tap to select */}
+                <div className="grid grid-cols-3 gap-2">
+                  {shuffledWords.map((word, i) => {
+                    const isSelected = verifyInputs.includes(word);
+                    const isCurrentSelection = verifyInputs[currentVerifyIndex] === word;
+                    return (
+                      <button
+                        key={`${word}-${i}`}
+                        onClick={() => !isSelected && handleWordSelect(word)}
+                        disabled={isSelected && !isCurrentSelection}
+                        className={`py-3 px-2 rounded-xl text-sm font-medium transition-all ${
+                          isCurrentSelection
+                            ? "bg-green-500 text-white"
+                            : isSelected
+                            ? "bg-zinc-700/50 text-zinc-500 cursor-not-allowed"
+                            : "bg-zinc-800 hover:bg-zinc-700 text-white active:scale-95"
+                        }`}
+                      >
+                        {word}
+                      </button>
+                    );
+                  })}
+                </div>
 
                 {verifyError && (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                    <p className="text-red-400 text-sm">{verifyError}</p>
-                  </div>
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-red-500/10 border border-red-500/20 rounded-lg p-3"
+                  >
+                    <p className="text-red-400 text-sm text-center">{verifyError}</p>
+                  </motion.div>
                 )}
 
                 <div className="flex gap-3">
@@ -523,7 +618,7 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
                     disabled={loading || verifyInputs.some(v => !v.trim())}
                     className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-medium rounded-lg transition-colors"
                   >
-                    {loading ? "Saving..." : "Verify & Save"}
+                    {loading ? "Saving..." : "Complete Backup"}
                   </button>
                 </div>
               </div>
