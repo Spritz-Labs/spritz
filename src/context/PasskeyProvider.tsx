@@ -271,6 +271,20 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
             try {
+                // SECURITY: Clear any existing session BEFORE registration
+                // This prevents the server from thinking we're "adding a passkey to existing account"
+                // when we actually want to create a new account
+                log.debug("[Passkey] Clearing any existing session before registration...");
+                try {
+                    await fetch("/api/auth/logout", {
+                        method: "POST",
+                        credentials: "include",
+                    });
+                } catch (e) {
+                    // Ignore logout errors - just continue with registration
+                    log.debug("[Passkey] Pre-registration logout (expected):", e);
+                }
+                
                 // Generate a temporary address based on username for registration
                 const tempAddress = await generateWalletAddress(username || "spritz-user");
                 

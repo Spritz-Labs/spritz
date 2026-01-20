@@ -96,22 +96,19 @@ export async function POST(request: NextRequest) {
             .select("credential_id")
             .eq("user_address", actualUserAddress.toLowerCase());
 
-        // Generate a unique user ID
-        // For rescue flows, add a random component so authenticator creates a NEW credential
-        // (WebAuthn won't allow registering the same user ID twice on same authenticator)
+        // Generate a UNIQUE user ID for EVERY registration
+        // SECURITY FIX: Previously we used tempAddress which could collide if two users
+        // entered the same username. Now we always include randomness to ensure uniqueness.
+        // This prevents passkey managers from merging/confusing credentials.
         const encoder = new TextEncoder();
-        const userIdSource = isRescueFlow 
-            ? `${actualUserAddress.toLowerCase()}:rescue:${Date.now()}:${crypto.randomUUID()}`
-            : actualUserAddress.toLowerCase();
+        const userIdSource = `${actualUserAddress.toLowerCase()}:${Date.now()}:${crypto.randomUUID()}`;
         const userIdBuffer = await crypto.subtle.digest(
             "SHA-256",
             encoder.encode(userIdSource)
         );
         const userId = new Uint8Array(userIdBuffer);
         
-        if (isRescueFlow) {
-            console.log("[Passkey] RESCUE: Generated unique user ID to avoid duplicate credential error");
-        }
+        console.log("[Passkey] Generated unique WebAuthn userID for registration");
 
         // For recovery flow, we allow registering new credentials even if others exist
         // For normal flow, exclude existing credentials to prevent duplicates
@@ -124,11 +121,13 @@ export async function POST(request: NextRequest) {
             })) || []);
 
         // Generate registration options
+        // NOTE: userName is what passkey managers (1Password, iCloud) display to the user
+        // Use the displayName (human-readable) instead of the wallet address
         const options = await generateRegistrationOptions({
             rpName: RP_NAME,
             rpID: rpId,
             userID: userId,
-            userName: actualUserAddress.toLowerCase(),
+            userName: displayName || "Spritz User", // Human-readable name for passkey managers
             userDisplayName: displayName || `Spritz User`,
             // Don't allow re-registering existing credentials (unless recovery)
             excludeCredentials,
