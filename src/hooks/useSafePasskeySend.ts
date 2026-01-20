@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { type Address, type Hex, parseEther, parseUnits, formatUnits } from "viem";
+import { type Address, type Hex, parseEther, parseUnits, formatUnits, formatEther } from "viem";
 import {
     createPasskeySafeAccountClient,
     sendSafeTransaction,
@@ -200,6 +200,57 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
             console.log("[SafePasskeySend] Safe client created, Safe address:", safeAccountAddress?.slice(0, 10) + "...");
+            
+            // PRE-FLIGHT BALANCE CHECK: Verify the Safe has sufficient balance before sending
+            // This prevents failed on-chain transactions from empty wallets
+            if (safeAccountAddress) {
+                const publicClient = getPublicClient(effectiveChainId);
+                
+                if (tokenAddress && tokenDecimals !== undefined) {
+                    // Check ERC-20 token balance
+                    const erc20Abi = [{ 
+                        name: 'balanceOf', 
+                        type: 'function', 
+                        inputs: [{ name: 'account', type: 'address' }], 
+                        outputs: [{ name: '', type: 'uint256' }] 
+                    }] as const;
+                    
+                    try {
+                        const tokenBalance = await publicClient.readContract({
+                            address: tokenAddress,
+                            abi: erc20Abi,
+                            functionName: 'balanceOf',
+                            args: [safeAccountAddress],
+                        }) as bigint;
+                        
+                        const transferAmount = parseUnits(amount, tokenDecimals);
+                        if (tokenBalance < transferAmount) {
+                            console.log(`[SafePasskeySend] Insufficient token balance: ${formatUnits(tokenBalance, tokenDecimals)} < ${amount}`);
+                            setError(`Insufficient balance. Your wallet has ${formatUnits(tokenBalance, tokenDecimals)} tokens but you're trying to send ${amount}. Deposit tokens first.`);
+                            setStatus("error");
+                            return null;
+                        }
+                    } catch (err) {
+                        console.log("[SafePasskeySend] Could not verify token balance, proceeding anyway:", err);
+                    }
+                } else {
+                    // Check native ETH balance
+                    try {
+                        const ethBalance = await publicClient.getBalance({ address: safeAccountAddress });
+                        const transferAmount = parseEther(amount);
+                        
+                        if (ethBalance < transferAmount) {
+                            console.log(`[SafePasskeySend] Insufficient ETH balance: ${formatEther(ethBalance)} < ${amount}`);
+                            setError(`Insufficient balance. Your wallet has ${formatEther(ethBalance)} ETH but you're trying to send ${amount} ETH. Deposit ETH first.`);
+                            setStatus("error");
+                            return null;
+                        }
+                    } catch (err) {
+                        console.log("[SafePasskeySend] Could not verify ETH balance, proceeding anyway:", err);
+                    }
+                }
+            }
+            
             setStatus("sending");
 
             // Send the transaction with explicit gas limits for WebAuthn

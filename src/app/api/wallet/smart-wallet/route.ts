@@ -6,7 +6,7 @@ import {
     getSmartWalletAddress, 
     getSupportedChains,
 } from "@/lib/smartAccount";
-import { getSafeAddress } from "@/lib/safeWallet";
+import { getSafeAddress, getPasskeySafeAddress } from "@/lib/safeWallet";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -145,28 +145,38 @@ export async function GET(request: NextRequest) {
                     // Has passkey - Safe is owned by the passkey signer
                     passkeyCredentialId = credential.credential_id;
                     
-                    // Check if we have a stored address (prevents address changes)
-                    if (user?.smart_wallet_address) {
-                        smartWalletAddress = user.smart_wallet_address as Address;
-                        console.log("[SmartWallet] Using stored passkey-based Safe:", smartWalletAddress.slice(0, 10));
-                    } else {
-                        // Calculate Safe from passkey signer using permissionless.js
-                        smartWalletAddress = await getSafeAddress({ 
-                            ownerAddress: credential.safe_signer_address as Address, 
-                            chainId: 8453 
-                        });
-                        
-                        // Store permanently - this passkey now controls this Safe
-                        await supabase
-                            .from("shout_users")
-                            .update({ 
-                                smart_wallet_address: smartWalletAddress,
-                                updated_at: new Date().toISOString(),
-                            })
-                            .eq("wallet_address", spritzId);
-                        
-                        console.log("[SmartWallet] Created passkey-based Safe:", smartWalletAddress.slice(0, 10));
+                    // IMPORTANT: Always calculate the correct passkey Safe address
+                    // This MUST use getPasskeySafeAddress (not getSafeAddress) because:
+                    // - getSafeAddress creates a Safe with an EOA owner
+                    // - getPasskeySafeAddress creates a Safe with a WebAuthn owner
+                    // - These produce DIFFERENT addresses even with the same "owner"!
+                    const calculatedAddress = await getPasskeySafeAddress(
+                        credential.public_key_x!,
+                        credential.public_key_y!,
+                        8453 // Base chain
+                    );
+                    
+                    // Check if stored address matches
+                    if (user?.smart_wallet_address && 
+                        user.smart_wallet_address.toLowerCase() !== calculatedAddress.toLowerCase()) {
+                        console.warn("[SmartWallet] ADDRESS MISMATCH DETECTED!");
+                        console.warn("[SmartWallet] Stored (WRONG):", user.smart_wallet_address);
+                        console.warn("[SmartWallet] Calculated (CORRECT):", calculatedAddress);
+                        // Use the CORRECT address - the calculated one
                     }
+                    
+                    smartWalletAddress = calculatedAddress;
+                    
+                    // Always update to ensure correct address is stored
+                    await supabase
+                        .from("shout_users")
+                        .update({ 
+                            smart_wallet_address: smartWalletAddress,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("wallet_address", spritzId);
+                    
+                    console.log("[SmartWallet] Passkey-based Safe address:", smartWalletAddress.slice(0, 10));
                     
                     canSign = true;
                     signerType = "passkey";

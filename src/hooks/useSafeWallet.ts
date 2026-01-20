@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useAccount, useSignMessage, useSignTypedData, useWalletClient, useSwitchChain } from "wagmi";
-import { type Address, type Hex, parseEther, parseUnits, formatEther } from "viem";
+import { type Address, type Hex, parseEther, parseUnits, formatEther, formatUnits } from "viem";
 import {
     getSafeAddress,
     isSafeDeployed,
@@ -15,6 +15,7 @@ import {
     SAFE_SUPPORTED_CHAINS,
     chainRequiresErc20Payment,
     checkPaymasterAllowance,
+    getPublicClient,
     type SendTransactionParams,
     type PasskeyCredential,
 } from "@/lib/safeWallet";
@@ -434,6 +435,56 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const safeAccountAddress = (safeClient as any).account?.address as Address | undefined;
             console.log(`[SafeWallet] Safe account address: ${safeAccountAddress}, forceNativeGas: ${forceNativeGas}, chainId: ${targetChainId}`);
+
+            // PRE-FLIGHT BALANCE CHECK: Verify the Safe has sufficient balance before sending
+            // This prevents failed on-chain transactions from empty/underfunded wallets
+            if (safeAccountAddress) {
+                const publicClient = getPublicClient(targetChainId);
+                
+                if (tokenAddress && tokenDecimals !== undefined) {
+                    // Check ERC-20 token balance
+                    const erc20Abi = [{ 
+                        name: 'balanceOf', 
+                        type: 'function', 
+                        inputs: [{ name: 'account', type: 'address' }], 
+                        outputs: [{ name: '', type: 'uint256' }] 
+                    }] as const;
+                    
+                    try {
+                        const tokenBalance = await publicClient.readContract({
+                            address: tokenAddress,
+                            abi: erc20Abi,
+                            functionName: 'balanceOf',
+                            args: [safeAccountAddress],
+                        }) as bigint;
+                        
+                        const transferAmount = parseUnits(amount, tokenDecimals);
+                        if (tokenBalance < transferAmount) {
+                            console.log(`[SafeWallet] Insufficient token balance: ${formatUnits(tokenBalance, tokenDecimals)} < ${amount}`);
+                            setError(`Insufficient balance. Your Safe has ${formatUnits(tokenBalance, tokenDecimals)} tokens but you're trying to send ${amount}. Deposit tokens to your Safe first at ${safeAccountAddress}`);
+                            setStatus("error");
+                            return null;
+                        }
+                    } catch (err) {
+                        console.log("[SafeWallet] Could not verify token balance, proceeding anyway:", err);
+                    }
+                } else {
+                    // Check native ETH balance
+                    try {
+                        const ethBalance = await publicClient.getBalance({ address: safeAccountAddress });
+                        const transferAmount = parseEther(amount);
+                        
+                        if (ethBalance < transferAmount) {
+                            console.log(`[SafeWallet] Insufficient ETH balance: ${formatEther(ethBalance)} < ${amount}`);
+                            setError(`Insufficient balance. Your Safe has ${formatEther(ethBalance)} ETH but you're trying to send ${amount} ETH. Deposit ETH to your Safe first at ${safeAccountAddress}`);
+                            setStatus("error");
+                            return null;
+                        }
+                    } catch (err) {
+                        console.log("[SafeWallet] Could not verify ETH balance, proceeding anyway:", err);
+                    }
+                }
+            }
 
             // Send the transaction - handle both native ETH and ERC20 tokens
             const sendOptions = {

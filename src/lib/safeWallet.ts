@@ -391,6 +391,70 @@ export async function getSafeAddress(config: SafeWalletConfig): Promise<Address>
 }
 
 /**
+ * Calculate the Safe address for a passkey user.
+ * 
+ * IMPORTANT: This MUST use the same calculation as createPasskeySafeAccountClient
+ * to ensure the displayed address matches where transactions are sent from.
+ * 
+ * The key difference from getSafeAddress is that this uses a WebAuthn account
+ * as the owner, which includes SafeWebAuthnSharedSigner configuration.
+ */
+export async function getPasskeySafeAddress(
+    publicKeyX: string, 
+    publicKeyY: string, 
+    chainId: number = 8453
+): Promise<Address> {
+    const chain = SAFE_SUPPORTED_CHAINS[chainId];
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    const publicClient = getPublicClient(chainId);
+
+    // Format public key exactly as createPasskeySafeAccountClient does
+    const xHex = publicKeyX.replace(/^0x/i, '');
+    const yHex = publicKeyY.replace(/^0x/i, '');
+    const xPadded = xHex.padStart(64, '0');
+    const yPadded = yHex.padStart(64, '0');
+    const formattedPublicKey = `0x${xPadded}${yPadded}` as Hex;
+
+    // We need a dummy credential ID for address calculation
+    // The credential ID doesn't affect the Safe address, only the public key does
+    const dummyCredentialId = "address-calculation-only";
+    
+    // Determine rpId based on environment
+    const rpId = typeof window !== "undefined" 
+        ? window.location.hostname 
+        : process.env.NEXT_PUBLIC_VERCEL_URL?.replace(/^https?:\/\//, '') || "spritz.chat";
+
+    // Create WebAuthn account exactly as createPasskeySafeAccountClient does
+    const webAuthnAccount = toWebAuthnAccount({
+        credential: {
+            id: dummyCredentialId,
+            publicKey: formattedPublicKey,
+        },
+        rpId,
+    });
+
+    // Create Safe account with the WebAuthn account as owner
+    // This MUST match createPasskeySafeAccountClient exactly
+    const safeAccount = await toSafeSmartAccount({
+        client: publicClient,
+        owners: [webAuthnAccount],
+        version: "1.4.1",
+        entryPoint: {
+            address: entryPoint07Address,
+            version: "0.7",
+        },
+        saltNonce: BigInt(0),
+        safeWebAuthnSharedSignerAddress: "0x94a4F6affBd8975951142c3999aEAB7ecee555c2" as Address,
+        safeP256VerifierAddress: "0xA86e0054C51E4894D88762a017ECc5E5235f5DBA" as Address,
+    });
+
+    return safeAccount.address;
+}
+
+/**
  * Calculate the deterministic address for a vanilla Safe 1.4.1 multi-sig
  * This calculates the address using the same method as createProxyWithNonce
  * 
