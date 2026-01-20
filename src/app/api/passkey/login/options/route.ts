@@ -147,16 +147,28 @@ export async function POST(request: NextRequest) {
 
         console.log("[Passkey] Generated auth options for", useDevicePasskey ? "discoverable" : "specific user", "flow");
 
+        // IMPORTANT: Never cache authentication challenges - they must be fresh
         return NextResponse.json({
             options: optionsWithCredentials,
             rpId,
             useDevicePasskey,
+        }, {
+            headers: {
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            }
         });
     } catch (error) {
         console.error("[Passkey] Auth options error:", error);
         return NextResponse.json(
             { error: "Failed to generate authentication options" },
-            { status: 500 }
+            { 
+                status: 500,
+                headers: {
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                }
+            }
         );
     }
 }

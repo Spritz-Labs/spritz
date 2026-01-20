@@ -162,17 +162,29 @@ export async function POST(request: NextRequest) {
 
         console.log("[Passkey] Generated registration options for:", actualUserAddress, isRecoveryFlow ? "(recovery)" : "");
 
+        // IMPORTANT: Never cache registration challenges - they must be fresh
         return NextResponse.json({
             options,
             rpId,
             isRecoveryFlow,
             userAddress: actualUserAddress.toLowerCase(),
+        }, {
+            headers: {
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            }
         });
     } catch (error) {
         console.error("[Passkey] Registration options error:", error);
         return NextResponse.json(
             { error: "Failed to generate registration options" },
-            { status: 500 }
+            { 
+                status: 500,
+                headers: {
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                }
+            }
         );
     }
 }
