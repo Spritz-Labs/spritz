@@ -9,7 +9,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useWalletClient, usePublicClient, useAccount, useSignMessage, useSignTypedData } from "wagmi";
 import { useWalletReconnect } from "@/hooks/useWalletReconnect";
-import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas } from "@/lib/safeWallet";
+import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas, deployVaultViaPasskey, type PasskeyCredential } from "@/lib/safeWallet";
 import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
 import type { Address, Hex } from "viem";
 
@@ -117,6 +117,51 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     // Signing functions for sponsored deployment
     const { signMessageAsync } = useSignMessage();
     const { signTypedDataAsync } = useSignTypedData();
+    
+    // Passkey credential for passkey users
+    const [passkeyCredential, setPasskeyCredential] = useState<PasskeyCredential | null>(null);
+    const [isPasskeyUser, setIsPasskeyUser] = useState(false);
+    
+    // Check if user is a passkey user (no connected wallet but has userAddress)
+    const canDeployWithPasskey = isPasskeyUser && !!passkeyCredential && useSponsoredGas;
+    const canDeployWithWallet = isConnected && !!walletClient;
+    const canDeploy = canDeployWithPasskey || canDeployWithWallet;
+    
+    // Load passkey credential for passkey users
+    useEffect(() => {
+        const loadPasskeyCredential = async () => {
+            if (!userAddress) return;
+            
+            try {
+                const response = await fetch(`/api/passkey/credential?address=${userAddress}`, {
+                    credentials: "include",
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.credentialId && data.publicKeyX && data.publicKeyY) {
+                        setPasskeyCredential({
+                            credentialId: data.credentialId,
+                            publicKey: {
+                                x: data.publicKeyX,
+                                y: data.publicKeyY,
+                            },
+                        });
+                        // User has a passkey - they can use passkey deployment
+                        setIsPasskeyUser(true);
+                        // Default to sponsored gas for passkey users (they can't use EOA anyway)
+                        if (!isConnected) {
+                            setUseSponsoredGas(true);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("[VaultList] Error loading passkey credential:", err);
+            }
+        };
+        
+        loadPasskeyCredential();
+    }, [userAddress, isConnected]);
 
     // Get gas cost estimate based on chain
     const getDeployGasCost = (chainId: number): { cost: string; isHigh: boolean; isSponsored: boolean } => {
@@ -181,9 +226,11 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             let txHash: Hex;
             let safeAddress: Address;
 
-            // On Mainnet (no sponsorship) or if EOA toggle is enabled, use EOA
-            // Otherwise, use Smart Wallet with sponsored gas
-            // Use EOA by default (single tx approval), sponsored gas is opt-in
+            // Deployment paths:
+            // 1. No sponsored gas OR chain doesn't support it → EOA deployment (requires connected wallet)
+            // 2. Sponsored gas + passkey user → Passkey-based Smart Wallet deployment
+            // 3. Sponsored gas + wallet connected → Wallet-based Smart Wallet deployment
+            
             if (!useSponsoredGas || !gasCost.isSponsored) {
                 // EOA deployment - connected wallet pays gas directly
                 if (!walletClient) {
@@ -205,21 +252,54 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 );
                 txHash = result.txHash;
                 safeAddress = result.safeAddress;
+                
+            } else if (passkeyCredential && isPasskeyUser && !isConnected) {
+                // PASSKEY DEPLOYMENT - for users without a connected wallet
+                // Uses their passkey to sign via their Smart Wallet
+                console.log("[VaultList] Deploying via Passkey Smart Wallet (sponsored gas)");
+                
+                try {
+                    const result = await deployVaultViaPasskey(
+                        deployInfo.owners as Address[],
+                        deployInfo.threshold,
+                        deployInfo.chainId,
+                        passkeyCredential,
+                        BigInt(deployInfo.saltNonce || "0")
+                    );
+                    txHash = result.txHash;
+                    safeAddress = result.safeAddress;
+                } catch (passkeyError: unknown) {
+                    const errorMsg = passkeyError instanceof Error ? passkeyError.message : String(passkeyError);
+                    
+                    // If bundler simulation fails, show helpful error
+                    if (errorMsg.includes("Create2 call failed") || errorMsg.includes("simulation")) {
+                        console.log("[VaultList] Passkey bundler simulation failed:", errorMsg);
+                        throw new Error("Deployment failed. The vault may already exist - try the Sync button.");
+                    }
+                    
+                    throw passkeyError;
+                }
+                
             } else {
-                // Smart Wallet deployment - sponsored gas via paymaster
+                // WALLET-BASED Smart Wallet deployment - sponsored gas via paymaster
                 // Try to ensure wallet is connected (handles PWA resume scenarios)
                 if (!connectedAddress || !isConnected) {
                     console.log("[VaultList] Wallet appears disconnected, attempting reconnect...");
                     const reconnected = await ensureConnected();
                     if (!reconnected) {
-                        setDeployError("Wallet disconnected. Please reconnect your wallet and try again.");
+                        // If we have a passkey, suggest using that instead
+                        if (passkeyCredential) {
+                            setDeployError("Wallet not connected. Make sure 'Use sponsored gas' is checked to deploy with your passkey.");
+                        } else {
+                            setDeployError("Wallet disconnected. Please reconnect your wallet and try again.");
+                        }
                         setIsDeploying(false);
                         return;
                     }
                     console.log("[VaultList] Wallet reconnected successfully");
                 }
 
-                console.log("[VaultList] Deploying via Smart Wallet (sponsored gas)");
+                console.log("[VaultList] Deploying via Wallet Smart Wallet (sponsored gas)");
                 
                 try {
                     const result = await deployVaultViaSponsoredGas(
@@ -353,7 +433,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         } finally {
             setIsDeploying(false);
         }
-    }, [walletClient, publicClient, selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults, useSponsoredGas, connectedAddress, isConnected, signMessageAsync, signTypedDataAsync]);
+    }, [walletClient, publicClient, selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults, useSponsoredGas, connectedAddress, isConnected, signMessageAsync, signTypedDataAsync, passkeyCredential, isPasskeyUser]);
 
     // Sync deployment status - checks on-chain state and updates DB if needed
     const [isSyncing, setIsSyncing] = useState(false);
@@ -1100,7 +1180,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                     <div className="flex items-center gap-3 mb-3">
                                         <button
                                             onClick={() => handleDeployVault(selectedVault.id)}
-                                            disabled={isDeploying || !isConnected}
+                                            disabled={isDeploying || !canDeploy}
                                             className={`px-4 py-2 font-medium rounded-lg transition-colors flex items-center gap-2 ${
                                                 gasCost.isHigh 
                                                     ? 'bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-600 text-black' 
@@ -1321,7 +1401,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         </p>
                                         <button
                                             onClick={() => handleDeployVault(selectedVault.id)}
-                                            disabled={isDeploying || !walletClient}
+                                            disabled={isDeploying || !canDeploy}
                                             className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-600 text-black font-medium rounded-lg transition-colors"
                                         >
                                             {isDeploying ? "Deploying..." : "Deploy Vault"}
