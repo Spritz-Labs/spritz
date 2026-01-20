@@ -209,13 +209,36 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
             console.log("[VaultList] Safe deployment tx:", txHash, "Safe:", safeAddress);
 
-            // Wait for confirmation
+            // Wait for transaction confirmation
             if (publicClient) {
+                console.log("[VaultList] Waiting for transaction confirmation...");
                 await publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 1 });
+                console.log("[VaultList] Transaction confirmed, verifying on-chain deployment...");
             }
 
-            // Update database
-            await confirmDeployment(vaultId, txHash);
+            // Poll for on-chain deployment with retries (bundler transactions can have slight delays)
+            let deployed = false;
+            let retries = 0;
+            const maxRetries = 10;
+            const retryDelay = 2000; // 2 seconds
+
+            while (!deployed && retries < maxRetries) {
+                // Small delay before checking
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                
+                try {
+                    // Use the deploy API to check and update status
+                    await confirmDeployment(vaultId, txHash);
+                    deployed = true;
+                    console.log("[VaultList] Vault deployment confirmed!");
+                } catch (confirmError) {
+                    retries++;
+                    console.log(`[VaultList] Deployment check attempt ${retries}/${maxRetries}...`);
+                    if (retries >= maxRetries) {
+                        throw new Error("Deployment verification timed out. The transaction was sent - please refresh to check status.");
+                    }
+                }
+            }
 
             // Refresh vault details
             const updatedVault = await getVault(vaultId);
