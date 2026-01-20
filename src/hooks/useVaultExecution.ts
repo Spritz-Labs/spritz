@@ -505,24 +505,45 @@ export function useVaultExecution() {
                 throw new Error(`Unsupported chain: ${chainId}`);
             }
 
-            // Execute the transaction
+            // Prepare the transaction arguments
+            const txArgs = [
+                to as Address,
+                BigInt(value || "0"),
+                data,
+                operation,
+                safeTxGas,
+                baseGas,
+                gasPrice,
+                gasToken,
+                refundReceiver,
+                concatenatedSigs,
+            ] as const;
+
+            // Estimate gas first to help wallets that have issues with complex Safe transactions
+            let gasEstimate: bigint | undefined;
+            try {
+                gasEstimate = await publicClient.estimateContractGas({
+                    address: safeAddress,
+                    abi: SAFE_ABI,
+                    functionName: "execTransaction",
+                    args: txArgs,
+                    account: userAddress,
+                });
+                // Add 20% buffer for safety
+                gasEstimate = (gasEstimate * BigInt(120)) / BigInt(100);
+                console.log("[VaultExecution] Estimated gas:", gasEstimate.toString());
+            } catch (gasErr) {
+                console.warn("[VaultExecution] Gas estimation failed, letting wallet estimate:", gasErr);
+            }
+
+            // Execute the transaction with explicit gas if estimation succeeded
             const hash = await walletClient.writeContract({
                 address: safeAddress,
                 abi: SAFE_ABI,
                 functionName: "execTransaction",
-                args: [
-                    to as Address,
-                    BigInt(value || "0"),
-                    data,
-                    operation,
-                    safeTxGas,
-                    baseGas,
-                    gasPrice,
-                    gasToken,
-                    refundReceiver,
-                    concatenatedSigs,
-                ],
+                args: txArgs,
                 chain,
+                ...(gasEstimate ? { gas: gasEstimate } : {}),
             });
 
             console.log("[VaultExecution] Transaction sent:", hash);
