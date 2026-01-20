@@ -9,8 +9,11 @@ const supabase = supabaseUrl && supabaseKey
     ? createClient(supabaseUrl, supabaseKey)
     : null;
 
-// Admin message expiry time (5 minutes)
-const ADMIN_MESSAGE_EXPIRY_MS = 5 * 60 * 1000;
+// Admin message expiry time (24 hours)
+// Note: The signature includes a timestamp for initial verification,
+// but credentials are cached for 24 hours in the client. The signature
+// itself remains valid - the timestamp is just to prevent ancient replays.
+const ADMIN_MESSAGE_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 // Extract and validate timestamp from message
 function validateMessageTimestamp(message: string): boolean {
