@@ -245,31 +245,14 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         throw new Error("Wallet disconnected. Please reconnect your wallet and try again.");
                     }
                     
-                    // If bundler simulation fails with Create2 error, try EOA as fallback
+                    // If bundler simulation fails, show helpful error (don't auto-fallback to EOA)
                     if (errorMsg.includes("Create2 call failed") || errorMsg.includes("simulation")) {
-                        console.log("[VaultList] Bundler simulation failed, falling back to EOA deployment...");
-                        
-                        if (!walletClient || !isConnected) {
-                            throw new Error("Bundler unavailable and wallet not connected for fallback. Please reconnect.");
-                        }
-                        
-                        const eoaResult = await deployMultiSigSafeWithEOA(
-                            deployInfo.owners as Address[],
-                            deployInfo.threshold,
-                            deployInfo.chainId,
-                            walletClient as {
-                                account: { address: Address };
-                                writeContract: (args: unknown) => Promise<Hex>;
-                            },
-                            BigInt(deployInfo.saltNonce || "0")
-                        );
-                        txHash = eoaResult.txHash;
-                        safeAddress = eoaResult.safeAddress;
-                        console.log("[VaultList] EOA fallback deployment submitted:", txHash);
-                    } else {
-                        // Re-throw other errors
-                        throw sponsoredError;
+                        console.log("[VaultList] Bundler simulation failed:", errorMsg);
+                        throw new Error("Sponsored gas unavailable. Uncheck 'Use sponsored gas' to deploy with your wallet instead.");
                     }
+                    
+                    // Re-throw other errors
+                    throw sponsoredError;
                 }
             }
 
