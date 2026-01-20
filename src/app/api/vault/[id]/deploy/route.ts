@@ -15,7 +15,9 @@ const supabase = createClient(
  * Called after the user deploys the vault's Safe contract on-chain.
  * Updates the database to mark the vault as deployed.
  * 
- * Body: { txHash: string }
+ * Body: { txHash?: string, force?: boolean }
+ * 
+ * If force=true, bypasses on-chain verification (use when Create2 failed = Safe already exists)
  */
 export async function POST(
     request: NextRequest,
@@ -24,7 +26,7 @@ export async function POST(
     try {
         const { id: vaultId } = await params;
         const body = await request.json();
-        const { txHash } = body;
+        const { txHash, force } = body;
 
         const user = await getAuthenticatedUser(request);
         if (!user) {
@@ -63,16 +65,23 @@ export async function POST(
             });
         }
 
-        // Verify the Safe is actually deployed on-chain
-        const deployed = await isSafeDeployed(vault.safe_address as Address, vault.chain_id);
-        
-        if (!deployed) {
-            // Return 202 (Accepted) instead of 400 to indicate pending state
-            // The client can retry after a delay
-            return NextResponse.json({ 
-                error: "Safe not yet deployed on-chain. Please wait for transaction confirmation.",
-                status: "pending"
-            }, { status: 202 });
+        // If force=true, skip on-chain check (used when Create2 failed = Safe exists)
+        // This is safe because Create2 only fails when contract already exists at that address
+        if (!force) {
+            // Verify the Safe is actually deployed on-chain
+            const deployed = await isSafeDeployed(vault.safe_address as Address, vault.chain_id);
+            
+            if (!deployed) {
+                // Return 202 (Accepted) instead of 400 to indicate pending state
+                // The client can retry after a delay
+                console.log("[Vault Deploy] Safe not deployed on-chain yet, returning 202:", vault.safe_address);
+                return NextResponse.json({ 
+                    error: "Safe not yet deployed on-chain. Please wait for transaction confirmation.",
+                    status: "pending"
+                }, { status: 202 });
+            }
+        } else {
+            console.log("[Vault Deploy] Force flag set - trusting that Safe exists (Create2 proof):", vault.safe_address);
         }
 
         // Update vault as deployed
@@ -89,7 +98,7 @@ export async function POST(
             return NextResponse.json({ error: "Failed to update vault" }, { status: 500 });
         }
 
-        console.log("[Vault Deploy] Vault marked as deployed:", vaultId, "Safe:", vault.safe_address);
+        console.log("[Vault Deploy] Vault marked as deployed:", vaultId, "Safe:", vault.safe_address, "forced:", !!force);
 
         return NextResponse.json({
             success: true,

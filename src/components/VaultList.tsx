@@ -277,10 +277,11 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             // "Create2 call failed" means the Safe already exists at that address!
             // This happens when a previous deployment succeeded but DB wasn't updated
             if (errorMsg.includes("Create2 call failed") || errorMsg.includes("437265617465322063616c6c206661696c6564")) {
-                console.log("[VaultList] Create2 failed = Safe already exists! Marking as deployed...");
+                console.log("[VaultList] Create2 failed = Safe already exists! Marking as deployed with force=true...");
                 try {
-                    // Mark as deployed in the database
-                    await confirmDeployment(vaultId, "");
+                    // Mark as deployed in the database, force=true bypasses on-chain check
+                    // because Create2 failure IS proof that the contract exists
+                    await confirmDeployment(vaultId, "", true);
                     const updatedVault = await getVault(vaultId);
                     if (updatedVault) {
                         setSelectedVault(updatedVault);

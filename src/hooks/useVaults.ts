@@ -169,7 +169,8 @@ export function useVaults(userAddress: string | null) {
     }, [userAddress]);
 
     // Confirm deployment after on-chain tx
-    const confirmDeployment = useCallback(async (vaultId: string, txHash: string) => {
+    // force=true bypasses on-chain check (use when Create2 failed = Safe already exists)
+    const confirmDeployment = useCallback(async (vaultId: string, txHash: string, force: boolean = false) => {
         if (!userAddress) {
             throw new Error("Not authenticated");
         }
@@ -178,7 +179,7 @@ export function useVaults(userAddress: string | null) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ txHash }),
+            body: JSON.stringify({ txHash, force }),
         });
 
         // Handle 202 (Accepted but pending) - Safe not yet visible on-chain
