@@ -207,22 +207,53 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 }
 
                 console.log("[VaultList] Deploying via Smart Wallet (sponsored gas)");
-                const result = await deployVaultViaSponsoredGas(
-                    deployInfo.owners as Address[],
-                    deployInfo.threshold,
-                    deployInfo.chainId,
-                    connectedAddress as Address,
-                    async (message: string) => {
-                        return await signMessageAsync({ message }) as Hex;
-                    },
-                    async (data: unknown) => {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        return await signTypedDataAsync(data as any) as Hex;
-                    },
-                    BigInt(deployInfo.saltNonce || "0")
-                );
-                txHash = result.txHash;
-                safeAddress = result.safeAddress;
+                
+                try {
+                    const result = await deployVaultViaSponsoredGas(
+                        deployInfo.owners as Address[],
+                        deployInfo.threshold,
+                        deployInfo.chainId,
+                        connectedAddress as Address,
+                        async (message: string) => {
+                            return await signMessageAsync({ message }) as Hex;
+                        },
+                        async (data: unknown) => {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            return await signTypedDataAsync(data as any) as Hex;
+                        },
+                        BigInt(deployInfo.saltNonce || "0")
+                    );
+                    txHash = result.txHash;
+                    safeAddress = result.safeAddress;
+                } catch (sponsoredError: unknown) {
+                    const errorMsg = sponsoredError instanceof Error ? sponsoredError.message : String(sponsoredError);
+                    
+                    // If bundler simulation fails with Create2 error, try EOA as fallback
+                    if (errorMsg.includes("Create2 call failed") || errorMsg.includes("simulation")) {
+                        console.log("[VaultList] Bundler simulation failed, falling back to EOA deployment...");
+                        
+                        if (!walletClient) {
+                            throw new Error("Bundler unavailable and wallet not connected for fallback");
+                        }
+                        
+                        const eoaResult = await deployMultiSigSafeWithEOA(
+                            deployInfo.owners as Address[],
+                            deployInfo.threshold,
+                            deployInfo.chainId,
+                            walletClient as {
+                                account: { address: Address };
+                                writeContract: (args: unknown) => Promise<Hex>;
+                            },
+                            BigInt(deployInfo.saltNonce || "0")
+                        );
+                        txHash = eoaResult.txHash;
+                        safeAddress = eoaResult.safeAddress;
+                        console.log("[VaultList] EOA fallback deployment submitted:", txHash);
+                    } else {
+                        // Re-throw other errors
+                        throw sponsoredError;
+                    }
+                }
             }
 
             console.log("[VaultList] Safe deployment tx:", txHash, "Safe:", safeAddress);
