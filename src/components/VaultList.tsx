@@ -152,6 +152,10 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             const gasCost = getDeployGasCost(deployInfo.chainId);
             console.log("[VaultList] Deploying vault Safe:", deployInfo);
             console.log("[VaultList] Chain:", deployInfo.chainId, "Owners:", deployInfo.owners.length);
+            console.log("[VaultList] saltNonce from API:", deployInfo.saltNonce, "as BigInt:", BigInt(deployInfo.saltNonce || "0").toString());
+            console.log("[VaultList] saltNonce hex:", "0x" + BigInt(deployInfo.saltNonce || "0").toString(16));
+            console.log("[VaultList] Stored safe address:", deployInfo.safeAddress);
+            console.log("[VaultList] Sorted owners:", [...(deployInfo.owners as string[])].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
             console.log("[VaultList] Using EOA:", useEOAForDeploy, "Sponsored:", gasCost.isSponsored);
 
             // Double-check on-chain status before deploying (in case previous attempt succeeded)

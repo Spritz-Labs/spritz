@@ -1432,6 +1432,8 @@ export async function deployVaultViaSponsoredGas(
     );
 
     log(`[SafeWallet] Deploying vault via Smart Wallet (sponsored) for ${sortedOwners.length} owners, threshold ${threshold}`);
+    log(`[SafeWallet] Using saltNonce: ${saltNonce.toString()} (hex: 0x${saltNonce.toString(16)})`);
+    log(`[SafeWallet] Sorted owners: ${sortedOwners.join(', ')}`);
 
     // Create a Smart Account Client for the user
     const smartAccountClient = await createSafeAccountClient(
@@ -1458,6 +1460,10 @@ export async function deployVaultViaSponsoredGas(
         ],
     });
 
+    // Calculate expected address BEFORE deployment to verify parameters
+    const expectedAddress = await getMultiSigSafeAddress(sortedOwners, threshold, chainId, saltNonce);
+    log(`[SafeWallet] Expected Safe address: ${expectedAddress}`);
+
     // Encode the factory call
     const factoryCallData = encodeFunctionData({
         abi: SAFE_PROXY_FACTORY_ABI,
@@ -1465,7 +1471,8 @@ export async function deployVaultViaSponsoredGas(
         args: [SAFE_SINGLETON_141, setupData, saltNonce],
     });
 
-    log(`[SafeWallet] Sending vault deployment via Smart Wallet (sponsored gas)...`);
+    log(`[SafeWallet] Factory call encoded. Sending via Smart Wallet (sponsored gas)...`);
+    log(`[SafeWallet] Factory: ${SAFE_PROXY_FACTORY_141}, Singleton: ${SAFE_SINGLETON_141}`);
 
     // Send the transaction through the user's Smart Wallet
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
