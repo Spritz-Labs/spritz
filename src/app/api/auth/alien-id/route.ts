@@ -26,9 +26,73 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Optionally verify the token with Alien's API
-        // For now, we trust the client-side SDK verification
-        // In production, you might want to verify the JWT with Alien's public key
+        if (!token) {
+            return NextResponse.json(
+                { success: false, error: "Token required for verification" },
+                { status: 400 }
+            );
+        }
+
+        // SECURITY: Verify the Alien ID token
+        // The token is a JWT that should be verified with Alien's public key
+        // For now, we do basic validation - the token must exist and contain the claimed address
+        try {
+            // Decode JWT payload (base64url encoded middle part)
+            const parts = token.split(".");
+            if (parts.length !== 3) {
+                console.error("[AlienId] Invalid token format - not a JWT");
+                return NextResponse.json(
+                    { success: false, error: "Invalid token format" },
+                    { status: 400 }
+                );
+            }
+            
+            // Decode the payload
+            const payloadBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(atob(payloadBase64));
+            
+            // Extract user identifier from token
+            // Alien SDK typically puts user info in 'sub' or a custom claim
+            const tokenAddress = payload.sub || payload.user_id || payload.address || payload.wallet_address;
+            
+            if (!tokenAddress) {
+                console.error("[AlienId] Token missing user identifier");
+                return NextResponse.json(
+                    { success: false, error: "Token missing user identifier" },
+                    { status: 400 }
+                );
+            }
+            
+            // CRITICAL: Verify the token's address matches the claimed address
+            // This prevents an attacker from using their valid token to claim someone else's address
+            if (tokenAddress.toLowerCase() !== alienAddress.toLowerCase()) {
+                console.error("[AlienId] SECURITY: Token address mismatch!", {
+                    claimed: alienAddress.slice(0, 15),
+                    inToken: tokenAddress.slice(0, 15),
+                });
+                return NextResponse.json(
+                    { success: false, error: "Token does not match claimed address" },
+                    { status: 401 }
+                );
+            }
+            
+            // Check token expiration if present
+            if (payload.exp && payload.exp * 1000 < Date.now()) {
+                console.error("[AlienId] Token expired");
+                return NextResponse.json(
+                    { success: false, error: "Token has expired" },
+                    { status: 401 }
+                );
+            }
+            
+            console.log("[AlienId] Token validated for:", alienAddress.slice(0, 20) + "...");
+        } catch (tokenError) {
+            console.error("[AlienId] Token validation error:", tokenError);
+            return NextResponse.json(
+                { success: false, error: "Invalid token" },
+                { status: 400 }
+            );
+        }
         
         console.log("[AlienId] Creating session for:", alienAddress.slice(0, 20) + "...");
         
