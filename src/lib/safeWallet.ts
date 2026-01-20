@@ -1329,6 +1329,100 @@ export async function deployMultiSigSafeWithEOA(
 }
 
 /**
+ * Deploy a multi-signature Safe for a vault via user's Safe Smart Wallet
+ * This uses the ERC-4337 bundler with paymaster for sponsored gas on L2s
+ * 
+ * @param owners - Array of owner addresses for the new vault
+ * @param threshold - Number of required signatures for the vault
+ * @param chainId - The chain ID
+ * @param signerAddress - The user's EOA address (Smart Wallet owner)
+ * @param signMessage - Function to sign messages
+ * @param signTypedData - Function to sign typed data
+ * @param saltNonce - Salt nonce for deterministic address
+ */
+export async function deployVaultViaSponsoredGas(
+    owners: Address[],
+    threshold: number,
+    chainId: number,
+    signerAddress: Address,
+    signMessage: (message: string) => Promise<Hex>,
+    signTypedData: (data: unknown) => Promise<Hex>,
+    saltNonce: bigint = BigInt(0)
+): Promise<{ txHash: Hex; safeAddress: Address }> {
+    const chain = SAFE_SUPPORTED_CHAINS[chainId];
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    if (owners.length === 0) {
+        throw new Error("At least one owner is required");
+    }
+
+    if (threshold < 1 || threshold > owners.length) {
+        throw new Error(`Invalid threshold: ${threshold} for ${owners.length} owners`);
+    }
+
+    // Sort owners for deterministic address (same as getMultiSigSafeAddress)
+    const sortedOwners = [...owners].sort((a, b) => 
+        a.toLowerCase().localeCompare(b.toLowerCase())
+    );
+
+    log(`[SafeWallet] Deploying vault via Smart Wallet (sponsored) for ${sortedOwners.length} owners, threshold ${threshold}`);
+
+    // Create a Smart Account Client for the user
+    const smartAccountClient = await createSafeAccountClient(
+        signerAddress,
+        chainId,
+        signMessage,
+        signTypedData,
+        { forceNativeGas: false } // Use paymaster for sponsored gas
+    );
+
+    // Encode the Safe setup call with multiple owners
+    const setupData = encodeFunctionData({
+        abi: SAFE_SETUP_ABI,
+        functionName: "setup",
+        args: [
+            sortedOwners,  // owners array
+            BigInt(threshold),  // threshold
+            "0x0000000000000000000000000000000000000000" as Address,  // to (no module setup)
+            "0x" as Hex,     // data
+            SAFE_FALLBACK_HANDLER_141,  // fallbackHandler
+            "0x0000000000000000000000000000000000000000" as Address,  // paymentToken (native)
+            BigInt(0),       // payment
+            "0x0000000000000000000000000000000000000000" as Address,  // paymentReceiver
+        ],
+    });
+
+    // Encode the factory call
+    const factoryCallData = encodeFunctionData({
+        abi: SAFE_PROXY_FACTORY_ABI,
+        functionName: "createProxyWithNonce",
+        args: [SAFE_SINGLETON_141, setupData, saltNonce],
+    });
+
+    log(`[SafeWallet] Sending vault deployment via Smart Wallet (sponsored gas)...`);
+
+    // Send the transaction through the user's Smart Wallet
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const txHash = await smartAccountClient.sendTransaction({
+        calls: [{
+            to: SAFE_PROXY_FACTORY_141,
+            data: factoryCallData,
+            value: BigInt(0),
+        }],
+    } as any);
+
+    // Calculate the expected Safe address
+    const safeAddress = await getMultiSigSafeAddress(sortedOwners, threshold, chainId, saltNonce);
+
+    log(`[SafeWallet] Vault deployment tx via Smart Wallet: ${txHash}`);
+    log(`[SafeWallet] Expected Safe address: ${safeAddress}`);
+
+    return { txHash, safeAddress };
+}
+
+/**
  * Execute a Safe transaction directly (EOA pays gas)
  * 
  * This bypasses the ERC-4337 bundler system entirely.
