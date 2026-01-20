@@ -17,7 +17,25 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("Passkey");
 
-// Storage keys (new system)
+/**
+ * H-4 SECURITY NOTE: Session Token Storage Strategy
+ * 
+ * PRIMARY AUTH: HttpOnly cookies (set by server, cannot be accessed by JS)
+ * - All API calls include `credentials: "include"` to send cookies
+ * - Server validates session via HttpOnly cookie
+ * - This is the SECURE authentication mechanism
+ * 
+ * SECONDARY (localStorage): Used ONLY for client-side UI state
+ * - Tracks whether user appears logged in (for immediate UI rendering)
+ * - NOT used for actual authentication (that's the HttpOnly cookie)
+ * - If localStorage is compromised, attacker only gets UI state
+ * - Server always validates via HttpOnly cookie, which JS cannot access
+ * 
+ * Token is signed with HMAC-SHA256 to detect tampering, but the real
+ * security comes from the HttpOnly cookie that the client cannot forge.
+ */
+
+// Storage keys (new system) - for UI state only
 const SESSION_STORAGE_KEY = "spritz_passkey_session";
 const USER_ADDRESS_KEY = "spritz_passkey_address";
 
@@ -614,7 +632,10 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
                 }
             }
 
-            // Store session
+            // H-4 NOTE: Store session token in localStorage for UI state ONLY
+            // The actual authentication is via HttpOnly cookie (set by server)
+            // This localStorage token is just for client-side UI to know user is logged in
+            // Server always validates using the HttpOnly cookie, not this token
             localStorage.setItem(SESSION_STORAGE_KEY, sessionToken);
             localStorage.setItem(USER_ADDRESS_KEY, walletAddress);
 

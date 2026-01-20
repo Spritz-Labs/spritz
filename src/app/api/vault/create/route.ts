@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthenticatedUser } from "@/lib/session";
+import { requireAuthWithCsrf } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
 import { getMultiSigSafeAddress } from "@/lib/safeWallet";
+import { ApiError } from "@/lib/apiErrors";
+import { VAULT_MAX_MEMBERS, VAULT_NAME_MAX_LENGTH, VAULT_DESCRIPTION_MAX_LENGTH } from "@/lib/constants";
 import { 
     type Address,
     type Chain,
+    isAddress,
 } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from "viem/chains";
+import crypto from "crypto";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,13 +38,12 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     try {
-        // Get authenticated user
-        const session = await getAuthenticatedUser(request);
+        // H-5 FIX: Use CSRF-protected authentication
+        const session = await requireAuthWithCsrf(request);
+        if (session instanceof NextResponse) return session;
+        
         if (!session?.userAddress) {
-            return NextResponse.json(
-                { error: "Authentication required" },
-                { status: 401 }
-            );
+            return ApiError.unauthorized();
         }
 
         const body = await request.json();
@@ -53,37 +56,62 @@ export async function POST(request: NextRequest) {
             threshold 
         } = body;
 
-        // Validate inputs
+        // H-3 FIX: Comprehensive input validation
+        // Validate required fields
         if (!name || !chainId || !members || !threshold) {
-            return NextResponse.json(
-                { error: "Name, chainId, members, and threshold are required" },
-                { status: 400 }
-            );
+            return ApiError.badRequest("Name, chainId, members, and threshold are required");
+        }
+
+        // Validate name length
+        if (typeof name !== "string" || name.length > VAULT_NAME_MAX_LENGTH) {
+            return ApiError.validationError(`Name must be ${VAULT_NAME_MAX_LENGTH} characters or less`);
+        }
+
+        // Validate description length if provided
+        if (description && (typeof description !== "string" || description.length > VAULT_DESCRIPTION_MAX_LENGTH)) {
+            return ApiError.validationError(`Description must be ${VAULT_DESCRIPTION_MAX_LENGTH} characters or less`);
         }
 
         // Validate chain
         if (!VAULT_SUPPORTED_CHAINS[chainId]) {
-            return NextResponse.json(
-                { error: `Chain ${chainId} is not supported for vaults` },
-                { status: 400 }
-            );
+            return ApiError.badRequest(`Chain ${chainId} is not supported for vaults`);
         }
 
-        // Validate members
+        // H-3 FIX: Validate members array
         if (!Array.isArray(members) || members.length < 1) {
-            return NextResponse.json(
-                { error: "At least one member is required" },
-                { status: 400 }
-            );
+            return ApiError.badRequest("At least one member is required");
+        }
+
+        // H-3 FIX: Enforce maximum members limit (DoS prevention)
+        if (members.length > VAULT_MAX_MEMBERS - 1) { // -1 for creator
+            return ApiError.badRequest(`Maximum ${VAULT_MAX_MEMBERS} total members allowed (including creator)`);
+        }
+
+        // H-3 FIX: Validate each member address format
+        for (const member of members) {
+            if (!member.address || typeof member.address !== "string") {
+                return ApiError.validationError("Invalid member format: address required");
+            }
+            if (!isAddress(member.address)) {
+                return ApiError.validationError(`Invalid Ethereum address: ${member.address}`);
+            }
+        }
+
+        // H-3 FIX: Check for duplicate addresses
+        const memberAddressesSet = new Set(members.map((m: { address: string }) => m.address.toLowerCase()));
+        if (memberAddressesSet.size !== members.length) {
+            return ApiError.badRequest("Duplicate member addresses are not allowed");
+        }
+
+        // H-3 FIX: Ensure creator is not in members list
+        if (memberAddressesSet.has(session.userAddress.toLowerCase())) {
+            return ApiError.badRequest("Creator cannot be in the members list (they are added automatically)");
         }
 
         // Validate threshold
         const totalSigners = members.length + 1; // +1 for creator
         if (threshold < 1 || threshold > totalSigners) {
-            return NextResponse.json(
-                { error: `Threshold must be between 1 and ${totalSigners}` },
-                { status: 400 }
-            );
+            return ApiError.badRequest(`Threshold must be between 1 and ${totalSigners}`);
         }
 
         // Get creator's smart wallet address from shout_users
@@ -94,10 +122,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (!creatorUser?.smart_wallet_address) {
-            return NextResponse.json(
-                { error: "You need a Spritz Smart Wallet to create a vault" },
-                { status: 400 }
-            );
+            return ApiError.badRequest("You need a Spritz Smart Wallet to create a vault");
         }
 
         // Verify all members have smart wallets
@@ -119,12 +144,9 @@ export async function POST(request: NextRequest) {
             (m: { address: string }) => !memberWalletMap[m.address.toLowerCase()]
         );
         if (missingWallets.length > 0) {
-            return NextResponse.json(
-                { 
-                    error: "Some members don't have Spritz Smart Wallets",
-                    missingMembers: missingWallets.map((m: { address: string }) => m.address),
-                },
-                { status: 400 }
+            return ApiError.badRequest(
+                "Some members don't have Spritz Smart Wallets",
+                { missingMembers: missingWallets.map((m: { address: string }) => m.address) }
             );
         }
 
@@ -140,8 +162,11 @@ export async function POST(request: NextRequest) {
             a.toLowerCase().localeCompare(b.toLowerCase())
         );
 
-        // Generate a unique salt nonce based on timestamp and creator
-        const saltNonce = BigInt(Date.now());
+        // M-4 FIX: Generate a unique salt nonce using timestamp + random bytes
+        // This prevents address collisions even if vaults are created in rapid succession
+        const randomBytes = crypto.randomBytes(8);
+        const randomPart = BigInt("0x" + randomBytes.toString("hex"));
+        const saltNonce = BigInt(Date.now()) * BigInt(1000000000000) + randomPart;
 
         // Calculate the actual Safe multi-sig address using the Safe SDK
         // This is the REAL address where the Safe will be deployed
@@ -156,10 +181,7 @@ export async function POST(request: NextRequest) {
             console.log("[Vault] Calculated Safe address:", safeAddress);
         } catch (safeError) {
             console.error("[Vault] Error calculating Safe address:", safeError);
-            return NextResponse.json(
-                { error: "Failed to calculate vault address" },
-                { status: 500 }
-            );
+            return ApiError.internal("Failed to calculate vault address");
         }
 
         // Sanitize inputs
@@ -187,10 +209,7 @@ export async function POST(request: NextRequest) {
 
         if (vaultError) {
             console.error("[Vault] Error creating vault:", vaultError);
-            return NextResponse.json(
-                { error: "Failed to create vault" },
-                { status: 500 }
-            );
+            return ApiError.internal("Failed to create vault");
         }
 
         // Add members (including creator)
@@ -224,10 +243,7 @@ export async function POST(request: NextRequest) {
             console.error("[Vault] Error adding members:", membersError);
             // Cleanup vault
             await supabase.from("shout_vaults").delete().eq("id", vault.id);
-            return NextResponse.json(
-                { error: "Failed to add vault members" },
-                { status: 500 }
-            );
+            return ApiError.internal("Failed to add vault members");
         }
 
         return NextResponse.json({
@@ -252,9 +268,6 @@ export async function POST(request: NextRequest) {
         });
     } catch (error) {
         console.error("[Vault] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to create vault" },
-            { status: 500 }
-        );
+        return ApiError.internal("Failed to create vault");
     }
 }

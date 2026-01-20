@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/session";
+import { getAuthenticatedUser, requireAuthWithCsrf } from "@/lib/session";
 import { createClient } from "@supabase/supabase-js";
 import { type Address, isAddress } from "viem";
 import { getRecoveryInfo, getSafeOwners } from "@/lib/safeWallet";
+import { ApiError } from "@/lib/apiErrors";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -88,10 +89,9 @@ export async function GET(request: NextRequest) {
  * This endpoint just validates the recovery address.
  */
 export async function POST(request: NextRequest) {
-    const session = await getAuthenticatedUser(request);
-    if (!session) {
-        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-    }
+    // H-5 FIX: Use CSRF-protected authentication
+    const session = await requireAuthWithCsrf(request);
+    if (session instanceof NextResponse) return session;
 
     try {
         const body = await request.json();
@@ -99,18 +99,12 @@ export async function POST(request: NextRequest) {
 
         // Validate address format
         if (!recoveryAddress || !isAddress(recoveryAddress)) {
-            return NextResponse.json(
-                { error: "Invalid recovery address" },
-                { status: 400 }
-            );
+            return ApiError.badRequest("Invalid recovery address");
         }
 
         // Prevent adding zero address
         if (recoveryAddress === "0x0000000000000000000000000000000000000000") {
-            return NextResponse.json(
-                { error: "Cannot use zero address as recovery" },
-                { status: 400 }
-            );
+            return ApiError.badRequest("Cannot use zero address as recovery");
         }
 
         // Return success - client will handle the actual transaction
@@ -122,9 +116,6 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error("[RecoverySigner] Error:", error);
-        return NextResponse.json(
-            { error: "Failed to validate recovery address" },
-            { status: 500 }
-        );
+        return ApiError.internal("Failed to validate recovery address");
     }
 }

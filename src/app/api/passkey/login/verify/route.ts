@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { createClient } from "@supabase/supabase-js";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/types";
-import { checkRateLimit } from "@/lib/ratelimit";
+import { checkRateLimit, getClientIdentifier } from "@/lib/ratelimit";
 import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
+import { ApiError } from "@/lib/apiErrors";
+import { RESCUE_TOKEN_EXPIRY_MINUTES, RATE_LIMIT_RESCUE_PER_ADDRESS } from "@/lib/constants";
 import crypto from "crypto";
 
 // Generate address from credential ID (must match registration logic exactly)
@@ -11,6 +13,47 @@ function generateWalletAddressFromCredential(credentialId: string): string {
     const data = `spritz-passkey-wallet:${credentialId}`;
     const hash = crypto.createHash("sha256").update(data).digest("hex");
     return `0x${hash.slice(0, 40)}`;
+}
+
+/**
+ * SECURITY: Check rescue attempt rate limit per address
+ * Prevents brute-force rescue attacks
+ */
+async function checkRescueRateLimit(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase: any,
+    targetAddress: string,
+    clientIp: string
+): Promise<{ allowed: boolean; reason?: string }> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    
+    // Count recent rescue attempts for this address
+    const { count: addressAttempts } = await supabase
+        .from("passkey_challenges")
+        .select("*", { count: "exact", head: true })
+        .eq("ceremony_type", "rescue")
+        .eq("user_address", targetAddress)
+        .gte("created_at", oneHourAgo);
+    
+    if ((addressAttempts || 0) >= RATE_LIMIT_RESCUE_PER_ADDRESS) {
+        console.warn(`[Passkey] SECURITY: Rescue rate limit exceeded for address ${targetAddress.slice(0, 10)}`);
+        return { allowed: false, reason: "Too many rescue attempts for this account. Please try again later." };
+    }
+    
+    // Also check by IP to prevent mass rescue attempts
+    const { count: ipAttempts } = await supabase
+        .from("passkey_challenges")
+        .select("*", { count: "exact", head: true })
+        .eq("ceremony_type", "rescue")
+        .eq("client_ip", clientIp)
+        .gte("created_at", oneHourAgo);
+    
+    if ((ipAttempts || 0) >= 10) {
+        console.warn(`[Passkey] SECURITY: Rescue rate limit exceeded for IP`);
+        return { allowed: false, reason: "Too many rescue attempts. Please try again later." };
+    }
+    
+    return { allowed: true };
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -80,10 +123,7 @@ export async function POST(request: NextRequest) {
         } = await request.json();
 
         if (!credential || !challenge) {
-            return NextResponse.json(
-                { error: "Missing required fields" },
-                { status: 400 }
-            );
+            return ApiError.badRequest("Missing required fields");
         }
 
         // Log request info for debugging
@@ -94,69 +134,45 @@ export async function POST(request: NextRequest) {
         console.log("[Passkey] Credential ID from browser:", credential.id);
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const clientIp = getClientIdentifier(request);
 
-        // Try to find unused challenge
-        let { data: challengeData, error: challengeError } = await supabase
+        // H-1 FIX: Use atomic UPDATE with WHERE clause to prevent race conditions
+        // This atomically finds an unused, unexpired challenge AND marks it as used
+        const { data: consumedChallenge, error: consumeError } = await supabase
             .from("passkey_challenges")
-            .select("*")
+            .update({ used: true, consumed_at: new Date().toISOString() })
             .eq("challenge", challenge)
             .eq("ceremony_type", "authentication")
             .eq("used", false)
+            .gt("expires_at", new Date().toISOString())
+            .select()
             .single();
 
-        // If not found, check if it exists but was already used (race condition)
-        if (challengeError || !challengeData) {
-            const { data: anyChallenge } = await supabase
+        // If no challenge was consumed, check why for proper error message
+        if (consumeError || !consumedChallenge) {
+            const { data: existingChallenge } = await supabase
                 .from("passkey_challenges")
-                .select("*")
+                .select("used, expires_at")
                 .eq("challenge", challenge)
                 .eq("ceremony_type", "authentication")
                 .single();
             
-            if (anyChallenge) {
-                if (anyChallenge.used) {
-                    console.error("[Passkey] Challenge already used (possible replay attack)");
-                    return NextResponse.json(
-                        { error: "Challenge already used. Please try again." },
-                        { status: 400 }
-                    );
+            if (existingChallenge) {
+                if (existingChallenge.used) {
+                    console.error("[Passkey] Challenge already used (prevented replay attack)");
+                    return ApiError.badRequest("Challenge already used. Please try again.");
                 }
-                if (new Date(anyChallenge.expires_at) < new Date()) {
-                    console.error("[Passkey] Challenge expired at:", anyChallenge.expires_at);
-                    return NextResponse.json(
-                        { error: "Challenge has expired. Please try again." },
-                        { status: 400 }
-                    );
+                if (new Date(existingChallenge.expires_at) < new Date()) {
+                    console.error("[Passkey] Challenge expired at:", existingChallenge.expires_at);
+                    return ApiError.badRequest("Challenge has expired. Please try again.");
                 }
             }
             
-            console.error("[Passkey] Challenge not found in database");
-            console.error("[Passkey] Looking for:", challenge.slice(0, 30) + "...");
-            console.error("[Passkey] Query error:", challengeError);
-            return NextResponse.json(
-                { error: "Invalid or expired challenge. Please try again." },
-                { status: 400 }
-            );
+            console.error("[Passkey] Challenge not found:", challenge.slice(0, 30) + "...");
+            return ApiError.badRequest("Invalid or expired challenge. Please try again.");
         }
 
-        // Check if challenge has expired
-        if (new Date(challengeData.expires_at) < new Date()) {
-            console.error("[Passkey] Challenge expired at:", challengeData.expires_at);
-            return NextResponse.json(
-                { error: "Challenge has expired. Please try again." },
-                { status: 400 }
-            );
-        }
-
-        // Mark challenge as used immediately to prevent replay
-        const { error: updateError } = await supabase
-            .from("passkey_challenges")
-            .update({ used: true })
-            .eq("id", challengeData.id);
-        
-        if (updateError) {
-            console.error("[Passkey] Failed to mark challenge as used:", updateError);
-        }
+        const challengeData = consumedChallenge;
 
         // Look up the credential by ID
         console.log("[Passkey] Looking up credential ID:", credential.id);
@@ -186,7 +202,7 @@ export async function POST(request: NextRequest) {
             console.error("[Passkey] Credential not found. Sent ID:", credential.id);
             console.error("[Passkey] DB error:", credError?.message);
             
-            // RESCUE FLOW: Check if this credential SHOULD belong to an existing account
+            // C-2 SECURITY FIX: Secured rescue flow with rate limiting and verification
             // Compute what address this credential would derive to
             const derivedAddress = generateWalletAddressFromCredential(credential.id);
             console.log("[Passkey] Derived address for rescue check:", derivedAddress);
@@ -194,35 +210,56 @@ export async function POST(request: NextRequest) {
             // Check if this address exists in our user database
             const { data: existingUser } = await supabase
                 .from("shout_users")
-                .select("wallet_address, login_count")
+                .select("wallet_address, login_count, email, email_verified")
                 .eq("wallet_address", derivedAddress)
                 .single();
             
             if (existingUser) {
+                // SECURITY: Check rescue rate limit before proceeding
+                const rateCheck = await checkRescueRateLimit(supabase, derivedAddress, clientIp);
+                if (!rateCheck.allowed) {
+                    console.warn("[Passkey] SECURITY: Rescue blocked by rate limit");
+                    return ApiError.rateLimited();
+                }
+                
                 // Account exists! This is an orphaned passkey that was never saved to DB
                 console.log("[Passkey] RESCUE: Found orphaned account!", derivedAddress);
                 console.log("[Passkey] User has", existingUser.login_count, "previous logins");
                 
-                // Generate a rescue token (valid for 10 minutes)
-                const rescueToken = crypto.randomUUID();
-                const rescueExpiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+                // SECURITY: Log this rescue attempt for audit
+                console.warn(`[Passkey] SECURITY AUDIT: Rescue attempt for ${derivedAddress} from IP ${clientIp}`);
                 
-                // Store rescue token
+                // Generate a rescue token
+                const rescueToken = crypto.randomUUID();
+                const rescueExpiry = new Date(Date.now() + RESCUE_TOKEN_EXPIRY_MINUTES * 60 * 1000).toISOString();
+                
+                // Store rescue token with client IP for audit trail
                 await supabase.from("passkey_challenges").insert({
                     challenge: rescueToken,
                     ceremony_type: "rescue",
                     user_address: derivedAddress,
                     expires_at: rescueExpiry,
                     used: false,
+                    client_ip: clientIp, // For rate limiting and audit
                 });
+                
+                // SECURITY: If user has verified email, require email verification for rescue
+                const requiresEmailVerification = existingUser.email_verified && existingUser.email;
                 
                 // Return rescue info to frontend
                 return NextResponse.json(
                     { 
                         error: "rescue_available",
-                        message: "We found your account! Your passkey needs to be re-linked.",
+                        message: requiresEmailVerification 
+                            ? "We found your account! Please verify via email to re-link your passkey."
+                            : "We found your account! Your passkey needs to be re-linked.",
                         rescueAddress: derivedAddress,
                         rescueToken: rescueToken,
+                        requiresEmailVerification,
+                        // Mask email for privacy
+                        maskedEmail: requiresEmailVerification 
+                            ? existingUser.email.replace(/(.{2})(.*)(@.*)/, "$1***$3")
+                            : undefined,
                     },
                     { status: 400 }
                 );
@@ -230,10 +267,7 @@ export async function POST(request: NextRequest) {
             
             // No rescue available - truly not found
             console.log("[Passkey] No rescue available, derived address not in DB");
-            return NextResponse.json(
-                { error: "Credential not found. Please register first." },
-                { status: 400 }
-            );
+            return ApiError.badRequest("Credential not found. Please register first.");
         }
 
         // Decode the stored public key
@@ -262,17 +296,11 @@ export async function POST(request: NextRequest) {
         } catch (verifyError) {
             console.error("[Passkey] Authentication verification failed:", verifyError);
             console.error("[Passkey] Credential response origin:", credential.response);
-            return NextResponse.json(
-                { error: "Authentication verification failed. Check server logs for details." },
-                { status: 400 }
-            );
+            return ApiError.badRequest("Authentication verification failed. Please try again.");
         }
 
         if (!verification.verified) {
-            return NextResponse.json(
-                { error: "Authentication failed" },
-                { status: 400 }
-            );
+            return ApiError.badRequest("Authentication failed");
         }
 
         // Update the counter to prevent replay attacks
@@ -332,9 +360,6 @@ export async function POST(request: NextRequest) {
         );
     } catch (error) {
         console.error("[Passkey] Auth verify error:", error);
-        return NextResponse.json(
-            { error: "Failed to verify authentication" },
-            { status: 500 }
-        );
+        return ApiError.internal("Failed to verify authentication");
     }
 }

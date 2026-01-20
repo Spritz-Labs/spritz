@@ -9,6 +9,7 @@ import {
     useBalance,
 } from "wagmi";
 import { parseEther, formatEther, type Address } from "viem";
+import { useEthPrice } from "./useEthPrice";
 
 export type SendStatus = "idle" | "estimating" | "confirming" | "pending" | "success" | "error";
 
@@ -43,14 +44,13 @@ export interface UseSendTransactionReturn {
     reset: () => void;
 }
 
-// ETH price for USD estimation (simplified - in production use a price feed)
-const ETH_PRICE_USD = 3500; // Approximate, should be fetched
-
 export function useSendTransaction(): UseSendTransactionReturn {
     const { address: userAddress, isConnected } = useAccount();
     const { data: balance } = useBalance({ address: userAddress });
     const { data: gasPrice } = useGasPrice();
     const { sendTransactionAsync } = useWagmiSendTransaction();
+    // M-3 FIX: Use dynamic ETH price instead of hardcoded value
+    const { price: ethPrice } = useEthPrice();
     
     const [status, setStatus] = useState<SendStatus>("idle");
     const [error, setError] = useState<string | null>(null);
@@ -85,7 +85,10 @@ export function useSendTransaction(): UseSendTransactionReturn {
             // Calculate estimated fee
             const estimatedFee = gasLimit * currentGasPrice;
             const estimatedFeeFormatted = formatEther(estimatedFee);
-            const estimatedFeeUsd = parseFloat(estimatedFeeFormatted) * ETH_PRICE_USD;
+            // M-3 FIX: Use dynamic ETH price (with fallback)
+            const estimatedFeeUsd = ethPrice 
+                ? parseFloat(estimatedFeeFormatted) * ethPrice 
+                : null;
 
             const estimate: GasEstimate = {
                 gasLimit,
@@ -104,7 +107,7 @@ export function useSendTransaction(): UseSendTransactionReturn {
             setStatus("error");
             return null;
         }
-    }, [isConnected, userAddress, gasPrice]);
+    }, [isConnected, userAddress, gasPrice, ethPrice]);
 
     const send = useCallback(async (params: SendTransactionParams): Promise<string | null> => {
         if (!isConnected || !userAddress) {

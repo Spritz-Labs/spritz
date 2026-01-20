@@ -4,10 +4,12 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase, isSupabaseConfigured } from "@/config/supabase";
 import { normalizeAddress } from "@/utils/address";
 import { useENS } from "./useENS";
+import { getENSCache } from "@/lib/lruCache";
+import { ENS_CACHE_TTL_MS } from "@/lib/constants";
 
-// Cache for ENS resolutions to avoid re-fetching
-const ensCache = new Map<string, { ensName: string | null; avatar: string | null; timestamp: number }>();
-const ENS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// H-2 FIX: Use LRU cache with size limits instead of unbounded Map
+// This prevents memory leaks in long-running sessions
+const ensCache = getENSCache();
 
 export type FriendRequest = {
     id: string;
@@ -47,23 +49,24 @@ export function useFriendRequests(userAddress: string | null) {
     const { resolveAddressOrENS } = useENS();
     const isResolvingRef = useRef(false);
 
-    // Cached ENS resolver with TTL
+    // Cached ENS resolver with TTL (H-2 FIX: uses LRU cache)
     const getCachedENS = useCallback(async (address: string) => {
-        const cached = ensCache.get(address.toLowerCase());
-        const now = Date.now();
+        const normalizedAddr = address.toLowerCase();
+        const cached = ensCache.get(normalizedAddr);
         
-        if (cached && now - cached.timestamp < ENS_CACHE_TTL) {
-            return { ensName: cached.ensName, avatar: cached.avatar };
+        // LRU cache handles TTL internally
+        if (cached) {
+            return cached;
         }
         
         try {
             const resolved = await resolveAddressOrENS(address);
-            ensCache.set(address.toLowerCase(), {
+            const result = {
                 ensName: resolved?.ensName || null,
                 avatar: resolved?.avatar || null,
-                timestamp: now,
-            });
-            return resolved;
+            };
+            ensCache.set(normalizedAddr, result);
+            return result;
         } catch {
             return { ensName: null, avatar: null };
         }
@@ -123,7 +126,7 @@ export function useFriendRequests(userAddress: string | null) {
             // Build friends list with cached ENS data (instant) + batch usernames
             const resolvedFriends = (friendsData || []).map((friend) => {
                 const addr = friend.friend_address.toLowerCase();
-                const cached = ensCache.get(addr);
+                const cached = ensCache.get(addr); // LRU cache handles TTL
                 return {
                     ...friend,
                     ensName: cached?.ensName || null,
@@ -156,20 +159,37 @@ export function useFriendRequests(userAddress: string | null) {
             setOutgoingRequests(outgoing || []);
             setFriends(resolvedFriends);
 
-            // Resolve ENS for friends in background (non-blocking)
-            if (!isResolvingRef.current && friendsData && friendsData.length > 0) {
-                isResolvingRef.current = true;
-                
-                // Resolve in background, update state when done
-                Promise.all(
+            // M-5 FIX: Resolve ENS for friends in background with proper cleanup
+            // Return abort controller for cleanup
+            return { friendsData };
+        } catch (err) {
+            console.error("Error fetching friend data:", err);
+            return null;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [userAddress, getCachedENS]);
+
+    // M-5 FIX: Separate effect for background ENS resolution with cleanup
+    const resolveENSInBackground = useCallback(async (
+        friendsData: Array<{ friend_address: string }>,
+        isMountedRef: React.MutableRefObject<boolean>
+    ) => {
+        if (!isResolvingRef.current && friendsData.length > 0) {
+            isResolvingRef.current = true;
+            
+            try {
+                await Promise.all(
                     friendsData.map(async (friend) => {
                         const addr = friend.friend_address.toLowerCase();
                         // Skip if already cached
                         if (ensCache.has(addr)) return null;
                         return getCachedENS(friend.friend_address);
                     })
-                ).then(() => {
-                    // Update friends with resolved ENS
+                );
+                
+                // M-5 FIX: Check if still mounted before updating state
+                if (isMountedRef.current) {
                     setFriends(prev => prev.map(friend => {
                         const cached = ensCache.get(friend.friend_address.toLowerCase());
                         if (cached && (!friend.ensName && cached.ensName)) {
@@ -181,20 +201,34 @@ export function useFriendRequests(userAddress: string | null) {
                         }
                         return friend;
                     }));
-                    isResolvingRef.current = false;
-                });
+                }
+            } finally {
+                isResolvingRef.current = false;
             }
-        } catch (err) {
-            console.error("Error fetching friend data:", err);
-        } finally {
-            setIsLoading(false);
         }
-    }, [userAddress, getCachedENS]);
+    }, [getCachedENS]);
 
-    // Initial fetch
+    // M-5 FIX: Track mount state for cleanup
+    const isMountedRef = useRef(true);
+    
+    // Initial fetch with proper cleanup
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        isMountedRef.current = true;
+        
+        const doFetch = async () => {
+            const result = await fetchData();
+            if (result?.friendsData && isMountedRef.current) {
+                resolveENSInBackground(result.friendsData, isMountedRef);
+            }
+        };
+        
+        doFetch();
+        
+        // Cleanup: prevent state updates after unmount
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, [fetchData, resolveENSInBackground]);
 
     // Real-time subscription for friend requests
     useEffect(() => {

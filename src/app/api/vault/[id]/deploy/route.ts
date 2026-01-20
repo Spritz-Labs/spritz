@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthenticatedUser } from "@/lib/session";
+import { requireAuthWithCsrf, getAuthenticatedUser } from "@/lib/session";
 import { isSafeDeployed } from "@/lib/safeWallet";
+import { ApiError } from "@/lib/apiErrors";
 import type { Address } from "viem";
 
 const supabase = createClient(
@@ -28,10 +29,9 @@ export async function POST(
         const body = await request.json();
         const { txHash, force } = body;
 
-        const user = await getAuthenticatedUser(request);
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        // H-5 FIX: Use CSRF-protected authentication
+        const user = await requireAuthWithCsrf(request);
+        if (user instanceof NextResponse) return user;
 
         // Get vault details
         const { data: vault, error: vaultError } = await supabase
@@ -41,7 +41,7 @@ export async function POST(
             .single();
 
         if (vaultError || !vault) {
-            return NextResponse.json({ error: "Vault not found" }, { status: 404 });
+            return ApiError.notFound("Vault");
         }
 
         // Verify user is a member
@@ -53,7 +53,7 @@ export async function POST(
             .single();
 
         if (!membership) {
-            return NextResponse.json({ error: "Not a member" }, { status: 403 });
+            return ApiError.forbidden("Not a vault member");
         }
 
         // Check if already deployed in DB
@@ -95,7 +95,7 @@ export async function POST(
 
         if (updateError) {
             console.error("[Vault Deploy] Update error:", updateError);
-            return NextResponse.json({ error: "Failed to update vault" }, { status: 500 });
+            return ApiError.internal("Failed to update vault");
         }
 
         console.log("[Vault Deploy] Vault marked as deployed:", vaultId, "Safe:", vault.safe_address, "forced:", !!force);
@@ -108,7 +108,7 @@ export async function POST(
         });
     } catch (error) {
         console.error("[Vault Deploy] Error:", error);
-        return NextResponse.json({ error: "Failed to process deployment" }, { status: 500 });
+        return ApiError.internal("Failed to process deployment");
     }
 }
 
