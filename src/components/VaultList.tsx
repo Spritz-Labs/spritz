@@ -7,6 +7,8 @@ import { useVaultExecution } from "@/hooks/useVaultExecution";
 import { getChainById } from "@/config/chains";
 import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
+import { useWalletClient, usePublicClient, useAccount } from "wagmi";
+import { deployMultiSigSafeWithEOA } from "@/lib/safeWallet";
 import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
 import type { Address, Hex } from "viem";
 
@@ -59,13 +61,15 @@ const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "�
 type VaultTab = "assets" | "send" | "receive" | "activity";
 
 export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
-    const { vaults, isLoading, getVault, updateVault, deleteVault } = useVaults(userAddress);
+    const { vaults, isLoading, getVault, updateVault, deleteVault, getDeploymentInfo, confirmDeployment, fetchVaults } = useVaults(userAddress);
     const vaultExecution = useVaultExecution();
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<VaultTab>("assets");
+    const [isDeploying, setIsDeploying] = useState(false);
+    const [deployError, setDeployError] = useState<string | null>(null);
     
     // Balance state
     const [balances, setBalances] = useState<VaultBalanceResponse | null>(null);
@@ -95,6 +99,92 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [isLoadingPendingTxs, setIsLoadingPendingTxs] = useState(false);
     const [isProposing, setIsProposing] = useState(false);
     const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+
+    // Wallet clients for deployment
+    const { data: walletClient } = useWalletClient();
+    const publicClient = usePublicClient();
+    const { isConnected } = useAccount();
+
+    // Get gas cost estimate based on chain
+    const getDeployGasCost = (chainId: number): { cost: string; isHigh: boolean } => {
+        // Mainnet is expensive, L2s are cheap
+        if (chainId === 1) {
+            return { cost: "$50-200+", isHigh: true };
+        }
+        // L2s are cheap
+        return { cost: "~$0.50-2", isHigh: false };
+    };
+
+    // Deploy vault's Safe contract (via connected wallet paying gas)
+    const handleDeployVault = useCallback(async (vaultId: string) => {
+        if (!walletClient || !selectedVault) {
+            setDeployError("Please connect your wallet to deploy");
+            return;
+        }
+
+        setIsDeploying(true);
+        setDeployError(null);
+
+        try {
+            // Get deployment info
+            const deployInfo = await getDeploymentInfo(vaultId);
+            
+            if (deployInfo.isDeployed) {
+                // Already deployed, just refresh
+                const updatedVault = await getVault(vaultId);
+                if (updatedVault) {
+                    setSelectedVault(updatedVault);
+                }
+                await fetchVaults();
+                setIsDeploying(false);
+                return;
+            }
+
+            console.log("[VaultList] Deploying vault Safe:", deployInfo);
+            console.log("[VaultList] Chain:", deployInfo.chainId, "Owners:", deployInfo.owners.length);
+
+            // Deploy the Safe - the connected wallet pays gas
+            const { txHash, safeAddress } = await deployMultiSigSafeWithEOA(
+                deployInfo.owners as Address[],
+                deployInfo.threshold,
+                deployInfo.chainId,
+                walletClient as {
+                    account: { address: Address };
+                    writeContract: (args: unknown) => Promise<Hex>;
+                },
+                BigInt(deployInfo.saltNonce || "0")
+            );
+
+            console.log("[VaultList] Safe deployment tx:", txHash, "Safe:", safeAddress);
+
+            // Wait for confirmation
+            if (publicClient) {
+                await publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 1 });
+            }
+
+            // Update database
+            await confirmDeployment(vaultId, txHash);
+
+            // Refresh vault details
+            const updatedVault = await getVault(vaultId);
+            if (updatedVault) {
+                setSelectedVault(updatedVault);
+            }
+            
+            console.log("[VaultList] Vault deployed successfully!");
+        } catch (err) {
+            console.error("[VaultList] Deploy error:", err);
+            const errorMsg = err instanceof Error ? err.message : "Failed to deploy vault";
+            // Clean up common error messages
+            if (errorMsg.includes("User rejected") || errorMsg.includes("User denied")) {
+                setDeployError("Transaction cancelled");
+            } else {
+                setDeployError(errorMsg);
+            }
+        } finally {
+            setIsDeploying(false);
+        }
+    }, [walletClient, publicClient, selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults]);
 
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
@@ -741,6 +831,75 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                     </div>
                 </div>
 
+                {/* Deploy Vault Banner - Show if not deployed */}
+                {!selectedVault.isDeployed && (() => {
+                    const gasCost = getDeployGasCost(selectedVault.chainId);
+                    const chainInfo = getChainById(selectedVault.chainId);
+                    
+                    return (
+                        <div className={`p-4 rounded-xl border ${gasCost.isHigh ? 'bg-amber-500/10 border-amber-500/30' : 'bg-yellow-500/10 border-yellow-500/30'}`}>
+                            <div className="flex items-start gap-3">
+                                <span className="text-2xl">{gasCost.isHigh ? '⚠️' : '🔧'}</span>
+                                <div className="flex-1">
+                                    <h4 className={`font-medium mb-1 ${gasCost.isHigh ? 'text-amber-400' : 'text-yellow-400'}`}>
+                                        Vault Not Yet Deployed
+                                    </h4>
+                                    <p className="text-sm text-zinc-400 mb-2">
+                                        Deploy the vault&apos;s smart contract on <span className="text-white font-medium">{chainInfo?.name || 'the network'}</span> to enable transactions.
+                                    </p>
+                                    
+                                    {/* Gas Cost Info */}
+                                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg mb-3 ${gasCost.isHigh ? 'bg-amber-500/20' : 'bg-zinc-800'}`}>
+                                        <span className="text-xs text-zinc-400">Estimated gas:</span>
+                                        <span className={`text-sm font-bold ${gasCost.isHigh ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                            {gasCost.cost}
+                                        </span>
+                                    </div>
+                                    
+                                    {gasCost.isHigh && (
+                                        <p className="text-xs text-amber-300/70 mb-3">
+                                            💡 Consider creating vaults on Layer 2 networks (Base, Arbitrum) for lower fees.
+                                        </p>
+                                    )}
+                                    
+                                    {deployError && (
+                                        <p className="text-sm text-red-400 mb-2">{deployError}</p>
+                                    )}
+                                    
+                                    <button
+                                        onClick={() => handleDeployVault(selectedVault.id)}
+                                        disabled={isDeploying || !isConnected}
+                                        className={`px-4 py-2 font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                                            gasCost.isHigh 
+                                                ? 'bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-600 text-black' 
+                                                : 'bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-600 text-black'
+                                        }`}
+                                    >
+                                        {isDeploying ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                                Deploying...
+                                            </>
+                                        ) : (
+                                            <>
+                                                🚀 Deploy Vault
+                                            </>
+                                        )}
+                                    </button>
+                                    
+                                    {!isConnected && (
+                                        <p className="text-xs text-zinc-500 mt-2">Connect your wallet to deploy</p>
+                                    )}
+                                    
+                                    <p className="text-xs text-zinc-500 mt-2">
+                                        Your connected wallet will pay the gas fee for deployment.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {/* Tab Navigation */}
                 <div className="flex gap-1 p-1 bg-zinc-800/50 rounded-xl">
                     {(["assets", "send", "receive", "activity"] as VaultTab[]).map((tab) => (
@@ -905,6 +1064,27 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         {/* Send Tab */}
                         {activeTab === "send" && (
                             <div className="space-y-4 relative">
+                                {/* Show deploy prompt if not deployed */}
+                                {!selectedVault.isDeployed && (
+                                    <div className="p-6 text-center">
+                                        <span className="text-4xl mb-4 block">🔒</span>
+                                        <h4 className="text-lg font-medium text-white mb-2">Deploy Vault First</h4>
+                                        <p className="text-sm text-zinc-400 mb-4">
+                                            You need to deploy the vault&apos;s smart contract before you can send transactions.
+                                        </p>
+                                        <button
+                                            onClick={() => handleDeployVault(selectedVault.id)}
+                                            disabled={isDeploying || !walletClient}
+                                            className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-600 text-black font-medium rounded-lg transition-colors"
+                                        >
+                                            {isDeploying ? "Deploying..." : "Deploy Vault"}
+                                        </button>
+                                    </div>
+                                )}
+                                
+                                {/* Deployed vault content */}
+                                {selectedVault.isDeployed && (
+                                <>
                                 {/* Token Selector Modal */}
                                 <AnimatePresence>
                                     {showTokenSelector && (
@@ -1122,6 +1302,8 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         )}
                                     </button>
                                 </div>
+                                </>
+                                )}
                             </div>
                         )}
 

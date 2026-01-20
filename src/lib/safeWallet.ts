@@ -30,6 +30,10 @@ import {
     formatEther,
     custom,
     bytesToHex,
+    keccak256,
+    toHex,
+    concat,
+    encodeAbiParameters,
 } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from "viem/chains";
 
@@ -457,6 +461,108 @@ export async function isSafeDeployed(
     } catch {
         return false;
     }
+}
+
+/**
+ * Calculate Safe transaction hash (EIP-712 compliant)
+ * 
+ * This creates a deterministic hash for a Safe transaction that:
+ * 1. Is the same for all signers (deterministic)
+ * 2. Is cryptographically secure (based on keccak256)
+ * 3. Follows the Safe EIP-712 standard
+ * 
+ * @param safeAddress - The Safe contract address
+ * @param chainId - The chain ID
+ * @param to - Destination address
+ * @param value - ETH value in wei (as string or bigint)
+ * @param data - Transaction data (0x for simple transfer)
+ * @param operation - 0 for Call, 1 for DelegateCall
+ * @param safeTxGas - Gas for the Safe transaction
+ * @param baseGas - Base gas for the transaction
+ * @param gasPrice - Gas price for refund
+ * @param gasToken - Token for gas payment (0x0 for ETH)
+ * @param refundReceiver - Receiver of gas refund
+ * @param nonce - Safe transaction nonce
+ */
+export function calculateSafeTxHash(
+    safeAddress: Address,
+    chainId: number,
+    to: Address,
+    value: string | bigint,
+    data: Hex = "0x",
+    operation: number = 0,
+    safeTxGas: bigint = BigInt(0),
+    baseGas: bigint = BigInt(0),
+    gasPrice: bigint = BigInt(0),
+    gasToken: Address = "0x0000000000000000000000000000000000000000" as Address,
+    refundReceiver: Address = "0x0000000000000000000000000000000000000000" as Address,
+    nonce: number | bigint = 0
+): Hex {
+    // Safe transaction type hash
+    const SAFE_TX_TYPEHASH = keccak256(
+        toHex(
+            "SafeTx(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)"
+        )
+    );
+
+    // EIP-712 domain separator for Safe
+    // Safe uses a simpler domain: just chainId and verifyingContract
+    const DOMAIN_SEPARATOR_TYPEHASH = keccak256(
+        toHex("EIP712Domain(uint256 chainId,address verifyingContract)")
+    );
+
+    const domainSeparator = keccak256(
+        encodeAbiParameters(
+            [{ type: "bytes32" }, { type: "uint256" }, { type: "address" }],
+            [DOMAIN_SEPARATOR_TYPEHASH, BigInt(chainId), safeAddress]
+        )
+    );
+
+    // Hash the data bytes
+    const dataHash = keccak256(data);
+
+    // Encode the transaction struct
+    const safeTxStructHash = keccak256(
+        encodeAbiParameters(
+            [
+                { type: "bytes32" },
+                { type: "address" },
+                { type: "uint256" },
+                { type: "bytes32" },
+                { type: "uint8" },
+                { type: "uint256" },
+                { type: "uint256" },
+                { type: "uint256" },
+                { type: "address" },
+                { type: "address" },
+                { type: "uint256" },
+            ],
+            [
+                SAFE_TX_TYPEHASH,
+                to,
+                BigInt(value.toString()),
+                dataHash,
+                operation,
+                safeTxGas,
+                baseGas,
+                gasPrice,
+                gasToken,
+                refundReceiver,
+                BigInt(nonce.toString()),
+            ]
+        )
+    );
+
+    // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || structHash)
+    const safeTxHash = keccak256(
+        concat([
+            toHex("\x19\x01", { size: 2 }),
+            domainSeparator,
+            safeTxStructHash,
+        ])
+    );
+
+    return safeTxHash;
 }
 
 /**
@@ -1139,6 +1245,84 @@ export async function deploySafeWithEOA(
     const safeAddress = await getSafeAddress({ ownerAddress, chainId });
 
     log(`[SafeWallet] Safe deployment tx: ${txHash}`);
+    log(`[SafeWallet] Expected Safe address: ${safeAddress}`);
+
+    return { txHash, safeAddress };
+}
+
+/**
+ * Deploy a multi-sig Safe wallet (vault) on a chain where EOA pays gas
+ * 
+ * This is used to deploy a vault's Safe contract. The caller (one of the owners)
+ * pays gas for deployment.
+ * 
+ * @param owners - Array of owner addresses (smart wallet addresses for vault members)
+ * @param threshold - Number of required signatures
+ * @param chainId - The chain ID
+ * @param walletClient - The wallet client for sending the deploy transaction
+ * @param saltNonce - Salt nonce for deterministic address
+ */
+export async function deployMultiSigSafeWithEOA(
+    owners: Address[],
+    threshold: number,
+    chainId: number,
+    walletClient: {
+        account: { address: Address };
+        writeContract: (args: unknown) => Promise<Hex>;
+    },
+    saltNonce: bigint = BigInt(0)
+): Promise<{ txHash: Hex; safeAddress: Address }> {
+    const chain = SAFE_SUPPORTED_CHAINS[chainId];
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    if (owners.length === 0) {
+        throw new Error("At least one owner is required");
+    }
+
+    if (threshold < 1 || threshold > owners.length) {
+        throw new Error(`Invalid threshold: ${threshold} for ${owners.length} owners`);
+    }
+
+    // Sort owners for deterministic address (same as getMultiSigSafeAddress)
+    const sortedOwners = [...owners].sort((a, b) => 
+        a.toLowerCase().localeCompare(b.toLowerCase())
+    );
+
+    log(`[SafeWallet] Deploying multi-sig Safe for ${sortedOwners.length} owners, threshold ${threshold}`);
+
+    // Encode the Safe setup call with multiple owners
+    const setupData = encodeFunctionData({
+        abi: SAFE_SETUP_ABI,
+        functionName: "setup",
+        args: [
+            sortedOwners,  // owners array
+            BigInt(threshold),  // threshold
+            "0x0000000000000000000000000000000000000000" as Address,  // to (no module setup)
+            "0x" as Hex,     // data
+            SAFE_FALLBACK_HANDLER_141,  // fallbackHandler
+            "0x0000000000000000000000000000000000000000" as Address,  // paymentToken (native)
+            BigInt(0),       // payment
+            "0x0000000000000000000000000000000000000000" as Address,  // paymentReceiver
+        ],
+    });
+
+    log(`[SafeWallet] Multi-sig setup data encoded, deploying via factory...`);
+
+    // Call the factory to deploy
+    const txHash = await walletClient.writeContract({
+        address: SAFE_PROXY_FACTORY_141,
+        abi: SAFE_PROXY_FACTORY_ABI,
+        functionName: "createProxyWithNonce",
+        args: [SAFE_SINGLETON_141, setupData, saltNonce],
+        chain,
+    });
+
+    // Calculate the expected Safe address
+    const safeAddress = await getMultiSigSafeAddress(sortedOwners, threshold, chainId, saltNonce);
+
+    log(`[SafeWallet] Multi-sig Safe deployment tx: ${txHash}`);
     log(`[SafeWallet] Expected Safe address: ${safeAddress}`);
 
     return { txHash, safeAddress };

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
-import { encodeFunctionData, parseUnits, type Address } from "viem";
+import { encodeFunctionData, parseUnits, type Address, type Hex } from "viem";
+import { calculateSafeTxHash } from "@/lib/safeWallet";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -306,7 +307,7 @@ export async function POST(
         // Get vault details
         const { data: vault, error: vaultError } = await supabase
             .from("shout_vaults")
-            .select("id, safe_address, threshold")
+            .select("id, safe_address, threshold, chain_id")
             .eq("id", vaultId)
             .single();
 
@@ -323,7 +324,7 @@ export async function POST(
         const nonce = txCount || 0;
 
         // Prepare transaction data
-        let txData = "0x";
+        let txData: Hex = "0x";
         let txValue = "0";
         let txTo = toAddress;
 
@@ -343,8 +344,22 @@ export async function POST(
             txValue = amountWei.toString();
         }
 
-        // Generate a pseudo safe_tx_hash (in production, this would be calculated properly)
-        const safeTxHash = `0x${Date.now().toString(16)}${Math.random().toString(16).slice(2, 18)}`;
+        // Calculate EIP-712 compliant Safe transaction hash
+        // This is deterministic: same tx params = same hash for all signers
+        const safeTxHash = calculateSafeTxHash(
+            vault.safe_address as Address,
+            vault.chain_id,
+            txTo as Address,
+            txValue,
+            txData,
+            0, // operation (0 = Call)
+            BigInt(0), // safeTxGas
+            BigInt(0), // baseGas  
+            BigInt(0), // gasPrice
+            "0x0000000000000000000000000000000000000000" as Address, // gasToken
+            "0x0000000000000000000000000000000000000000" as Address, // refundReceiver
+            nonce
+        );
 
         // Create transaction
         const { data: transaction, error: txError } = await supabase

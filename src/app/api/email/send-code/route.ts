@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { secureVerificationCode } from "@/lib/secureRandom";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -13,11 +14,6 @@ const supabase =
     supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
-
-// Generate a 6-digit code
-function generateCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
 
 export async function POST(request: NextRequest) {
     // Rate limit: 5 requests per minute for email sending (strict)
@@ -73,8 +69,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Generate verification code
-        const code = generateCode();
+        // Generate cryptographically secure verification code
+        const code = secureVerificationCode();
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
         // Delete any existing codes for this wallet

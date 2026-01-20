@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMessage } from "viem";
 import { createClient } from "@supabase/supabase-js";
+import { secureInviteCode } from "@/lib/secureRandom";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -43,16 +44,6 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; ad
     } catch {
         return { isAdmin: false, address: null };
     }
-}
-
-// Generate a random invite code
-function generateInviteCode(): string {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Removed confusing chars (0, O, 1, I)
-    let code = "";
-    for (let i = 0; i < 8; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
 }
 
 // GET: List all invite codes
@@ -124,8 +115,8 @@ export async function POST(request: NextRequest) {
     try {
         const { maxUses, expiresAt, note, customCode } = await request.json();
 
-        // Generate or use custom code
-        let code = customCode || generateInviteCode();
+        // Generate or use custom code (using cryptographically secure random)
+        let code = customCode || secureInviteCode();
         
         // Check if custom code already exists
         if (customCode) {

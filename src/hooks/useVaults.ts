@@ -150,6 +150,48 @@ export function useVaults(userAddress: string | null) {
         return true;
     }, [userAddress, fetchVaults]);
 
+    // Get deployment info for a vault
+    const getDeploymentInfo = useCallback(async (vaultId: string) => {
+        if (!userAddress) {
+            throw new Error("Not authenticated");
+        }
+
+        const response = await fetch(`/api/vault/${vaultId}/deploy`, {
+            credentials: "include",
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || "Failed to get deployment info");
+        }
+
+        return response.json();
+    }, [userAddress]);
+
+    // Confirm deployment after on-chain tx
+    const confirmDeployment = useCallback(async (vaultId: string, txHash: string) => {
+        if (!userAddress) {
+            throw new Error("Not authenticated");
+        }
+
+        const response = await fetch(`/api/vault/${vaultId}/deploy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ txHash }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || "Failed to confirm deployment");
+        }
+
+        // Refresh vaults list
+        await fetchVaults();
+
+        return response.json();
+    }, [userAddress, fetchVaults]);
+
     // Fetch on mount
     useEffect(() => {
         fetchVaults();
@@ -164,6 +206,8 @@ export function useVaults(userAddress: string | null) {
         getVault,
         updateVault,
         deleteVault,
+        getDeploymentInfo,
+        confirmDeployment,
     };
 }
 

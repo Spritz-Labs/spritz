@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { secureRandomString } from "@/lib/secureRandom";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Generate a secure recovery token
+// Generate a secure recovery token using cryptographically secure random
 function generateRecoveryToken(): string {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No confusing chars (0/O, 1/I)
-    let token = "";
-    for (let i = 0; i < 12; i++) {
-        if (i > 0 && i % 4 === 0) token += "-";
-        token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
+    const raw = secureRandomString(12, chars);
+    // Format as XXXX-XXXX-XXXX
+    return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 }
 
 // POST: Verify email code and create recovery token

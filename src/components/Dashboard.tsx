@@ -53,6 +53,8 @@ import { useGroupInvitations } from "@/hooks/useGroupInvitations";
 import { GroupInvitations } from "./GroupInvitations";
 import { usePresence } from "@/hooks/usePresence";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
+import { useInactivityMonitor, useSessionLock } from "@/hooks/useInactivityMonitor";
+import { SessionLockScreen, InactivityWarning } from "./SessionLockScreen";
 import { useLoginTracking } from "@/hooks/useLoginTracking";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
@@ -140,6 +142,17 @@ function DashboardContent({
     const [isInvitesModalOpen, setIsInvitesModalOpen] = useState(false);
     const [showWakuSuccess, setShowWakuSuccess] = useState(false);
     const [showSolanaBanner, setShowSolanaBanner] = useState(true);
+
+    // Session lock and inactivity monitoring (relaxed settings)
+    const { isLocked, lockReason, lock, unlock } = useSessionLock();
+    const { isWarningShown, timeRemaining, resetActivity } = useInactivityMonitor({
+        timeout: 30 * 60 * 1000, // 30 minutes of inactivity
+        backgroundTimeout: 5 * 60 * 1000, // 5 minutes when backgrounded
+        warningThreshold: 2 * 60 * 1000, // Show warning 2 minutes before lock
+        onInactive: () => lock("inactivity"),
+        onWarning: () => console.log("[Dashboard] Inactivity warning"),
+        enabled: true,
+    });
 
     // Live streaming state
     const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
@@ -2084,6 +2097,32 @@ function DashboardContent({
 
     return (
         <>
+            {/* Session Lock Screen - Requires re-authentication */}
+            <SessionLockScreen
+                isLocked={isLocked}
+                lockReason={lockReason}
+                onUnlock={() => {
+                    unlock();
+                    resetActivity();
+                }}
+                walletAddress={userAddress}
+                authMethod={
+                    isPasskeyUser ? "passkey" :
+                    isEmailUser ? "email" :
+                    isWorldIdUser ? "world_id" :
+                    isAlienIdUser ? "alien_id" :
+                    isSolanaUser ? "solana" :
+                    "wallet"
+                }
+            />
+            
+            {/* Inactivity Warning Toast */}
+            <InactivityWarning
+                isVisible={isWarningShown && !isLocked}
+                timeRemaining={timeRemaining}
+                onStayActive={resetActivity}
+            />
+            
             <div className="min-h-screen bg-zinc-950 flex flex-col">
                 {/* Header */}
                 <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-lg sticky top-0 z-40 safe-area-pt px-2">
