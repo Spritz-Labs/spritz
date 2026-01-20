@@ -238,13 +238,7 @@ export function AlienAuth() {
                     className="w-full"
                     onClick={() => console.log("[AlienAuth] SignInButton container clicked")}
                 >
-                    <SignInButton 
-                        color="dark" 
-                        onError={(err: Error) => {
-                            console.error("[AlienAuth] SignInButton error:", err);
-                            setError(err.message || "Failed to open Alien sign-in");
-                        }}
-                    />
+                    <SignInButton color="dark" />
                 </div>
             </div>
 

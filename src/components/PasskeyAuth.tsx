@@ -407,9 +407,7 @@ export function PasskeyAuth() {
 
                 <p className="text-center text-zinc-500 text-xs">
                     {mode === "login"
-                        ? useDevicePasskey
-                            ? "Will search for passkeys stored on this device"
-                            : "Use your device's biometric authentication"
+                        ? "Use your device's biometric authentication"
                         : "Creates a secure account linked to your device"}
                 </p>
 

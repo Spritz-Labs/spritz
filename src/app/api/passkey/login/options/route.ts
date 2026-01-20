@@ -102,21 +102,15 @@ export async function POST(request: NextRequest) {
         
         // Clean up old expired challenges to prevent database bloat (ignore errors)
         try {
-            const { count: deletedUsed } = await supabase
+            await supabase
                 .from("passkey_challenges")
                 .delete()
-                .eq("used", true)
-                .select("*", { count: "exact", head: true });
+                .eq("used", true);
             
-            const { count: deletedExpired } = await supabase
+            await supabase
                 .from("passkey_challenges")
                 .delete()
-                .lt("expires_at", new Date().toISOString())
-                .select("*", { count: "exact", head: true });
-            
-            if ((deletedUsed || 0) > 0 || (deletedExpired || 0) > 0) {
-                console.log(`[Passkey] Cleaned up ${deletedUsed || 0} used and ${deletedExpired || 0} expired challenges`);
-            }
+                .lt("expires_at", new Date().toISOString());
         } catch (cleanupError) {
             console.warn("[Passkey] Challenge cleanup warning:", cleanupError);
         }
