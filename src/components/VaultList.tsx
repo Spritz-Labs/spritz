@@ -276,6 +276,87 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         }
     }, []);
 
+    // Sign a pending transaction
+    const signTransaction = async (transactionId: string) => {
+        if (!selectedVault) return;
+        
+        try {
+            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ transactionId, action: "sign" }),
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                alert(data.message);
+                fetchPendingTxs(selectedVault.id);
+            } else {
+                alert(data.error || "Failed to sign");
+            }
+        } catch (err) {
+            console.error("[VaultList] Sign error:", err);
+            alert("Failed to sign transaction");
+        }
+    };
+
+    // Execute a transaction (when threshold is met)
+    const executeTransaction = async (transactionId: string) => {
+        if (!selectedVault) return;
+        
+        try {
+            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ transactionId, action: "execute" }),
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                alert(data.message);
+                fetchPendingTxs(selectedVault.id);
+                fetchBalances(selectedVault.id);
+                fetchTransactions(selectedVault.safeAddress, selectedVault.chainId);
+            } else {
+                alert(data.error || "Failed to execute");
+            }
+        } catch (err) {
+            console.error("[VaultList] Execute error:", err);
+            alert("Failed to execute transaction");
+        }
+    };
+
+    // Cancel a pending transaction
+    const cancelTransaction = async (transactionId: string) => {
+        if (!selectedVault) return;
+        if (!confirm("Are you sure you want to cancel this transaction?")) return;
+        
+        try {
+            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ transactionId, action: "cancel" }),
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                alert(data.message);
+                fetchPendingTxs(selectedVault.id);
+            } else {
+                alert(data.error || "Failed to cancel");
+            }
+        } catch (err) {
+            console.error("[VaultList] Cancel error:", err);
+            alert("Failed to cancel transaction");
+        }
+    };
+
     // Propose a new transaction
     const proposeTransaction = async () => {
         if (!selectedVault || !sendToken || !sendAmount || !ensResolver.resolvedAddress) {
@@ -964,43 +1045,83 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                             <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
                                             Pending Transactions ({pendingTxs.length})
                                         </h4>
-                                        {pendingTxs.map((tx) => (
-                                            <div
-                                                key={tx.id}
-                                                className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-white truncate">
-                                                            {tx.description}
-                                                        </p>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className="text-xs text-zinc-500">
-                                                                {tx.confirmations.length}/{selectedVault.threshold} signatures
-                                                            </span>
-                                                            <span className="text-xs text-zinc-600">•</span>
-                                                            <span className="text-xs text-zinc-500">
-                                                                {getTimeAgo(new Date(tx.created_at))}
-                                                            </span>
+                                        {pendingTxs.map((tx) => {
+                                            const hasThreshold = tx.confirmations.length >= selectedVault.threshold;
+                                            const userHasSigned = tx.confirmations.some(
+                                                (c) => c.signer_address.toLowerCase() === userAddress.toLowerCase() ||
+                                                       selectedVault.members.find(
+                                                           (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+                                                       )?.smartWalletAddress?.toLowerCase() === c.signer_address.toLowerCase()
+                                            );
+                                            const isProposer = tx.created_by.toLowerCase() === userAddress.toLowerCase();
+                                            
+                                            return (
+                                                <div
+                                                    key={tx.id}
+                                                    className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium text-white truncate">
+                                                                {tx.description}
+                                                            </p>
+                                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                                <span className="text-xs text-zinc-500">
+                                                                    {tx.confirmations.length}/{selectedVault.threshold} signatures
+                                                                </span>
+                                                                {userHasSigned && (
+                                                                    <span className="text-xs text-emerald-400 flex items-center gap-0.5">
+                                                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                        </svg>
+                                                                        Signed
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-xs text-zinc-600">•</span>
+                                                                <span className="text-xs text-zinc-500">
+                                                                    {getTimeAgo(new Date(tx.created_at))}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {hasThreshold ? (
+                                                                <button 
+                                                                    onClick={() => executeTransaction(tx.id)}
+                                                                    className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                                                                >
+                                                                    Execute
+                                                                </button>
+                                                            ) : !userHasSigned ? (
+                                                                <button 
+                                                                    onClick={() => signTransaction(tx.id)}
+                                                                    className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors"
+                                                                >
+                                                                    Sign
+                                                                </button>
+                                                            ) : (
+                                                                <span className="text-xs text-zinc-500">Waiting...</span>
+                                                            )}
+                                                            {isProposer && (
+                                                                <button 
+                                                                    onClick={() => cancelTransaction(tx.id)}
+                                                                    className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors"
+                                                                    title="Cancel transaction"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                    {tx.confirmations.length >= selectedVault.threshold ? (
-                                                        <button className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors">
-                                                            Execute
-                                                        </button>
-                                                    ) : (
-                                                        <button className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors">
-                                                            Sign
-                                                        </button>
-                                                    )}
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
 
