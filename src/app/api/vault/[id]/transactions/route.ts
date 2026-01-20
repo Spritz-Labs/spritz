@@ -54,6 +54,7 @@ export async function GET(
                 confirmations:shout_vault_confirmations(
                     id,
                     signer_address,
+                    signature,
                     signed_at
                 )
             `)
@@ -107,6 +108,7 @@ export async function PATCH(
                 confirmations:shout_vault_confirmations(
                     id,
                     signer_address,
+                    signature,
                     signed_at
                 )
             `)
@@ -145,13 +147,21 @@ export async function PATCH(
                 return NextResponse.json({ error: "Already signed" }, { status: 400 });
             }
 
+            // Get the actual signature from the request
+            const { signature, safeTxHash } = body;
+            
+            if (!signature) {
+                return NextResponse.json({ error: "Signature required" }, { status: 400 });
+            }
+
             // Add signature
             const { error: signError } = await supabase
                 .from("shout_vault_confirmations")
                 .insert({
                     transaction_id: transactionId,
                     signer_address: signerAddress,
-                    signature: `signed_by_${user.userAddress.toLowerCase()}`, // Placeholder
+                    signature: signature,
+                    safe_tx_hash: safeTxHash || null,
                 });
 
             if (signError) {
@@ -164,8 +174,8 @@ export async function PATCH(
             return NextResponse.json({
                 success: true,
                 message: newConfirmationCount >= vault.threshold
-                    ? "Transaction ready to execute!"
-                    : `Signed! ${vault.threshold - newConfirmationCount} more signature(s) needed.`,
+                    ? "✅ Transaction ready to execute!"
+                    : `✅ Signed! ${vault.threshold - newConfirmationCount} more signature(s) needed.`,
                 confirmations: newConfirmationCount,
                 threshold: vault.threshold,
                 canExecute: newConfirmationCount >= vault.threshold,
@@ -229,6 +239,27 @@ export async function PATCH(
             }
 
             return NextResponse.json({ success: true, message: "Transaction cancelled" });
+        }
+
+        if (action === "executed") {
+            // Update with the actual transaction hash after on-chain execution
+            const { txHash } = body;
+            
+            const { error: updateError } = await supabase
+                .from("shout_vault_transactions")
+                .update({
+                    status: "executed",
+                    executed_at: new Date().toISOString(),
+                    executed_tx_hash: txHash || null,
+                })
+                .eq("id", transactionId);
+
+            if (updateError) {
+                console.error("[Vault Transactions] Update error:", updateError);
+                return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+            }
+
+            return NextResponse.json({ success: true, message: "Transaction marked as executed" });
         }
 
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });

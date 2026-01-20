@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useVaults, type VaultListItem, type VaultDetails } from "@/hooks/useVaults";
+import { useVaultExecution } from "@/hooks/useVaultExecution";
 import { getChainById } from "@/config/chains";
 import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
 import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
+import type { Address, Hex } from "viem";
 
 type VaultListProps = {
     userAddress: string;
@@ -45,6 +47,7 @@ type PendingTransaction = {
     confirmations: {
         id: string;
         signer_address: string;
+        signature?: string;
         signed_at: string;
     }[];
 };
@@ -57,6 +60,7 @@ type VaultTab = "assets" | "send" | "receive" | "activity";
 
 export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const { vaults, isLoading, getVault, updateVault, deleteVault } = useVaults(userAddress);
+    const vaultExecution = useVaultExecution();
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -280,25 +284,47 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         }
     }, []);
 
-    // Sign a pending transaction
-    const signTransaction = async (transactionId: string) => {
+    // Sign a pending transaction with actual wallet signature
+    const handleSignTransaction = async (tx: PendingTransaction) => {
         if (!selectedVault) return;
         
         try {
+            // Get the transaction details for signing
+            const signResult = await vaultExecution.signTransaction({
+                safeAddress: selectedVault.safeAddress as Address,
+                chainId: selectedVault.chainId,
+                to: tx.to_address as Address,
+                value: tx.value || "0",
+                data: (tx.data || "0x") as Hex,
+                nonce: tx.nonce,
+            });
+            
+            if (!signResult.success || !signResult.signature) {
+                alert(signResult.error || "Failed to sign");
+                return;
+            }
+            
+            // Store the signature in the database
             const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ transactionId, action: "sign" }),
+                body: JSON.stringify({ 
+                    transactionId: tx.id, 
+                    action: "sign",
+                    signature: signResult.signature,
+                    signerAddress: signResult.signerAddress,
+                    safeTxHash: signResult.safeTxHash,
+                }),
             });
             
             const data = await response.json();
             
             if (response.ok) {
-                alert(data.message);
+                alert(data.message || "✅ Signed successfully!");
                 fetchPendingTxs(selectedVault.id);
             } else {
-                alert(data.error || "Failed to sign");
+                alert(data.error || "Failed to store signature");
             }
         } catch (err) {
             console.error("[VaultList] Sign error:", err);
@@ -307,46 +333,63 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     };
 
     // Execute a transaction (when threshold is met)
-    const executeTransaction = async (transactionId: string) => {
+    const handleExecuteTransaction = async (tx: PendingTransaction) => {
         if (!selectedVault) return;
         
         try {
-            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ transactionId, action: "execute" }),
+            // Get signatures from the database (they should have real signatures now)
+            const signatures = tx.confirmations
+                .filter(c => c.signature && !c.signature.startsWith("signed_by_") && !c.signature.startsWith("auto_signed"))
+                .map(c => ({
+                    signerAddress: c.signer_address,
+                    signature: c.signature!,
+                }));
+            
+            console.log("[VaultList] Executing with", signatures.length, "signatures");
+            
+            // Execute on-chain with collected signatures
+            const result = await vaultExecution.execute({
+                safeAddress: selectedVault.safeAddress as Address,
+                chainId: selectedVault.chainId,
+                to: tx.to_address as Address,
+                value: tx.value || "0",
+                data: (tx.data || "0x") as Hex,
+                signatures: signatures.length > 0 ? signatures : undefined,
             });
             
-            const data = await response.json();
-            
-            if (response.ok) {
-                // Transaction approved - for now show success message
-                // TODO: Future - trigger wallet connection for on-chain execution
-                if (data.requiresWallet) {
-                    alert("✅ Transaction approved by all signers!\n\n🔜 Coming soon: Connect wallet to execute on-chain.\n\nFor now, you can execute manually via the Safe app.");
-                    
-                    // Open Safe app for manual execution
-                    const safeAppUrl = `https://app.safe.global/transactions/queue?safe=${
-                        selectedVault.chainId === 1 ? "eth" : 
-                        selectedVault.chainId === 8453 ? "base" :
-                        selectedVault.chainId === 42161 ? "arb1" :
-                        selectedVault.chainId === 10 ? "oeth" :
-                        selectedVault.chainId === 137 ? "matic" : "eth"
-                    }:${selectedVault.safeAddress}`;
-                    
-                    if (confirm("Open Safe app to execute transaction?")) {
-                        window.open(safeAppUrl, "_blank");
-                    }
-                } else {
-                    alert(data.message);
-                }
+            if (result.success && result.txHash) {
+                alert(`✅ Transaction executed!\n\nTx Hash: ${result.txHash.slice(0, 10)}...${result.txHash.slice(-8)}`);
+                
+                // Update the transaction status and hash in the database
+                await fetch(`/api/vault/${selectedVault.id}/transactions`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ 
+                        transactionId: tx.id, 
+                        action: "executed",
+                        txHash: result.txHash 
+                    }),
+                });
                 
                 fetchPendingTxs(selectedVault.id);
                 fetchBalances(selectedVault.id);
                 fetchTransactions(selectedVault.safeAddress, selectedVault.chainId);
-            } else {
-                alert(data.error || "Failed to execute");
+            } else if (result.needsMoreSignatures) {
+                alert(`Need ${result.threshold} signatures to execute.\n\nAsk other vault members to sign first.`);
+            } else if (result.error) {
+                // Execution failed - show error and option to use Safe app
+                const safeAppUrl = `https://app.safe.global/transactions/queue?safe=${
+                    selectedVault.chainId === 1 ? "eth" : 
+                    selectedVault.chainId === 8453 ? "base" :
+                    selectedVault.chainId === 42161 ? "arb1" :
+                    selectedVault.chainId === 10 ? "oeth" :
+                    selectedVault.chainId === 137 ? "matic" : "eth"
+                }:${selectedVault.safeAddress}`;
+                
+                if (confirm(`${result.error}\n\nWould you like to try via the Safe app?`)) {
+                    window.open(safeAppUrl, "_blank");
+                }
             }
         } catch (err) {
             console.error("[VaultList] Execute error:", err);
@@ -1214,15 +1257,17 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                                 {hasThreshold ? (
                                                                     <button 
-                                                                        onClick={() => executeTransaction(tx.id)}
-                                                                        className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                                                                        onClick={() => handleExecuteTransaction(tx)}
+                                                                        disabled={vaultExecution.isExecuting}
+                                                                        className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
                                                                     >
                                                                         Execute
                                                                     </button>
                                                                 ) : !userHasSigned ? (
                                                                     <button 
-                                                                        onClick={() => signTransaction(tx.id)}
-                                                                        className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors"
+                                                                        onClick={() => handleSignTransaction(tx)}
+                                                                        disabled={vaultExecution.isSigning}
+                                                                        className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
                                                                     >
                                                                         Sign
                                                                     </button>
