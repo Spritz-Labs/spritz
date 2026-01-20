@@ -284,6 +284,46 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         }
     }, [walletClient, publicClient, selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults, useEOAForDeploy, connectedAddress, signMessageAsync, signTypedDataAsync]);
 
+    // Sync deployment status - checks on-chain state and updates DB if needed
+    const [isSyncing, setIsSyncing] = useState(false);
+    const handleSyncStatus = useCallback(async (vaultId: string) => {
+        if (!selectedVault) return;
+        
+        setIsSyncing(true);
+        try {
+            console.log("[VaultList] Syncing deployment status for vault:", vaultId);
+            
+            // Call getDeploymentInfo which checks on-chain and auto-updates DB
+            const deployInfo = await getDeploymentInfo(vaultId);
+            console.log("[VaultList] Deploy info:", deployInfo);
+            
+            if (deployInfo.isDeployed && !selectedVault.isDeployed) {
+                // Status changed - update DB and refresh
+                console.log("[VaultList] Safe is deployed on-chain! Updating database...");
+                await confirmDeployment(vaultId, "");
+                
+                // Refresh vault details
+                const updatedVault = await getVault(vaultId);
+                if (updatedVault) {
+                    setSelectedVault(updatedVault);
+                }
+                await fetchVaults();
+            } else if (deployInfo.isDeployed) {
+                // Just refresh to get latest state
+                const updatedVault = await getVault(vaultId);
+                if (updatedVault) {
+                    setSelectedVault(updatedVault);
+                }
+            } else {
+                console.log("[VaultList] Safe is not deployed on-chain yet");
+            }
+        } catch (err) {
+            console.error("[VaultList] Sync error:", err);
+        } finally {
+            setIsSyncing(false);
+        }
+    }, [selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults]);
+
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
         console.log("[VaultList] Fetching balances for vault:", vaultId);
@@ -923,6 +963,16 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         }`}>
                             {selectedVault.isDeployed ? "Deployed" : "Not Deployed"}
                         </span>
+                        {!selectedVault.isDeployed && (
+                            <button
+                                onClick={() => handleSyncStatus(selectedVault.id)}
+                                disabled={isSyncing}
+                                className="text-xs px-2 py-0.5 rounded-full bg-zinc-700/50 text-zinc-400 hover:bg-zinc-600/50 hover:text-white transition-colors disabled:opacity-50"
+                                title="Check on-chain deployment status"
+                            >
+                                {isSyncing ? "Syncing..." : "🔄 Sync"}
+                            </button>
+                        )}
                         <span className="text-xs text-zinc-500">
                             {selectedVault.threshold}/{selectedVault.members.length} signatures required
                         </span>
