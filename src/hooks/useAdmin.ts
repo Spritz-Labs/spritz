@@ -130,31 +130,21 @@ export function useAdmin() {
             return;
         }
 
-        // Don't verify if wallet is reconnecting
-        if (isReconnecting) {
+        // Skip if we've already verified these credentials
+        if (verificationAttempted.current && state.isAuthenticated) {
+            // Make sure loading is false if already authenticated
+            if (state.isLoading) {
+                setState(prev => ({ ...prev, isLoading: false }));
+            }
             return;
         }
 
         // If wallet IS connected and credentials are from a different address,
         // show a warning but don't immediately clear - let them sign with the connected wallet
         // Only clear if they try to sign in with a different wallet
-        if (isConnected && address && credentials.address.toLowerCase() !== address.toLowerCase()) {
+        // Note: We still proceed with verification since server will validate the signature
+        if (isConnected && address && !isReconnecting && credentials.address.toLowerCase() !== address.toLowerCase()) {
             console.log("[Admin] Credentials address doesn't match connected wallet");
-            // Don't clear credentials - just show they need to sign with current wallet
-            // They can still use the admin panel with cached credentials until they sign out
-            // or the credentials expire
-            setState(prev => ({ 
-                ...prev, 
-                isLoading: false,
-                // Only show error if not already authenticated
-                error: prev.isAuthenticated ? null : "Sign in with your connected wallet to continue"
-            }));
-            // Allow verification to proceed - server will validate the signature
-        }
-
-        // Skip if we've already verified these credentials
-        if (verificationAttempted.current && state.isAuthenticated) {
-            return;
         }
 
         const verifyCredentials = async () => {
@@ -193,6 +183,7 @@ export function useAdmin() {
                     });
                 }
             } catch (err) {
+                console.error("[Admin] Verification error:", err);
                 setState(prev => ({
                     ...prev,
                     isLoading: false,
@@ -202,7 +193,7 @@ export function useAdmin() {
         };
 
         verifyCredentials();
-    }, [credentials, isReconnecting, state.isAuthenticated, credentialsSource, address, isConnected]);
+    }, [credentials, state.isAuthenticated, state.isLoading, credentialsSource, address, isConnected, isReconnecting]);
 
     // Sign in as admin
     const signIn = useCallback(async () => {
