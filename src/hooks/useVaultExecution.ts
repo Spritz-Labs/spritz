@@ -7,6 +7,11 @@
  * IMPORTANT: Vaults use Smart Wallet addresses as owners.
  * Smart Wallets are Safe contracts that implement EIP-1271 (isValidSignature).
  * When executing, we use contract signature format where v=0.
+ * 
+ * For EIP-1271 contract signatures:
+ * - Safe's isValidSignature wraps the hash before validation
+ * - EOA must sign the wrapped hash, not the raw safeTxHash
+ * - See getSafeMessageHash() for the wrapping logic
  */
 
 import { useState, useCallback } from "react";
@@ -14,6 +19,7 @@ import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
+import { getSafeMessageHash } from "@/lib/safeWallet";
 
 // Map chain IDs to viem chain objects
 const VIEM_CHAINS: Record<number, Chain> = {
@@ -109,7 +115,7 @@ export type VaultExecutionStatus = "idle" | "checking" | "signing" | "executing"
  * - r: address of contract owner (padded to 32 bytes, left-padded with zeros)  
  * - s: offset to dynamic data from start of signatures (32 bytes)
  * - v: 0x00 (indicates contract signature)
- * - Dynamic part: 32-byte length + actual signature bytes
+ * - Dynamic part: 32-byte length + actual signature bytes (NOT padded)
  * 
  * @param contractAddress - The contract owner address (Smart Wallet)
  * @param signature - The actual signature (from EOA owner of the Smart Wallet)
@@ -132,16 +138,15 @@ function buildContractSignature(
     // Static part (65 bytes = 130 hex chars)
     const staticPart = r + s + v;
     
-    // Dynamic part: length (32 bytes) + signature
+    // Dynamic part: length (32 bytes) + signature bytes (not padded)
+    // Safe reads: sigLength from position s, then signature from s+32
     const sigHex = signature.startsWith("0x") ? signature.slice(2) : signature;
     const sigLengthBytes = sigHex.length / 2;
     const lengthHex = sigLengthBytes.toString(16).padStart(64, "0");
     
-    // Signature must be padded to 32-byte boundary
-    const paddedSigHex = sigHex.padEnd(Math.ceil(sigLengthBytes / 32) * 64, "0");
-    
-    const dynamicPart = lengthHex + paddedSigHex;
-    const dynamicLength = 32 + Math.ceil(sigLengthBytes / 32) * 32; // length field + padded sig
+    // No padding needed - Safe just reads sigLength bytes
+    const dynamicPart = lengthHex + sigHex;
+    const dynamicLength = 32 + sigLengthBytes; // length field + signature
     
     return { staticPart, dynamicPart, dynamicLength };
 }
@@ -263,6 +268,14 @@ export function useVaultExecution() {
      * Sign a vault transaction (returns signature to store in DB)
      * @param smartWalletAddress - If the Safe owner is a Smart Wallet (not EOA), provide the SW address
      *                            The signature is still created by the EOA, but stored under the SW address
+     * 
+     * IMPORTANT for EIP-1271 (Smart Wallet signers):
+     * When a Smart Wallet is the owner of the Vault, the Vault calls isValidSignature()
+     * on the Smart Wallet. Safe's isValidSignature wraps the hash before validation:
+     * - messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, originalHash))
+     * - finalHash = keccak256("\x19\x01" || domainSeparator || messageHash)
+     * 
+     * So we must sign the WRAPPED hash, not the raw safeTxHash!
      */
     const signTransaction = useCallback(async (params: {
         safeAddress: Address;
@@ -288,7 +301,7 @@ export function useVaultExecution() {
                 console.log("[VaultExecution] Signing for Smart Wallet owner:", smartWalletAddress);
             }
 
-            // Get safeTxHash
+            // Get the vault's safeTxHash
             const safeTxHash = await getSafeTxHash({
                 safeAddress,
                 chainId: params.chainId,
@@ -302,11 +315,26 @@ export function useVaultExecution() {
                 throw new Error("Failed to get transaction hash");
             }
 
-            console.log("[VaultExecution] Safe tx hash:", safeTxHash);
+            console.log("[VaultExecution] Vault safeTxHash:", safeTxHash);
+
+            // Determine what hash to sign
+            // For Smart Wallet owners (EIP-1271), we need to sign the WRAPPED hash
+            // because Safe's isValidSignature wraps the hash before validation
+            let hashToSign: Hex;
+            
+            if (smartWalletAddress) {
+                // For contract signers: sign the Safe message hash
+                // This is what the Smart Wallet's isValidSignature will validate against
+                hashToSign = getSafeMessageHash(smartWalletAddress, params.chainId, safeTxHash);
+                console.log("[VaultExecution] EIP-1271: Signing wrapped Safe message hash:", hashToSign);
+            } else {
+                // For EOA signers: sign the raw safeTxHash
+                hashToSign = safeTxHash;
+            }
 
             // Sign the hash with wallet (EOA)
             const signature = await walletClient.signMessage({
-                message: { raw: safeTxHash },
+                message: { raw: hashToSign },
             });
 
             // Adjust v value for Safe's signature format
@@ -318,7 +346,7 @@ export function useVaultExecution() {
             v += 4; // Safe adds 4 for eth_sign signatures
             const adjustedSignature = signature.slice(0, -2) + v.toString(16).padStart(2, "0");
 
-            console.log("[VaultExecution] Signature generated (eth_sign format)");
+            console.log("[VaultExecution] Signature generated (eth_sign format, v=" + v + ")");
             setStatus("idle");
 
             // Return the Smart Wallet address as signer if provided (for ERC-1271 contract signatures)
@@ -330,7 +358,7 @@ export function useVaultExecution() {
                 success: true,
                 signature: adjustedSignature,
                 signerAddress,
-                safeTxHash,
+                safeTxHash, // Return the vault's safeTxHash (not the wrapped one) for reference
             };
         } catch (err) {
             console.error("[VaultExecution] Sign error:", err);

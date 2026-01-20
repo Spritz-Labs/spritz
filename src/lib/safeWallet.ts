@@ -630,6 +630,72 @@ export function calculateSafeTxHash(
 }
 
 /**
+ * Calculate the Safe message hash for EIP-1271 signature validation
+ * 
+ * When Safe A (a Smart Wallet) is an owner of Safe B (a Vault), and Safe B
+ * calls isValidSignature() on Safe A, Safe A wraps the hash before validation:
+ * 
+ * 1. messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, originalHash))
+ * 2. finalHash = keccak256("\x19\x01" || domainSeparator || messageHash)
+ * 
+ * The EOA owner of Safe A must sign this finalHash (not the originalHash)
+ * for the signature to be valid.
+ * 
+ * @param safeAddress - The Safe contract address (the signer, e.g., Smart Wallet)
+ * @param chainId - The chain ID
+ * @param messageHash - The original hash that Safe A needs to "sign" (e.g., vault's safeTxHash)
+ */
+export function getSafeMessageHash(
+    safeAddress: Address,
+    chainId: number,
+    messageHash: Hex
+): Hex {
+    // SafeMessage type hash: keccak256("SafeMessage(bytes message)")
+    const SAFE_MSG_TYPEHASH = keccak256(toHex("SafeMessage(bytes message)"));
+    
+    // EIP-712 domain separator for Safe
+    const DOMAIN_SEPARATOR_TYPEHASH = keccak256(
+        toHex("EIP712Domain(uint256 chainId,address verifyingContract)")
+    );
+    
+    const domainSeparator = keccak256(
+        encodeAbiParameters(
+            [{ type: "bytes32" }, { type: "uint256" }, { type: "address" }],
+            [DOMAIN_SEPARATOR_TYPEHASH, BigInt(chainId), safeAddress]
+        )
+    );
+    
+    // Safe's getMessageHashForSafe computes:
+    // safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, message))
+    // But message is the raw bytes, and for a bytes32 it's encoded as abi.encode(_dataHash)
+    // So we hash abi.encode(messageHash) first
+    const encodedMessage = encodeAbiParameters(
+        [{ type: "bytes32" }],
+        [messageHash]
+    );
+    const messageBytes = keccak256(encodedMessage);
+    
+    // Now encode with the SAFE_MSG_TYPEHASH
+    const safeMessageHash = keccak256(
+        encodeAbiParameters(
+            [{ type: "bytes32" }, { type: "bytes32" }],
+            [SAFE_MSG_TYPEHASH, messageBytes]
+        )
+    );
+    
+    // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || safeMessageHash)
+    const finalHash = keccak256(
+        concat([
+            toHex("\x19\x01", { size: 2 }),
+            domainSeparator,
+            safeMessageHash,
+        ])
+    );
+    
+    return finalHash;
+}
+
+/**
  * Create a Safe Smart Account Client
  * This client can be used to send transactions through the Safe
  * 
