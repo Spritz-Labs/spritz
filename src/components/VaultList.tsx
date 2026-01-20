@@ -38,6 +38,8 @@ type PendingTransaction = {
     nonce: number;
     status: "pending" | "executed" | "cancelled";
     description: string;
+    token_symbol?: string;
+    token_address?: string;
     created_by: string;
     created_at: string;
     confirmations: {
@@ -78,6 +80,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [sendAmount, setSendAmount] = useState("");
     const [sendToken, setSendToken] = useState<VaultTokenBalance | null>(null);
     const [isSending, setIsSending] = useState(false);
+    const [showTokenSelector, setShowTokenSelector] = useState(false);
     
     // Activity state
     const [transactions, setTransactions] = useState<VaultTransaction[]>([]);
@@ -87,6 +90,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [pendingTxs, setPendingTxs] = useState<PendingTransaction[]>([]);
     const [isLoadingPendingTxs, setIsLoadingPendingTxs] = useState(false);
     const [isProposing, setIsProposing] = useState(false);
+    const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
@@ -680,7 +684,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all capitalize ${
+                            className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all capitalize relative ${
                                 activeTab === tab
                                     ? "bg-zinc-700 text-white shadow-sm"
                                     : "text-zinc-400 hover:text-zinc-200"
@@ -691,6 +695,11 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                             {tab === "receive" && "📥"}
                             {tab === "activity" && "📜"}
                             <span className="ml-1.5 hidden sm:inline">{tab}</span>
+                            {tab === "activity" && pendingTxs.length > 0 && (
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 text-black text-xs font-bold rounded-full flex items-center justify-center">
+                                    {pendingTxs.length}
+                                </span>
+                            )}
                         </button>
                     ))}
                 </div>
@@ -832,45 +841,114 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
                         {/* Send Tab */}
                         {activeTab === "send" && (
-                            <div className="space-y-4">
+                            <div className="space-y-4 relative">
+                                {/* Token Selector Modal */}
+                                <AnimatePresence>
+                                    {showTokenSelector && (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="absolute inset-0 bg-zinc-900/95 z-10 flex flex-col rounded-xl"
+                                        >
+                                            <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                                                <h4 className="text-sm font-medium text-white">Select Token</h4>
+                                                <button
+                                                    onClick={() => setShowTokenSelector(false)}
+                                                    className="p-1 text-zinc-400 hover:text-white"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto">
+                                                {getAllTokens().length === 0 ? (
+                                                    <div className="p-8 text-center text-zinc-500 text-sm">
+                                                        No tokens with balance
+                                                    </div>
+                                                ) : (
+                                                    getAllTokens().map((token) => (
+                                                        <button
+                                                            key={token.contractAddress}
+                                                            onClick={() => {
+                                                                setSendToken(token);
+                                                                setShowTokenSelector(false);
+                                                            }}
+                                                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors text-left border-b border-zinc-800/30 last:border-b-0"
+                                                        >
+                                                            <div className="relative">
+                                                                {token.logoUrl ? (
+                                                                    <img src={token.logoUrl} alt={token.symbol} className="w-10 h-10 rounded-full" />
+                                                                ) : (
+                                                                    <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
+                                                                        {token.symbol.slice(0, 2)}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-white">{token.symbol}</p>
+                                                                <p className="text-xs text-zinc-500">{token.name}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-sm font-medium text-white">{formatBalance(token.balanceFormatted, 4)}</p>
+                                                                {token.balanceUsd !== null && (
+                                                                    <p className="text-xs text-zinc-500">
+                                                                        ${Number(token.balanceUsd).toFixed(2)}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            {sendToken?.contractAddress === token.contractAddress && (
+                                                                <svg className="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
                                 <div className="p-4 bg-zinc-800/50 rounded-xl space-y-4">
-                                    {/* Token selector */}
+                                    {/* Token selector button */}
                                     <div>
                                         <label className="block text-xs text-zinc-400 mb-2">Token</label>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                            {getAllTokens().map((token) => (
-                                                <button
-                                                    key={token.contractAddress}
-                                                    onClick={() => setSendToken(token)}
-                                                    className={`p-2 rounded-lg border text-left transition-all ${
-                                                        sendToken?.contractAddress === token.contractAddress
-                                                            ? "border-orange-500 bg-orange-500/10"
-                                                            : "border-zinc-700 bg-zinc-900 hover:border-zinc-600"
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        {token.logoUrl ? (
-                                                            <img src={token.logoUrl} alt="" className="w-6 h-6 rounded-full" />
-                                                        ) : (
-                                                            <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
-                                                                {token.symbol.slice(0, 2)}
-                                                            </div>
-                                                        )}
-                                                        <div>
-                                                            <p className="text-xs font-medium text-white">{token.symbol}</p>
-                                                            <p className="text-[10px] text-zinc-500">
-                                                                {formatBalance(token.balanceFormatted, 2)}
-                                                            </p>
+                                        <button
+                                            onClick={() => setShowTokenSelector(true)}
+                                            className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg hover:border-zinc-600 transition-colors flex items-center gap-3"
+                                        >
+                                            {sendToken ? (
+                                                <>
+                                                    {sendToken.logoUrl ? (
+                                                        <img src={sendToken.logoUrl} alt="" className="w-8 h-8 rounded-full" />
+                                                    ) : (
+                                                        <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
+                                                            {sendToken.symbol.slice(0, 2)}
                                                         </div>
+                                                    )}
+                                                    <div className="flex-1 text-left">
+                                                        <p className="text-sm font-medium text-white">{sendToken.symbol}</p>
+                                                        <p className="text-xs text-zinc-500">
+                                                            Balance: {formatBalance(sendToken.balanceFormatted, 4)}
+                                                        </p>
                                                     </div>
-                                                </button>
-                                            ))}
-                                            {getAllTokens().length === 0 && (
-                                                <p className="col-span-full text-sm text-zinc-500 text-center py-4">
-                                                    No tokens available to send
-                                                </p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center">
+                                                        <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                        </svg>
+                                                    </div>
+                                                    <span className="flex-1 text-left text-zinc-400">Select token to send</span>
+                                                </>
                                             )}
-                                        </div>
+                                            <svg className="w-5 h-5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
                                     </div>
 
                                     {/* Amount input */}
@@ -882,15 +960,18 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 value={sendAmount}
                                                 onChange={(e) => setSendAmount(e.target.value)}
                                                 placeholder="0.00"
-                                                className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 pr-16"
+                                                className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-lg placeholder-zinc-500 focus:outline-none focus:border-orange-500 pr-20"
                                             />
                                             {sendToken && (
-                                                <button
-                                                    onClick={() => setSendAmount(sendToken.balanceFormatted)}
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-orange-400 hover:text-orange-300"
-                                                >
-                                                    MAX
-                                                </button>
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                                    <span className="text-sm text-zinc-400">{sendToken.symbol}</span>
+                                                    <button
+                                                        onClick={() => setSendAmount(sendToken.balanceFormatted)}
+                                                        className="text-xs font-medium text-orange-400 hover:text-orange-300 px-2 py-1 bg-orange-500/10 rounded"
+                                                    >
+                                                        MAX
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -944,11 +1025,16 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         )}
                                     </div>
 
-                                    {/* Info box */}
-                                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                                    {/* Info box about signing flow */}
+                                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-2">
                                         <p className="text-xs text-blue-300">
-                                            <span className="font-medium">Multisig Required:</span> This transaction will require {selectedVault.threshold} of {selectedVault.members.length} members to sign before it can be executed.
+                                            <span className="font-medium">📝 How it works:</span>
                                         </p>
+                                        <ol className="text-xs text-blue-300/80 space-y-1 ml-4 list-decimal">
+                                            <li>You propose the transaction</li>
+                                            <li>Other members sign in the <span className="font-medium">Activity</span> tab</li>
+                                            <li>Once {selectedVault.threshold}/{selectedVault.members.length} sign, anyone can execute</li>
+                                        </ol>
                                     </div>
 
                                     {/* Send button */}
@@ -1054,71 +1140,150 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                        )?.smartWalletAddress?.toLowerCase() === c.signer_address.toLowerCase()
                                             );
                                             const isProposer = tx.created_by.toLowerCase() === userAddress.toLowerCase();
+                                            const isExpanded = expandedTxId === tx.id;
+                                            
+                                            // Find member info for each signer
+                                            const getSignerDisplay = (signerAddr: string) => {
+                                                const member = selectedVault.members.find(
+                                                    (m) => m.smartWalletAddress?.toLowerCase() === signerAddr.toLowerCase() ||
+                                                           m.address.toLowerCase() === signerAddr.toLowerCase()
+                                                );
+                                                if (member?.nickname) return member.nickname;
+                                                return `${signerAddr.slice(0, 6)}...${signerAddr.slice(-4)}`;
+                                            };
                                             
                                             return (
                                                 <div
                                                     key={tx.id}
-                                                    className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl"
+                                                    className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl overflow-hidden"
                                                 >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    {/* Main row - clickable to expand */}
+                                                    <div 
+                                                        className="p-3 cursor-pointer hover:bg-yellow-500/5 transition-colors"
+                                                        onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-white truncate">
+                                                                    {tx.description}
+                                                                </p>
+                                                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                                    <span className="text-xs text-zinc-500">
+                                                                        {tx.confirmations.length}/{selectedVault.threshold} signatures
+                                                                    </span>
+                                                                    {userHasSigned && (
+                                                                        <span className="text-xs text-emerald-400 flex items-center gap-0.5">
+                                                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                            </svg>
+                                                                            Signed
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-xs text-zinc-600">•</span>
+                                                                    <span className="text-xs text-zinc-500">
+                                                                        {getTimeAgo(new Date(tx.created_at))}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                                {hasThreshold ? (
+                                                                    <button 
+                                                                        onClick={() => executeTransaction(tx.id)}
+                                                                        className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                                                                    >
+                                                                        Execute
+                                                                    </button>
+                                                                ) : !userHasSigned ? (
+                                                                    <button 
+                                                                        onClick={() => signTransaction(tx.id)}
+                                                                        className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors"
+                                                                    >
+                                                                        Sign
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="text-xs text-zinc-500">Waiting...</span>
+                                                                )}
+                                                                {isProposer && (
+                                                                    <button 
+                                                                        onClick={() => cancelTransaction(tx.id)}
+                                                                        className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors"
+                                                                        title="Cancel transaction"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                        </svg>
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            {/* Expand indicator */}
+                                                            <svg 
+                                                                className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                                                                fill="none" 
+                                                                stroke="currentColor" 
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                             </svg>
                                                         </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-medium text-white truncate">
-                                                                {tx.description}
-                                                            </p>
-                                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                                <span className="text-xs text-zinc-500">
-                                                                    {tx.confirmations.length}/{selectedVault.threshold} signatures
-                                                                </span>
-                                                                {userHasSigned && (
-                                                                    <span className="text-xs text-emerald-400 flex items-center gap-0.5">
-                                                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                                        </svg>
-                                                                        Signed
-                                                                    </span>
-                                                                )}
-                                                                <span className="text-xs text-zinc-600">•</span>
-                                                                <span className="text-xs text-zinc-500">
-                                                                    {getTimeAgo(new Date(tx.created_at))}
-                                                                </span>
+                                                    </div>
+                                                    
+                                                    {/* Expanded details */}
+                                                    {isExpanded && (
+                                                        <div className="px-3 pb-3 border-t border-yellow-500/20">
+                                                            {/* Signature progress */}
+                                                            <div className="mt-3 space-y-2">
+                                                                <p className="text-xs font-medium text-zinc-400">Signatures:</p>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {selectedVault.members.map((member) => {
+                                                                        const memberSigned = tx.confirmations.some(
+                                                                            (c) => c.signer_address.toLowerCase() === member.smartWalletAddress?.toLowerCase() ||
+                                                                                   c.signer_address.toLowerCase() === member.address.toLowerCase()
+                                                                        );
+                                                                        return (
+                                                                            <div 
+                                                                                key={member.address}
+                                                                                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs ${
+                                                                                    memberSigned 
+                                                                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                                                                        : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                                                                                }`}
+                                                                            >
+                                                                                {memberSigned ? (
+                                                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                                    </svg>
+                                                                                ) : (
+                                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                                    </svg>
+                                                                                )}
+                                                                                {member.nickname || `${member.address.slice(0, 6)}...`}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            {/* Transaction details */}
+                                                            <div className="mt-3 p-2 bg-zinc-900/50 rounded-lg">
+                                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                                    <div>
+                                                                        <span className="text-zinc-500">To:</span>
+                                                                        <p className="text-zinc-300 font-mono truncate">{tx.to_address}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="text-zinc-500">Value:</span>
+                                                                        <p className="text-zinc-300">{tx.value || "0"} {tx.token_symbol || "ETH"}</p>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-2">
-                                                            {hasThreshold ? (
-                                                                <button 
-                                                                    onClick={() => executeTransaction(tx.id)}
-                                                                    className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
-                                                                >
-                                                                    Execute
-                                                                </button>
-                                                            ) : !userHasSigned ? (
-                                                                <button 
-                                                                    onClick={() => signTransaction(tx.id)}
-                                                                    className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors"
-                                                                >
-                                                                    Sign
-                                                                </button>
-                                                            ) : (
-                                                                <span className="text-xs text-zinc-500">Waiting...</span>
-                                                            )}
-                                                            {isProposer && (
-                                                                <button 
-                                                                    onClick={() => cancelTransaction(tx.id)}
-                                                                    className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors"
-                                                                    title="Cancel transaction"
-                                                                >
-                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                                    </svg>
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
+                                                    )}
                                                 </div>
                                             );
                                         })}

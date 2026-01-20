@@ -325,6 +325,8 @@ export async function POST(
                 nonce,
                 status: "pending",
                 description: description || `Send ${amount} ${tokenSymbol || "ETH"} to ${toAddress.slice(0, 6)}...${toAddress.slice(-4)}`,
+                token_symbol: tokenSymbol || "ETH",
+                token_address: tokenAddress || null,
                 created_by: user.userAddress.toLowerCase(),
             })
             .select()
