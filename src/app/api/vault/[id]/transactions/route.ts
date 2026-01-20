@@ -181,20 +181,13 @@ export async function PATCH(
                 }, { status: 400 });
             }
 
-            // For now, we'll mark as executed in the database
-            // In production, this would:
-            // 1. Encode all signatures
-            // 2. Call Safe's execTransaction
-            // 3. Wait for confirmation
-            // 4. Update status
-
-            // Mark as executed (placeholder - real execution would happen here)
+            // Mark as ready for execution
+            // The actual on-chain execution happens client-side via wallet
             const { error: updateError } = await supabase
                 .from("shout_vault_transactions")
                 .update({
                     status: "executed",
                     executed_at: new Date().toISOString(),
-                    // executed_tx_hash would be set after actual on-chain tx
                 })
                 .eq("id", transactionId);
 
@@ -203,10 +196,20 @@ export async function PATCH(
                 return NextResponse.json({ error: "Failed to execute" }, { status: 500 });
             }
 
+            // Return execution data for client-side wallet interaction
             return NextResponse.json({
                 success: true,
-                message: "Transaction marked as executed. Note: On-chain execution coming soon!",
-                // In production: txHash: "0x..."
+                message: "Transaction approved! Connect wallet to execute on-chain.",
+                requiresWallet: true,
+                executionData: {
+                    safeAddress: vault.safe_address,
+                    chainId: vault.chain_id,
+                    to: transaction.to_address,
+                    value: transaction.value,
+                    data: transaction.data,
+                    operation: transaction.operation || 0,
+                    nonce: transaction.nonce,
+                },
             });
         }
 

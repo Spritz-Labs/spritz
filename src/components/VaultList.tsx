@@ -321,7 +321,27 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             const data = await response.json();
             
             if (response.ok) {
-                alert(data.message);
+                // Transaction approved - for now show success message
+                // TODO: Future - trigger wallet connection for on-chain execution
+                if (data.requiresWallet) {
+                    alert("✅ Transaction approved by all signers!\n\n🔜 Coming soon: Connect wallet to execute on-chain.\n\nFor now, you can execute manually via the Safe app.");
+                    
+                    // Open Safe app for manual execution
+                    const safeAppUrl = `https://app.safe.global/transactions/queue?safe=${
+                        selectedVault.chainId === 1 ? "eth" : 
+                        selectedVault.chainId === 8453 ? "base" :
+                        selectedVault.chainId === 42161 ? "arb1" :
+                        selectedVault.chainId === 10 ? "oeth" :
+                        selectedVault.chainId === 137 ? "matic" : "eth"
+                    }:${selectedVault.safeAddress}`;
+                    
+                    if (confirm("Open Safe app to execute transaction?")) {
+                        window.open(safeAppUrl, "_blank");
+                    }
+                } else {
+                    alert(data.message);
+                }
+                
                 fetchPendingTxs(selectedVault.id);
                 fetchBalances(selectedVault.id);
                 fetchTransactions(selectedVault.safeAddress, selectedVault.chainId);
@@ -959,6 +979,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 type="number"
                                                 value={sendAmount}
                                                 onChange={(e) => setSendAmount(e.target.value)}
+                                                onWheel={(e) => e.currentTarget.blur()}
                                                 placeholder="0.00"
                                                 className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-lg placeholder-zinc-500 focus:outline-none focus:border-orange-500 pr-20"
                                             />
