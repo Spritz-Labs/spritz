@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
                     // Create new user
                     const { error: insertError } = await supabase.from("shout_users").insert({
                         wallet_address: userAddress,
+                        wallet_type: "world_id", // IMPORTANT: Set wallet_type for World ID users
                         first_login: new Date().toISOString(),
                         last_login: new Date().toISOString(),
                         login_count: 1,
@@ -63,16 +64,25 @@ export async function POST(request: NextRequest) {
                     if (insertError) {
                         console.error("[WorldId] Error creating user:", insertError);
                     } else {
-                        console.log("[WorldId] Created new user:", userAddress.slice(0, 20) + "...");
+                        console.log("[WorldId] Created new user with wallet_type='world_id':", userAddress.slice(0, 20) + "...");
                     }
                 } else {
                     // Update existing user
+                    // Also fix wallet_type if it's missing (for users created before this fix)
+                    const updateData: Record<string, unknown> = {
+                        last_login: new Date().toISOString(),
+                        login_count: (existingUser.login_count || 0) + 1,
+                    };
+                    
+                    // Fix wallet_type for World ID users who don't have it set
+                    if (!existingUser.wallet_type) {
+                        updateData.wallet_type = 'world_id';
+                        console.log("[WorldId] Fixing wallet_type to 'world_id' for user:", userAddress.slice(0, 10));
+                    }
+                    
                     await supabase
                         .from("shout_users")
-                        .update({
-                            last_login: new Date().toISOString(),
-                            login_count: (existingUser.login_count || 0) + 1,
-                        })
+                        .update(updateData)
                         .eq("wallet_address", userAddress);
                     console.log("[WorldId] Updated user:", userAddress.slice(0, 20) + "...");
                 }

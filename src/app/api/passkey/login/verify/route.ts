@@ -356,19 +356,29 @@ export async function POST(request: NextRequest) {
             // Create new user
             await supabase.from("shout_users").insert({
                 wallet_address: storedCredential.user_address,
+                wallet_type: "passkey", // IMPORTANT: Set wallet_type for passkey users
                 first_login: new Date().toISOString(),
                 last_login: new Date().toISOString(),
                 login_count: 1,
             });
-            console.log("[Passkey] Created user record");
+            console.log("[Passkey] Created user record with wallet_type='passkey'");
         } else {
             // Update existing user
+            // Also fix wallet_type if it's missing or wrong (for users created before this fix)
+            const updateData: Record<string, unknown> = {
+                last_login: new Date().toISOString(),
+                login_count: (existingUser.login_count || 0) + 1,
+            };
+            
+            // Fix wallet_type for passkey users who don't have it set correctly
+            if (!existingUser.wallet_type || existingUser.wallet_type === 'evm') {
+                updateData.wallet_type = 'passkey';
+                console.log("[Passkey] Fixing wallet_type to 'passkey' for user:", storedCredential.user_address.slice(0, 10));
+            }
+            
             await supabase
                 .from("shout_users")
-                .update({
-                    last_login: new Date().toISOString(),
-                    login_count: (existingUser.login_count || 0) + 1,
-                })
+                .update(updateData)
                 .eq("wallet_address", storedCredential.user_address);
         }
 

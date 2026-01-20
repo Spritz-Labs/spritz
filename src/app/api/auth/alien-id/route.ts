@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
                 // Create new user
                 const { error: insertError } = await supabase.from("shout_users").insert({
                     wallet_address: alienAddress,
+                    wallet_type: "alien_id", // IMPORTANT: Set wallet_type for Alien ID users
                     first_login: new Date().toISOString(),
                     last_login: new Date().toISOString(),
                     login_count: 1,
@@ -115,16 +116,25 @@ export async function POST(request: NextRequest) {
                 if (insertError) {
                     console.error("[AlienId] Error creating user:", insertError);
                 } else {
-                    console.log("[AlienId] Created new user:", alienAddress.slice(0, 20) + "...");
+                    console.log("[AlienId] Created new user with wallet_type='alien_id':", alienAddress.slice(0, 20) + "...");
                 }
             } else {
                 // Update existing user
+                // Also fix wallet_type if it's missing (for users created before this fix)
+                const updateData: Record<string, unknown> = {
+                    last_login: new Date().toISOString(),
+                    login_count: (existingUser.login_count || 0) + 1,
+                };
+                
+                // Fix wallet_type for Alien ID users who don't have it set
+                if (!existingUser.wallet_type) {
+                    updateData.wallet_type = 'alien_id';
+                    console.log("[AlienId] Fixing wallet_type to 'alien_id' for user:", alienAddress.slice(0, 10));
+                }
+                
                 await supabase
                     .from("shout_users")
-                    .update({
-                        last_login: new Date().toISOString(),
-                        login_count: (existingUser.login_count || 0) + 1,
-                    })
+                    .update(updateData)
                     .eq("wallet_address", alienAddress);
                 console.log("[AlienId] Updated user:", alienAddress.slice(0, 20) + "...");
             }

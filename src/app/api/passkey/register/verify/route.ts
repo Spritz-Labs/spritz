@@ -11,7 +11,7 @@ import {
     calculateWebAuthnSignerAddress,
     type P256PublicKey,
 } from "@/lib/passkeySigner";
-import { getSafeAddress } from "@/lib/safeWallet";
+import { getPasskeySafeAddress } from "@/lib/safeWallet";
 import { type Address } from "viem";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -390,16 +390,18 @@ export async function POST(request: NextRequest) {
             console.log("[Passkey] Safe signer ready:", safeSignerAddress.slice(0, 10) + "...");
         }
 
-        // Calculate the Smart Wallet (Safe) address from the passkey signer
+        // Calculate the Smart Wallet (Safe) address from the passkey public key
         // This is where the user's funds will be stored
-        // IMPORTANT: Must use getSafeAddress from safeWallet.ts for consistency with transactions
+        // IMPORTANT: Must use getPasskeySafeAddress (NOT getSafeAddress) for WebAuthn-based Safe
+        // getPasskeySafeAddress creates a Safe with WebAuthn owner, matching transaction logic
         let smartWalletAddress: string | null = null;
-        if (safeSignerAddress) {
-            smartWalletAddress = await getSafeAddress({ 
-                ownerAddress: safeSignerAddress as Address, 
-                chainId: 8453 
-            });
-            console.log("[Passkey] Smart Wallet (Safe) address:", smartWalletAddress.slice(0, 10) + "...");
+        if (p256PublicKey) {
+            smartWalletAddress = await getPasskeySafeAddress(
+                p256PublicKey.x,
+                p256PublicKey.y,
+                8453 // Base chain
+            );
+            console.log("[Passkey] Smart Wallet (WebAuthn Safe) address:", smartWalletAddress.slice(0, 10) + "...");
         }
 
         // Create/update user in shout_users table with the FINAL address
@@ -413,6 +415,7 @@ export async function POST(request: NextRequest) {
             // Create new user with wallet address
             await supabase.from("shout_users").insert({
                 wallet_address: finalUserAddress,
+                wallet_type: "passkey", // IMPORTANT: Set wallet_type for passkey users
                 first_login: new Date().toISOString(),
                 last_login: new Date().toISOString(),
                 login_count: 1,
@@ -420,7 +423,7 @@ export async function POST(request: NextRequest) {
                 // IMPORTANT: This passkey now controls this wallet
                 smart_wallet_address: smartWalletAddress,
             });
-            console.log("[Passkey] Created user record with wallet:", finalUserAddress);
+            console.log("[Passkey] Created user record with wallet_type='passkey':", finalUserAddress);
             if (smartWalletAddress) {
                 console.log("[Passkey] Wallet address locked to this passkey:", smartWalletAddress.slice(0, 10) + "...");
             }
@@ -432,6 +435,13 @@ export async function POST(request: NextRequest) {
                 last_login: new Date().toISOString(),
                 login_count: (existingUser.login_count || 0) + 1,
             };
+            
+            // Fix wallet_type for users who registered a passkey (upgrade to passkey user)
+            // This is important so they get the correct Smart Wallet address calculation
+            if (!existingUser.wallet_type || existingUser.wallet_type === 'evm') {
+                updateData.wallet_type = 'passkey';
+                console.log("[Passkey] Upgrading wallet_type to 'passkey' for user:", finalUserAddress.slice(0, 10));
+            }
             
             if (smartWalletAddress && !existingUser.smart_wallet_address) {
                 // First passkey for this user - set their wallet address
