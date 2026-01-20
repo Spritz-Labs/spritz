@@ -138,6 +138,9 @@ export async function POST(request: NextRequest) {
 
         // H-1 FIX: Use atomic UPDATE with WHERE clause to prevent race conditions
         // This atomically finds an unused, unexpired challenge AND marks it as used
+        console.log("[Passkey] Looking for challenge:", challenge.slice(0, 40) + "...");
+        console.log("[Passkey] Challenge length:", challenge.length);
+        
         const { data: consumedChallenge, error: consumeError } = await supabase
             .from("passkey_challenges")
             .update({ used: true, consumed_at: new Date().toISOString() })
@@ -150,25 +153,52 @@ export async function POST(request: NextRequest) {
 
         // If no challenge was consumed, check why for proper error message
         if (consumeError || !consumedChallenge) {
-            const { data: existingChallenge } = await supabase
+            console.log("[Passkey] Consume error:", consumeError?.message);
+            
+            // First, try to find any matching challenge (regardless of type/used/expiry)
+            const { data: anyMatch } = await supabase
                 .from("passkey_challenges")
-                .select("used, expires_at")
+                .select("challenge, ceremony_type, used, expires_at, created_at")
                 .eq("challenge", challenge)
-                .eq("ceremony_type", "authentication")
                 .single();
             
-            if (existingChallenge) {
-                if (existingChallenge.used) {
+            if (anyMatch) {
+                console.log("[Passkey] Found challenge with:", {
+                    ceremony_type: anyMatch.ceremony_type,
+                    used: anyMatch.used,
+                    expires_at: anyMatch.expires_at,
+                    created_at: anyMatch.created_at,
+                    isExpired: new Date(anyMatch.expires_at) < new Date(),
+                });
+                
+                if (anyMatch.used) {
                     console.error("[Passkey] Challenge already used (prevented replay attack)");
                     return ApiError.badRequest("Challenge already used. Please try again.");
                 }
-                if (new Date(existingChallenge.expires_at) < new Date()) {
-                    console.error("[Passkey] Challenge expired at:", existingChallenge.expires_at);
+                if (new Date(anyMatch.expires_at) < new Date()) {
+                    console.error("[Passkey] Challenge expired at:", anyMatch.expires_at);
                     return ApiError.badRequest("Challenge has expired. Please try again.");
                 }
+                if (anyMatch.ceremony_type !== "authentication") {
+                    console.error("[Passkey] Challenge has wrong ceremony type:", anyMatch.ceremony_type);
+                    return ApiError.badRequest("Invalid challenge type. Please try again.");
+                }
+            } else {
+                // Challenge not in database at all - list recent ones to debug
+                const { data: recentChallenges } = await supabase
+                    .from("passkey_challenges")
+                    .select("challenge, ceremony_type, created_at")
+                    .eq("ceremony_type", "authentication")
+                    .order("created_at", { ascending: false })
+                    .limit(3);
+                
+                console.error("[Passkey] Challenge NOT found in DB. Recent challenges:");
+                recentChallenges?.forEach((c, i) => {
+                    console.error(`  ${i + 1}. ${c.challenge.slice(0, 40)}... (created: ${c.created_at})`);
+                });
             }
             
-            console.error("[Passkey] Challenge not found:", challenge.slice(0, 30) + "...");
+            console.error("[Passkey] Challenge not found:", challenge.slice(0, 40) + "...");
             return ApiError.badRequest("Invalid or expired challenge. Please try again.");
         }
 

@@ -102,29 +102,38 @@ export async function POST(request: NextRequest) {
         
         // Clean up old expired challenges to prevent database bloat (ignore errors)
         try {
-            await supabase
+            const { count: deletedUsed } = await supabase
                 .from("passkey_challenges")
                 .delete()
-                .eq("used", true);
+                .eq("used", true)
+                .select("*", { count: "exact", head: true });
             
-            await supabase
+            const { count: deletedExpired } = await supabase
                 .from("passkey_challenges")
                 .delete()
-                .lt("expires_at", new Date().toISOString());
+                .lt("expires_at", new Date().toISOString())
+                .select("*", { count: "exact", head: true });
+            
+            if ((deletedUsed || 0) > 0 || (deletedExpired || 0) > 0) {
+                console.log(`[Passkey] Cleaned up ${deletedUsed || 0} used and ${deletedExpired || 0} expired challenges`);
+            }
         } catch (cleanupError) {
             console.warn("[Passkey] Challenge cleanup warning:", cleanupError);
         }
         
-        const { error: insertError } = await supabase.from("passkey_challenges").insert({
+        console.log("[Passkey] Storing challenge:", options.challenge.slice(0, 40) + "...");
+        console.log("[Passkey] Challenge length:", options.challenge.length);
+        
+        const { data: insertedData, error: insertError } = await supabase.from("passkey_challenges").insert({
             challenge: options.challenge,
             ceremony_type: "authentication",
             user_address: userAddress?.toLowerCase() || null,
             expires_at: expiresAt,
-        });
+        }).select().single();
         
         if (insertError) {
             console.error("[Passkey] Failed to store challenge:", insertError);
-            console.error("[Passkey] Challenge value:", options.challenge.slice(0, 30) + "...");
+            console.error("[Passkey] Challenge value:", options.challenge.slice(0, 40) + "...");
             // Don't fail if it's just a duplicate - try to continue
             if (!insertError.message?.includes("duplicate")) {
                 return NextResponse.json(
@@ -132,6 +141,8 @@ export async function POST(request: NextRequest) {
                     { status: 500 }
                 );
             }
+        } else {
+            console.log("[Passkey] Challenge stored successfully, ID:", insertedData?.id);
         }
 
         console.log("[Passkey] Generated auth options for", useDevicePasskey ? "discoverable" : "specific user", "flow");
