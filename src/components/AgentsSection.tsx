@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAgents, useFavoriteAgents, Agent, DiscoveredAgent, MCPServer, APITool } from "@/hooks/useAgents";
 import { CreateAgentModal } from "./CreateAgentModal";
@@ -12,10 +12,11 @@ import { ExploreAgentsModal } from "./ExploreAgentsModal";
 interface AgentsSectionProps {
     userAddress: string;
     hasBetaAccess: boolean;
+    isBetaAccessLoading?: boolean;
     isAdmin?: boolean;
 }
 
-export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: AgentsSectionProps) {
+export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading = false, isAdmin = false }: AgentsSectionProps) {
     const { agents, isLoading, error, createAgent, updateAgent, deleteAgent } = useAgents(userAddress, isAdmin);
     const { favorites, removeFavorite, refresh: refreshFavorites } = useFavoriteAgents(userAddress);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -30,35 +31,43 @@ export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: A
     const [isApplying, setIsApplying] = useState(false);
     const [hasApplied, setHasApplied] = useState(false);
     const [appliedAt, setAppliedAt] = useState<string | null>(null);
-    const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(false);
+    const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(true); // Start true to prevent flash
+    
+    // Use ref to track if we've initiated the check (prevents re-triggering)
+    const hasCheckedBetaStatus = useRef(false);
 
-    // Check beta status on mount if user doesn't have access
+    // Check beta status on mount ONCE if user doesn't have access
     useEffect(() => {
-        if (!hasBetaAccess && !hasApplied && !isCheckingBetaStatus) {
-            setIsCheckingBetaStatus(true);
-            fetch("/api/beta-access/apply", {
-                method: "GET",
-                credentials: "include",
-            })
-                .then((res) => res.json())
-                .then((data) => {
-                    if (data.hasApplied) {
-                        setHasApplied(true);
-                        setAppliedAt(data.appliedAt);
-                    }
-                    // If user already has beta access, reload to show agents
-                    if (data.hasBetaAccess) {
-                        window.location.reload();
-                    }
-                })
-                .catch((err) => {
-                    console.error("[AgentsSection] Error checking beta status:", err);
-                })
-                .finally(() => {
-                    setIsCheckingBetaStatus(false);
-                });
+        // Skip if user already has beta access or we've already checked
+        if (hasBetaAccess || hasCheckedBetaStatus.current) {
+            setIsCheckingBetaStatus(false);
+            return;
         }
-    }, [hasBetaAccess, hasApplied, isCheckingBetaStatus]);
+        
+        hasCheckedBetaStatus.current = true;
+        
+        fetch("/api/beta-access/apply", {
+            method: "GET",
+            credentials: "include",
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.hasApplied) {
+                    setHasApplied(true);
+                    setAppliedAt(data.appliedAt);
+                }
+                // If user already has beta access, reload to show agents
+                if (data.hasBetaAccess) {
+                    window.location.reload();
+                }
+            })
+            .catch((err) => {
+                console.error("[AgentsSection] Error checking beta status:", err);
+            })
+            .finally(() => {
+                setIsCheckingBetaStatus(false);
+            });
+    }, [hasBetaAccess]); // Only depend on hasBetaAccess prop
 
     const handleCreateAgent = async (
         name: string,
@@ -232,7 +241,8 @@ export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: A
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                     >
-                        {isLoading ? (
+                        {/* Show loading while checking beta status OR loading agents */}
+                        {(isLoading || isCheckingBetaStatus || isBetaAccessLoading) ? (
                             <div className="flex items-center justify-center py-6 sm:py-8">
                                 <svg className="animate-spin w-5 h-5 sm:w-6 sm:h-6 text-purple-400" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -244,9 +254,7 @@ export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: A
                                 {error}
                             </div>
                         ) : !hasBetaAccess ? (
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
+                            <div
                                 className="p-4 sm:p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-center"
                             >
                                 <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
@@ -255,11 +263,7 @@ export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: A
                                 <h3 className="text-sm sm:text-base text-white font-medium mb-1">
                                     {hasApplied ? "Application Pending" : "AI Agents (Beta)"}
                                 </h3>
-                                {isCheckingBetaStatus ? (
-                                    <div className="flex items-center justify-center py-3 sm:py-4">
-                                        <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                                    </div>
-                                ) : hasApplied ? (
+                                {hasApplied ? (
                                     <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
                                         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 sm:p-4">
                                             <p className="text-amber-400 text-xs sm:text-sm font-medium mb-1">Application Submitted</p>
@@ -282,7 +286,7 @@ export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: A
                                         Apply for beta access to create and interact with AI agents
                                     </p>
                                 )}
-                                {!hasApplied && !isCheckingBetaStatus && (
+                                {!hasApplied && (
                                     <button
                                         onClick={handleApplyForBetaAccess}
                                         disabled={isApplying}
@@ -291,7 +295,7 @@ export function AgentsSection({ userAddress, hasBetaAccess, isAdmin = false }: A
                                         {isApplying ? "Applying..." : "Apply for Beta Access"}
                                     </button>
                                 )}
-                            </motion.div>
+                            </div>
                         ) : agents.length === 0 && favorites.length === 0 ? (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}

@@ -167,6 +167,7 @@ function DashboardContent({
     const [walletBetaApplied, setWalletBetaApplied] = useState(false);
     const [betaAppliedAt, setBetaAppliedAt] = useState<string | null>(null);
     const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(false);
+    const walletBetaCheckInitiated = useRef(false); // Prevent multiple checks
     const [currentCallFriend, setCurrentCallFriend] =
         useState<FriendsListFriend | null>(null);
     const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(
@@ -359,38 +360,49 @@ function DashboardContent({
 
     // Beta access is passed from SIWE auth (or fall back to hook for non-EVM users)
     // Use || so if EITHER source says true, access is granted (more forgiving for cache issues)
-    const { hasBetaAccess: hookBetaAccess, refresh: refreshBetaAccess } = useBetaAccess(userAddress);
+    const { hasBetaAccess: hookBetaAccess, isLoading: isBetaAccessLoading, refresh: refreshBetaAccess } = useBetaAccess(userAddress);
     const hasBetaAccess = isBetaTester || hookBetaAccess;
 
-    // Check beta status when wallet beta prompt opens
+    // Check beta status when wallet beta prompt opens (ONCE per prompt open)
     useEffect(() => {
-        if (showWalletBetaPrompt && !walletBetaApplied && !isCheckingBetaStatus) {
-            setIsCheckingBetaStatus(true);
-            fetch("/api/beta-access/apply", {
-                method: "GET",
-                credentials: "include",
-            })
-                .then((res) => res.json())
-                .then((data) => {
-                    if (data.hasApplied) {
-                        setWalletBetaApplied(true);
-                        setBetaAppliedAt(data.appliedAt);
-                    }
-                    // If user already has beta access, close prompt and open wallet
-                    if (data.hasBetaAccess) {
-                        refreshBetaAccess();
-                        setShowWalletBetaPrompt(false);
-                        setIsWalletModalOpen(true);
-                    }
-                })
-                .catch((err) => {
-                    console.error("[Dashboard] Error checking beta status:", err);
-                })
-                .finally(() => {
-                    setIsCheckingBetaStatus(false);
-                });
+        // Only check when prompt opens and we haven't already checked
+        if (!showWalletBetaPrompt) {
+            // Reset the check flag when prompt closes so we can check again next time
+            walletBetaCheckInitiated.current = false;
+            return;
         }
-    }, [showWalletBetaPrompt, walletBetaApplied, isCheckingBetaStatus, refreshBetaAccess]);
+        
+        if (walletBetaApplied || walletBetaCheckInitiated.current) {
+            return;
+        }
+        
+        walletBetaCheckInitiated.current = true;
+        setIsCheckingBetaStatus(true);
+        
+        fetch("/api/beta-access/apply", {
+            method: "GET",
+            credentials: "include",
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.hasApplied) {
+                    setWalletBetaApplied(true);
+                    setBetaAppliedAt(data.appliedAt);
+                }
+                // If user already has beta access, close prompt and open wallet
+                if (data.hasBetaAccess) {
+                    refreshBetaAccess();
+                    setShowWalletBetaPrompt(false);
+                    setIsWalletModalOpen(true);
+                }
+            })
+            .catch((err) => {
+                console.error("[Dashboard] Error checking beta status:", err);
+            })
+            .finally(() => {
+                setIsCheckingBetaStatus(false);
+            });
+    }, [showWalletBetaPrompt, walletBetaApplied, refreshBetaAccess]);
 
     // Email verification
     const {
@@ -3250,6 +3262,7 @@ function DashboardContent({
                                 <AgentsSection
                                     userAddress={userAddress}
                                     hasBetaAccess={hasBetaAccess}
+                                    isBetaAccessLoading={isBetaAccessLoading}
                                     isAdmin={isAdmin}
                                 />
                             </div>
@@ -3932,6 +3945,10 @@ function DashboardContent({
                             {/* Wallet Tab - Shows for all, beta prompt for non-beta users */}
                             <button
                                 onClick={() => {
+                                    // If still loading beta access, don't show prompt yet
+                                    if (isBetaAccessLoading) {
+                                        return; // Wait for beta access check to complete
+                                    }
                                     if (hasBetaAccess) {
                                         setIsWalletModalOpen(true);
                                     } else {
@@ -3944,7 +3961,11 @@ function DashboardContent({
                                         : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
                                 }`}
                             >
-                                <span className="text-xl">💳</span>
+                                {isBetaAccessLoading ? (
+                                    <span className="text-xl animate-pulse">💳</span>
+                                ) : (
+                                    <span className="text-xl">💳</span>
+                                )}
                                 <span className="text-[9px] font-medium mt-0.5">
                                     Wallet
                                 </span>
