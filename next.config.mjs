@@ -140,6 +140,36 @@ const nextConfig = {
                         key: "Permissions-Policy",
                         value: "camera=(self), microphone=(self), geolocation=()",
                     },
+                    // SEC-012 FIX: Content Security Policy
+                    // Allows safe inline scripts (needed for Next.js), external APIs, and WebSocket connections
+                    {
+                        key: "Content-Security-Policy",
+                        value: [
+                            "default-src 'self'",
+                            // Scripts: self + inline (Next.js needs this) + eval (for some libraries)
+                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com",
+                            // Styles: self + inline (Tailwind, etc.)
+                            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+                            // Images: self + data URIs + external sources
+                            "img-src 'self' data: blob: https: http:",
+                            // Fonts: self + Google Fonts
+                            "font-src 'self' https://fonts.gstatic.com data:",
+                            // Connect: APIs, WebSockets, Waku, etc.
+                            "connect-src 'self' https: wss: ws: blob:",
+                            // Media: self + blob for video/audio
+                            "media-src 'self' blob: https:",
+                            // Frame: self only (X-Frame-Options also set)
+                            "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
+                            // Object: none (no plugins)
+                            "object-src 'none'",
+                            // Base URI: self only
+                            "base-uri 'self'",
+                            // Form action: self only
+                            "form-action 'self'",
+                            // Upgrade insecure requests in production
+                            "upgrade-insecure-requests",
+                        ].join("; "),
+                    },
                 ],
             },
         ];

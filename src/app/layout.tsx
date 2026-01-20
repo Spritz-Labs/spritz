@@ -7,6 +7,7 @@ import { EmailAuthProvider } from "@/context/EmailAuthProvider";
 import { AlienAuthProvider } from "@/context/AlienAuthProvider";
 import { WorldIdProvider } from "@/context/WorldIdProvider";
 import { AuthProvider } from "@/context/AuthProvider";
+import { RootErrorBoundary } from "@/components/RootErrorBoundary";
 
 const dmSans = DM_Sans({
     subsets: ["latin"],
@@ -255,17 +256,20 @@ export default function RootLayout({
             <body
                 className={`${dmSans.variable} ${jetbrainsMono.variable} font-sans antialiased`}
             >
-                <Web3Provider>
-                    <AuthProvider>
-                        <PasskeyProvider>
-                            <EmailAuthProvider>
-                                <AlienAuthProvider>
-                                    <WorldIdProvider>{children}</WorldIdProvider>
-                                </AlienAuthProvider>
-                            </EmailAuthProvider>
-                        </PasskeyProvider>
-                    </AuthProvider>
-                </Web3Provider>
+                {/* SRE-012 FIX: Root Error Boundary catches unhandled errors */}
+                <RootErrorBoundary>
+                    <Web3Provider>
+                        <AuthProvider>
+                            <PasskeyProvider>
+                                <EmailAuthProvider>
+                                    <AlienAuthProvider>
+                                        <WorldIdProvider>{children}</WorldIdProvider>
+                                    </AlienAuthProvider>
+                                </EmailAuthProvider>
+                            </PasskeyProvider>
+                        </AuthProvider>
+                    </Web3Provider>
+                </RootErrorBoundary>
             </body>
         </html>
     );

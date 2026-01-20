@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { jwtVerify } from "jose";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// SEC-010 FIX: Use the same secret as session for verifying OAuth state
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET;
+const encodedSecret = new TextEncoder().encode(SESSION_SECRET || "dev-only-insecure-secret");
 
 // Helper to get the app's base URL from the request
 function getAppUrl(request: NextRequest): string {
@@ -38,12 +43,21 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // Decode state to get user address
-        const stateData = JSON.parse(Buffer.from(state, "base64").toString());
-        const userAddress = stateData.userAddress;
-
-        if (!userAddress) {
-            throw new Error("Invalid state");
+        // SEC-010 FIX: Verify the signed OAuth state parameter
+        // This prevents CSRF attacks where an attacker tries to link their calendar
+        // to a victim's account
+        let userAddress: string;
+        try {
+            const { payload } = await jwtVerify(state, encodedSecret);
+            userAddress = payload.userAddress as string;
+            if (!userAddress) {
+                throw new Error("Invalid state payload");
+            }
+        } catch (jwtError) {
+            console.error("[Calendar] Invalid or expired state token:", jwtError);
+            return NextResponse.redirect(
+                `${appUrl}?calendar_error=${encodeURIComponent("OAuth session expired or invalid. Please try again.")}`
+            );
         }
 
         // Exchange code for tokens

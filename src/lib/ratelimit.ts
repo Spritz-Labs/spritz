@@ -1,6 +1,12 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { NextRequest, NextResponse } from "next/server";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("RateLimit");
+
+// SEC-008 FIX: Track and warn when rate limiting is disabled
+let rateLimitDisabledWarned = false;
 
 // Initialize Redis client (will be null if not configured)
 const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -108,8 +114,16 @@ export async function checkRateLimit(
 ): Promise<NextResponse | null> {
     const limiter = rateLimiters[tier];
     
-    // If rate limiting is not configured, allow all requests
+    // SEC-008 FIX: Log warning when rate limiting is disabled in production
     if (!limiter) {
+        if (process.env.NODE_ENV === "production" && !rateLimitDisabledWarned) {
+            log.warn("SECURITY: Rate limiting is disabled - Redis not configured", {
+                tier,
+                path: request.nextUrl.pathname,
+                env: process.env.NODE_ENV,
+            });
+            rateLimitDisabledWarned = true; // Only warn once per process
+        }
         return null;
     }
 
@@ -120,6 +134,13 @@ export async function checkRateLimit(
 
         if (!success) {
             const retryAfter = Math.ceil((reset - Date.now()) / 1000);
+            
+            log.info("Rate limit exceeded", {
+                tier,
+                identifier: identifier.slice(0, 10) + "...",
+                path: request.nextUrl.pathname,
+                retryAfter,
+            });
             
             return NextResponse.json(
                 {
@@ -143,7 +164,7 @@ export async function checkRateLimit(
         return null;
     } catch (error) {
         // If rate limiting fails, log but allow the request
-        console.error("[RateLimit] Error checking rate limit:", error);
+        log.error("Error checking rate limit", { error, tier });
         return null;
     }
 }

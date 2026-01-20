@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { SignJWT } from "jose";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// SEC-010 FIX: Use the same secret as session for signing OAuth state
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET;
+const encodedSecret = new TextEncoder().encode(SESSION_SECRET || "dev-only-insecure-secret");
 
 // Helper to get the app's base URL from the request
 function getAppUrl(request: NextRequest): string {
@@ -49,7 +54,14 @@ export async function GET(request: NextRequest) {
         "https://www.googleapis.com/auth/calendar.events",
     ].join(" ");
 
-    const state = Buffer.from(JSON.stringify({ userAddress })).toString("base64");
+    // SEC-010 FIX: Sign the OAuth state parameter to prevent CSRF attacks
+    // The state is now a signed JWT that expires in 10 minutes
+    const state = await new SignJWT({ userAddress: userAddress.toLowerCase() })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt()
+        .setExpirationTime("10m")
+        .sign(encodedSecret);
+
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
         `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +

@@ -13,6 +13,17 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // SRE-010 FIX: Warn on console.log usage in production code
+  // Use the logger utility from @/lib/logger instead
+  {
+    rules: {
+      // Warn on console.log/info/debug, but allow warn/error
+      // This encourages using the proper logger utility
+      "no-console": ["warn", { 
+        allow: ["warn", "error"] 
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;
