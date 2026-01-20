@@ -391,10 +391,13 @@ export async function getSafeAddress(config: SafeWalletConfig): Promise<Address>
 }
 
 /**
- * Calculate the deterministic address for a multi-sig Safe (vault)
- * Uses the same Safe SDK under the hood but with multiple owners
+ * Calculate the deterministic address for a vanilla Safe 1.4.1 multi-sig
+ * This calculates the address using the same method as createProxyWithNonce
  * 
- * @param owners - Array of owner addresses (must be sorted)
+ * IMPORTANT: This is for VANILLA Safe 1.4.1, NOT ERC-4337 Safe accounts!
+ * The address is calculated from: factory + singleton + initializer + saltNonce
+ * 
+ * @param owners - Array of owner addresses (will be sorted internally)
  * @param threshold - Number of required signatures
  * @param chainId - The chain ID
  * @param saltNonce - Salt nonce for unique addresses (default 0)
@@ -417,33 +420,91 @@ export async function getMultiSigSafeAddress(
     if (threshold < 1 || threshold > owners.length) {
         throw new Error(`Invalid threshold: ${threshold} for ${owners.length} owners`);
     }
-
-    const publicClient = getPublicClient(chainId);
     
     // Sort owners for deterministic address
     const sortedOwners = [...owners].sort((a, b) => 
         a.toLowerCase().localeCompare(b.toLowerCase())
     );
 
-    log(`[SafeWallet] Calculating multi-sig Safe address for ${sortedOwners.length} owners, threshold ${threshold}`);
-    
-    // Create Safe account with multiple owners
-    // Note: For address calculation, we use "local" type for all owners
-    const safeAccount = await toSafeSmartAccount({
-        client: publicClient,
-        owners: sortedOwners.map(addr => ({ address: addr, type: "local" } as any)),
-        threshold: BigInt(threshold),
-        version: "1.4.1",
-        entryPoint: {
-            address: entryPoint07Address,
-            version: "0.7",
-        },
-        saltNonce,
+    log(`[SafeWallet] Calculating vanilla Safe 1.4.1 address for ${sortedOwners.length} owners, threshold ${threshold}, nonce ${saltNonce}`);
+
+    // Encode the EXACT same setup data used in deployment
+    const setupData = encodeFunctionData({
+        abi: [{
+            name: "setup",
+            type: "function",
+            inputs: [
+                { name: "_owners", type: "address[]" },
+                { name: "_threshold", type: "uint256" },
+                { name: "to", type: "address" },
+                { name: "data", type: "bytes" },
+                { name: "fallbackHandler", type: "address" },
+                { name: "paymentToken", type: "address" },
+                { name: "payment", type: "uint256" },
+                { name: "paymentReceiver", type: "address" },
+            ],
+            outputs: [],
+        }],
+        functionName: "setup",
+        args: [
+            sortedOwners,
+            BigInt(threshold),
+            "0x0000000000000000000000000000000000000000" as Address,
+            "0x" as Hex,
+            "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99" as Address, // SAFE_FALLBACK_HANDLER_141
+            "0x0000000000000000000000000000000000000000" as Address,
+            BigInt(0),
+            "0x0000000000000000000000000000000000000000" as Address,
+        ],
     });
 
-    log(`[SafeWallet] Multi-sig Safe address: ${safeAccount.address}`);
+    // Safe Proxy Factory uses CREATE2 with this formula:
+    // address = keccak256(0xff ++ factory ++ salt ++ keccak256(initCode))[12:]
+    // where salt = keccak256(keccak256(initializer) ++ saltNonce)
+    
+    const factory = "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67" as Address; // SAFE_PROXY_FACTORY_141
+    const singleton = "0x41675C099F32341bf84BFc5382aF534df5C7461a" as Address; // SAFE_SINGLETON_141
+    
+    // Safe Proxy bytecode from Safe v1.4.1 
+    // This is the creation code that the factory uses to deploy proxies
+    // Source: https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/proxies/SafeProxyFactory.sol
+    const proxyCreationCode = "0x608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101c46022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505060ab806101196000396000f3fe608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000000000000000000000000000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea264697066735822122003d1488ee65e08fa41e58e888a9865554c535f2c77126a82cb4c0f917f31441a64736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564" as Hex;
+    
+    // Calculate salt = keccak256(keccak256(initializer) ++ saltNonce)
+    const initializerHash = keccak256(setupData);
+    const salt = keccak256(
+        concat([
+            initializerHash,
+            toHex(saltNonce, { size: 32 }),
+        ])
+    );
+    
+    // Calculate init code hash = keccak256(proxyCreationCode ++ singleton)
+    const initCode = concat([
+        proxyCreationCode,
+        encodeAbiParameters(
+            [{ type: "address" }],
+            [singleton]
+        ),
+    ]);
+    const initCodeHash = keccak256(initCode);
+    
+    // Calculate CREATE2 address
+    const create2Address = keccak256(
+        concat([
+            "0xff" as Hex,
+            factory,
+            salt,
+            initCodeHash,
+        ])
+    );
+    
+    // Take last 20 bytes as address
+    const safeAddress = `0x${create2Address.slice(-40)}` as Address;
 
-    return safeAccount.address;
+    log(`[SafeWallet] Vanilla Safe 1.4.1 address: ${safeAddress}`);
+
+    return safeAddress;
 }
 
 /**
