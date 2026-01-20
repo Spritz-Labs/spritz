@@ -100,8 +100,9 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [isProposing, setIsProposing] = useState(false);
     const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
     
-    // Deployment toggle: default to Smart Wallet (sponsored), toggle for EOA
-    const [useEOAForDeploy, setUseEOAForDeploy] = useState(false);
+    // Deployment toggle: default to EOA (single tx), toggle for sponsored gas (multiple signs)
+    // EOA is better UX - just one "approve transaction" instead of multiple sign prompts
+    const [useSponsoredGas, setUseSponsoredGas] = useState(false);
 
     // Wallet clients for deployment
     const { data: walletClient } = useWalletClient();
@@ -156,7 +157,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             console.log("[VaultList] saltNonce hex:", "0x" + BigInt(deployInfo.saltNonce || "0").toString(16));
             console.log("[VaultList] Stored safe address:", deployInfo.safeAddress);
             console.log("[VaultList] Sorted owners:", [...(deployInfo.owners as string[])].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
-            console.log("[VaultList] Using EOA:", useEOAForDeploy, "Sponsored:", gasCost.isSponsored);
+            console.log("[VaultList] Using Sponsored:", useSponsoredGas, "Chain supports:", gasCost.isSponsored);
 
             // Double-check on-chain status before deploying (in case previous attempt succeeded)
             // This prevents "Create2 call failed" errors when Safe already exists
@@ -177,7 +178,8 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
             // On Mainnet (no sponsorship) or if EOA toggle is enabled, use EOA
             // Otherwise, use Smart Wallet with sponsored gas
-            if (useEOAForDeploy || !gasCost.isSponsored) {
+            // Use EOA by default (single tx approval), sponsored gas is opt-in
+            if (!useSponsoredGas || !gasCost.isSponsored) {
                 // EOA deployment - connected wallet pays gas directly
                 if (!walletClient) {
                     setDeployError("Please connect your wallet to deploy");
@@ -200,8 +202,8 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 safeAddress = result.safeAddress;
             } else {
                 // Smart Wallet deployment - sponsored gas via paymaster
-                if (!connectedAddress) {
-                    setDeployError("Please connect your wallet to deploy");
+                if (!connectedAddress || !isConnected) {
+                    setDeployError("Wallet disconnected. Please reconnect your wallet and try again.");
                     setIsDeploying(false);
                     return;
                 }
@@ -215,9 +217,17 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         deployInfo.chainId,
                         connectedAddress as Address,
                         async (message: string) => {
+                            // Check wallet is still connected before signing
+                            if (!isConnected) {
+                                throw new Error("Wallet disconnected during signing. Please reconnect.");
+                            }
                             return await signMessageAsync({ message }) as Hex;
                         },
                         async (data: unknown) => {
+                            // Check wallet is still connected before signing
+                            if (!isConnected) {
+                                throw new Error("Wallet disconnected during signing. Please reconnect.");
+                            }
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             return await signTypedDataAsync(data as any) as Hex;
                         },
@@ -228,12 +238,19 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 } catch (sponsoredError: unknown) {
                     const errorMsg = sponsoredError instanceof Error ? sponsoredError.message : String(sponsoredError);
                     
+                    // Handle wallet disconnection
+                    if (errorMsg.toLowerCase().includes("not connected") || 
+                        errorMsg.toLowerCase().includes("disconnected") ||
+                        errorMsg.toLowerCase().includes("no account")) {
+                        throw new Error("Wallet disconnected. Please reconnect your wallet and try again.");
+                    }
+                    
                     // If bundler simulation fails with Create2 error, try EOA as fallback
                     if (errorMsg.includes("Create2 call failed") || errorMsg.includes("simulation")) {
                         console.log("[VaultList] Bundler simulation failed, falling back to EOA deployment...");
                         
-                        if (!walletClient) {
-                            throw new Error("Bundler unavailable and wallet not connected for fallback");
+                        if (!walletClient || !isConnected) {
+                            throw new Error("Bundler unavailable and wallet not connected for fallback. Please reconnect.");
                         }
                         
                         const eoaResult = await deployMultiSigSafeWithEOA(
@@ -336,7 +353,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         } finally {
             setIsDeploying(false);
         }
-    }, [walletClient, publicClient, selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults, useEOAForDeploy, connectedAddress, signMessageAsync, signTypedDataAsync]);
+    }, [walletClient, publicClient, selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults, useSponsoredGas, connectedAddress, isConnected, signMessageAsync, signTypedDataAsync]);
 
     // Sync deployment status - checks on-chain state and updates DB if needed
     const [isSyncing, setIsSyncing] = useState(false);
@@ -1037,14 +1054,14 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 {!selectedVault.isDeployed && (() => {
                     const gasCost = getDeployGasCost(selectedVault.chainId);
                     const chainInfo = getChainById(selectedVault.chainId);
-                    const isSponsored = gasCost.isSponsored && !useEOAForDeploy;
+                    const willUseSponsored = gasCost.isSponsored && useSponsoredGas;
                     
                     return (
-                        <div className={`p-4 rounded-xl border ${gasCost.isHigh ? 'bg-amber-500/10 border-amber-500/30' : isSponsored ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-yellow-500/10 border-yellow-500/30'}`}>
+                        <div className={`p-4 rounded-xl border ${gasCost.isHigh ? 'bg-amber-500/10 border-amber-500/30' : 'bg-zinc-800/50 border-zinc-700'}`}>
                             <div className="flex items-start gap-3">
-                                <span className="text-2xl">{gasCost.isHigh ? '⚠️' : isSponsored ? '✨' : '🔧'}</span>
+                                <span className="text-2xl">{gasCost.isHigh ? '⚠️' : '🔧'}</span>
                                 <div className="flex-1">
-                                    <h4 className={`font-medium mb-1 ${gasCost.isHigh ? 'text-amber-400' : isSponsored ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                                    <h4 className={`font-medium mb-1 ${gasCost.isHigh ? 'text-amber-400' : 'text-white'}`}>
                                         Vault Not Yet Deployed
                                     </h4>
                                     <p className="text-sm text-zinc-400 mb-2">
@@ -1053,19 +1070,19 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                     
                                     {/* Gas Cost Info */}
                                     <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg mb-3 ${
-                                        gasCost.isHigh ? 'bg-amber-500/20' : isSponsored ? 'bg-emerald-500/20' : 'bg-zinc-800'
+                                        gasCost.isHigh ? 'bg-amber-500/20' : willUseSponsored ? 'bg-emerald-500/20' : 'bg-zinc-800'
                                     }`}>
                                         <span className="text-xs text-zinc-400">Gas fee:</span>
                                         <span className={`text-sm font-bold ${
-                                            gasCost.isHigh ? 'text-amber-400' : isSponsored ? 'text-emerald-400' : 'text-yellow-400'
+                                            gasCost.isHigh ? 'text-amber-400' : willUseSponsored ? 'text-emerald-400' : 'text-zinc-300'
                                         }`}>
-                                            {isSponsored ? 'Free (Sponsored)' : useEOAForDeploy ? '~$0.50-2' : gasCost.cost}
+                                            {willUseSponsored ? 'Free (Sponsored)' : gasCost.cost}
                                         </span>
                                     </div>
                                     
                                     {gasCost.isHigh && (
                                         <p className="text-xs text-amber-300/70 mb-3">
-                                            💡 Consider creating vaults on Layer 2 networks (Base, Arbitrum) for free sponsored deployments.
+                                            💡 Consider creating vaults on Layer 2 networks (Base, Arbitrum) for lower gas fees.
                                         </p>
                                     )}
                                     
@@ -1080,14 +1097,12 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                             className={`px-4 py-2 font-medium rounded-lg transition-colors flex items-center gap-2 ${
                                                 gasCost.isHigh 
                                                     ? 'bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-600 text-black' 
-                                                    : isSponsored 
-                                                        ? 'bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-600 text-black'
-                                                        : 'bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-600 text-black'
+                                                    : 'bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-600 text-white'
                                             }`}
                                         >
                                             {isDeploying ? (
                                                 <>
-                                                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                     Deploying...
                                                 </>
                                             ) : (
@@ -1098,14 +1113,14 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         </button>
                                     </div>
                                     
-                                    {/* EOA Toggle - Only show on L2s where sponsorship is available */}
+                                    {/* Sponsored Gas Toggle - Only show on L2s where sponsorship is available */}
                                     {gasCost.isSponsored && (
                                         <button
-                                            onClick={() => setUseEOAForDeploy(!useEOAForDeploy)}
+                                            onClick={() => setUseSponsoredGas(!useSponsoredGas)}
                                             className="text-xs text-zinc-400 hover:text-zinc-300 flex items-center gap-1.5 mb-2"
                                         >
-                                            <span className="text-sm">{useEOAForDeploy ? '☑' : '☐'}</span>
-                                            <span>Pay from connected wallet instead</span>
+                                            <span className="text-sm">{useSponsoredGas ? '☑' : '☐'}</span>
+                                            <span>Use sponsored gas (free, requires multiple signatures)</span>
                                         </button>
                                     )}
                                     
@@ -1114,9 +1129,9 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                     )}
                                     
                                     <p className="text-xs text-zinc-500">
-                                        {isSponsored 
-                                            ? 'Deployment is sponsored by your Smart Wallet - no gas fees!' 
-                                            : 'Your connected wallet will pay the gas fee for deployment.'
+                                        {willUseSponsored 
+                                            ? 'Using sponsored gas - requires signing multiple messages.' 
+                                            : 'Your wallet will approve one transaction to deploy.'
                                         }
                                     </p>
                                 </div>
