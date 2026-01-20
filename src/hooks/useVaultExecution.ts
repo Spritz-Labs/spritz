@@ -19,7 +19,7 @@ import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
-import { getSafeMessageHash } from "@/lib/safeWallet";
+import { getSafeMessageHashAsync } from "@/lib/safeWallet";
 
 // Map chain IDs to viem chain objects
 const VIEM_CHAINS: Record<number, Chain> = {
@@ -325,7 +325,13 @@ export function useVaultExecution() {
             if (smartWalletAddress) {
                 // For contract signers: sign the Safe message hash
                 // This is what the Smart Wallet's isValidSignature will validate against
-                hashToSign = getSafeMessageHash(smartWalletAddress, params.chainId, safeTxHash);
+                // Use async version to fetch the actual domain separator from the contract
+                hashToSign = await getSafeMessageHashAsync(
+                    smartWalletAddress, 
+                    params.chainId, 
+                    safeTxHash,
+                    publicClient
+                );
                 console.log("[VaultExecution] EIP-1271: Signing wrapped Safe message hash:", hashToSign);
             } else {
                 // For EOA signers: sign the raw safeTxHash

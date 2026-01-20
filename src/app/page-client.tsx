@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { useAccount, useReconnect } from "wagmi";
@@ -69,14 +69,67 @@ export default function Home() {
     
     // EVM wallet via wagmi
     const { address: wagmiAddress, isConnected: isWagmiConnected, isReconnecting } = useAccount();
-    const { reconnect } = useReconnect();
+    const { reconnect, connectors } = useReconnect();
     // AppKit disconnect (works for both EVM and Solana)
     const { disconnect: walletDisconnect } = useDisconnect();
+    
+    // Track last reconnect attempt to prevent spam
+    const lastReconnectAttempt = useRef<number>(0);
+    const RECONNECT_COOLDOWN = 3000; // 3 seconds cooldown between reconnect attempts
+
+    // Robust reconnect function that handles PWA resume scenarios
+    const attemptReconnect = useCallback(() => {
+        const now = Date.now();
+        if (now - lastReconnectAttempt.current < RECONNECT_COOLDOWN) {
+            console.log("[PWA] Reconnect attempt too soon, skipping");
+            return;
+        }
+        
+        lastReconnectAttempt.current = now;
+        console.log("[PWA] Attempting wallet reconnection...");
+        
+        // Try reconnecting with all available connectors
+        reconnect({ connectors });
+    }, [reconnect, connectors]);
 
     // Explicitly trigger wallet reconnection on mount for PWA persistence
     useEffect(() => {
-        reconnect();
-    }, [reconnect]);
+        attemptReconnect();
+    }, [attemptReconnect]);
+    
+    // Reconnect wallet when app comes back to foreground (PWA resume)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                // App is now visible
+                console.log("[PWA] App foregrounded, checking wallet connection...");
+                
+                // If we have saved session but wallet isn't connected, try reconnecting
+                if (hasSavedWalletSession() && !isWagmiConnected && !isReconnecting) {
+                    console.log("[PWA] Wallet not connected but session exists, reconnecting...");
+                    attemptReconnect();
+                }
+            }
+        };
+        
+        // Also handle focus events (backup for visibility change)
+        const handleFocus = () => {
+            if (hasSavedWalletSession() && !isWagmiConnected && !isReconnecting) {
+                console.log("[PWA] Window focused, reconnecting wallet...");
+                attemptReconnect();
+            }
+        };
+        
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", handleFocus);
+        
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("focus", handleFocus);
+        };
+    }, [isWagmiConnected, isReconnecting, attemptReconnect]);
 
     // Multi-chain wallet detection (EVM + Solana)
     const {

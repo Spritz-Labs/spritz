@@ -247,6 +247,16 @@ export function useAuthImplementation() {
             return false;
         }
 
+        // If still reconnecting, wait a moment
+        if (isReconnecting) {
+            console.log("[Auth] Wallet reconnecting, waiting...");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            if (!isConnected) {
+                setState((prev) => ({ ...prev, error: "Wallet connection lost. Please reconnect." }));
+                return false;
+            }
+        }
+
         setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
         try {
@@ -272,14 +282,25 @@ export function useAuthImplementation() {
             return true;
         } catch (err) {
             console.error("[Auth] Sign in error:", err);
+            const errorMessage = err instanceof Error ? err.message : "Sign in failed";
+            
+            // Detect wallet disconnection errors
+            const isDisconnectError = errorMessage.toLowerCase().includes("disconnect") ||
+                errorMessage.toLowerCase().includes("not connected") ||
+                errorMessage.toLowerCase().includes("no provider") ||
+                errorMessage.toLowerCase().includes("user rejected") ||
+                errorMessage.includes("connector not connected");
+            
             setState((prev) => ({
                 ...prev,
                 isLoading: false,
-                error: err instanceof Error ? err.message : "Sign in failed",
+                error: isDisconnectError 
+                    ? "Wallet connection lost. Please reconnect your wallet."
+                    : errorMessage,
             }));
             return false;
         }
-    }, [address, isConnected, signMessageAsync]);
+    }, [address, isConnected, isReconnecting, signMessageAsync]);
 
     // Sign out
     const signOut = useCallback(async () => {

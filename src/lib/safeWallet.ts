@@ -630,20 +630,12 @@ export function calculateSafeTxHash(
 }
 
 /**
- * Calculate the Safe message hash for EIP-1271 signature validation
+ * Calculate the Safe message hash for EIP-1271 signature validation (sync version)
  * 
- * When Safe A (a Smart Wallet) is an owner of Safe B (a Vault), and Safe B
- * calls isValidSignature() on Safe A, Safe A wraps the hash before validation:
+ * NOTE: This computes the domain separator locally. For production use,
+ * prefer getSafeMessageHashAsync which reads the actual domain separator from the contract.
  * 
- * 1. messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, originalHash))
- * 2. finalHash = keccak256("\x19\x01" || domainSeparator || messageHash)
- * 
- * The EOA owner of Safe A must sign this finalHash (not the originalHash)
- * for the signature to be valid.
- * 
- * @param safeAddress - The Safe contract address (the signer, e.g., Smart Wallet)
- * @param chainId - The chain ID
- * @param messageHash - The original hash that Safe A needs to "sign" (e.g., vault's safeTxHash)
+ * @deprecated Use getSafeMessageHashAsync instead
  */
 export function getSafeMessageHash(
     safeAddress: Address,
@@ -653,7 +645,7 @@ export function getSafeMessageHash(
     // SafeMessage type hash: keccak256("SafeMessage(bytes message)")
     const SAFE_MSG_TYPEHASH = keccak256(toHex("SafeMessage(bytes message)"));
     
-    // EIP-712 domain separator for Safe
+    // EIP-712 domain separator for Safe (computed locally)
     const DOMAIN_SEPARATOR_TYPEHASH = keccak256(
         toHex("EIP712Domain(uint256 chainId,address verifyingContract)")
     );
@@ -665,17 +657,88 @@ export function getSafeMessageHash(
         )
     );
     
+    return computeSafeMessageHash(domainSeparator, messageHash);
+}
+
+/**
+ * Calculate the Safe message hash for EIP-1271 signature validation (async version)
+ * 
+ * When Safe A (a Smart Wallet) is an owner of Safe B (a Vault), and Safe B
+ * calls isValidSignature() on Safe A, Safe A wraps the hash before validation:
+ * 
+ * 1. messageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(abi.encode(originalHash))))
+ * 2. finalHash = keccak256("\x19\x01" || domainSeparator || messageHash)
+ * 
+ * The EOA owner of Safe A must sign this finalHash (not the originalHash)
+ * for the signature to be valid.
+ * 
+ * @param safeAddress - The Safe contract address (the signer, e.g., Smart Wallet)
+ * @param chainId - The chain ID
+ * @param messageHash - The original hash that Safe A needs to "sign" (e.g., vault's safeTxHash)
+ * @param publicClient - Viem public client to read from the contract
+ */
+export async function getSafeMessageHashAsync(
+    safeAddress: Address,
+    chainId: number,
+    messageHash: Hex,
+    publicClient: ReturnType<typeof createPublicClient>
+): Promise<Hex> {
+    // Try to read the domain separator from the contract
+    let domainSeparator: Hex;
+    
+    try {
+        domainSeparator = await publicClient.readContract({
+            address: safeAddress,
+            abi: [{
+                name: "domainSeparator",
+                type: "function",
+                stateMutability: "view",
+                inputs: [],
+                outputs: [{ type: "bytes32" }],
+            }],
+            functionName: "domainSeparator",
+        }) as Hex;
+        console.log("[SafeMessageHash] Domain separator from contract:", domainSeparator);
+    } catch (e) {
+        // Fallback to computed domain separator if contract call fails
+        console.log("[SafeMessageHash] Could not read domain separator from contract, computing locally");
+        const DOMAIN_SEPARATOR_TYPEHASH = keccak256(
+            toHex("EIP712Domain(uint256 chainId,address verifyingContract)")
+        );
+        
+        domainSeparator = keccak256(
+            encodeAbiParameters(
+                [{ type: "bytes32" }, { type: "uint256" }, { type: "address" }],
+                [DOMAIN_SEPARATOR_TYPEHASH, BigInt(chainId), safeAddress]
+            )
+        );
+    }
+    
+    return computeSafeMessageHash(domainSeparator, messageHash);
+}
+
+/**
+ * Internal helper to compute the Safe message hash given a domain separator
+ */
+function computeSafeMessageHash(domainSeparator: Hex, originalHash: Hex): Hex {
+    // SafeMessage type hash: keccak256("SafeMessage(bytes message)")
+    const SAFE_MSG_TYPEHASH = keccak256(toHex("SafeMessage(bytes message)"));
+    
     // Safe's getMessageHashForSafe computes:
-    // safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, message))
-    // But message is the raw bytes, and for a bytes32 it's encoded as abi.encode(_dataHash)
-    // So we hash abi.encode(messageHash) first
+    // 1. message = abi.encode(originalHash) where originalHash is bytes32
+    // 2. safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(message)))
+    // 3. return keccak256(0x19 || 0x01 || domainSeparator || safeMessageHash)
+    
+    // Step 1: Encode the original hash as bytes (abi.encode for bytes32 is just the 32 bytes)
     const encodedMessage = encodeAbiParameters(
         [{ type: "bytes32" }],
-        [messageHash]
+        [originalHash]
     );
+    
+    // Step 2: Hash the encoded message
     const messageBytes = keccak256(encodedMessage);
     
-    // Now encode with the SAFE_MSG_TYPEHASH
+    // Step 3: Encode with SafeMessage typehash and hash
     const safeMessageHash = keccak256(
         encodeAbiParameters(
             [{ type: "bytes32" }, { type: "bytes32" }],
@@ -683,7 +746,7 @@ export function getSafeMessageHash(
         )
     );
     
-    // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || safeMessageHash)
+    // Step 4: Final EIP-712 hash
     const finalHash = keccak256(
         concat([
             toHex("\x19\x01", { size: 2 }),
@@ -691,6 +754,14 @@ export function getSafeMessageHash(
             safeMessageHash,
         ])
     );
+    
+    console.log("[SafeMessageHash] Computed hash:", {
+        originalHash,
+        messageBytes,
+        safeMessageHash,
+        domainSeparator,
+        finalHash,
+    });
     
     return finalHash;
 }

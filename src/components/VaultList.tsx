@@ -8,6 +8,7 @@ import { getChainById } from "@/config/chains";
 import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useWalletClient, usePublicClient, useAccount, useSignMessage, useSignTypedData } from "wagmi";
+import { useWalletReconnect } from "@/hooks/useWalletReconnect";
 import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas } from "@/lib/safeWallet";
 import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
 import type { Address, Hex } from "viem";
@@ -109,6 +110,9 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const publicClient = usePublicClient();
     const { address: connectedAddress, isConnected } = useAccount();
     
+    // Wallet reconnection for PWA persistence
+    const { ensureConnected } = useWalletReconnect();
+    
     // Signing functions for sponsored deployment
     const { signMessageAsync } = useSignMessage();
     const { signTypedDataAsync } = useSignTypedData();
@@ -202,10 +206,16 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 safeAddress = result.safeAddress;
             } else {
                 // Smart Wallet deployment - sponsored gas via paymaster
+                // Try to ensure wallet is connected (handles PWA resume scenarios)
                 if (!connectedAddress || !isConnected) {
-                    setDeployError("Wallet disconnected. Please reconnect your wallet and try again.");
-                    setIsDeploying(false);
-                    return;
+                    console.log("[VaultList] Wallet appears disconnected, attempting reconnect...");
+                    const reconnected = await ensureConnected();
+                    if (!reconnected) {
+                        setDeployError("Wallet disconnected. Please reconnect your wallet and try again.");
+                        setIsDeploying(false);
+                        return;
+                    }
+                    console.log("[VaultList] Wallet reconnected successfully");
                 }
 
                 console.log("[VaultList] Deploying via Smart Wallet (sponsored gas)");
@@ -217,16 +227,22 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         deployInfo.chainId,
                         connectedAddress as Address,
                         async (message: string) => {
-                            // Check wallet is still connected before signing
+                            // Check wallet is still connected before signing, try reconnect
                             if (!isConnected) {
-                                throw new Error("Wallet disconnected during signing. Please reconnect.");
+                                const reconnected = await ensureConnected();
+                                if (!reconnected) {
+                                    throw new Error("Wallet disconnected during signing. Please reconnect.");
+                                }
                             }
                             return await signMessageAsync({ message }) as Hex;
                         },
                         async (data: unknown) => {
-                            // Check wallet is still connected before signing
+                            // Check wallet is still connected before signing, try reconnect
                             if (!isConnected) {
-                                throw new Error("Wallet disconnected during signing. Please reconnect.");
+                                const reconnected = await ensureConnected();
+                                if (!reconnected) {
+                                    throw new Error("Wallet disconnected during signing. Please reconnect.");
+                                }
                             }
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             return await signTypedDataAsync(data as any) as Hex;
