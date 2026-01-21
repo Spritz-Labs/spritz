@@ -634,6 +634,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const [hasAcknowledgedChainWarning, setHasAcknowledgedChainWarning] = useState(false);
     const [showNetworksInfo, setShowNetworksInfo] = useState(false);
     const [showCreateVaultModal, setShowCreateVaultModal] = useState(false);
+    const [vaultRefreshKey, setVaultRefreshKey] = useState(0);
     
     // Vaults hook
     const { vaults, createVault } = useVaults(isOpen ? userAddress : null);
@@ -2645,6 +2646,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     <VaultList
                                         userAddress={userAddress}
                                         onCreateNew={() => setShowCreateVaultModal(true)}
+                                        refreshKey={vaultRefreshKey}
                                     />
                                 </div>
                             </div>
@@ -2677,6 +2679,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 onCreate={async (params) => {
                     await createVault(params);
                     setShowCreateVaultModal(false);
+                    // Trigger VaultList to refresh
+                    setVaultRefreshKey(prev => prev + 1);
                 }}
             />
 

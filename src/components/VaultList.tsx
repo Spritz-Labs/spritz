@@ -20,6 +20,7 @@ const AA_TX_TIMEOUT = 120_000;
 type VaultListProps = {
     userAddress: string;
     onCreateNew: () => void;
+    refreshKey?: number; // Increment to trigger a refresh after vault creation
 };
 
 // Transaction types for activity tab
@@ -65,8 +66,16 @@ const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "�
 // Tab types for vault detail view
 type VaultTab = "assets" | "send" | "receive" | "activity";
 
-export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
+export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListProps) {
     const { vaults, isLoading, getVault, updateVault, deleteVault, getDeploymentInfo, confirmDeployment, fetchVaults } = useVaults(userAddress);
+    
+    // Refetch vaults when refreshKey changes (after vault creation)
+    useEffect(() => {
+        if (refreshKey !== undefined && refreshKey > 0) {
+            console.log("[VaultList] Refreshing vaults due to refreshKey change:", refreshKey);
+            fetchVaults();
+        }
+    }, [refreshKey, fetchVaults]);
     // Pass the userAddress to support passkey users who don't have a wagmi wallet connected
     const vaultExecution = useVaultExecution(userAddress as Address | undefined);
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
