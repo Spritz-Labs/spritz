@@ -1196,8 +1196,10 @@ export async function createPasskeySafeAccountClient(
         return bytes.buffer;
     };
 
-    // Custom getFn that exactly mirrors the working login flow
-    // This uses the same navigator.credentials.get() options that work for login
+    // Custom getFn that requests the specific passkey credential
+    // CRITICAL: We must NOT fall back to "discoverable credentials" (empty allowCredentials)
+    // because Safari will show "iPhone, iPad, Android, Security Key" options instead
+    // of directly prompting for the local/synced passkey
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const customGetFn = async (options?: any): Promise<any> => {
         console.log(`[SafeWallet] customGetFn called`);
@@ -1207,15 +1209,14 @@ export async function createPasskeySafeAccountClient(
             return navigator.credentials.get(options);
         }
 
-        // Build options exactly like the working login flow
+        // Build options with the specific credential ID
+        // CRITICAL for iOS/Safari: 
+        // 1. Specify the credential ID to direct the browser to the exact passkey
+        // 2. Do NOT specify transports - let browser decide (required for iCloud Keychain sync)
+        // 3. Do NOT fall back to discoverable credentials (causes cross-device UI)
         const credentialIdBuffer = base64urlToArrayBuffer(passkeyCredential.credentialId);
         
-        // First try with specific credential ID (faster if it works)
-        // IMPORTANT: Don't specify transports - let the browser decide
-        // This is critical for iCloud-synced passkeys to work correctly
-        // Specifying transports can cause Safari to show cross-device options
-        // (QR code, iPhone, etc.) instead of using the local/synced passkey
-        const publicKeyOptionsWithCred: PublicKeyCredentialRequestOptions = {
+        const publicKeyOptions: PublicKeyCredentialRequestOptions = {
             challenge: options.publicKey.challenge,
             rpId: rpId,
             timeout: 120000,
@@ -1223,56 +1224,29 @@ export async function createPasskeySafeAccountClient(
             allowCredentials: [{
                 id: credentialIdBuffer,
                 type: 'public-key',
-                // Don't specify transports - browser will use the appropriate method
+                // CRITICAL: Do NOT specify transports
+                // Safari uses this to determine which UI to show
+                // Specifying transports can force cross-device authentication UI
             }],
         };
 
         debugLog(`[SafeWallet] Using rpId: ${rpId}`);
         debugLog(`[SafeWallet] Credential ID: ${passkeyCredential.credentialId.slice(0, 20)}...`);
+        debugLog(`[SafeWallet] Requesting specific credential (no fallback to discoverable)`);
 
-        try {
-            // Try with specific credential first
-            debugLog(`[SafeWallet] Trying with specific credential ID...`);
-            const credential = await navigator.credentials.get({
-                publicKey: publicKeyOptionsWithCred,
-                mediation: "optional",
-            } as CredentialRequestOptions);
-            
-            if (credential) {
-                debugLog(`[SafeWallet] Got credential successfully`);
-                return credential;
-            }
-        } catch (error) {
-            debugLog(`[SafeWallet] Specific credential failed, trying discoverable...`);
+        // Request the specific credential - do NOT fall back to discoverable
+        // If this fails, let the error propagate so user knows what went wrong
+        const credential = await navigator.credentials.get({
+            publicKey: publicKeyOptions,
+            // Note: not specifying 'mediation' - let browser use default behavior
+        });
+        
+        if (!credential) {
+            throw new Error('No passkey credential returned. Please ensure your passkey is available on this device.');
         }
-
-        // Fallback: Try discoverable credential (no allowCredentials)
-        // This lets the browser find any passkey for this rpId
-        debugLog(`[SafeWallet] Trying discoverable credential lookup...`);
-        const publicKeyOptionsDiscoverable: PublicKeyCredentialRequestOptions = {
-            challenge: options.publicKey.challenge,
-            rpId: rpId,
-            timeout: 120000,
-            userVerification: 'preferred',
-            // No allowCredentials - browser will show all available passkeys for this rpId
-        };
-
-        try {
-            const credential = await navigator.credentials.get({
-                publicKey: publicKeyOptionsDiscoverable,
-                mediation: "optional",
-            } as CredentialRequestOptions);
-            
-            if (!credential) {
-                throw new Error('No credential returned');
-            }
-            
-            debugLog(`[SafeWallet] Got credential via discoverable lookup`);
-            return credential;
-        } catch (error) {
-            console.error(`[SafeWallet] All credential methods failed:`, error);
-            throw error;
-        }
+        
+        debugLog(`[SafeWallet] Got credential successfully`);
+        return credential;
     };
 
     // Create a WebAuthn account using viem's built-in support

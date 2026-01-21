@@ -7,6 +7,7 @@ import { useVaultExecution } from "@/hooks/useVaultExecution";
 import { getChainById } from "@/config/chains";
 import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
+import { useSendSuggestions, useAddressBook, type SendSuggestion } from "@/hooks/useSendSuggestions";
 import { useWalletClient, usePublicClient, useAccount, useSignMessage, useSignTypedData } from "wagmi";
 import { useWalletReconnect } from "@/hooks/useWalletReconnect";
 import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas, deployVaultViaPasskey, type PasskeyCredential, getPublicClient } from "@/lib/safeWallet";
@@ -99,6 +100,14 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [showTokenSelector, setShowTokenSelector] = useState(false);
     const [isUsdMode, setIsUsdMode] = useState(false); // Toggle between USD and token amount input
     
+    // Send suggestions (friends, vaults, address book)
+    const { suggestions: sendSuggestions, filter: filterSuggestions, refresh: refreshSuggestions, isLoading: suggestionsLoading } = useSendSuggestions(true);
+    const { addEntry: addToAddressBook } = useAddressBook();
+    const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false);
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+    const [showSaveAddressDialog, setShowSaveAddressDialog] = useState(false);
+    const [saveAddressLabel, setSaveAddressLabel] = useState("");
+    
     // Calculate token price per unit for USD conversion (Vault send)
     const vaultTokenPriceUsd = useMemo(() => {
         if (!sendToken?.balanceUsd || !sendToken?.balanceFormatted) return 0;
@@ -149,6 +158,98 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         }
         setIsUsdMode(!isUsdMode);
     }, [sendAmount, isUsdMode, vaultTokenPriceUsd, getVaultTokenAmount, getVaultUsdAmount]);
+    
+    // Filter suggestions based on recipient input
+    const filteredSuggestions = useMemo(() => {
+        if (ensResolver.input.length > 0) {
+            return filterSuggestions(ensResolver.input);
+        }
+        return sendSuggestions;
+    }, [ensResolver.input, filterSuggestions, sendSuggestions]);
+    
+    // Check if current address can be saved to address book
+    const canSaveToAddressBook = useMemo(() => {
+        if (!ensResolver.input || !ensResolver.isValid) return false;
+        const addr = (ensResolver.resolvedAddress || ensResolver.input).toLowerCase();
+        return !sendSuggestions.some(s => s.address.toLowerCase() === addr);
+    }, [ensResolver.input, ensResolver.isValid, ensResolver.resolvedAddress, sendSuggestions]);
+    
+    // Handle selecting a suggestion
+    const handleSelectSuggestion = useCallback((suggestion: SendSuggestion) => {
+        const targetAddress = suggestion.smartWalletAddress || suggestion.address;
+        ensResolver.setInput(targetAddress);
+        setShowRecipientSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+    }, [ensResolver]);
+    
+    // Handle keyboard navigation for suggestions
+    const handleRecipientKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (!showRecipientSuggestions || filteredSuggestions.length === 0) return;
+        
+        switch (e.key) {
+            case "ArrowDown":
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev < filteredSuggestions.length - 1 ? prev + 1 : 0
+                );
+                break;
+            case "ArrowUp":
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev > 0 ? prev - 1 : filteredSuggestions.length - 1
+                );
+                break;
+            case "Enter":
+                if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < filteredSuggestions.length) {
+                    e.preventDefault();
+                    handleSelectSuggestion(filteredSuggestions[selectedSuggestionIndex]);
+                }
+                break;
+            case "Escape":
+                setShowRecipientSuggestions(false);
+                setSelectedSuggestionIndex(-1);
+                break;
+        }
+    }, [showRecipientSuggestions, filteredSuggestions, selectedSuggestionIndex, handleSelectSuggestion]);
+    
+    // Handle saving address to address book
+    const handleSaveToAddressBook = useCallback(async () => {
+        if (!saveAddressLabel.trim() || !ensResolver.resolvedAddress) return;
+        
+        try {
+            await addToAddressBook({
+                address: ensResolver.resolvedAddress,
+                label: saveAddressLabel.trim(),
+                ensName: ensResolver.ensName || undefined,
+            });
+            setShowSaveAddressDialog(false);
+            setSaveAddressLabel("");
+            refreshSuggestions();
+        } catch (err) {
+            console.error("Failed to save to address book:", err);
+        }
+    }, [saveAddressLabel, ensResolver.resolvedAddress, ensResolver.ensName, addToAddressBook, refreshSuggestions]);
+    
+    // Get suggestion type icon
+    const getSuggestionIcon = (type: SendSuggestion["type"]) => {
+        switch (type) {
+            case "friend": return "👤";
+            case "vault": return "🔐";
+            case "address_book": return "📖";
+            case "recent": return "🕐";
+            default: return "📍";
+        }
+    };
+    
+    const getSuggestionLabel = (type: SendSuggestion["type"]) => {
+        switch (type) {
+            case "friend": return "Friend";
+            case "vault": return "Vault";
+            case "address_book": return "Saved";
+            case "recent": return "Recent";
+            default: return "";
+        }
+    };
     
     // Activity state
     const [transactions, setTransactions] = useState<VaultTransaction[]>([]);
@@ -1732,15 +1833,24 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         </div>
                                     </div>
 
-                                    {/* Recipient input with ENS support */}
-                                    <div>
+                                    {/* Recipient input with ENS support and suggestions */}
+                                    <div className="relative">
                                         <label className="block text-xs text-zinc-400 mb-2">Recipient Address or ENS</label>
                                         <div className="relative">
                                             <input
                                                 type="text"
                                                 value={ensResolver.input}
-                                                onChange={(e) => ensResolver.setInput(e.target.value)}
-                                                placeholder="0x... or vitalik.eth"
+                                                onChange={(e) => {
+                                                    ensResolver.setInput(e.target.value);
+                                                    setShowRecipientSuggestions(true);
+                                                    setSelectedSuggestionIndex(-1);
+                                                }}
+                                                onFocus={() => setShowRecipientSuggestions(true)}
+                                                onBlur={() => {
+                                                    setTimeout(() => setShowRecipientSuggestions(false), 200);
+                                                }}
+                                                onKeyDown={handleRecipientKeyDown}
+                                                placeholder="0x..., ENS, or select from contacts"
                                                 spellCheck={false}
                                                 autoComplete="off"
                                                 autoCorrect="off"
@@ -1754,13 +1864,13 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 }`}
                                             />
                                             {/* Loading indicator */}
-                                            {ensResolver.isResolving && (
+                                            {(ensResolver.isResolving || suggestionsLoading) && (
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                                                     <div className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
                                                 </div>
                                             )}
                                             {/* Valid indicator */}
-                                            {!ensResolver.isResolving && ensResolver.isValid && (
+                                            {!ensResolver.isResolving && !suggestionsLoading && ensResolver.isValid && (
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400">
                                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1768,6 +1878,130 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 </div>
                                             )}
                                         </div>
+                                        
+                                        {/* Suggestions dropdown */}
+                                        {showRecipientSuggestions && !showSaveAddressDialog && (filteredSuggestions.length > 0 || canSaveToAddressBook) && (
+                                            <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                                                {/* Save to address book option */}
+                                                {canSaveToAddressBook && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowSaveAddressDialog(true);
+                                                            setShowRecipientSuggestions(false);
+                                                        }}
+                                                        className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-zinc-700/50 transition-colors border-b border-zinc-700"
+                                                    >
+                                                        <span className="text-base">💾</span>
+                                                        <div className="text-left">
+                                                            <div className="text-xs font-medium text-white">Save to Address Book</div>
+                                                            <div className="text-[10px] text-zinc-400 font-mono">
+                                                                {(ensResolver.resolvedAddress || ensResolver.input).slice(0, 10)}...{(ensResolver.resolvedAddress || ensResolver.input).slice(-8)}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                )}
+
+                                                {/* Suggestions list */}
+                                                {filteredSuggestions.length > 0 && (
+                                                    <div className="py-1">
+                                                        {filteredSuggestions.slice(0, 8).map((suggestion, index) => (
+                                                            <button
+                                                                key={`${suggestion.type}-${suggestion.address}`}
+                                                                type="button"
+                                                                onClick={() => handleSelectSuggestion(suggestion)}
+                                                                className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${
+                                                                    index === selectedSuggestionIndex
+                                                                        ? "bg-orange-600/20"
+                                                                        : "hover:bg-zinc-700/50"
+                                                                }`}
+                                                            >
+                                                                {/* Avatar or type icon */}
+                                                                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                                                    {suggestion.avatar ? (
+                                                                        <img 
+                                                                            src={suggestion.avatar} 
+                                                                            alt="" 
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-sm">{getSuggestionIcon(suggestion.type)}</span>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                {/* Info */}
+                                                                <div className="flex-1 min-w-0 text-left">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-xs font-medium text-white truncate">
+                                                                            {suggestion.label}
+                                                                        </span>
+                                                                        {suggestion.isFavorite && (
+                                                                            <span className="text-yellow-400 text-[10px]">★</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                                                        <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
+                                                                            {getSuggestionLabel(suggestion.type)}
+                                                                        </span>
+                                                                        {suggestion.sublabel && (
+                                                                            <span className="truncate">{suggestion.sublabel}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Address preview */}
+                                                                <div className="text-[10px] text-zinc-500 font-mono flex-shrink-0">
+                                                                    {(suggestion.smartWalletAddress || suggestion.address).slice(0, 6)}...
+                                                                    {(suggestion.smartWalletAddress || suggestion.address).slice(-4)}
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        
+                                        {/* Save address dialog */}
+                                        {showSaveAddressDialog && (
+                                            <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3">
+                                                <div className="text-xs font-medium text-white mb-2">
+                                                    Save to Address Book
+                                                </div>
+                                                <div className="text-[10px] text-zinc-400 font-mono mb-2 break-all">
+                                                    {ensResolver.resolvedAddress || ensResolver.input}
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={saveAddressLabel}
+                                                    onChange={(e) => setSaveAddressLabel(e.target.value)}
+                                                    placeholder="Label (e.g., Mom, Work, Exchange)"
+                                                    maxLength={50}
+                                                    autoFocus
+                                                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/50 mb-2"
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowSaveAddressDialog(false);
+                                                            setSaveAddressLabel("");
+                                                        }}
+                                                        className="flex-1 px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSaveToAddressBook}
+                                                        disabled={!saveAddressLabel.trim()}
+                                                        className="flex-1 px-3 py-1.5 text-xs bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        Save
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        
                                         {/* Show resolved info */}
                                         {ensResolver.ensName && ensResolver.resolvedAddress && (
                                             <p className="mt-1 text-xs text-emerald-400 flex items-center gap-1">
