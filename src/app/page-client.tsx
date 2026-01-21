@@ -102,18 +102,41 @@ export default function Home() {
         reconnect({ connectors });
     }, [reconnect, connectors]);
 
-    // Explicitly trigger wallet reconnection on mount for PWA persistence
-    // Only if user hasn't intentionally disconnected
+    // DO NOT auto-reconnect on initial page load
+    // This was causing issues where the wallet modal would pop up immediately
+    // preventing users from accessing other auth methods (passkeys, etc.)
+    // Wagmi handles its own internal reconnection for active sessions.
+    // We only manually reconnect when app comes back from background.
     useEffect(() => {
+        // Check if we should skip wallet reconnection entirely
         if (typeof window !== "undefined") {
             const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
             if (intentionallyDisconnected === "true") {
-                console.log("[PWA] Skipping initial reconnect - user intentionally disconnected");
+                console.log("[PWA] Wallet reconnection disabled - user chose other auth method");
                 return;
             }
+            
+            // Check if wallet data exists but is stale (failed to connect)
+            const wagmiState = localStorage.getItem("wagmi.store");
+            if (wagmiState) {
+                try {
+                    const parsed = JSON.parse(wagmiState);
+                    // If there's no current connection, don't force reconnect
+                    // Let the user choose to connect if they want
+                    if (!parsed?.state?.current) {
+                        console.log("[PWA] No active wallet connection, skipping auto-reconnect");
+                        return;
+                    }
+                } catch {
+                    // Invalid state, clear it
+                    localStorage.removeItem("wagmi.store");
+                }
+            }
         }
-        attemptReconnect();
-    }, [attemptReconnect]);
+        // Only reconnect if we have a genuinely active session
+        // This is handled by wagmi internally, so we don't need to do anything
+        console.log("[PWA] Letting wagmi handle initial reconnection");
+    }, []);
     
     // Reconnect wallet when app comes back to foreground (PWA resume)
     // ONLY if user hasn't intentionally disconnected
@@ -434,23 +457,53 @@ export default function Home() {
     };
 
     // Clear auth and start fresh (recovery function)
+    // This is the nuclear option for users stuck in login loops
     const handleClearAuth = async () => {
-        console.log("[Recovery] Clearing all auth data...");
+        console.log("[Recovery] Clearing ALL auth and wallet data...");
         try {
-            // Clear localStorage (including ALL user data to prevent data leakage)
+            // Set flag to prevent auto-reconnect after reload
+            sessionStorage.setItem("wallet_intentionally_disconnected", "true");
+            
+            // Clear ALL wallet and auth related localStorage
             const keysToRemove = Object.keys(localStorage).filter(k => 
                 k.startsWith("wagmi") || 
                 k.startsWith("@reown") ||
-                k.startsWith("waku_") || // Clear ALL Waku/messaging data
-                k.startsWith("shout_") || // Clear group data 
+                k.startsWith("@w3m") ||
+                k.startsWith("@appkit") ||
+                k.startsWith("waku_") ||
+                k.startsWith("shout_") ||
                 k.startsWith("wc@") ||
+                k.startsWith("spritz_") ||
                 k.includes("walletconnect") ||
+                k.includes("wallet") ||
                 k === AUTH_CREDENTIALS_KEY ||
                 k === SOLANA_AUTH_CREDENTIALS_KEY
             );
-            keysToRemove.forEach(k => localStorage.removeItem(k));
-            // Clear IndexedDB
+            console.log("[Recovery] Removing keys:", keysToRemove.length);
+            keysToRemove.forEach(k => {
+                console.log("[Recovery] Removing:", k);
+                localStorage.removeItem(k);
+            });
+            
+            // Also clear session storage (except the disconnect flag)
+            const sessionKeysToRemove = Object.keys(sessionStorage).filter(k => 
+                k !== "wallet_intentionally_disconnected"
+            );
+            sessionKeysToRemove.forEach(k => sessionStorage.removeItem(k));
+            
+            // Clear IndexedDB databases
             indexedDB.deleteDatabase("spritz_auth");
+            indexedDB.deleteDatabase("WALLET_CONNECT_V2_INDEXED_DB");
+            
+            // Clear cookies related to auth
+            document.cookie.split(";").forEach(c => {
+                const name = c.trim().split("=")[0];
+                if (name.includes("spritz") || name.includes("session")) {
+                    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+                }
+            });
+            
+            console.log("[Recovery] All data cleared, reloading...");
         } catch (e) {
             console.error("[Recovery] Error clearing auth:", e);
         }

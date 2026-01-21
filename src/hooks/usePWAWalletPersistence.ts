@@ -216,17 +216,26 @@ export function usePWAWalletPersistence() {
     }, [isConnected, hasSavedSession, attemptReconnect, connectionState]);
 
     // Initial mount - check connection state
+    // IMPORTANT: Don't auto-reconnect on initial mount!
+    // This was causing the wallet modal to pop up immediately,
+    // preventing users from using other auth methods.
+    // Wagmi handles its own internal reconnection for active sessions.
     useEffect(() => {
         mountedRef.current = true;
         
         if (isConnected && address) {
             setConnectionState("connected");
             setLastConnectedAddress(address);
-        } else if (hasSavedSession()) {
-            setConnectionState("reconnecting");
-            attemptReconnect();
-        } else {
+        } else if (wasIntentionallyDisconnected()) {
+            // User chose to disconnect - respect that
             setConnectionState("disconnected");
+            console.log("[PWA-Wallet] User intentionally disconnected, not auto-reconnecting");
+        } else {
+            // Don't try to reconnect on initial mount
+            // Just set state to disconnected and let user choose
+            // Wagmi will handle auto-reconnection for genuine active sessions
+            setConnectionState("disconnected");
+            console.log("[PWA-Wallet] No active connection on mount, waiting for user action");
         }
 
         return () => {
