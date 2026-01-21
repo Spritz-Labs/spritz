@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/session";
 import { createClient } from "@supabase/supabase-js";
-import { isAddress, createPublicClient, http, normalize } from "viem";
+import { isAddress, createPublicClient, http } from "viem";
+import { normalize } from "viem/ens";
 import { mainnet } from "viem/chains";
 
 // Public client for ENS resolution
