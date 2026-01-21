@@ -5,6 +5,9 @@ import { google } from "googleapis";
 import { localTimeToUTC, getDayOfWeekInTimezone } from "@/lib/timezone";
 import { toZonedTime, format } from "date-fns-tz";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { DelveClient, DelveClientError } from "@/lib/delve";
+import { buildKgContext, buildStackMessages } from "@/lib/delve/chatContext";
+import type { ChatKgContext } from "@/lib/delve/chatContext";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -30,6 +33,50 @@ interface MCPTool {
         required?: string[];
     };
 }
+
+type DelveAgentConfigRow = {
+    bonfire_id: string | null;
+    delve_agent_id: string | null;
+    knowledge_collection_enabled: boolean | null;
+    registration_status: string | null;
+};
+
+const logDelveError = (context: string, error: unknown) => {
+    if (error instanceof DelveClientError) {
+        console.error(context, {
+            message: error.message,
+            statusCode: error.statusCode,
+            errorCode: error.errorCode,
+            details: error.details,
+        });
+        return;
+    }
+    console.error(context, error);
+};
+
+const formatKgContextForPrompt = (kgContext: ChatKgContext): string => {
+    const entitySummary = kgContext.entities
+        .slice(0, 10)
+        .map((entity) => `${entity.name} (${entity.type})`)
+        .join(", ");
+    const relationshipSummary = kgContext.relationships
+        .slice(0, 10)
+        .map((relation) => `- ${relation.source} ${relation.relation} ${relation.target}`)
+        .join("\n");
+
+    let prompt = "\n\n## Knowledge Graph Context\n";
+    if (entitySummary) {
+        prompt += `Entities: ${entitySummary}\n`;
+    }
+    if (relationshipSummary) {
+        prompt += `Relationships:\n${relationshipSummary}\n`;
+    }
+    if (kgContext.episode_id) {
+        prompt += `Episode: ${kgContext.episode_id}\n`;
+    }
+    prompt += "Use this context when relevant.";
+    return prompt;
+};
 
 // Discover MCP server tools by calling tools/list
 async function discoverMcpTools(
@@ -352,6 +399,7 @@ export async function POST(
         }
 
         const normalizedAddress = userAddress.toLowerCase();
+        const chatId = `${id}:${normalizedAddress}`;
 
         // Get the agent
         const { data: agent, error: agentError } = await supabase
@@ -367,6 +415,52 @@ export async function POST(
         // Check access
         if (agent.owner_address !== normalizedAddress && agent.visibility === "private") {
             return NextResponse.json({ error: "Access denied" }, { status: 403 });
+        }
+
+        const { data: delveConfig, error: delveConfigError } = await supabase
+            .from("delve_agent_config")
+            .select("bonfire_id, delve_agent_id, knowledge_collection_enabled, registration_status")
+            .eq("agent_id", id)
+            .maybeSingle();
+
+        if (delveConfigError) {
+            console.error("[Delve] Failed to fetch agent config:", delveConfigError);
+        }
+
+        const resolvedDelveConfig = (delveConfig as DelveAgentConfigRow | null) ?? null;
+        const bonfireId = resolvedDelveConfig?.bonfire_id ?? process.env.DELVE_BONFIRE_ID;
+        const knowledgeCollectionEnabled =
+            resolvedDelveConfig?.knowledge_collection_enabled === true;
+        const registrationStatus = resolvedDelveConfig?.registration_status ?? null;
+        const delveAgentId = resolvedDelveConfig?.delve_agent_id ?? null;
+        const shouldSendToStack =
+            knowledgeCollectionEnabled &&
+            registrationStatus === "registered" &&
+            Boolean(delveAgentId);
+
+        let delveClientInstance: DelveClient | null = null;
+        if (bonfireId || shouldSendToStack) {
+            try {
+                delveClientInstance = new DelveClient();
+            } catch (error) {
+                console.warn(
+                    "[Delve] Client not configured; skipping KG context and stack updates.",
+                    error
+                );
+            }
+        }
+
+        let kgContext: ChatKgContext | undefined;
+        if (delveClientInstance && bonfireId) {
+            try {
+                const kgSearchResponse = await delveClientInstance.searchKnowledgeGraph(
+                    bonfireId,
+                    message
+                );
+                kgContext = buildKgContext(kgSearchResponse);
+            } catch (error) {
+                logDelveError("[Delve] KG search failed", error);
+            }
         }
 
         // Get recent chat history for context (last 10 messages)
@@ -580,6 +674,10 @@ Remember: The user asked a question and the answer is in the data above. Just pr
         // Add knowledge context
         if (knowledgeContext) {
             systemInstructions += `\n\nYou have access to the following knowledge sources. Use this information to help answer questions when relevant:${knowledgeContext}`;
+        }
+
+        if (kgContext) {
+            systemInstructions += formatKgContextForPrompt(kgContext);
         }
         
         // Add a final reminder if we had MCP results
@@ -1211,11 +1309,36 @@ ${apiResults.join("\n")}
         // Increment message count
         await supabase.rpc("increment_agent_messages", { p_agent_id: id });
 
+        if (delveClientInstance && shouldSendToStack && delveAgentId) {
+            const stackMessages = buildStackMessages({
+                userAddress: normalizedAddress,
+                agentName: agent.name,
+                agentId: id,
+                chatId,
+                userText: message,
+                agentText: assistantMessage,
+            });
+
+            void delveClientInstance
+                .addToStack(delveAgentId, stackMessages)
+                .then((result) => {
+                    console.log("[Delve] Sent messages to stack", {
+                        agentId: id,
+                        delveAgentId,
+                        messageCount: result.message_count,
+                    });
+                })
+                .catch((error) => {
+                    logDelveError("[Delve] Failed to add messages to stack", error);
+                });
+        }
+
         return NextResponse.json({
             message: assistantMessage,
             agentName: agent.name,
             agentEmoji: agent.avatar_emoji,
             scheduling: schedulingResponseData,
+            ...(kgContext ? { kg_context: kgContext } : {}),
         });
     } catch (error) {
         console.error("[Agent Chat] Error:", error);
