@@ -18,12 +18,12 @@
  * - For execution, passkey users need to use the Safe app or have another member execute
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters, createPublicClient, http } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
-import { getSafeMessageHashAsync } from "@/lib/safeWallet";
+import { getSafeMessageHashAsync, executeVaultViaPasskey, type PasskeyCredential } from "@/lib/safeWallet";
 import { usePasskeySigner } from "@/hooks/usePasskeySigner";
 
 // Map chain IDs to viem chain objects
@@ -192,6 +192,15 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
     const [status, setStatus] = useState<VaultExecutionStatus>("idle");
     const [error, setError] = useState<string | null>(null);
     const [txHash, setTxHash] = useState<string | null>(null);
+    
+    // Auto-load passkey credential when user is a passkey user
+    // This is needed for vault execution to work
+    useEffect(() => {
+        if (isPasskeyOnly && passkeyUserAddress && !passkeySigner.isReady && !passkeySigner.isLoading) {
+            console.log("[VaultExecution] Auto-loading passkey credential for:", passkeyUserAddress.slice(0, 10));
+            passkeySigner.loadCredential(passkeyUserAddress);
+        }
+    }, [isPasskeyOnly, passkeyUserAddress, passkeySigner]);
     
     // Get public client - prefer wagmi, fall back to chain-specific
     const getPublicClient = useCallback((chainId?: number) => {
@@ -463,11 +472,159 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
     }, [walletClient, userAddress, getSafeTxHash, getPublicClient, isPasskeyOnly, passkeySigner]);
 
     /**
+     * Execute vault transaction via passkey Smart Wallet
+     * This is used when passkey users need to execute vault transactions
+     */
+    const executeWithSignaturesViaPasskey = useCallback(async (params: {
+        safeAddress: Address;
+        chainId: number;
+        to: Address;
+        value: string;
+        data: Hex;
+        signatures: Array<{ signerAddress: string; signature: string }>;
+    }): Promise<{ success: boolean; txHash?: string; error?: string }> => {
+        // Try to load credential if not ready
+        if (!passkeySigner.isReady && passkeyUserAddress) {
+            console.log("[VaultExecution] Passkey not ready, attempting to load credential...");
+            await passkeySigner.loadCredential(passkeyUserAddress);
+            // Wait a moment for state to update
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        if (!passkeySigner.isReady || !passkeySigner.credential) {
+            return { success: false, error: "Unable to load passkey. Please ensure you have a passkey registered and try again." };
+        }
+        
+        const { credentialId, publicKeyX, publicKeyY } = passkeySigner.credential;
+        if (!credentialId || !publicKeyX || !publicKeyY) {
+            return { success: false, error: "Invalid passkey credential" };
+        }
+
+        setStatus("executing");
+        setError(null);
+        setTxHash(null);
+
+        try {
+            const { safeAddress, chainId, to, value, data, signatures } = params;
+            const publicClient = getPublicClient(chainId);
+            
+            if (!publicClient) {
+                throw new Error(`No public client available for chain ${chainId}`);
+            }
+            
+            console.log("[VaultExecution] Executing via Passkey Smart Wallet with", signatures.length, "signatures");
+
+            // Get Safe owners to build proper signatures
+            const owners = await publicClient.readContract({
+                address: safeAddress,
+                abi: SAFE_ABI,
+                functionName: "getOwners",
+            }) as Address[];
+            
+            console.log("[VaultExecution] Vault owners:", owners);
+
+            // Sort signatures by signer address (Safe requires ascending order)
+            const sortedSigs = [...signatures].sort((a, b) => 
+                a.signerAddress.toLowerCase().localeCompare(b.signerAddress.toLowerCase())
+            );
+
+            // Build signatures with contract signature format for Smart Wallet owners
+            const signerInfo: Array<{
+                signerAddress: string;
+                signature: string;
+                isContract: boolean;
+                isOwner: boolean;
+            }> = [];
+
+            for (const sig of sortedSigs) {
+                const signerAddr = sig.signerAddress.toLowerCase() as Address;
+                const isOwner = owners.some(o => o.toLowerCase() === signerAddr);
+                
+                const signerCode = await publicClient.getCode({ address: signerAddr });
+                const isContract = signerCode !== undefined && signerCode !== "0x" && signerCode.length > 2;
+                
+                if (isOwner) {
+                    signerInfo.push({
+                        signerAddress: sig.signerAddress,
+                        signature: sig.signature,
+                        isContract,
+                        isOwner,
+                    });
+                }
+            }
+
+            if (signerInfo.length === 0) {
+                throw new Error("No valid owner signatures found");
+            }
+
+            // Build the final signatures bytes for Safe
+            // Contract signatures use special format with v=0
+            const staticParts: string[] = [];
+            const dynamicParts: string[] = [];
+            let dynamicOffset = signerInfo.length * 65; // 65 bytes per static signature
+
+            for (const info of signerInfo) {
+                if (info.isContract) {
+                    // Build contract signature
+                    const contractSig = buildContractSignature(
+                        info.signerAddress as Address,
+                        info.signature,
+                        dynamicOffset
+                    );
+                    staticParts.push(contractSig.staticPart);
+                    dynamicParts.push(contractSig.dynamicPart);
+                    dynamicOffset += contractSig.dynamicLength;
+                } else {
+                    // Regular EOA signature (65 bytes, no padding needed)
+                    const sigHex = info.signature.startsWith("0x") 
+                        ? info.signature.slice(2) 
+                        : info.signature;
+                    staticParts.push(sigHex);
+                }
+            }
+
+            const combinedSignatures = "0x" + staticParts.join("") + dynamicParts.join("") as Hex;
+            console.log("[VaultExecution] Combined signatures length:", combinedSignatures.length);
+
+            // Create passkey credential - use the credential from the signer hook
+            const passkeyCredential: PasskeyCredential = {
+                credentialId,
+                publicKey: {
+                    x: publicKeyX,
+                    y: publicKeyY,
+                },
+            };
+
+            // Execute via passkey Smart Wallet
+            const hash = await executeVaultViaPasskey(
+                safeAddress,
+                chainId,
+                to,
+                BigInt(value),
+                data,
+                combinedSignatures,
+                passkeyCredential
+            );
+
+            setTxHash(hash);
+            setStatus("success");
+            console.log("[VaultExecution] Passkey execution successful:", hash);
+
+            return { success: true, txHash: hash };
+        } catch (err) {
+            console.error("[VaultExecution] Passkey execution error:", err);
+            const errorMessage = err instanceof Error ? err.message : "Execution failed";
+            setStatus("error");
+            setError(errorMessage);
+            return { success: false, error: errorMessage };
+        }
+    }, [passkeySigner, getPublicClient]);
+
+    /**
      * Execute with multiple signatures (for multi-sig)
      * Supports both EOA signatures and ERC-1271 contract signatures (for Smart Wallet owners)
      * 
-     * NOTE: Execution requires an external wallet to pay gas. Passkey-only users cannot execute
-     * directly and should use the Safe app or ask another vault member to execute.
+     * Now also supports passkey users via passkey Smart Wallet execution.
      */
     const executeWithSignatures = useCallback(async (params: {
         safeAddress: Address;
@@ -479,15 +636,31 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
     }): Promise<{ success: boolean; txHash?: string; error?: string }> => {
         const publicClient = getPublicClient(params.chainId);
         
+        // For passkey users, we can execute via the passkey Smart Wallet
+        if (isPasskeyOnly && passkeySigner.isReady) {
+            return executeWithSignaturesViaPasskey(params);
+        }
+        
         // Execution requires a wallet client to send the transaction and pay gas
         if (!walletClient || !publicClient || !userAddress) {
             if (isPasskeyOnly) {
+                // Try to load passkey credential if not ready
+                if (passkeyUserAddress && !passkeySigner.isReady) {
+                    console.log("[VaultExecution] Loading passkey credential for execution...");
+                    await passkeySigner.loadCredential(passkeyUserAddress);
+                    // Wait a moment for state to update
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                // Try again after loading
+                if (passkeySigner.isReady) {
+                    return executeWithSignaturesViaPasskey(params);
+                }
                 return { 
                     success: false, 
-                    error: "Passkey users cannot execute vault transactions directly. Please use the Safe app or ask another vault member with a connected wallet to execute." 
+                    error: "Unable to load passkey. Please refresh the page and try again." 
                 };
             }
-            return { success: false, error: "Wallet not connected" };
+            return { success: false, error: "Please connect your wallet to execute vault transactions." };
         }
 
         setStatus("executing");
@@ -681,7 +854,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, getPublicClient, isPasskeyOnly]);
+    }, [walletClient, userAddress, getPublicClient, isPasskeyOnly, executeWithSignaturesViaPasskey, passkeySigner, passkeyUserAddress]);
 
     /**
      * Execute a vault transaction (for threshold=1 or with pre-collected signatures)
@@ -702,15 +875,39 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         const { safeAddress, chainId, to, value, data, signatures, smartWalletAddress } = params;
         const publicClient = getPublicClient(chainId);
 
-        // Execution requires a wallet client to send the transaction and pay gas
-        if (!walletClient || !publicClient || !userAddress) {
-            if (isPasskeyOnly) {
+        // For passkey users, try to execute via passkey Smart Wallet
+        if (isPasskeyOnly) {
+            // Try to load passkey if not ready
+            if (passkeyUserAddress && !passkeySigner.isReady && !passkeySigner.isLoading) {
+                console.log("[VaultExecution] Loading passkey for vault execution...");
+                await passkeySigner.loadCredential(passkeyUserAddress);
+                // Wait for state to update
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            // If we have enough signatures, execute via passkey
+            if (signatures && signatures.length > 0) {
+                return executeWithSignaturesViaPasskey({
+                    safeAddress,
+                    chainId,
+                    to,
+                    value,
+                    data,
+                    signatures,
+                });
+            }
+            
+            if (!passkeySigner.isReady) {
                 return { 
                     success: false, 
-                    error: "Passkey users cannot execute vault transactions directly. Please use the Safe app or ask another vault member with a connected wallet to execute." 
+                    error: "Unable to load passkey. Please refresh the page and try again." 
                 };
             }
-            return { success: false, error: "Wallet not connected" };
+        }
+
+        // Execution requires a wallet client to send the transaction and pay gas
+        if (!walletClient || !publicClient || !userAddress) {
+            return { success: false, error: "Please connect your wallet to execute vault transactions." };
         }
 
         setStatus("checking");
@@ -862,7 +1059,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, signTransaction, executeWithSignatures, getPublicClient, isPasskeyOnly]);
+    }, [walletClient, userAddress, signTransaction, executeWithSignatures, executeWithSignaturesViaPasskey, getPublicClient, isPasskeyOnly, passkeySigner, passkeyUserAddress]);
 
     const reset = useCallback(() => {
         setStatus("idle");

@@ -1869,6 +1869,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     value={recipientInput}
                                                     onChange={(e) => setRecipientInput(e.target.value)}
                                                     placeholder="0x... or ENS name"
+                                                    spellCheck={false}
+                                                    autoComplete="off"
+                                                    autoCorrect="off"
+                                                    autoCapitalize="off"
                                                     className={`w-full bg-zinc-800/50 border rounded-xl p-3 pr-10 text-white text-sm placeholder-zinc-500 focus:outline-none ${
                                                         recipientInput && !isRecipientValid && !isResolvingEns
                                                             ? "border-red-500/50 focus:border-red-500"

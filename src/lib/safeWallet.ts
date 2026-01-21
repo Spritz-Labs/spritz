@@ -391,13 +391,61 @@ export async function getSafeAddress(config: SafeWalletConfig): Promise<Address>
 }
 
 /**
+ * CANONICAL Safe address constants for WebAuthn-owned Safes
+ * 
+ * CRITICAL: These MUST be identical everywhere Safe addresses are calculated.
+ * Changing ANY of these will result in a DIFFERENT Safe address!
+ */
+const SAFE_WEBAUTHN_CONFIG = {
+    version: "1.4.1" as const,
+    saltNonce: BigInt(0),
+    safeWebAuthnSharedSignerAddress: "0x94a4F6affBd8975951142c3999aEAB7ecee555c2" as Address,
+    safeP256VerifierAddress: "0xA86e0054C51E4894D88762a017ECc5E5235f5DBA" as Address,
+} as const;
+
+/**
+ * Format P256 public key coordinates for WebAuthn account creation
+ * 
+ * CRITICAL: This formatting MUST be identical everywhere.
+ * The public key format directly affects the Safe address.
+ */
+export function formatP256PublicKey(x: string, y: string): Hex {
+    const xHex = x.replace(/^0x/i, '');
+    const yHex = y.replace(/^0x/i, '');
+    
+    // Validate coordinates are valid hex
+    if (!/^[0-9a-fA-F]+$/.test(xHex) || !/^[0-9a-fA-F]+$/.test(yHex)) {
+        throw new Error(`Invalid public key format: x=${xHex.slice(0, 10)}..., y=${yHex.slice(0, 10)}...`);
+    }
+    
+    // Ensure each coordinate is exactly 64 hex chars (32 bytes)
+    const xPadded = xHex.padStart(64, '0');
+    const yPadded = yHex.padStart(64, '0');
+    
+    // Concatenate: total 128 hex chars (64 bytes)
+    const formatted = `0x${xPadded}${yPadded}` as Hex;
+    
+    if (formatted.length !== 130) {
+        throw new Error(`Invalid public key length: ${formatted.length}, expected 130`);
+    }
+    
+    return formatted;
+}
+
+/**
  * Calculate the Safe address for a passkey user.
  * 
- * IMPORTANT: This MUST use the same calculation as createPasskeySafeAccountClient
- * to ensure the displayed address matches where transactions are sent from.
+ * CRITICAL: This function is the SINGLE SOURCE OF TRUTH for passkey Safe addresses.
+ * It MUST produce the EXACT same address as createPasskeySafeAccountClient.
  * 
- * The key difference from getSafeAddress is that this uses a WebAuthn account
- * as the owner, which includes SafeWebAuthnSharedSigner configuration.
+ * The Safe address is deterministic based on:
+ * 1. P256 public key (x, y coordinates) → WebAuthn account owner
+ * 2. Safe configuration (version, salt, WebAuthn signer addresses)
+ * 
+ * The following do NOT affect the address:
+ * - Chain ID (Safe has same address on all chains)
+ * - Credential ID (only used for signing, not address)
+ * - rpId (only used for signing, not address)
  */
 export async function getPasskeySafeAddress(
     publicKeyX: string, 
@@ -410,45 +458,33 @@ export async function getPasskeySafeAddress(
     }
 
     const publicClient = getPublicClient(chainId);
-
-    // Format public key exactly as createPasskeySafeAccountClient does
-    const xHex = publicKeyX.replace(/^0x/i, '');
-    const yHex = publicKeyY.replace(/^0x/i, '');
-    const xPadded = xHex.padStart(64, '0');
-    const yPadded = yHex.padStart(64, '0');
-    const formattedPublicKey = `0x${xPadded}${yPadded}` as Hex;
-
-    // We need a dummy credential ID for address calculation
-    // The credential ID doesn't affect the Safe address, only the public key does
-    const dummyCredentialId = "address-calculation-only";
     
-    // Determine rpId based on environment
-    const rpId = typeof window !== "undefined" 
-        ? window.location.hostname 
-        : process.env.NEXT_PUBLIC_VERCEL_URL?.replace(/^https?:\/\//, '') || "spritz.chat";
+    // Format public key using canonical function
+    const formattedPublicKey = formatP256PublicKey(publicKeyX, publicKeyY);
 
-    // Create WebAuthn account exactly as createPasskeySafeAccountClient does
+    // Create WebAuthn account
+    // NOTE: credential ID and rpId don't affect the Safe address!
+    // The address is derived from the public key only.
     const webAuthnAccount = toWebAuthnAccount({
         credential: {
-            id: dummyCredentialId,
+            id: "address-calculation", // Dummy - doesn't affect address
             publicKey: formattedPublicKey,
         },
-        rpId,
+        rpId: "spritz.chat", // Doesn't affect address
     });
 
-    // Create Safe account with the WebAuthn account as owner
-    // This MUST match createPasskeySafeAccountClient exactly
+    // Create Safe account with CANONICAL configuration
     const safeAccount = await toSafeSmartAccount({
         client: publicClient,
         owners: [webAuthnAccount],
-        version: "1.4.1",
+        version: SAFE_WEBAUTHN_CONFIG.version,
         entryPoint: {
             address: entryPoint07Address,
             version: "0.7",
         },
-        saltNonce: BigInt(0),
-        safeWebAuthnSharedSignerAddress: "0x94a4F6affBd8975951142c3999aEAB7ecee555c2" as Address,
-        safeP256VerifierAddress: "0xA86e0054C51E4894D88762a017ECc5E5235f5DBA" as Address,
+        saltNonce: SAFE_WEBAUTHN_CONFIG.saltNonce,
+        safeWebAuthnSharedSignerAddress: SAFE_WEBAUTHN_CONFIG.safeWebAuthnSharedSignerAddress,
+        safeP256VerifierAddress: SAFE_WEBAUTHN_CONFIG.safeP256VerifierAddress,
     });
 
     return safeAccount.address;
@@ -1117,27 +1153,12 @@ export async function createPasskeySafeAccountClient(
         throw new Error("Missing public key coordinates");
     }
 
-    // Convert our P256 public key to the format viem/ox expects (concatenated x||y, 64 bytes)
-    // x and y are each 32 bytes (64 hex chars) with 0x prefix
-    const xHex = passkeyCredential.publicKey.x.replace(/^0x/i, '');
-    const yHex = passkeyCredential.publicKey.y.replace(/^0x/i, '');
-    
-    // Validate coordinates are valid hex
-    if (!/^[0-9a-fA-F]+$/.test(xHex) || !/^[0-9a-fA-F]+$/.test(yHex)) {
-        throw new Error(`Invalid public key format: x=${xHex.slice(0, 20)}..., y=${yHex.slice(0, 20)}...`);
-    }
-    
-    // Ensure each coordinate is exactly 64 hex chars (32 bytes), pad with leading zeros if needed
-    const xPadded = xHex.padStart(64, '0');
-    const yPadded = yHex.padStart(64, '0');
-    
-    // Concatenate: total 128 hex chars (64 bytes)
-    const formattedPublicKey = `0x${xPadded}${yPadded}` as Hex;
-    
-    // Validate final length
-    if (formattedPublicKey.length !== 130) {
-        throw new Error(`Invalid public key length: ${formattedPublicKey.length}, expected 130`);
-    }
+    // Format public key using the CANONICAL function
+    // CRITICAL: This MUST match getPasskeySafeAddress exactly!
+    const formattedPublicKey = formatP256PublicKey(
+        passkeyCredential.publicKey.x,
+        passkeyCredential.publicKey.y
+    );
 
     log(`[SafeWallet] Creating WebAuthn account with credential: ${passkeyCredential.credentialId.slice(0, 20)}...`);
     // SECURITY: Only log full key details in development
@@ -1263,20 +1284,18 @@ export async function createPasskeySafeAccountClient(
     console.log(`[SafeWallet] WebAuthn account created, type: ${webAuthnAccount.type}`);
 
     // Create Safe account with the WebAuthn account as owner
-    // Explicitly pass WebAuthn-related addresses for clarity
-    // Using Safe v1.4.1 which is more widely deployed
+    // CRITICAL: Use CANONICAL configuration to ensure address matches getPasskeySafeAddress!
     const safeAccount = await toSafeSmartAccount({
         client: publicClient,
         owners: [webAuthnAccount],
-        version: "1.4.1",
+        version: SAFE_WEBAUTHN_CONFIG.version,
         entryPoint: {
             address: entryPoint07Address,
             version: "0.7",
         },
-        saltNonce: BigInt(0),
-        // Explicitly set WebAuthn addresses (these are the defaults but being explicit)
-        safeWebAuthnSharedSignerAddress: "0x94a4F6affBd8975951142c3999aEAB7ecee555c2" as Address,
-        safeP256VerifierAddress: "0xA86e0054C51E4894D88762a017ECc5E5235f5DBA" as Address,
+        saltNonce: SAFE_WEBAUTHN_CONFIG.saltNonce,
+        safeWebAuthnSharedSignerAddress: SAFE_WEBAUTHN_CONFIG.safeWebAuthnSharedSignerAddress,
+        safeP256VerifierAddress: SAFE_WEBAUTHN_CONFIG.safeP256VerifierAddress,
     });
 
     console.log(`[SafeWallet] Safe account address: ${safeAccount.address}, forceNativeGas: ${options?.forceNativeGas}`);
@@ -2259,4 +2278,101 @@ export async function getRecoveryInfo(
         hasRecoverySigner: recoverySigners.length > 0,
         recoverySigners,
     };
+}
+
+/**
+ * Execute a multi-sig vault transaction using passkey
+ * 
+ * This allows passkey users to execute vault transactions by:
+ * 1. Creating a passkey-based Smart Account Client
+ * 2. Encoding the execTransaction call to the vault Safe
+ * 3. Sending it through the passkey Smart Wallet via ERC-4337
+ * 
+ * The passkey user's Smart Wallet must be an owner of the vault.
+ * 
+ * @param vaultAddress - The vault (Safe) address to execute on
+ * @param chainId - The chain ID
+ * @param to - Destination address for the vault transaction
+ * @param value - ETH value in wei
+ * @param data - Call data (0x for ETH transfer)
+ * @param signatures - Collected signatures (already meeting threshold)
+ * @param passkeyCredential - The passkey credential for signing
+ */
+export async function executeVaultViaPasskey(
+    vaultAddress: Address,
+    chainId: number,
+    to: Address,
+    value: bigint,
+    data: Hex,
+    signatures: string,
+    passkeyCredential: PasskeyCredential
+): Promise<Hex> {
+    const publicClient = getPublicClient(chainId);
+    const chain = SAFE_SUPPORTED_CHAINS[chainId];
+    
+    if (!chain) {
+        throw new Error(`Unsupported chain: ${chainId}`);
+    }
+
+    log(`[SafeWallet] Executing vault transaction via Passkey`);
+    log(`[SafeWallet] Vault: ${vaultAddress.slice(0, 10)}...`);
+    log(`[SafeWallet] To: ${to}, Value: ${formatEther(value)} ETH`);
+
+    // Get the vault's nonce
+    const nonce = await publicClient.readContract({
+        address: vaultAddress,
+        abi: SAFE_ABI,
+        functionName: "nonce",
+    }) as bigint;
+    
+    log(`[SafeWallet] Vault nonce: ${nonce}`);
+
+    // Create the passkey-based Smart Account Client
+    const smartAccountClient = await createPasskeySafeAccountClient(
+        passkeyCredential,
+        chainId,
+        { forceNativeGas: false } // Use paymaster for sponsored gas
+    );
+
+    // Build the execTransaction call data for the vault
+    const operation = 0; // Call (not delegatecall)
+    const safeTxGas = BigInt(0);
+    const baseGas = BigInt(0);
+    const gasPrice = BigInt(0);
+    const gasToken = "0x0000000000000000000000000000000000000000" as Address;
+    const refundReceiver = "0x0000000000000000000000000000000000000000" as Address;
+
+    const execData = encodeFunctionData({
+        abi: SAFE_ABI,
+        functionName: "execTransaction",
+        args: [
+            to,
+            value,
+            data,
+            operation,
+            safeTxGas,
+            baseGas,
+            gasPrice,
+            gasToken,
+            refundReceiver,
+            signatures as Hex,
+        ],
+    });
+
+    log(`[SafeWallet] Sending execTransaction via Passkey Smart Wallet...`);
+
+    // Send the transaction through the user's passkey-based Smart Wallet
+    // This calls execTransaction on the vault Safe
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const txHash = await smartAccountClient.sendTransaction({
+        calls: [{
+            to: vaultAddress,
+            data: execData,
+            value: BigInt(0), // No value sent to the vault itself
+        }],
+    } as any);
+
+    log(`[SafeWallet] Vault execution tx via Passkey: ${txHash}`);
+
+    return txHash;
 }

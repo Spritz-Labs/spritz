@@ -80,6 +80,15 @@ export default function Home() {
 
     // Robust reconnect function that handles PWA resume scenarios
     const attemptReconnect = useCallback(() => {
+        // Check if user intentionally disconnected - don't auto-reconnect
+        if (typeof window !== "undefined") {
+            const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
+            if (intentionallyDisconnected === "true") {
+                console.log("[PWA] User intentionally disconnected, skipping auto-reconnect");
+                return;
+            }
+        }
+        
         const now = Date.now();
         if (now - lastReconnectAttempt.current < RECONNECT_COOLDOWN) {
             console.log("[PWA] Reconnect attempt too soon, skipping");
@@ -94,16 +103,30 @@ export default function Home() {
     }, [reconnect, connectors]);
 
     // Explicitly trigger wallet reconnection on mount for PWA persistence
+    // Only if user hasn't intentionally disconnected
     useEffect(() => {
+        if (typeof window !== "undefined") {
+            const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
+            if (intentionallyDisconnected === "true") {
+                console.log("[PWA] Skipping initial reconnect - user intentionally disconnected");
+                return;
+            }
+        }
         attemptReconnect();
     }, [attemptReconnect]);
     
     // Reconnect wallet when app comes back to foreground (PWA resume)
+    // ONLY if user hasn't intentionally disconnected
     useEffect(() => {
         if (typeof window === "undefined") return;
         
+        const shouldAutoReconnect = () => {
+            const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
+            return intentionallyDisconnected !== "true";
+        };
+        
         const handleVisibilityChange = () => {
-            if (!document.hidden) {
+            if (!document.hidden && shouldAutoReconnect()) {
                 // App is now visible
                 console.log("[PWA] App foregrounded, checking wallet connection...");
                 
@@ -117,7 +140,7 @@ export default function Home() {
         
         // Also handle focus events (backup for visibility change)
         const handleFocus = () => {
-            if (hasSavedWalletSession() && !isWagmiConnected && !isReconnecting) {
+            if (shouldAutoReconnect() && hasSavedWalletSession() && !isWagmiConnected && !isReconnecting) {
                 console.log("[PWA] Window focused, reconnecting wallet...");
                 attemptReconnect();
             }

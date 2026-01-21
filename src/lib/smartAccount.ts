@@ -60,16 +60,20 @@ function getPublicClient(chainId: number = 8453) {
 /**
  * Get Smart Wallet info for a user.
  * 
- * IMPORTANT: This now uses getSafeAddress from safeWallet.ts for consistency.
- * The address calculation must match what permissionless.js uses for transactions.
+ * IMPORTANT: Address calculation differs by auth type!
+ * - Wallet users: Safe owned by EOA → use getSafeAddress
+ * - Passkey users: Safe owned by WebAuthn signer → use getPasskeySafeAddress
+ * - Email/Digital ID: If they have a passkey, use passkey method; else EOA method
  * 
  * @param spritzId - The user's Spritz ID
  * @param authType - Authentication type
+ * @param passkeyCoordinates - P256 public key coords (required for passkey users)
  * @returns Smart Wallet address and deployment status
  */
 export async function getSmartWalletAddress(
     spritzId: Address,
-    authType: "passkey" | "email" | "wallet" | "digitalid" = "wallet"
+    authType: "passkey" | "email" | "wallet" | "digitalid" = "wallet",
+    passkeyCoordinates?: { publicKeyX: string; publicKeyY: string }
 ): Promise<{ 
     smartWalletAddress: Address; 
     isDeployed: boolean;
@@ -77,38 +81,81 @@ export async function getSmartWalletAddress(
     canSign: boolean;
     signerType: "eoa" | "passkey" | "none";
 }> {
-    // Import getSafeAddress dynamically to avoid circular dependencies
-    const { getSafeAddress, isSafeDeployed } = await import("./safeWallet");
+    // Import Safe utilities dynamically to avoid circular dependencies
+    const { getSafeAddress, getPasskeySafeAddress, isSafeDeployed } = await import("./safeWallet");
     
-    // Calculate the Safe counterfactual address using permissionless.js
-    // This MUST match what's used in transactions
-    const smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
-    
-    // Determine signing capability based on auth type
+    let smartWalletAddress: Address;
     let canSign = false;
     let signerType: "eoa" | "passkey" | "none" = "none";
     
+    // CRITICAL: Use different address calculations based on auth type
     switch (authType) {
         case "wallet":
+            // EOA owns the Safe directly
+            smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
             canSign = true;
             signerType = "eoa";
             break;
+            
         case "email":
-            canSign = true;
-            signerType = "eoa";
+            // Email users might have a passkey or use EOA
+            if (passkeyCoordinates?.publicKeyX && passkeyCoordinates?.publicKeyY) {
+                // Has passkey - use WebAuthn-based Safe
+                smartWalletAddress = await getPasskeySafeAddress(
+                    passkeyCoordinates.publicKeyX,
+                    passkeyCoordinates.publicKeyY,
+                    8453
+                );
+                canSign = true;
+                signerType = "passkey";
+            } else {
+                // No passkey - use EOA-based Safe (they need to add a passkey)
+                smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
+                canSign = false;
+                signerType = "none";
+            }
             break;
+            
         case "passkey":
-            // Passkey users can sign via WebAuthn, but need Safe's passkey module
-            canSign = false; // Will be true once passkey module is integrated
-            signerType = "passkey";
+            // CRITICAL: Passkey users MUST use getPasskeySafeAddress
+            // Using getSafeAddress would produce the WRONG address!
+            if (!passkeyCoordinates?.publicKeyX || !passkeyCoordinates?.publicKeyY) {
+                console.error("[SmartWallet] Passkey user but no coordinates provided!");
+                // Fall back to spritzId as placeholder - address will be wrong!
+                smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
+                canSign = false;
+                signerType = "none";
+            } else {
+                smartWalletAddress = await getPasskeySafeAddress(
+                    passkeyCoordinates.publicKeyX,
+                    passkeyCoordinates.publicKeyY,
+                    8453
+                );
+                canSign = true;
+                signerType = "passkey";
+            }
             break;
+            
         case "digitalid":
-            canSign = false; // Similar to passkey
-            signerType = "none";
+            // Digital ID users are like email - might have passkey
+            if (passkeyCoordinates?.publicKeyX && passkeyCoordinates?.publicKeyY) {
+                smartWalletAddress = await getPasskeySafeAddress(
+                    passkeyCoordinates.publicKeyX,
+                    passkeyCoordinates.publicKeyY,
+                    8453
+                );
+                canSign = true;
+                signerType = "passkey";
+            } else {
+                // No passkey yet - they need to add one
+                smartWalletAddress = await getSafeAddress({ ownerAddress: spritzId, chainId: 8453 });
+                canSign = false;
+                signerType = "none";
+            }
             break;
     }
     
-    // Check if Safe is deployed using the same method as safeWallet.ts
+    // Check if Safe is deployed
     let isDeployed = false;
     try {
         isDeployed = await isSafeDeployed(smartWalletAddress, 8453);

@@ -1009,6 +1009,10 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                                     value={x402WalletAddress}
                                                     onChange={(e) => setX402WalletAddress(e.target.value)}
                                                     placeholder="0x..."
+                                                    spellCheck={false}
+                                                    autoComplete="off"
+                                                    autoCorrect="off"
+                                                    autoCapitalize="off"
                                                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
                                                 />
                                             </div>

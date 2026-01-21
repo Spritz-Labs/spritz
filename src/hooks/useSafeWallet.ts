@@ -161,22 +161,21 @@ export function useSafeWallet(): UseSafeWalletReturn {
         setSignerType("passkey");
 
         try {
-            // Import passkey signer utilities
-            const { calculateWebAuthnSignerAddress } = await import("@/lib/passkeySigner");
+            // Import the CORRECT passkey Safe address calculator
+            // CRITICAL: This MUST use getPasskeySafeAddress (NOT getSafeAddress)
+            // because passkey Safes use WebAuthn owners via SafeWebAuthnSharedSigner,
+            // which produces a DIFFERENT address than an EOA-owned Safe!
+            const { getPasskeySafeAddress } = await import("@/lib/safeWallet");
             
-            const publicKey: P256PublicKey = {
-                x: credential.publicKeyX,
-                y: credential.publicKeyY,
-            };
-
-            // Calculate the Safe address with WebAuthn signer as owner
-            const webAuthnSignerAddress = calculateWebAuthnSignerAddress(publicKey, targetChainId);
+            // Calculate the Safe address using the canonical WebAuthn method
+            // This ensures the address matches what createPasskeySafeAccountClient uses
+            const address = await getPasskeySafeAddress(
+                credential.publicKeyX,
+                credential.publicKeyY,
+                targetChainId
+            );
             
-            // Get the Safe address with this owner
-            const address = await getSafeAddress({
-                ownerAddress: webAuthnSignerAddress,
-                chainId: targetChainId,
-            });
+            console.log("[SafeWallet] Passkey Safe address (WebAuthn owner):", address.slice(0, 10) + "...");
 
             setSafeAddress(address);
 
@@ -226,7 +225,10 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // Store the passkey credential for signing
             // Note: viem's toWebAuthnAccount handles the actual signing
             setPasskeyCredential({
-                publicKey,
+                publicKey: {
+                    x: credential.publicKeyX,
+                    y: credential.publicKeyY,
+                },
                 credentialId: credential.credentialId,
             });
 
@@ -326,7 +328,23 @@ export function useSafeWallet(): UseSafeWalletReturn {
             // For Mainnet without USDC approval:
             // - Try bundler with native gas (Safe pays from its ETH balance)
             // - If useEOAForGas is true, use direct execution (EOA pays gas)
-            const predictedSafeAddress = safeAddress || await getSafeAddress({ ownerAddress: ownerAddress!, chainId: targetChainId });
+            // CRITICAL: For passkey users, safeAddress was set by initializeWithPasskey
+            // using getPasskeySafeAddress. DO NOT recalculate with getSafeAddress!
+            let predictedSafeAddress = safeAddress;
+            if (!predictedSafeAddress) {
+                if (signerType === "passkey" && passkeyCredential) {
+                    // Passkey user - use WebAuthn-based Safe address
+                    const { getPasskeySafeAddress } = await import("@/lib/safeWallet");
+                    predictedSafeAddress = await getPasskeySafeAddress(
+                        passkeyCredential.publicKey.x,
+                        passkeyCredential.publicKey.y,
+                        targetChainId
+                    );
+                } else {
+                    // EOA user - use EOA-owned Safe address
+                    predictedSafeAddress = await getSafeAddress({ ownerAddress: ownerAddress!, chainId: targetChainId });
+                }
+            }
             let forceNativeGas = useEOAForGas;
 
             if (chainRequiresErc20Payment(targetChainId) && predictedSafeAddress && !useEOAForGas) {

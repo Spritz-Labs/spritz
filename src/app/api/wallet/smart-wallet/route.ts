@@ -187,8 +187,10 @@ export async function GET(request: NextRequest) {
         // Check deployment status if we have an address
         if (smartWalletAddress) {
             try {
-                const result = await getSmartWalletAddress(spritzId, walletType);
-                isDeployed = result.isDeployed;
+                // Import isSafeDeployed directly for deployment check
+                // The address is already correctly calculated above
+                const { isSafeDeployed } = await import("@/lib/safeWallet");
+                isDeployed = await isSafeDeployed(smartWalletAddress, 8453);
             } catch {
                 isDeployed = false;
             }

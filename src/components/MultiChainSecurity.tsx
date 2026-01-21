@@ -439,6 +439,10 @@ export function MultiChainSecurity({ safeAddress, primarySigner, balances }: Mul
                             value={recoveryInput}
                             onChange={(e) => setRecoveryInput(e.target.value)}
                             placeholder="0x... or ENS name"
+                            spellCheck={false}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
                             className="w-full bg-zinc-800 rounded-lg px-3 py-2 text-white text-sm font-mono"
                         />
                         {recoveryEnsName && resolvedRecoveryAddress && (

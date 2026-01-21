@@ -19,7 +19,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useAccount, useReconnect } from "wagmi";
 
 const RECONNECT_DELAY_MS = 500; // Initial delay before reconnect attempt
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 3; // Reduced from 5 - don't spam reconnects
 const RECONNECT_BACKOFF_MULTIPLIER = 1.5;
 const GRACE_PERIOD_MS = 3000; // Time to wait before showing "disconnected" UI
 const SESSION_CHECK_INTERVAL = 30000; // Check session health every 30s
@@ -39,9 +39,21 @@ export function usePWAWalletPersistence() {
     const mountedRef = useRef(true);
     const isReconnectingRef = useRef(false);
 
+    // Check if user intentionally disconnected (escape hatch for reconnect loop)
+    const wasIntentionallyDisconnected = useCallback((): boolean => {
+        if (typeof window === "undefined") return false;
+        return sessionStorage.getItem("wallet_intentionally_disconnected") === "true";
+    }, []);
+
     // Check if we have a saved session that should reconnect
     const hasSavedSession = useCallback((): boolean => {
         if (typeof window === "undefined") return false;
+        
+        // Don't auto-reconnect if user intentionally disconnected
+        if (wasIntentionallyDisconnected()) {
+            return false;
+        }
+        
         try {
             // Check wagmi store
             const wagmiState = localStorage.getItem("wagmi.store");
@@ -61,7 +73,7 @@ export function usePWAWalletPersistence() {
             // Ignore
         }
         return false;
-    }, []);
+    }, [wasIntentionallyDisconnected]);
 
     // Attempt reconnection with exponential backoff
     const attemptReconnect = useCallback(async () => {
@@ -236,21 +248,62 @@ export function usePWAWalletPersistence() {
         attemptReconnect();
     }, [attemptReconnect]);
 
-    // Clear session - for logout
+    // Clear session - for logout or to escape reconnect loop
     const clearSession = useCallback(() => {
         setLastConnectedAddress(null);
         setReconnectAttempts(0);
         setConnectionState("disconnected");
         
-        // Clear stored sessions
+        // Clear any pending reconnect attempts
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
+        if (gracePeriodRef.current) {
+            clearTimeout(gracePeriodRef.current);
+            gracePeriodRef.current = null;
+        }
+        
+        // Clear stored wallet sessions to escape reconnect loop
         if (typeof window !== "undefined") {
             try {
-                // Don't clear wagmi.store as it might contain other settings
-                // Just mark that we intentionally disconnected
+                // Mark that we intentionally disconnected
                 sessionStorage.setItem("wallet_intentionally_disconnected", "true");
-            } catch {
-                // Ignore
+                
+                // Clear wagmi state that causes reconnect loop
+                localStorage.removeItem("wagmi.store");
+                localStorage.removeItem("wagmi.connected");
+                localStorage.removeItem("wagmi.wallet");
+                localStorage.removeItem("wagmi.recentConnectorId");
+                
+                // Clear WalletConnect/AppKit sessions
+                const keysToRemove: string[] = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (
+                        key.startsWith("wc@") || 
+                        key.startsWith("@reown") || 
+                        key.startsWith("@w3m") ||
+                        key.startsWith("@appkit") ||
+                        key.includes("walletconnect")
+                    )) {
+                        keysToRemove.push(key);
+                    }
+                }
+                keysToRemove.forEach(key => localStorage.removeItem(key));
+                
+                console.log("[PWA-Wallet] Cleared wallet session data to escape reconnect loop");
+            } catch (err) {
+                console.warn("[PWA-Wallet] Error clearing session:", err);
             }
+        }
+    }, []);
+
+    // Allow reconnection again (called when user explicitly tries to connect wallet)
+    const allowReconnect = useCallback(() => {
+        if (typeof window !== "undefined") {
+            sessionStorage.removeItem("wallet_intentionally_disconnected");
+            console.log("[PWA-Wallet] Cleared intentional disconnect flag");
         }
     }, []);
 
@@ -267,9 +320,11 @@ export function usePWAWalletPersistence() {
         lastConnectedAddress,
         /** Force a reconnection attempt */
         forceReconnect,
-        /** Clear session (for logout) */
+        /** Clear session (for logout or to escape reconnect loop) */
         clearSession,
         /** Check if there's a saved session */
         hasSavedSession,
+        /** Allow reconnection (clears intentional disconnect flag) */
+        allowReconnect,
     };
 }

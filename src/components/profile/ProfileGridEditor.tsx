@@ -1385,6 +1385,10 @@ function WidgetConfigFields({
                             value={(config.contractAddress as string) || ''}
                             onChange={(e) => updateField('contractAddress', e.target.value)}
                             placeholder="0x..."
+                            spellCheck={false}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
                             className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                         />
                     </div>

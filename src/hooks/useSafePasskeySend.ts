@@ -97,9 +97,18 @@ export function useSafePasskeySend(): UseSafePasskeySendReturn {
                 safeSignerAddress: data.safeSignerAddress,
             });
 
-            // For now, use the user's Spritz address as the Safe address
-            // In production, this would be the counterfactual Safe address
-            setSafeAddress(userAddress);
+            // CRITICAL: Calculate the CORRECT passkey Safe address using getPasskeySafeAddress
+            // This MUST match what createPasskeySafeAccountClient uses for transactions!
+            // DO NOT use userAddress (Spritz ID) - that's just an identity, not the Safe address!
+            const { getPasskeySafeAddress } = await import("@/lib/safeWallet");
+            const calculatedSafeAddress = await getPasskeySafeAddress(
+                data.publicKeyX,
+                data.publicKeyY,
+                chainId // Use current chain (or default 8453)
+            );
+            
+            console.log("[SafePasskeySend] Calculated passkey Safe address:", calculatedSafeAddress.slice(0, 10) + "...");
+            setSafeAddress(calculatedSafeAddress);
             setStatus("ready");
             
         } catch (err) {

@@ -843,6 +843,10 @@ function WidgetConfigFields({
                             value={(config.contractAddress as string) || ''}
                             onChange={(e) => updateField('contractAddress', e.target.value)}
                             placeholder="0x..."
+                            spellCheck={false}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
                             className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                         />
                     </div>
@@ -1264,6 +1268,10 @@ function WidgetConfigFields({
                             value={(config.address as string) || ''}
                             onChange={(e) => updateField('address', e.target.value)}
                             placeholder="0x..."
+                            spellCheck={false}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
                             className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white font-mono text-sm"
                         />
                         <p className="text-zinc-500 text-xs mt-1">Your wallet address is used automatically if left empty</p>

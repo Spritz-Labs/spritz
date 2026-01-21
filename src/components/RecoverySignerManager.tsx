@@ -221,6 +221,10 @@ export function RecoverySignerManager({ onClose }: RecoverySignerManagerProps) {
                                         value={recoveryInput}
                                         onChange={(e) => setRecoveryInput(e.target.value)}
                                         placeholder="0x... or ENS name"
+                                        spellCheck={false}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
                                         className={`w-full bg-zinc-800 rounded-xl px-3 py-2 text-white text-sm font-mono ${
                                             ensError ? "border border-red-500/50" : ""
                                         }`}

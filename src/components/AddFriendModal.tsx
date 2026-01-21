@@ -243,6 +243,10 @@ export function AddFriendModal({
                                                     setInput(e.target.value)
                                                 }
                                                 placeholder="kevin, 0x..., or vitalik.eth"
+                                                spellCheck={false}
+                                                autoComplete="off"
+                                                autoCorrect="off"
+                                                autoCapitalize="off"
                                                 className="w-full py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 focus:ring-2 focus:ring-[#FB8D22]/20 transition-all"
                                             />
                                             {isResolving && (

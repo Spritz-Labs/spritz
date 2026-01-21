@@ -9,9 +9,12 @@ import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
 import { useWalletClient, usePublicClient, useAccount, useSignMessage, useSignTypedData } from "wagmi";
 import { useWalletReconnect } from "@/hooks/useWalletReconnect";
-import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas, deployVaultViaPasskey, type PasskeyCredential } from "@/lib/safeWallet";
+import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas, deployVaultViaPasskey, type PasskeyCredential, getPublicClient } from "@/lib/safeWallet";
 import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
 import type { Address, Hex } from "viem";
+
+// Timeout for waiting for AA transactions (2 minutes)
+const AA_TX_TIMEOUT = 120_000;
 
 type VaultListProps = {
     userAddress: string;
@@ -73,9 +76,12 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [isDeploying, setIsDeploying] = useState(false);
     const [deployError, setDeployError] = useState<string | null>(null);
     
-    // Balance state
+    // Balance state for selected vault
     const [balances, setBalances] = useState<VaultBalanceResponse | null>(null);
     const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+    
+    // Cache for vault list balances (keyed by vault ID)
+    const [vaultBalanceCache, setVaultBalanceCache] = useState<Record<string, { totalUsd: number; loading: boolean }>>({});
     
     // Edit state
     const [isEditing, setIsEditing] = useState(false);
@@ -162,6 +168,58 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         
         loadPasskeyCredential();
     }, [userAddress, isConnected]);
+    
+    // Fetch balances for all deployed vaults (for list display)
+    useEffect(() => {
+        const fetchVaultListBalances = async () => {
+            if (!vaults || vaults.length === 0) return;
+            
+            // Only fetch for deployed vaults
+            const deployedVaults = vaults.filter(v => v.isDeployed);
+            if (deployedVaults.length === 0) return;
+            
+            // Mark all as loading
+            const loadingState: Record<string, { totalUsd: number; loading: boolean }> = {};
+            deployedVaults.forEach(v => {
+                loadingState[v.id] = { totalUsd: vaultBalanceCache[v.id]?.totalUsd || 0, loading: true };
+            });
+            setVaultBalanceCache(prev => ({ ...prev, ...loadingState }));
+            
+            // Fetch balances in parallel (batch of 3 at a time to avoid rate limits)
+            const batchSize = 3;
+            for (let i = 0; i < deployedVaults.length; i += batchSize) {
+                const batch = deployedVaults.slice(i, i + batchSize);
+                const results = await Promise.all(
+                    batch.map(async (vault) => {
+                        try {
+                            const response = await fetch(`/api/vault/${vault.id}/balances`, {
+                                credentials: "include",
+                            });
+                            if (response.ok) {
+                                const data: VaultBalanceResponse = await response.json();
+                                return { id: vault.id, totalUsd: data.totalUsd, loading: false };
+                            }
+                        } catch (err) {
+                            console.error(`[VaultList] Error fetching balance for vault ${vault.id}:`, err);
+                        }
+                        return { id: vault.id, totalUsd: 0, loading: false };
+                    })
+                );
+                
+                // Update cache with results
+                setVaultBalanceCache(prev => {
+                    const updated = { ...prev };
+                    results.forEach(r => {
+                        updated[r.id] = { totalUsd: r.totalUsd, loading: r.loading };
+                    });
+                    return updated;
+                });
+            }
+        };
+        
+        fetchVaultListBalances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vaults.length]); // Only re-run when vault count changes
 
     // Get gas cost estimate based on chain
     const getDeployGasCost = (chainId: number): { cost: string; isHigh: boolean; isSponsored: boolean } => {
@@ -356,17 +414,32 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             console.log("[VaultList] Safe deployment tx:", txHash, "Safe:", safeAddress);
 
             // Wait for transaction confirmation
-            if (publicClient) {
-                console.log("[VaultList] Waiting for transaction confirmation...");
-                await publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 1 });
+            // For passkey users, wagmi's publicClient may not be available, so use our own
+            const waitClient = publicClient || getPublicClient(deployInfo.chainId);
+            console.log("[VaultList] Waiting for transaction confirmation (timeout: 2min)...");
+            
+            try {
+                await waitClient.waitForTransactionReceipt({ 
+                    hash: txHash, 
+                    confirmations: 1,
+                    timeout: AA_TX_TIMEOUT, // 2 minute timeout for AA transactions
+                });
                 console.log("[VaultList] Transaction confirmed, verifying on-chain deployment...");
+            } catch (waitError: unknown) {
+                // Log but don't fail - the tx may have succeeded even if we timed out
+                const errorMsg = waitError instanceof Error ? waitError.message : String(waitError);
+                if (errorMsg.includes("Timed out") || errorMsg.includes("timeout")) {
+                    console.log("[VaultList] Receipt wait timed out, but tx may have succeeded. Proceeding to poll...");
+                } else {
+                    console.warn("[VaultList] Error waiting for receipt:", errorMsg);
+                }
             }
 
             // Poll for on-chain deployment with retries (bundler transactions can have slight delays)
             let deployed = false;
             let retries = 0;
-            const maxRetries = 15;
-            const retryDelay = 3000; // 3 seconds
+            const maxRetries = 20; // More retries for slow bundlers
+            const retryDelay = 2000; // 2 seconds between checks
 
             console.log("[VaultList] Polling for on-chain deployment confirmation...");
 
@@ -388,10 +461,23 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                     } else {
                         console.error(`[VaultList] Deployment check error:`, confirmError);
                     }
-                    
-                    if (retries >= maxRetries) {
-                        throw new Error("Deployment verification timed out. The transaction was sent - please refresh to check status.");
-                    }
+                }
+            }
+            
+            // If polling timed out, try force-sync as a last resort
+            // The transaction was submitted successfully, so the vault may exist
+            if (!deployed) {
+                console.log("[VaultList] Polling timed out, attempting force sync...");
+                try {
+                    await confirmDeployment(vaultId, txHash, true); // force=true
+                    deployed = true;
+                    console.log("[VaultList] Force sync succeeded!");
+                } catch (forceSyncError) {
+                    console.warn("[VaultList] Force sync failed:", forceSyncError);
+                    // Don't throw - show a helpful message instead
+                    setDeployError("Transaction sent but verification timed out. Click Sync to check status.");
+                    setIsDeploying(false);
+                    return;
                 }
             }
 
@@ -1556,6 +1642,10 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 value={ensResolver.input}
                                                 onChange={(e) => ensResolver.setInput(e.target.value)}
                                                 placeholder="0x... or vitalik.eth"
+                                                spellCheck={false}
+                                                autoComplete="off"
+                                                autoCorrect="off"
+                                                autoCapitalize="off"
                                                 className={`w-full px-3 py-3 bg-zinc-900 border rounded-lg text-white placeholder-zinc-500 focus:outline-none font-mono text-sm ${
                                                     ensResolver.error 
                                                         ? "border-red-500 focus:border-red-500" 
@@ -2123,6 +2213,23 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                     </span>
                                 </div>
                             </div>
+                            {/* Balance display */}
+                            {vault.isDeployed && (
+                                <div className="text-right mr-2">
+                                    {vaultBalanceCache[vault.id]?.loading ? (
+                                        <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
+                                    ) : vaultBalanceCache[vault.id]?.totalUsd ? (
+                                        <span className="text-sm font-medium text-emerald-400">
+                                            ${vaultBalanceCache[vault.id].totalUsd.toLocaleString(undefined, { 
+                                                minimumFractionDigits: 2, 
+                                                maximumFractionDigits: 2 
+                                            })}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-zinc-500">$0.00</span>
+                                    )}
+                                </div>
+                            )}
                             <svg className="w-5 h-5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>

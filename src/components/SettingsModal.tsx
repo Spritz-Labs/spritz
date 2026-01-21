@@ -1297,7 +1297,7 @@ export function SettingsModal({
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-xs text-zinc-500 mb-1">Your booking link</p>
                                                         <p className="text-sm text-orange-400 font-mono truncate">
-                                                            spritz.chat/{schedulingSlug ? `book/${schedulingSlug}` : `schedule/${userAddress ? `${userAddress.slice(0, 6)}...` : "you"}`}
+                                                            spritz.chat/{schedulingSlug ? `cal/${schedulingSlug}` : `schedule/${userAddress ? `${userAddress.slice(0, 6)}...` : "you"}`}
                                                         </p>
                                                     </div>
                                                     <button
@@ -1534,6 +1534,10 @@ export function SettingsModal({
                                                                 value={schedulingWallet}
                                                                 onChange={(e) => setSchedulingWallet(e.target.value)}
                                                                 placeholder="Payment wallet (0x...)"
+                                                                spellCheck={false}
+                                                                autoComplete="off"
+                                                                autoCorrect="off"
+                                                                autoCapitalize="off"
                                                                 className="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-600 text-xs font-mono focus:outline-none focus:border-orange-500"
                                                             />
                                                         </div>
