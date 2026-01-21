@@ -271,7 +271,9 @@ export async function POST(request: NextRequest) {
                     },
                 });
 
-                const busyPeriods = busyResponse.data.calendars?.[calendarConnection.calendar_id || "primary"]?.busy || [];
+                const calendarData = busyResponse.data.calendars?.[calendarConnection.calendar_id || "primary"];
+                const busyPeriods = calendarData?.busy || [];
+                const calendarErrors = calendarData?.errors || [];
                 
                 // Log detailed info about the freebusy response
                 console.log("[Schedule] Google Calendar freebusy check:", {
@@ -279,44 +281,123 @@ export async function POST(request: NextRequest) {
                     requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
                     busyPeriodsCount: busyPeriods.length,
                     busyPeriods: busyPeriods.map(b => ({ start: b.start, end: b.end })),
-                    rawResponse: JSON.stringify(busyResponse.data),
+                    errors: calendarErrors,
                 });
+                
+                // If there are calendar API errors, log them
+                if (calendarErrors.length > 0) {
+                    console.warn("[Schedule] Calendar API errors:", calendarErrors);
+                }
                 
                 if (busyPeriods.length > 0) {
                     // Try to get more details about what's blocking
-                    let eventDetails = "Unknown event";
+                    let eventDetails = "Calendar busy";
+                    let eventType = "unknown";
                     try {
                         // Query actual events to find what's blocking
+                        // Expand time range slightly to catch all-day events and events that might start earlier
+                        const queryStart = new Date(scheduledTime.getTime() - 24 * 60 * 60 * 1000); // Day before
+                        const queryEnd = new Date(slotEnd.getTime() + 60 * 60 * 1000); // Hour after
+                        
                         const eventsResponse = await calendar.events.list({
                             calendarId: calendarConnection.calendar_id || "primary",
-                            timeMin: scheduledTime.toISOString(),
-                            timeMax: slotEnd.toISOString(),
+                            timeMin: queryStart.toISOString(),
+                            timeMax: queryEnd.toISOString(),
                             singleEvents: true,
                             orderBy: "startTime",
                         });
                         
                         const events = eventsResponse.data.items || [];
-                        console.log("[Schedule] Found blocking events:", events.map(e => ({
+                        console.log("[Schedule] Calendar events in window:", events.map(e => ({
                             summary: e.summary,
                             start: e.start,
                             end: e.end,
                             status: e.status,
                             transparency: e.transparency,
+                            eventType: e.eventType,
                         })));
                         
-                        if (events.length > 0) {
-                            const event = events[0];
-                            eventDetails = event.summary || "Busy (no title)";
+                        // Find the event that's actually blocking (overlaps with our slot)
+                        const slotStartMs = scheduledTime.getTime();
+                        const slotEndMs = slotEnd.getTime();
+                        
+                        const blockingEvent = events.find(e => {
+                            // Skip events marked as "free" (transparent)
+                            if (e.transparency === "transparent") return false;
+                            
+                            // Calculate event times
+                            let eventStart: number, eventEnd: number;
+                            
+                            if (e.start?.dateTime) {
+                                eventStart = new Date(e.start.dateTime).getTime();
+                                eventEnd = e.end?.dateTime ? new Date(e.end.dateTime).getTime() : eventStart + 60 * 60 * 1000;
+                            } else if (e.start?.date) {
+                                // All-day event
+                                eventStart = new Date(e.start.date).getTime();
+                                eventEnd = e.end?.date ? new Date(e.end.date).getTime() : eventStart + 24 * 60 * 60 * 1000;
+                            } else {
+                                return false;
+                            }
+                            
+                            // Check for overlap
+                            return (
+                                (slotStartMs >= eventStart && slotStartMs < eventEnd) ||
+                                (slotEndMs > eventStart && slotEndMs <= eventEnd) ||
+                                (slotStartMs <= eventStart && slotEndMs >= eventEnd)
+                            );
+                        });
+                        
+                        if (blockingEvent) {
+                            const summary = blockingEvent.summary || "(No title)";
+                            eventType = blockingEvent.eventType || "event";
+                            
+                            // Check if it's an all-day event
+                            if (blockingEvent.start?.date && !blockingEvent.start?.dateTime) {
+                                eventDetails = `All-day event: "${summary}"`;
+                            } else if (eventType === "outOfOffice") {
+                                eventDetails = `Out of Office: "${summary}"`;
+                            } else if (eventType === "focusTime") {
+                                eventDetails = `Focus Time: "${summary}"`;
+                            } else {
+                                eventDetails = `Event: "${summary}"`;
+                            }
+                            
+                            console.log("[Schedule] Blocking event identified:", {
+                                summary,
+                                eventType,
+                                start: blockingEvent.start,
+                                end: blockingEvent.end,
+                                transparency: blockingEvent.transparency,
+                            });
+                        } else {
+                            // Freebusy says busy but we can't find the event
+                            // This can happen with private events or external calendars
+                            eventDetails = "Private/external calendar event";
+                            console.log("[Schedule] Could not identify blocking event, but freebusy reports busy");
                         }
                     } catch (eventsError) {
                         console.error("[Schedule] Could not fetch event details:", eventsError);
+                        eventDetails = "Calendar event (details unavailable)";
                     }
+                    
+                    // Format the busy period times for display
+                    const busyStart = busyPeriods[0]?.start ? new Date(busyPeriods[0].start).toLocaleTimeString('en-US', { 
+                        hour: 'numeric', 
+                        minute: '2-digit',
+                        timeZone: recipientTimezone 
+                    }) : "?";
+                    const busyEnd = busyPeriods[0]?.end ? new Date(busyPeriods[0].end).toLocaleTimeString('en-US', { 
+                        hour: 'numeric', 
+                        minute: '2-digit',
+                        timeZone: recipientTimezone 
+                    }) : "?";
                     
                     return NextResponse.json(
                         { 
                             error: "This time slot conflicts with an existing calendar event",
                             source: "google_calendar",
-                            details: `Blocked by: "${eventDetails}" (${busyPeriods[0]?.start} to ${busyPeriods[0]?.end})`,
+                            details: `${eventDetails} (${busyStart} - ${busyEnd})`,
+                            eventType,
                         },
                         { status: 409 }
                     );

@@ -441,7 +441,15 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.error || "Failed to book");
+                // Include details in error message if available
+                let errorMsg = data.error || "Failed to book";
+                if (data.details) {
+                    errorMsg += ` - ${data.details}`;
+                }
+                if (data.source) {
+                    errorMsg += ` (Source: ${data.source})`;
+                }
+                throw new Error(errorMsg);
             }
 
             setBookingSuccess(true);

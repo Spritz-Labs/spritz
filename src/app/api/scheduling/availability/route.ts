@@ -269,9 +269,24 @@ export async function GET(request: NextRequest) {
                     },
                 });
 
-                const busyPeriods = busyResponse.data.calendars?.[connection.calendar_id || "primary"]?.busy || [];
+                const calendarData = busyResponse.data.calendars?.[connection.calendar_id || "primary"];
+                const busyPeriods = calendarData?.busy || [];
+                const calendarErrors = calendarData?.errors || [];
                 
-                console.log("[Scheduling] Found", busyPeriods.length, "busy periods from Google Calendar");
+                console.log("[Scheduling] Google Calendar freebusy response:", {
+                    calendarId: connection.calendar_id || "primary",
+                    busyPeriodsCount: busyPeriods.length,
+                    errors: calendarErrors,
+                    busyPeriods: busyPeriods.map(b => ({
+                        start: b.start,
+                        end: b.end,
+                    })),
+                });
+                
+                // If there are calendar errors, log them but continue (events might still be returned)
+                if (calendarErrors.length > 0) {
+                    console.warn("[Scheduling] Calendar errors:", calendarErrors);
+                }
                 
                 // Update last_sync_at on successful calendar check
                 await supabase
