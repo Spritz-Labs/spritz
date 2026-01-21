@@ -105,6 +105,9 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
             const challengeBytes = hexToBytes(challenge);
             
             // Create the assertion options
+            // For iCloud/cloud-synced passkeys, don't specify transports
+            // This lets the browser use the synced passkey directly without
+            // showing QR code for cross-device authentication
             const options: PublicKeyCredentialRequestOptions = {
                 challenge: challengeBytes.buffer.slice(
                     challengeBytes.byteOffset,
@@ -114,7 +117,9 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
                 allowCredentials: [{
                     id: base64UrlToArrayBuffer(credential.credentialId),
                     type: "public-key",
-                    transports: ["internal", "hybrid"] as AuthenticatorTransport[],
+                    // Don't specify transports - let the browser decide
+                    // This is important for iCloud-synced passkeys that may
+                    // be used on different devices than where they were registered
                 }],
                 userVerification: "required",
                 timeout: 60000,
