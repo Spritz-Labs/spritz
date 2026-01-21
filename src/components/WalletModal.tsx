@@ -644,6 +644,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     // Send form state
     const [sendToken, setSendToken] = useState<TokenBalance | null>(null);
     const [sendAmount, setSendAmount] = useState("");
+    const [isUsdMode, setIsUsdMode] = useState(false); // Toggle between USD and token amount input
     
     // ENS resolver for recipient
     const {
@@ -796,24 +797,75 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             setDisplayError(null);
         }
     }, [effectiveError]);
+    
+    // Calculate token price per unit for USD conversion
+    const tokenPriceUsd = useMemo(() => {
+        if (!sendToken?.balanceUsd || !sendToken?.balanceFormatted) return 0;
+        const balance = parseFloat(sendToken.balanceFormatted);
+        if (balance <= 0) return 0;
+        return sendToken.balanceUsd / balance;
+    }, [sendToken]);
+    
+    // Convert between USD and token amounts
+    const getTokenAmount = useCallback((usdAmount: string): string => {
+        if (!usdAmount || !tokenPriceUsd || tokenPriceUsd <= 0) return "";
+        const usd = parseFloat(usdAmount);
+        if (isNaN(usd) || usd <= 0) return "";
+        return (usd / tokenPriceUsd).toFixed(sendToken?.decimals || 18);
+    }, [tokenPriceUsd, sendToken]);
+    
+    const getUsdAmount = useCallback((tokenAmount: string): string => {
+        if (!tokenAmount || !tokenPriceUsd) return "";
+        const amount = parseFloat(tokenAmount);
+        if (isNaN(amount) || amount <= 0) return "";
+        return (amount * tokenPriceUsd).toFixed(2);
+    }, [tokenPriceUsd]);
+    
+    // Get the actual token amount to send (converts from USD if needed)
+    const actualSendAmount = useMemo(() => {
+        if (!sendAmount) return "";
+        if (isUsdMode) {
+            return getTokenAmount(sendAmount);
+        }
+        return sendAmount;
+    }, [sendAmount, isUsdMode, getTokenAmount]);
+    
+    // Toggle between USD and token mode, converting the amount
+    const toggleAmountMode = useCallback(() => {
+        if (!sendAmount || !tokenPriceUsd) {
+            setIsUsdMode(!isUsdMode);
+            return;
+        }
+        
+        if (isUsdMode) {
+            // Converting from USD to token
+            const tokenAmount = getTokenAmount(sendAmount);
+            setSendAmount(tokenAmount || "");
+        } else {
+            // Converting from token to USD
+            const usdAmount = getUsdAmount(sendAmount);
+            setSendAmount(usdAmount || "");
+        }
+        setIsUsdMode(!isUsdMode);
+    }, [sendAmount, isUsdMode, tokenPriceUsd, getTokenAmount, getUsdAmount]);
 
     // Estimate gas when recipient and amount are valid
     const handleEstimateGas = useCallback(async () => {
-        if (!sendToken || !resolvedRecipient || !sendAmount) return;
+        if (!sendToken || !resolvedRecipient || !actualSendAmount) return;
 
         if (useSafeForSend && safeAddress) {
-            await estimateSafeGas(resolvedRecipient, sendAmount);
+            await estimateSafeGas(resolvedRecipient, actualSendAmount);
         } else {
             await estimateGas({
                 to: resolvedRecipient,
-                value: sendAmount,
+                value: actualSendAmount,
             });
         }
-    }, [sendToken, resolvedRecipient, sendAmount, estimateGas, estimateSafeGas, useSafeForSend, safeAddress]);
+    }, [sendToken, resolvedRecipient, actualSendAmount, estimateGas, estimateSafeGas, useSafeForSend, safeAddress]);
 
     // Handle send confirmation
     const handleSend = useCallback(async () => {
-        if (!sendToken || !resolvedRecipient || !sendAmount) return;
+        if (!sendToken || !resolvedRecipient || !actualSendAmount) return;
 
         let hash: string | null = null;
         
@@ -828,7 +880,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             console.log("[WalletModal] Sending via passkey Safe to:", resolvedRecipient, "authMethod:", authMethod);
             hash = await sendPasskeyTransaction(
                 resolvedRecipient,
-                sendAmount,
+                actualSendAmount,
                 tokenAddress,
                 tokenDecimals,
                 selectedChainId,
@@ -840,7 +892,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             // On Mainnet, useEOAForGas allows the connected wallet to pay gas directly
             hash = await sendSafeTransaction(
                 resolvedRecipient,
-                sendAmount,
+                actualSendAmount,
                 tokenAddress,
                 tokenDecimals,
                 { chainId: selectedChainId, useEOAForGas }
@@ -853,7 +905,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             }
             hash = await send({
                 to: resolvedRecipient,
-                value: sendAmount,
+                value: actualSendAmount,
             });
         }
 
@@ -875,13 +927,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 refreshTx();
             }, 15000);
         }
-    }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId, useEOAForGas]);
+    }, [sendToken, resolvedRecipient, actualSendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId, useEOAForGas]);
 
     // Reset send form
     const resetSendForm = useCallback(() => {
         setSendToken(null);
         clearRecipient();
         setSendAmount("");
+        setIsUsdMode(false);
         setShowSendConfirm(false);
         setUseEOAForGas(false);
         resetSend();
@@ -937,10 +990,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     // Auto-estimate gas when send form is complete
     useEffect(() => {
-        if (sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0) {
+        if (sendToken && resolvedRecipient && actualSendAmount && parseFloat(actualSendAmount) > 0) {
             handleEstimateGas();
         }
-    }, [sendToken, resolvedRecipient, sendAmount, handleEstimateGas]);
+    }, [sendToken, resolvedRecipient, actualSendAmount, handleEstimateGas]);
 
     // Copy wallet address
     const handleCopy = () => {
@@ -1926,17 +1979,38 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 <label className="text-xs font-medium text-zinc-400">
                                                     Amount
                                                 </label>
-                                                {sendToken && (
-                                                    <button
-                                                        onClick={() => setSendAmount(sendToken.balanceFormatted)}
-                                                        className="text-xs text-purple-400 hover:text-purple-300"
-                                                    >
-                                                        MAX
-                                                    </button>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    {/* USD/Token toggle */}
+                                                    {sendToken && tokenPriceUsd > 0 && (
+                                                        <button
+                                                            onClick={toggleAmountMode}
+                                                            className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                                                            title={isUsdMode ? "Switch to token amount" : "Switch to USD amount"}
+                                                        >
+                                                            <span className={isUsdMode ? "text-emerald-400" : "text-zinc-500"}>$</span>
+                                                            <span className="text-zinc-500">/</span>
+                                                            <span className={!isUsdMode ? "text-emerald-400" : "text-zinc-500"}>{sendToken.symbol}</span>
+                                                        </button>
+                                                    )}
+                                                    {sendToken && (
+                                                        <button
+                                                            onClick={() => {
+                                                                if (isUsdMode && sendToken.balanceUsd) {
+                                                                    setSendAmount(sendToken.balanceUsd.toFixed(2));
+                                                                } else {
+                                                                    setSendAmount(sendToken.balanceFormatted);
+                                                                }
+                                                            }}
+                                                            className="text-xs text-purple-400 hover:text-purple-300"
+                                                        >
+                                                            MAX
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3">
                                                 <div className="flex items-center gap-2">
+                                                    {isUsdMode && <span className="text-zinc-400 text-xl font-medium">$</span>}
                                                     <input
                                                         type="text"
                                                         inputMode="decimal"
@@ -1951,20 +2025,28 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                         placeholder="0.00"
                                                         className="flex-1 bg-transparent text-white text-xl font-medium placeholder-zinc-500 focus:outline-none"
                                                     />
-                                                    <span className="text-zinc-400 font-medium">
-                                                        {sendToken?.symbol || "---"}
-                                                    </span>
+                                                    {!isUsdMode && (
+                                                        <span className="text-zinc-400 font-medium">
+                                                            {sendToken?.symbol || "---"}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-xs text-zinc-500 mt-1">
-                                                    ≈ {sendToken?.balanceUsd && sendAmount 
-                                                        ? formatUsd((parseFloat(sendAmount) / parseFloat(sendToken.balanceFormatted)) * sendToken.balanceUsd)
-                                                        : "$0.00"}
+                                                    {isUsdMode ? (
+                                                        // Show token equivalent when in USD mode
+                                                        <>≈ {actualSendAmount ? `${parseFloat(actualSendAmount).toFixed(6)} ${sendToken?.symbol || ""}` : `0 ${sendToken?.symbol || ""}`}</>
+                                                    ) : (
+                                                        // Show USD equivalent when in token mode
+                                                        <>≈ {sendToken?.balanceUsd && sendAmount 
+                                                            ? formatUsd((parseFloat(sendAmount) / parseFloat(sendToken.balanceFormatted)) * sendToken.balanceUsd)
+                                                            : "$0.00"}</>
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>
 
                                         {/* Gas Estimation & Summary */}
-                                        {sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0 && (
+                                        {sendToken && resolvedRecipient && actualSendAmount && parseFloat(actualSendAmount) > 0 && (
                                             <div className="bg-zinc-800/30 rounded-xl p-3 space-y-2">
                                                 <div className="flex justify-between text-xs">
                                                     <span className="text-zinc-500">Network Fee</span>
@@ -1975,12 +2057,18 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between text-xs">
-                                                    <span className="text-zinc-500">Total</span>
+                                                    <span className="text-zinc-500">You send</span>
                                                     <span className="text-zinc-300 font-medium">
-                                                        {sendAmount} {sendToken.symbol}
-                                                        {gasEstimate?.estimatedFeeUsd && sendToken.balanceUsd && sendAmount && (
-                                                            <> + {formatUsd(gasEstimate.estimatedFeeUsd)} fee</>
-                                                        )}
+                                                        {parseFloat(actualSendAmount).toFixed(6)} {sendToken.symbol}
+                                                        {isUsdMode && sendAmount && <> (${sendAmount})</>}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-zinc-500">+ Network Fee</span>
+                                                    <span className="text-zinc-300 font-medium">
+                                                        {gasEstimate?.estimatedFeeUsd 
+                                                            ? formatUsd(gasEstimate.estimatedFeeUsd)
+                                                            : "Sponsored ✨"}
                                                     </span>
                                                 </div>
                                             </div>
@@ -2034,13 +2122,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 disabled={
                                                     !sendToken ||
                                                     !resolvedRecipient ||
-                                                    !sendAmount ||
-                                                    parseFloat(sendAmount) <= 0 ||
+                                                    !actualSendAmount ||
+                                                    parseFloat(actualSendAmount) <= 0 ||
                                                     effectiveIsSending ||
                                                     isResolvingEns
                                                 }
                                                 className={`w-full py-3 rounded-xl font-medium transition-colors ${
-                                                    sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0 && !effectiveIsSending && !isResolvingEns
+                                                    sendToken && resolvedRecipient && actualSendAmount && parseFloat(actualSendAmount) > 0 && !effectiveIsSending && !isResolvingEns
                                                         ? "bg-emerald-500 text-white hover:bg-emerald-600"
                                                         : "bg-emerald-500/20 text-emerald-400 opacity-50 cursor-not-allowed"
                                                 }`}
@@ -2058,10 +2146,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     "Resolving ENS..."
                                                 ) : !resolvedRecipient ? (
                                                     "Invalid Address"
-                                                ) : !sendAmount || parseFloat(sendAmount) <= 0 ? (
+                                                ) : !sendAmount || (isUsdMode ? !actualSendAmount : parseFloat(sendAmount) <= 0) ? (
                                                     "Enter Amount"
                                                 ) : (
-                                                    `Send ${sendAmount} ${sendToken.symbol}`
+                                                    isUsdMode 
+                                                        ? `Send $${sendAmount} (${parseFloat(actualSendAmount).toFixed(4)} ${sendToken.symbol})`
+                                                        : `Send ${sendAmount} ${sendToken.symbol}`
                                                 )}
                                             </button>
                                         )}

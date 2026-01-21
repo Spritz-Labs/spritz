@@ -1211,6 +1211,10 @@ export async function createPasskeySafeAccountClient(
         const credentialIdBuffer = base64urlToArrayBuffer(passkeyCredential.credentialId);
         
         // First try with specific credential ID (faster if it works)
+        // IMPORTANT: Don't specify transports - let the browser decide
+        // This is critical for iCloud-synced passkeys to work correctly
+        // Specifying transports can cause Safari to show cross-device options
+        // (QR code, iPhone, etc.) instead of using the local/synced passkey
         const publicKeyOptionsWithCred: PublicKeyCredentialRequestOptions = {
             challenge: options.publicKey.challenge,
             rpId: rpId,
@@ -1219,7 +1223,7 @@ export async function createPasskeySafeAccountClient(
             allowCredentials: [{
                 id: credentialIdBuffer,
                 type: 'public-key',
-                transports: ['internal', 'hybrid'] as AuthenticatorTransport[],
+                // Don't specify transports - browser will use the appropriate method
             }],
         };
 

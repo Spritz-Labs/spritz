@@ -188,6 +188,9 @@ export function useSafeWallet(): UseSafeWalletReturn {
                 const rpId = window.location.hostname;
                 const challengeBytes = hexToBytes(challenge);
                 
+                // Don't specify transports - let browser decide
+                // This is critical for iCloud-synced passkeys to work correctly
+                // Specifying transports causes Safari to show cross-device options
                 const options: PublicKeyCredentialRequestOptions = {
                     challenge: challengeBytes.buffer.slice(
                         challengeBytes.byteOffset,
@@ -197,7 +200,7 @@ export function useSafeWallet(): UseSafeWalletReturn {
                     allowCredentials: [{
                         id: base64UrlToArrayBuffer(credential.credentialId),
                         type: "public-key",
-                        transports: ["internal", "hybrid"] as AuthenticatorTransport[],
+                        // Don't specify transports - browser will use appropriate method
                     }],
                     userVerification: "required",
                     timeout: 60000,

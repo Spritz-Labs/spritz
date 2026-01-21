@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useVaults, type VaultListItem, type VaultDetails } from "@/hooks/useVaults";
 import { useVaultExecution } from "@/hooks/useVaultExecution";
@@ -97,6 +97,58 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [sendToken, setSendToken] = useState<VaultTokenBalance | null>(null);
     const [isSending, setIsSending] = useState(false);
     const [showTokenSelector, setShowTokenSelector] = useState(false);
+    const [isUsdMode, setIsUsdMode] = useState(false); // Toggle between USD and token amount input
+    
+    // Calculate token price per unit for USD conversion (Vault send)
+    const vaultTokenPriceUsd = useMemo(() => {
+        if (!sendToken?.balanceUsd || !sendToken?.balanceFormatted) return 0;
+        const balance = parseFloat(sendToken.balanceFormatted);
+        if (balance <= 0) return 0;
+        return sendToken.balanceUsd / balance;
+    }, [sendToken]);
+    
+    // Convert between USD and token amounts (Vault send)
+    const getVaultTokenAmount = useCallback((usdAmount: string): string => {
+        if (!usdAmount || !vaultTokenPriceUsd || vaultTokenPriceUsd <= 0) return "";
+        const usd = parseFloat(usdAmount);
+        if (isNaN(usd) || usd <= 0) return "";
+        return (usd / vaultTokenPriceUsd).toFixed(sendToken?.decimals || 18);
+    }, [vaultTokenPriceUsd, sendToken]);
+    
+    const getVaultUsdAmount = useCallback((tokenAmount: string): string => {
+        if (!tokenAmount || !vaultTokenPriceUsd) return "";
+        const amount = parseFloat(tokenAmount);
+        if (isNaN(amount) || amount <= 0) return "";
+        return (amount * vaultTokenPriceUsd).toFixed(2);
+    }, [vaultTokenPriceUsd]);
+    
+    // Get the actual token amount to send (Vault send - converts from USD if needed)
+    const actualVaultSendAmount = useMemo(() => {
+        if (!sendAmount) return "";
+        if (isUsdMode) {
+            return getVaultTokenAmount(sendAmount);
+        }
+        return sendAmount;
+    }, [sendAmount, isUsdMode, getVaultTokenAmount]);
+    
+    // Toggle between USD and token mode (Vault send)
+    const toggleVaultAmountMode = useCallback(() => {
+        if (!sendAmount || !vaultTokenPriceUsd) {
+            setIsUsdMode(!isUsdMode);
+            return;
+        }
+        
+        if (isUsdMode) {
+            // Converting from USD to token
+            const tokenAmount = getVaultTokenAmount(sendAmount);
+            setSendAmount(tokenAmount || "");
+        } else {
+            // Converting from token to USD
+            const usdAmount = getVaultUsdAmount(sendAmount);
+            setSendAmount(usdAmount || "");
+        }
+        setIsUsdMode(!isUsdMode);
+    }, [sendAmount, isUsdMode, vaultTokenPriceUsd, getVaultTokenAmount, getVaultUsdAmount]);
     
     // Activity state
     const [transactions, setTransactions] = useState<VaultTransaction[]>([]);
@@ -898,24 +950,28 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
     // Propose a new transaction
     const proposeTransaction = async () => {
-        if (!selectedVault || !sendToken || !sendAmount || !ensResolver.resolvedAddress) {
+        if (!selectedVault || !sendToken || !actualVaultSendAmount || !ensResolver.resolvedAddress) {
             alert("Please fill in all fields");
             return;
         }
 
         setIsProposing(true);
         try {
+            const displayAmount = isUsdMode 
+                ? `$${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(6)} ${sendToken.symbol})`
+                : `${actualVaultSendAmount} ${sendToken.symbol}`;
+            
             const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
                 body: JSON.stringify({
                     toAddress: ensResolver.resolvedAddress,
-                    amount: sendAmount,
+                    amount: actualVaultSendAmount,
                     tokenAddress: sendToken.contractAddress === "native" ? null : sendToken.contractAddress,
                     tokenDecimals: sendToken.decimals,
                     tokenSymbol: sendToken.symbol,
-                    description: `Send ${sendAmount} ${sendToken.symbol} to ${ensResolver.input}`,
+                    description: `Send ${displayAmount} to ${ensResolver.input}`,
                 }),
             });
 
@@ -925,6 +981,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 alert(data.message || "Transaction proposed!");
                 // Reset form
                 setSendAmount("");
+                setIsUsdMode(false);
                 setSendToken(null);
                 ensResolver.clear();
                 // Refresh pending txs and switch to activity tab
@@ -1028,6 +1085,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             alert(`Transaction proposal feature coming soon!\n\nTo: ${displayTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`);
             ensResolver.clear();
             setSendAmount("");
+            setIsUsdMode(false);
             setSendToken(null);
         } catch (err) {
             alert(err instanceof Error ? err.message : "Failed to create transaction");
@@ -1052,6 +1110,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         setActiveTab("assets");
                         ensResolver.clear();
                         setSendAmount("");
+                        setIsUsdMode(false);
                         setSendToken(null);
                     }}
                     className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
@@ -1609,26 +1668,66 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
                                     {/* Amount input */}
                                     <div>
-                                        <label className="block text-xs text-zinc-400 mb-2">Amount</label>
-                                        <div className="relative">
-                                            <input
-                                                type="number"
-                                                value={sendAmount}
-                                                onChange={(e) => setSendAmount(e.target.value)}
-                                                onWheel={(e) => e.currentTarget.blur()}
-                                                placeholder="0.00"
-                                                className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-lg placeholder-zinc-500 focus:outline-none focus:border-orange-500 pr-20"
-                                            />
-                                            {sendToken && (
-                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                                    <span className="text-sm text-zinc-400">{sendToken.symbol}</span>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-xs text-zinc-400">Amount</label>
+                                            <div className="flex items-center gap-2">
+                                                {/* USD/Token toggle */}
+                                                {sendToken && vaultTokenPriceUsd > 0 && (
                                                     <button
-                                                        onClick={() => setSendAmount(sendToken.balanceFormatted)}
-                                                        className="text-xs font-medium text-orange-400 hover:text-orange-300 px-2 py-1 bg-orange-500/10 rounded"
+                                                        onClick={toggleVaultAmountMode}
+                                                        className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                                                        title={isUsdMode ? "Switch to token amount" : "Switch to USD amount"}
+                                                    >
+                                                        <span className={isUsdMode ? "text-emerald-400" : "text-zinc-500"}>$</span>
+                                                        <span className="text-zinc-500">/</span>
+                                                        <span className={!isUsdMode ? "text-emerald-400" : "text-zinc-500"}>{sendToken.symbol}</span>
+                                                    </button>
+                                                )}
+                                                {sendToken && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (isUsdMode && sendToken.balanceUsd) {
+                                                                setSendAmount(sendToken.balanceUsd.toFixed(2));
+                                                            } else {
+                                                                setSendAmount(sendToken.balanceFormatted);
+                                                            }
+                                                        }}
+                                                        className="text-xs font-medium text-orange-400 hover:text-orange-300 px-2 py-0.5 bg-orange-500/10 rounded"
                                                     >
                                                         MAX
                                                     </button>
-                                                </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg focus-within:border-orange-500">
+                                                {isUsdMode && <span className="pl-3 text-zinc-400 text-lg">$</span>}
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={sendAmount}
+                                                    onChange={(e) => {
+                                                        // Only allow valid decimal numbers
+                                                        const value = e.target.value;
+                                                        if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                                            setSendAmount(value);
+                                                        }
+                                                    }}
+                                                    placeholder="0.00"
+                                                    className="flex-1 px-3 py-3 bg-transparent text-white text-lg placeholder-zinc-500 focus:outline-none"
+                                                />
+                                                {!isUsdMode && sendToken && (
+                                                    <span className="pr-3 text-sm text-zinc-400">{sendToken.symbol}</span>
+                                                )}
+                                            </div>
+                                            {/* Show conversion */}
+                                            {sendToken && sendAmount && (
+                                                <p className="mt-1 text-xs text-zinc-500">
+                                                    {isUsdMode 
+                                                        ? `≈ ${actualVaultSendAmount ? parseFloat(actualVaultSendAmount).toFixed(6) : "0"} ${sendToken.symbol}`
+                                                        : `≈ $${getVaultUsdAmount(sendAmount) || "0.00"}`
+                                                    }
+                                                </p>
                                             )}
                                         </div>
                                     </div>
@@ -1698,10 +1797,23 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         </ol>
                                     </div>
 
+                                    {/* Transaction summary when amount entered */}
+                                    {sendToken && actualVaultSendAmount && parseFloat(actualVaultSendAmount) > 0 && (
+                                        <div className="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg space-y-2">
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-zinc-500">You send</span>
+                                                <span className="text-zinc-300 font-medium">
+                                                    {parseFloat(actualVaultSendAmount).toFixed(6)} {sendToken.symbol}
+                                                    {isUsdMode && sendAmount && <> (${sendAmount})</>}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Send button */}
                                     <button
                                         onClick={proposeTransaction}
-                                        disabled={!ensResolver.isValid || !sendAmount || !sendToken || isProposing || ensResolver.isResolving}
+                                        disabled={!ensResolver.isValid || !actualVaultSendAmount || parseFloat(actualVaultSendAmount) <= 0 || !sendToken || isProposing || ensResolver.isResolving}
                                         className="w-full py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {isProposing ? (
@@ -1709,12 +1821,24 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                 Creating Proposal...
                                             </>
+                                        ) : !sendToken ? (
+                                            "Select Token"
+                                        ) : !sendAmount ? (
+                                            "Enter Amount"
+                                        ) : !ensResolver.input ? (
+                                            "Enter Recipient"
+                                        ) : ensResolver.isResolving ? (
+                                            "Resolving ENS..."
+                                        ) : !ensResolver.isValid ? (
+                                            "Invalid Address"
                                         ) : (
                                             <>
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                                 </svg>
-                                                Propose Transaction
+                                                {isUsdMode 
+                                                    ? `Propose $${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(4)} ${sendToken.symbol})`
+                                                    : `Propose ${sendAmount} ${sendToken.symbol}`}
                                             </>
                                         )}
                                     </button>
