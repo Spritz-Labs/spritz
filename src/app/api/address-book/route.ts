@@ -5,10 +5,12 @@ import { isAddress, createPublicClient, http } from "viem";
 import { normalize } from "viem/ens";
 import { mainnet } from "viem/chains";
 
+import { getRpcUrl } from "@/lib/rpc";
+
 // Public client for ENS resolution
 const ensClient = createPublicClient({
     chain: mainnet,
-    transport: http(process.env.NEXT_PUBLIC_ETH_RPC_URL || "https://eth.llamarpc.com"),
+    transport: http(getRpcUrl(1)),
 });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

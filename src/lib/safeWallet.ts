@@ -176,16 +176,18 @@ function getPimlicoBundlerUrl(chainId: number): string {
     return url;
 }
 
-// RPC URLs for each supported chain (free public RPCs - no API key required)
+import { getRpcUrl } from "./rpc";
+
+// RPC URLs for each supported chain (uses dRPC if configured, otherwise fallback)
 const CHAIN_RPC_URLS: Record<number, string> = {
-    1: "https://eth.llamarpc.com",           // Ethereum Mainnet
-    8453: "https://base.llamarpc.com",        // Base (LlamaRPC - free)
-    42161: "https://arb1.arbitrum.io/rpc",    // Arbitrum
-    10: "https://mainnet.optimism.io",        // Optimism
-    137: "https://polygon-rpc.com",           // Polygon
-    56: "https://bsc-dataseed.binance.org",   // BSC
-    130: "https://mainnet.unichain.org",      // Unichain
-    43114: "https://api.avax.network/ext/bc/C/rpc", // Avalanche
+    1: getRpcUrl(1),           // Ethereum Mainnet
+    8453: getRpcUrl(8453),     // Base
+    42161: getRpcUrl(42161),   // Arbitrum
+    10: getRpcUrl(10),         // Optimism
+    137: getRpcUrl(137),       // Polygon
+    56: getRpcUrl(56),         // BSC
+    130: getRpcUrl(130),       // Unichain
+    43114: getRpcUrl(43114),   // Avalanche
 };
 
 // Create a public client for a chain

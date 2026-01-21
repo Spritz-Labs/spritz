@@ -25,6 +25,7 @@ import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
 import { getSafeMessageHashAsync, executeVaultViaPasskey, type PasskeyCredential } from "@/lib/safeWallet";
 import { usePasskeySigner } from "@/hooks/usePasskeySigner";
+import { getRpcUrl } from "@/lib/rpc";
 
 // Map chain IDs to viem chain objects
 const VIEM_CHAINS: Record<number, Chain> = {
@@ -165,18 +166,8 @@ function getPublicClientForChain(chainId: number) {
     }
     
     // Use reliable public RPCs for read operations
-    // Ankr provides free public RPCs with no CORS issues
-    // Free public RPCs (no API key required)
-    const rpcUrls: Record<number, string> = {
-        1: "https://eth.llamarpc.com",
-        8453: "https://base.llamarpc.com",
-        42161: "https://arb1.arbitrum.io/rpc",
-        10: "https://mainnet.optimism.io",
-        137: "https://polygon-rpc.com",
-        56: "https://bsc-dataseed.binance.org",
-    };
-    
-    const rpcUrl = rpcUrls[chainId];
+    // Use centralized RPC config (dRPC if configured, otherwise fallback)
+    const rpcUrl = getRpcUrl(chainId);
     if (!rpcUrl) {
         console.warn("[VaultExecution] No RPC URL for chain:", chainId);
         return null;

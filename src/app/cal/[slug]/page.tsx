@@ -13,10 +13,12 @@ import { injected, coinbaseWallet } from "wagmi/connectors";
 import { base, baseSepolia, mainnet, arbitrum, optimism, polygon } from "wagmi/chains";
 import { normalize } from "viem/ens";
 
+import { getRpcUrl } from "@/lib/rpc";
+
 // Public client for ENS resolution
 const ensClient = createPublicClient({
     chain: mainnet,
-    transport: http("https://eth.llamarpc.com"),
+    transport: http(getRpcUrl(1)),
 });
 
 type ScheduleType = "free" | "paid";

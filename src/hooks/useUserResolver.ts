@@ -6,10 +6,12 @@ import { normalize } from "viem/ens";
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
 
+import { getRpcUrl } from "@/lib/rpc";
+
 // ENS resolution uses mainnet
 const ensClient = createPublicClient({
     chain: mainnet,
-    transport: http("https://eth.llamarpc.com"),
+    transport: http(getRpcUrl(1)),
 });
 
 export interface UseUserResolverReturn {

@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, type Address, type Chain } from "viem";
-import { base, mainnet, arbitrum, optimism, polygon, bsc } from "viem/chains";
+import { base, mainnet, arbitrum, optimism, polygon, bsc, avalanche } from "viem/chains";
 import { getAuthenticatedUser } from "@/lib/session";
+import { getRpcUrl } from "@/lib/rpc";
 
-// Chain configurations with free public RPCs (no API key required)
-const CHAINS: Record<number, { chain: Chain; rpc: string }> = {
-    1: { chain: mainnet, rpc: "https://eth.llamarpc.com" },
-    8453: { chain: base, rpc: "https://base.llamarpc.com" },
-    42161: { chain: arbitrum, rpc: "https://arb1.arbitrum.io/rpc" },
-    10: { chain: optimism, rpc: "https://mainnet.optimism.io" },
-    137: { chain: polygon, rpc: "https://polygon-rpc.com" },
-    56: { chain: bsc, rpc: "https://bsc-dataseed.binance.org" },
+// Chain configurations using centralized RPC config (dRPC if configured)
+const CHAINS: Record<number, Chain> = {
+    1: mainnet,
+    8453: base,
+    42161: arbitrum,
+    10: optimism,
+    137: polygon,
+    56: bsc,
+    43114: avalanche,
 };
 
 const SAFE_ABI = [
@@ -73,22 +75,23 @@ export async function GET(
         }
 
         const chainId = parseInt(chainIdStr);
-        const chainConfig = CHAINS[chainId];
+        const chain = CHAINS[chainId];
 
-        if (!chainConfig) {
+        if (!chain) {
             return NextResponse.json(
                 { error: `Unsupported chain: ${chainId}` },
                 { status: 400 }
             );
         }
 
+        const rpcUrl = getRpcUrl(chainId);
         console.log(`[VaultRead] Reading vault ${safeAddress} on chain ${chainId}`);
-        console.log(`[VaultRead] Using RPC: ${chainConfig.rpc}`);
+        console.log(`[VaultRead] Using RPC: ${rpcUrl}`);
 
         // Create public client
         const publicClient = createPublicClient({
-            chain: chainConfig.chain,
-            transport: http(chainConfig.rpc),
+            chain,
+            transport: http(rpcUrl),
         });
 
         // Read vault data with retries
