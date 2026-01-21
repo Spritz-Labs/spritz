@@ -99,24 +99,41 @@ export async function GET(
             try {
                 console.log(`[VaultRead] Attempt ${attempt}/${maxRetries}...`);
 
-                // Read all data in parallel
-                const [nonce, owners, threshold] = await Promise.all([
-                    publicClient.readContract({
-                        address: safeAddress,
-                        abi: SAFE_ABI,
-                        functionName: "nonce",
-                    }),
-                    publicClient.readContract({
-                        address: safeAddress,
-                        abi: SAFE_ABI,
-                        functionName: "getOwners",
-                    }),
-                    publicClient.readContract({
-                        address: safeAddress,
-                        abi: SAFE_ABI,
-                        functionName: "getThreshold",
-                    }),
-                ]);
+                // First verify this is actually a Safe contract (not a Smart Wallet)
+                // Safe contracts have getOwners and getThreshold, Smart Wallets don't
+                let nonce: bigint;
+                let owners: readonly `0x${string}`[];
+                let threshold: bigint;
+                
+                try {
+                    // Read all data in parallel
+                    [nonce, owners, threshold] = await Promise.all([
+                        publicClient.readContract({
+                            address: safeAddress,
+                            abi: SAFE_ABI,
+                            functionName: "nonce",
+                        }),
+                        publicClient.readContract({
+                            address: safeAddress,
+                            abi: SAFE_ABI,
+                            functionName: "getOwners",
+                        }),
+                        publicClient.readContract({
+                            address: safeAddress,
+                            abi: SAFE_ABI,
+                            functionName: "getThreshold",
+                        }),
+                    ]);
+                } catch (contractErr) {
+                    // Check if this might be a Smart Wallet (ERC-4337) instead of a Safe
+                    // Smart Wallets don't have getOwners/getThreshold
+                    console.error(`[VaultRead] Contract call failed - this may not be a Safe contract:`, contractErr);
+                    throw new Error(
+                        "This address does not appear to be a Safe vault. " +
+                        "It may be a Smart Wallet or the vault address was stored incorrectly. " +
+                        "Please delete this vault and create a new one."
+                    );
+                }
 
                 console.log(`[VaultRead] Success! Nonce: ${nonce}, Owners: ${owners.length}, Threshold: ${threshold}`);
 
