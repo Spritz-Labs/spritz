@@ -65,7 +65,10 @@ export async function POST(request: NextRequest) {
                 allowCredentials = credentials.map((cred) => ({
                     id: cred.credential_id,
                     type: "public-key" as const,
-                    transports: (cred.transports || ["internal", "hybrid"]) as AuthenticatorTransport[],
+                    // IMPORTANT: Don't include "hybrid" as default - it causes Safari to show
+                    // cross-device options (iPhone, iPad, Android, Security Key) instead of
+                    // directly prompting for the local/synced passkey
+                    transports: (cred.transports || ["internal"]) as AuthenticatorTransport[],
                 }));
             }
         }

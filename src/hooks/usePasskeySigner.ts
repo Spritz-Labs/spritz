@@ -126,8 +126,11 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
             };
 
             // Request the assertion
+            // Use mediation: "optional" to match the login flow behavior
+            // This helps Safari/iOS show the passkey picker correctly
             const assertion = await navigator.credentials.get({
                 publicKey: options,
+                mediation: "optional",
             }) as PublicKeyCredential;
 
             if (!assertion) {

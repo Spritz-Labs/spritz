@@ -1236,9 +1236,11 @@ export async function createPasskeySafeAccountClient(
 
         // Request the specific credential - do NOT fall back to discoverable
         // If this fails, let the error propagate so user knows what went wrong
+        // IMPORTANT: Use mediation: "optional" to match the login flow behavior
+        // This helps Safari/iOS show the passkey picker correctly
         const credential = await navigator.credentials.get({
             publicKey: publicKeyOptions,
-            // Note: not specifying 'mediation' - let browser use default behavior
+            mediation: "optional", // Match login flow - shows platform authenticator UI
         });
         
         if (!credential) {

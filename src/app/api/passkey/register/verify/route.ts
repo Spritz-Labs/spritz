@@ -250,7 +250,10 @@ export async function POST(request: NextRequest) {
         const backedUp = registrationInfo.credentialBackedUp;
 
         // Get transports from the response if available
-        const transports = credential.response.transports || ["internal", "hybrid"];
+        // IMPORTANT: Don't store "hybrid" as default - it causes Safari to show
+        // cross-device options (iPhone, iPad, Android, Security Key) instead of
+        // directly prompting for the local/synced passkey
+        const transports = credential.response.transports || ["internal"];
 
         // Determine final wallet address:
         // 1. If recovery: use the recovered address (to restore access to old account)
