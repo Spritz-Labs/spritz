@@ -242,23 +242,34 @@ function extractRSFromDER(derSignature: Uint8Array): { r: bigint; s: bigint } {
 
 /**
  * Extract the clientDataFields from clientDataJSON
- * Safe's WebAuthn verifier expects just the fields after the challenge
- * Format: "clientDataJSON": {"type":"webauthn.get","challenge":"...","origin":"...","crossOrigin":false}
- * We need: ","origin":"...","crossOrigin":false}
+ * Safe's WebAuthn verifier expects the fields AFTER the challenge value's closing quote
+ * 
+ * Format: {"type":"webauthn.get","challenge":"<base64>","origin":"...","crossOrigin":false}
+ * Safe reconstructs: '{"type":"webauthn.get","challenge":"' + base64(hash) + '"' + clientDataFields
+ * So clientDataFields should be: ,"origin":"...","crossOrigin":false}
+ * 
+ * IMPORTANT: The closing } MUST be included - Safe does NOT add it!
  */
 function extractClientDataFields(clientDataJSON: string): string {
-    // Find the end of the challenge value (after the base64url challenge string)
-    const challengeEndIndex = clientDataJSON.indexOf('","', clientDataJSON.indexOf('"challenge"'));
-    if (challengeEndIndex === -1) {
-        throw new Error("Invalid clientDataJSON: could not find challenge end");
+    // Find the end of the challenge value (the closing quote after the base64url challenge)
+    const challengeStart = clientDataJSON.indexOf('"challenge":"');
+    if (challengeStart === -1) {
+        throw new Error("Invalid clientDataJSON: could not find challenge");
     }
     
-    // Extract everything from after the challenge to the end
-    // This includes: ,"origin":"...","crossOrigin":...}
-    const fields = clientDataJSON.slice(challengeEndIndex);
+    // Find the closing quote of the challenge value
+    // The challenge value starts after '"challenge":"', find the next '"'
+    const challengeValueStart = challengeStart + '"challenge":"'.length;
+    const challengeEndQuote = clientDataJSON.indexOf('"', challengeValueStart);
+    if (challengeEndQuote === -1) {
+        throw new Error("Invalid clientDataJSON: could not find challenge end quote");
+    }
     
-    // Remove the closing brace - Safe adds it back
-    return fields.endsWith("}") ? fields.slice(0, -1) : fields;
+    // Extract everything after the challenge's closing quote (including the closing brace)
+    // This gives us: ,"origin":"...","crossOrigin":false}
+    const fields = clientDataJSON.slice(challengeEndQuote + 1);
+    
+    return fields;
 }
 
 export function useVaultExecution(passkeyUserAddress?: Address) {
