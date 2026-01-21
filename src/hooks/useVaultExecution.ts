@@ -1001,6 +1001,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             }
             
             // Sign the transaction with the passkey first
+            // CRITICAL: Pass smartWalletAddress so the signature is recorded under the Safe owner
             const signResult = await signTransaction({
                 safeAddress,
                 chainId,
@@ -1008,6 +1009,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 value,
                 data,
                 nonce,
+                smartWalletAddress, // Pass the Smart Wallet address for EIP-1271 signing
             });
             
             if (!signResult.success || !signResult.signature) {
@@ -1018,6 +1020,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             }
             
             // Execute with the signature
+            // Use the signer address returned from signTransaction (which will be the Smart Wallet)
             return executeWithSignaturesViaPasskey({
                 safeAddress,
                 chainId,
@@ -1025,7 +1028,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 value,
                 data,
                 signatures: [{
-                    signerAddress: userAddress || passkeyUserAddress!,
+                    signerAddress: signResult.signerAddress || smartWalletAddress || userAddress || passkeyUserAddress!,
                     signature: signResult.signature,
                 }],
             });
