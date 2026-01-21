@@ -638,40 +638,29 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         try {
             const { safeAddress, chainId, to, value, data, signatures } = params;
             
-            // Create a fresh client for the specific chain (don't rely on wagmi)
-            const publicClient = getPublicClientForChain(chainId);
-            if (!publicClient) {
-                throw new Error(`Unsupported chain: ${chainId}`);
-            }
-            
             console.log("[VaultExecution] Executing via Passkey Smart Wallet with", signatures.length, "signatures");
             console.log("[VaultExecution] Chain:", chainId, "Vault:", safeAddress);
 
-            // Get Safe owners with retry logic
-            let owners: Address[] = [];
-            const maxRetries = 3;
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                    console.log(`[VaultExecution] Reading vault owners (attempt ${attempt}/${maxRetries})...`);
-                    owners = await publicClient.readContract({
-                        address: safeAddress,
-                        abi: SAFE_ABI,
-                        functionName: "getOwners",
-                    }) as Address[];
-                    console.log("[VaultExecution] Vault owners:", owners);
-                    break;
-                } catch (err) {
-                    console.error(`[VaultExecution] Attempt ${attempt} to read owners failed:`, err);
-                    if (attempt === maxRetries) {
-                        throw new Error("Unable to read vault contract. Please check your network connection.");
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-                }
+            // Use server-side API to read vault data (bypasses CORS issues)
+            console.log("[VaultExecution] Reading vault data via server API...");
+            const vaultReadResponse = await fetch(
+                `/api/vault/${safeAddress}/read?safeAddress=${safeAddress}&chainId=${chainId}`,
+                { credentials: "include" }
+            );
+            
+            if (!vaultReadResponse.ok) {
+                const errorData = await vaultReadResponse.json().catch(() => ({}));
+                throw new Error(errorData.error || `Failed to read vault (status ${vaultReadResponse.status})`);
             }
             
-            if (owners.length === 0) {
+            const vaultData = await vaultReadResponse.json();
+            const owners = vaultData.owners as Address[];
+            
+            if (!owners || owners.length === 0) {
                 throw new Error("Failed to read vault owners");
             }
+            
+            console.log("[VaultExecution] Vault owners:", owners);
             
             console.log("[VaultExecution] Signature signer addresses:", signatures.map(s => s.signerAddress));
 
@@ -691,12 +680,23 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             // Track non-owner signers for error message
             const nonOwnerSigners: string[] = [];
 
+            // Create a fresh client for checking signer types
+            const freshClient = getPublicClientForChain(chainId);
+            
             for (const sig of sortedSigs) {
                 const signerAddr = sig.signerAddress.toLowerCase() as Address;
                 const isOwner = owners.some(o => o.toLowerCase() === signerAddr);
                 
-                const signerCode = await publicClient.getCode({ address: signerAddr });
-                const isContract = signerCode !== undefined && signerCode !== "0x" && signerCode.length > 2;
+                // Check if signer is a contract - if client unavailable, assume contract for Smart Wallets
+                let isContract = true; // Default to true for Smart Wallets
+                if (freshClient) {
+                    try {
+                        const signerCode = await freshClient.getCode({ address: signerAddr });
+                        isContract = signerCode !== undefined && signerCode !== "0x" && signerCode.length > 2;
+                    } catch (codeErr) {
+                        console.warn(`[VaultExecution] Could not check if signer is contract, assuming true:`, codeErr);
+                    }
+                }
                 
                 console.log(`[VaultExecution] Signer ${signerAddr.slice(0, 10)}... isOwner=${isOwner}, isContract=${isContract}`);
                 
@@ -1100,70 +1100,25 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             // we need to sign with the passkey and execute
             console.log("[VaultExecution] Passkey user executing threshold=1 vault transaction");
             
-            // Get current nonce for the vault
-            // Create a fresh client for the specific chain (don't rely on wagmi)
-            const freshClient = getPublicClientForChain(chainId);
-            if (!freshClient) {
-                return { success: false, error: `Unsupported chain: ${chainId}` };
+            // Get current nonce for the vault via server-side API (bypasses CORS)
+            console.log("[VaultExecution] Reading vault nonce via server API...");
+            const vaultReadResponse = await fetch(
+                `/api/vault/${safeAddress}/read?safeAddress=${safeAddress}&chainId=${chainId}`,
+                { credentials: "include" }
+            );
+            
+            if (!vaultReadResponse.ok) {
+                const errorData = await vaultReadResponse.json().catch(() => ({}));
+                return { 
+                    success: false, 
+                    error: errorData.error || `Failed to read vault (status ${vaultReadResponse.status})` 
+                };
             }
             
-            let nonce: number | null = null;
-            const maxRetries = 3;
+            const vaultData = await vaultReadResponse.json();
+            const nonce = vaultData.nonce as number;
             
-            // Log the RPC URL being used
-            const rpcUrls: Record<number, string> = {
-                1: "https://rpc.ankr.com/eth",
-                8453: "https://rpc.ankr.com/base",
-                42161: "https://rpc.ankr.com/arbitrum",
-                10: "https://rpc.ankr.com/optimism",
-                137: "https://rpc.ankr.com/polygon",
-                56: "https://rpc.ankr.com/bsc",
-            };
-            console.log(`[VaultExecution] Using RPC: ${rpcUrls[chainId]} for chain ${chainId}`);
-            
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                    console.log(`[VaultExecution] Reading nonce from vault (attempt ${attempt}/${maxRetries}):`, safeAddress, "on chain:", chainId);
-                    const nonceResult = await freshClient.readContract({
-                        address: safeAddress,
-                        abi: SAFE_ABI,
-                        functionName: "nonce",
-                    }) as bigint;
-                    nonce = Number(nonceResult);
-                    console.log("[VaultExecution] Vault nonce:", nonce);
-                    break; // Success, exit retry loop
-                } catch (err: unknown) {
-                    const errorMessage = err instanceof Error ? err.message : String(err);
-                    const errorName = err instanceof Error ? err.name : "Unknown";
-                    console.error(`[VaultExecution] Attempt ${attempt} failed - ${errorName}: ${errorMessage}`);
-                    
-                    if (attempt === maxRetries) {
-                        console.error("[VaultExecution] Chain ID:", chainId, "Safe address:", safeAddress);
-                        
-                        // Try to get more info about why it failed
-                        try {
-                            const code = await freshClient.getCode({ address: safeAddress });
-                            const hasCode = !!code && code !== "0x" && code.length > 2;
-                            console.log("[VaultExecution] Contract code exists:", hasCode);
-                            if (!hasCode) {
-                                return { success: false, error: "Vault contract not found. It may not be deployed on this network yet." };
-                            }
-                        } catch (codeErr) {
-                            console.error("[VaultExecution] Also failed to get code:", codeErr);
-                        }
-                        
-                        return { success: false, error: "Unable to read vault contract. Please try again in a moment." };
-                    }
-                    
-                    // Wait before retry
-                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-                }
-            }
-            
-            // This shouldn't happen since we return on max retries
-            if (nonce === null) {
-                return { success: false, error: "Failed to read vault nonce" };
-            }
+            console.log("[VaultExecution] Vault nonce:", nonce);
             
             // Sign the transaction with the passkey first
             // CRITICAL: Pass smartWalletAddress so the signature is recorded under the Safe owner
