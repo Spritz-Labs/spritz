@@ -168,7 +168,7 @@ function getPublicClientForChain(chainId: number) {
     // Prioritize official/high-reliability endpoints
     const rpcUrls: Record<number, string> = {
         1: "https://eth.llamarpc.com",
-        8453: "https://mainnet.base.org", // Official Base RPC
+        8453: "https://base.llamarpc.com", // More reliable than mainnet.base.org
         42161: "https://arb1.arbitrum.io/rpc", // Official Arbitrum RPC
         10: "https://mainnet.optimism.io", // Official Optimism RPC
         137: "https://polygon-rpc.com", // Official Polygon RPC
@@ -187,6 +187,86 @@ function getPublicClientForChain(chainId: number) {
         chain,
         transport: http(rpcUrl),
     });
+}
+
+/**
+ * Extract r and s components from a DER-encoded ECDSA signature
+ * WebAuthn signatures are DER-encoded, but Safe's WebAuthn verifier expects r and s as uint256
+ */
+function extractRSFromDER(derSignature: Uint8Array): { r: bigint; s: bigint } {
+    // DER format: 0x30 [total length] 0x02 [r length] [r] 0x02 [s length] [s]
+    let offset = 0;
+    
+    // Check sequence tag
+    if (derSignature[offset++] !== 0x30) {
+        throw new Error("Invalid DER signature: expected sequence tag");
+    }
+    
+    // Skip sequence length
+    let seqLen = derSignature[offset++];
+    if (seqLen & 0x80) {
+        // Long form length
+        const lenBytes = seqLen & 0x7f;
+        offset += lenBytes;
+    }
+    
+    // Read r
+    if (derSignature[offset++] !== 0x02) {
+        throw new Error("Invalid DER signature: expected integer tag for r");
+    }
+    const rLen = derSignature[offset++];
+    let rBytes = derSignature.slice(offset, offset + rLen);
+    offset += rLen;
+    
+    // Remove leading zero if present (DER uses it to indicate positive number)
+    if (rBytes[0] === 0x00 && rBytes.length > 32) {
+        rBytes = rBytes.slice(1);
+    }
+    
+    // Read s
+    if (derSignature[offset++] !== 0x02) {
+        throw new Error("Invalid DER signature: expected integer tag for s");
+    }
+    const sLen = derSignature[offset++];
+    let sBytes = derSignature.slice(offset, offset + sLen);
+    
+    // Remove leading zero if present
+    if (sBytes[0] === 0x00 && sBytes.length > 32) {
+        sBytes = sBytes.slice(1);
+    }
+    
+    // Pad to 32 bytes if needed
+    const rPadded = new Uint8Array(32);
+    const sPadded = new Uint8Array(32);
+    rPadded.set(rBytes, 32 - rBytes.length);
+    sPadded.set(sBytes, 32 - sBytes.length);
+    
+    // Convert to bigint
+    const r = BigInt("0x" + Array.from(rPadded).map(b => b.toString(16).padStart(2, "0")).join(""));
+    const s = BigInt("0x" + Array.from(sPadded).map(b => b.toString(16).padStart(2, "0")).join(""));
+    
+    return { r, s };
+}
+
+/**
+ * Extract the clientDataFields from clientDataJSON
+ * Safe's WebAuthn verifier expects just the fields after the challenge
+ * Format: "clientDataJSON": {"type":"webauthn.get","challenge":"...","origin":"...","crossOrigin":false}
+ * We need: ","origin":"...","crossOrigin":false}
+ */
+function extractClientDataFields(clientDataJSON: string): string {
+    // Find the end of the challenge value (after the base64url challenge string)
+    const challengeEndIndex = clientDataJSON.indexOf('","', clientDataJSON.indexOf('"challenge"'));
+    if (challengeEndIndex === -1) {
+        throw new Error("Invalid clientDataJSON: could not find challenge end");
+    }
+    
+    // Extract everything from after the challenge to the end
+    // This includes: ,"origin":"...","crossOrigin":...}
+    const fields = clientDataJSON.slice(challengeEndIndex);
+    
+    // Remove the closing brace - Safe adds it back
+    return fields.endsWith("}") ? fields.slice(0, -1) : fields;
 }
 
 export function useVaultExecution(passkeyUserAddress?: Address) {
@@ -451,25 +531,55 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                     throw new Error(passkeySigner.error || "Passkey signing cancelled");
                 }
                 
-                // Convert passkey signature to hex format
-                // Note: This is a simplified conversion - passkey signatures have a different format
-                // For now, we convert the signature bytes to hex
-                const sigBytes = passkeyResult.signature;
-                signature = "0x" + Array.from(sigBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+                // For WebAuthn/passkey signatures with Safe Smart Wallet:
+                // The signature must be ABI-encoded with all WebAuthn assertion components
+                // Safe's WebAuthn verification expects: (authenticatorData, clientDataFields, r, s)
+                
+                // 1. Extract r and s from the DER-encoded signature
+                const { r, s } = extractRSFromDER(passkeyResult.signature);
+                
+                // 2. Extract the "clientDataFields" from clientDataJSON
+                // This is everything after the challenge in the JSON (origin, type, etc.)
+                const clientDataFields = extractClientDataFields(passkeyResult.clientDataJSON);
+                
+                // 3. ABI-encode the full WebAuthn signature for Safe verification
+                signature = encodeAbiParameters(
+                    [
+                        { name: "authenticatorData", type: "bytes" },
+                        { name: "clientDataFields", type: "bytes" },
+                        { name: "r", type: "uint256" },
+                        { name: "s", type: "uint256" },
+                    ],
+                    [
+                        toHex(passkeyResult.authenticatorData),
+                        toHex(new TextEncoder().encode(clientDataFields)),
+                        r,
+                        s,
+                    ]
+                );
+                
+                console.log("[VaultExecution] WebAuthn signature encoded for Safe verification");
             } else {
                 throw new Error("No signing method available");
             }
 
-            // Adjust v value for Safe's signature format
-            // For eth_sign, v should be 27 or 28, and we add 4 for eth_sign type
-            let v = parseInt(signature.slice(-2), 16);
-            if (v < 27) {
-                v += 27;
+            let adjustedSignature: string;
+            
+            if (canUsePasskey && !hasWalletClient) {
+                // For WebAuthn signatures, don't adjust v - the signature is already properly encoded
+                adjustedSignature = signature;
+                console.log("[VaultExecution] Using WebAuthn signature format");
+            } else {
+                // Adjust v value for Safe's signature format (EOA signatures)
+                // For eth_sign, v should be 27 or 28, and we add 4 for eth_sign type
+                let v = parseInt(signature.slice(-2), 16);
+                if (v < 27) {
+                    v += 27;
+                }
+                v += 4; // Safe adds 4 for eth_sign signatures
+                adjustedSignature = signature.slice(0, -2) + v.toString(16).padStart(2, "0");
+                console.log("[VaultExecution] EOA signature adjusted (v=" + v + ")");
             }
-            v += 4; // Safe adds 4 for eth_sign signatures
-            const adjustedSignature = signature.slice(0, -2) + v.toString(16).padStart(2, "0");
-
-            console.log("[VaultExecution] Signature generated (eth_sign format, v=" + v + ")");
             setStatus("idle");
 
             // Return the Smart Wallet address as signer if provided (for ERC-1271 contract signatures)

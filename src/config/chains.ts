@@ -39,7 +39,7 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🔵",
         color: "#0052FF",
         explorerUrl: "https://basescan.org",
-        rpcUrl: "https://mainnet.base.org",
+        rpcUrl: "https://base.llamarpc.com", // More reliable than mainnet.base.org
     },
     unichain: {
         id: 130,
