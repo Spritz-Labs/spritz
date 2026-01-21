@@ -242,34 +242,49 @@ function extractRSFromDER(derSignature: Uint8Array): { r: bigint; s: bigint } {
 
 /**
  * Extract the clientDataFields from clientDataJSON
- * Safe's WebAuthn verifier expects the fields AFTER the challenge value's closing quote
  * 
- * Format: {"type":"webauthn.get","challenge":"<base64>","origin":"...","crossOrigin":false}
- * Safe reconstructs: '{"type":"webauthn.get","challenge":"' + base64(hash) + '"' + clientDataFields
- * So clientDataFields should be: ,"origin":"...","crossOrigin":false}
+ * Safe's WebAuthn verifier expects the fields AFTER the challenge, formatted as a STRING.
+ * Based on permissionless.js reference implementation, the format is:
  * 
- * IMPORTANT: The closing } MUST be included - Safe does NOT add it!
+ * Input: {"type":"webauthn.get","challenge":"<base64>","origin":"...","crossOrigin":false}
+ * Output: "origin":"...","crossOrigin":false
+ * 
+ * NOTE: 
+ * - Does NOT include the leading comma after challenge
+ * - Does NOT include the trailing closing brace
+ * - This is passed as a STRING type, not bytes!
  */
 function extractClientDataFields(clientDataJSON: string): string {
-    // Find the end of the challenge value (the closing quote after the base64url challenge)
-    const challengeStart = clientDataJSON.indexOf('"challenge":"');
-    if (challengeStart === -1) {
-        throw new Error("Invalid clientDataJSON: could not find challenge");
+    // Use the same regex as permissionless.js for consistency
+    // Matches the full JSON structure and captures everything between "," after challenge and "}" at end
+    const match = clientDataJSON.match(/^\{"type":"webauthn\.get","challenge":"[A-Za-z0-9\-_]{43}",(.*)\}$/);
+    
+    if (!match) {
+        // Fallback: try to extract manually if regex doesn't match
+        // (e.g., if challenge length varies)
+        const challengeStart = clientDataJSON.indexOf('"challenge":"');
+        if (challengeStart === -1) {
+            throw new Error("Invalid clientDataJSON: could not find challenge");
+        }
+        
+        // Find the closing quote of the challenge value
+        const challengeValueStart = challengeStart + '"challenge":"'.length;
+        const challengeEndQuote = clientDataJSON.indexOf('"', challengeValueStart);
+        if (challengeEndQuote === -1) {
+            throw new Error("Invalid clientDataJSON: could not find challenge end quote");
+        }
+        
+        // Get everything after the quote and comma, up to but not including the closing brace
+        let fields = clientDataJSON.slice(challengeEndQuote + 2); // Skip ,"
+        if (fields.endsWith("}")) {
+            fields = fields.slice(0, -1);
+        }
+        
+        return fields;
     }
     
-    // Find the closing quote of the challenge value
-    // The challenge value starts after '"challenge":"', find the next '"'
-    const challengeValueStart = challengeStart + '"challenge":"'.length;
-    const challengeEndQuote = clientDataJSON.indexOf('"', challengeValueStart);
-    if (challengeEndQuote === -1) {
-        throw new Error("Invalid clientDataJSON: could not find challenge end quote");
-    }
-    
-    // Extract everything after the challenge's closing quote (including the closing brace)
-    // This gives us: ,"origin":"...","crossOrigin":false}
-    const fields = clientDataJSON.slice(challengeEndQuote + 1);
-    
-    return fields;
+    // Return the captured group (everything between "," and "}")
+    return match[1];
 }
 
 export function useVaultExecution(passkeyUserAddress?: Address) {
@@ -547,16 +562,19 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 const clientDataFields = extractClientDataFields(passkeyResult.clientDataJSON);
                 
                 // 3. ABI-encode the full WebAuthn signature for Safe verification
-                // CRITICAL: Safe expects (bytes, bytes, uint256[2]) format
+                // CRITICAL: Safe expects (bytes, string, uint256[2]) format
+                // - authenticatorData: raw bytes
+                // - clientDataFields: STRING type (not bytes!)
+                // - signature: uint256[2] array for r and s
                 signature = encodeAbiParameters(
                     [
                         { name: "authenticatorData", type: "bytes" },
-                        { name: "clientDataFields", type: "bytes" },
+                        { name: "clientDataFields", type: "string" },
                         { name: "rs", type: "uint256[2]" },
                     ],
                     [
                         toHex(passkeyResult.authenticatorData),
-                        toHex(new TextEncoder().encode(clientDataFields)),
+                        clientDataFields, // Pass as string directly, NOT encoded to bytes
                         [r, s] as [bigint, bigint],
                     ]
                 );
