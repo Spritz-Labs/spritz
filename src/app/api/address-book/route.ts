@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/session";
 import { createClient } from "@supabase/supabase-js";
-import { isAddress } from "viem";
+import { isAddress, createPublicClient, http, normalize } from "viem";
+import { mainnet } from "viem/chains";
+
+// Public client for ENS resolution
+const ensClient = createPublicClient({
+    chain: mainnet,
+    transport: http(process.env.NEXT_PUBLIC_ETH_RPC_URL || "https://eth.llamarpc.com"),
+});
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -89,12 +96,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { address, label, ensName, notes, isFavorite } = body;
-
-        // Validate address
-        if (!address || !isAddress(address)) {
-            return NextResponse.json({ error: "Invalid address" }, { status: 400 });
-        }
+        const { address: inputAddress, label, ensName: inputEnsName, notes, isFavorite } = body;
 
         // Validate label
         if (!label || typeof label !== "string" || label.trim().length === 0) {
@@ -105,12 +107,60 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Label too long (max 50 characters)" }, { status: 400 });
         }
 
+        let resolvedAddress: string;
+        let resolvedEnsName: string | null = inputEnsName || null;
+
+        // Check if input is an ENS name or address
+        if (!inputAddress) {
+            return NextResponse.json({ error: "Address or ENS name is required" }, { status: 400 });
+        }
+
+        const trimmedInput = inputAddress.trim();
+        
+        // Check if it looks like an ENS name (contains a dot and ends with common TLDs)
+        const isEnsName = /\.(eth|xyz|com|org|id|art|luxury|kred|club|luxe|reverse)$/i.test(trimmedInput);
+        
+        if (isEnsName) {
+            // Resolve ENS name to address
+            try {
+                const normalizedName = normalize(trimmedInput.toLowerCase());
+                const address = await ensClient.getEnsAddress({ name: normalizedName });
+                
+                if (!address) {
+                    return NextResponse.json({ error: `Could not resolve ENS name: ${trimmedInput}` }, { status: 400 });
+                }
+                
+                resolvedAddress = address.toLowerCase();
+                resolvedEnsName = normalizedName;
+            } catch (ensError) {
+                console.error("[AddressBook] ENS resolution error:", ensError);
+                return NextResponse.json({ error: `Invalid ENS name: ${trimmedInput}` }, { status: 400 });
+            }
+        } else if (isAddress(trimmedInput)) {
+            // It's a valid address
+            resolvedAddress = trimmedInput.toLowerCase();
+            
+            // Optionally try to get reverse ENS for the address if not provided
+            if (!resolvedEnsName) {
+                try {
+                    const ensName = await ensClient.getEnsName({ address: trimmedInput as `0x${string}` });
+                    if (ensName) {
+                        resolvedEnsName = ensName;
+                    }
+                } catch {
+                    // Ignore reverse lookup errors
+                }
+            }
+        } else {
+            return NextResponse.json({ error: "Invalid address or ENS name" }, { status: 400 });
+        }
+
         // Check if address already exists
         const { data: existing } = await supabase
             .from("shout_address_book")
             .select("id")
             .eq("user_address", userAddress)
-            .eq("address", address.toLowerCase())
+            .eq("address", resolvedAddress)
             .single();
 
         if (existing) {
@@ -122,9 +172,9 @@ export async function POST(request: NextRequest) {
             .from("shout_address_book")
             .insert({
                 user_address: userAddress,
-                address: address.toLowerCase(),
+                address: resolvedAddress,
                 label: label.trim(),
-                ens_name: ensName || null,
+                ens_name: resolvedEnsName,
                 notes: notes || null,
                 is_favorite: isFavorite || false,
             })

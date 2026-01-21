@@ -101,29 +101,43 @@ export function SettingsModal({
     const [editingLabel, setEditingLabel] = useState("");
     const [addressBookError, setAddressBookError] = useState<string | null>(null);
     
+    const [isAddingAddress, setIsAddingAddress] = useState(false);
+    
+    // Check if input looks like an ENS name
+    const isEnsName = useCallback((input: string) => {
+        return /\.(eth|xyz|com|org|id|art|luxury|kred|club|luxe|reverse)$/i.test(input.trim());
+    }, []);
+    
     // Handle adding new address to address book
     const handleAddToAddressBook = useCallback(async () => {
         if (!newAddressLabel.trim() || !newAddressValue.trim()) {
-            setAddressBookError("Both label and address are required");
+            setAddressBookError("Both label and address/ENS are required");
             return;
         }
-        if (!isAddress(newAddressValue)) {
-            setAddressBookError("Invalid Ethereum address");
+        
+        const input = newAddressValue.trim();
+        
+        // Basic validation - must be either a valid address or look like an ENS name
+        if (!isAddress(input) && !isEnsName(input)) {
+            setAddressBookError("Enter a valid address (0x...) or ENS name (e.g., vitalik.eth)");
             return;
         }
         
         try {
             setAddressBookError(null);
+            setIsAddingAddress(true);
             await addEntry({
-                address: newAddressValue.trim(),
+                address: input, // API will resolve ENS if needed
                 label: newAddressLabel.trim(),
             });
             setNewAddressLabel("");
             setNewAddressValue("");
         } catch (err) {
             setAddressBookError(err instanceof Error ? err.message : "Failed to add");
+        } finally {
+            setIsAddingAddress(false);
         }
-    }, [newAddressLabel, newAddressValue, addEntry]);
+    }, [newAddressLabel, newAddressValue, addEntry, isEnsName]);
     
     // Handle updating entry label
     const handleUpdateLabel = useCallback(async (id: string) => {
@@ -1807,9 +1821,11 @@ export function SettingsModal({
                                         type="text"
                                         value={newAddressValue}
                                         onChange={(e) => setNewAddressValue(e.target.value)}
-                                        placeholder="0x... Ethereum address"
+                                        placeholder="0x... or ENS (vitalik.eth)"
                                         spellCheck={false}
                                         autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
                                         className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                                     />
                                     {addressBookError && (
@@ -1817,10 +1833,17 @@ export function SettingsModal({
                                     )}
                                     <button
                                         onClick={handleAddToAddressBook}
-                                        disabled={!newAddressLabel.trim() || !newAddressValue.trim()}
-                                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={!newAddressLabel.trim() || !newAddressValue.trim() || isAddingAddress}
+                                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        Add to Address Book
+                                        {isAddingAddress ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                {isEnsName(newAddressValue) ? "Resolving ENS..." : "Adding..."}
+                                            </>
+                                        ) : (
+                                            "Add to Address Book"
+                                        )}
                                     </button>
                                 </div>
                             </div>
