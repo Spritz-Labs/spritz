@@ -645,6 +645,44 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 }
             }
 
+            // Verify on-chain owners match expected owners
+            console.log("[VaultList] Verifying vault owners match expected...");
+            try {
+                const verifyClient = publicClient || getPublicClient(deployInfo.chainId);
+                const onChainOwners = await verifyClient.readContract({
+                    address: safeAddress as Address,
+                    abi: [{
+                        name: "getOwners",
+                        type: "function",
+                        inputs: [],
+                        outputs: [{ name: "", type: "address[]" }],
+                    }],
+                    functionName: "getOwners",
+                }) as Address[];
+                
+                // Normalize for comparison
+                const expectedOwners = (deployInfo.owners as string[]).map(o => o.toLowerCase()).sort();
+                const actualOwners = (onChainOwners as string[]).map(o => o.toLowerCase()).sort();
+                
+                console.log("[VaultList] Expected owners:", expectedOwners);
+                console.log("[VaultList] Actual owners:", actualOwners);
+                
+                // Check if they match
+                const ownersMatch = expectedOwners.length === actualOwners.length &&
+                    expectedOwners.every((owner, i) => owner === actualOwners[i]);
+                
+                if (!ownersMatch) {
+                    console.error("[VaultList] OWNER MISMATCH DETECTED!");
+                    console.error("[VaultList] Expected:", expectedOwners);
+                    console.error("[VaultList] Got:", actualOwners);
+                    // Don't fail deployment, but log a warning - the vault is deployed
+                    // but users might have trouble executing transactions
+                    setDeployError("Warning: Vault deployed but owners may not match expected. Try refreshing.");
+                }
+            } catch (ownerCheckError) {
+                console.warn("[VaultList] Could not verify owners:", ownerCheckError);
+            }
+            
             // Refresh vault details
             const updatedVault = await getVault(vaultId);
             if (updatedVault) {
@@ -687,10 +725,10 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
     // Sync deployment status - checks on-chain state and updates DB if needed
     const [isSyncing, setIsSyncing] = useState(false);
-    const handleSyncStatus = useCallback(async (vaultId: string) => {
-        if (!selectedVault) return;
+    const handleSyncStatus = useCallback(async (vaultId: string, silent: boolean = false) => {
+        if (!selectedVault) return false;
         
-        setIsSyncing(true);
+        if (!silent) setIsSyncing(true);
         try {
             console.log("[VaultList] Syncing deployment status for vault:", vaultId);
             
@@ -709,21 +747,59 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                     setSelectedVault(updatedVault);
                 }
                 await fetchVaults();
+                return true; // Deployment confirmed
             } else if (deployInfo.isDeployed) {
                 // Just refresh to get latest state
                 const updatedVault = await getVault(vaultId);
                 if (updatedVault) {
                     setSelectedVault(updatedVault);
                 }
+                return true;
             } else {
                 console.log("[VaultList] Safe is not deployed on-chain yet");
+                return false;
             }
         } catch (err) {
             console.error("[VaultList] Sync error:", err);
+            return false;
         } finally {
-            setIsSyncing(false);
+            if (!silent) setIsSyncing(false);
         }
     }, [selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults]);
+
+    // Auto-sync for undeployed vaults: check every 5 seconds after deployment attempt
+    const [autoSyncAttempts, setAutoSyncAttempts] = useState(0);
+    useEffect(() => {
+        // Only auto-sync if vault is selected, not deployed, and we're not already deploying/syncing
+        if (!selectedVault || selectedVault.isDeployed || isDeploying || isSyncing) {
+            setAutoSyncAttempts(0);
+            return;
+        }
+
+        // Limit auto-sync attempts to avoid infinite polling
+        if (autoSyncAttempts >= 12) { // 12 attempts = 1 minute of checking
+            console.log("[VaultList] Auto-sync: max attempts reached");
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            console.log(`[VaultList] Auto-sync attempt ${autoSyncAttempts + 1}/12...`);
+            const deployed = await handleSyncStatus(selectedVault.id, true);
+            if (deployed) {
+                console.log("[VaultList] Auto-sync: deployment confirmed!");
+                setAutoSyncAttempts(0);
+            } else {
+                setAutoSyncAttempts(prev => prev + 1);
+            }
+        }, 5000); // Check every 5 seconds
+
+        return () => clearTimeout(timer);
+    }, [selectedVault, isDeploying, isSyncing, autoSyncAttempts, handleSyncStatus]);
+
+    // Reset auto-sync counter when vault changes
+    useEffect(() => {
+        setAutoSyncAttempts(0);
+    }, [selectedVault?.id]);
 
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
