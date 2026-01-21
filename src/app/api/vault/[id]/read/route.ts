@@ -3,14 +3,14 @@ import { createPublicClient, http, type Address, type Chain } from "viem";
 import { base, mainnet, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getAuthenticatedUser } from "@/lib/session";
 
-// Chain configurations with reliable RPCs
+// Chain configurations with free public RPCs (no API key required)
 const CHAINS: Record<number, { chain: Chain; rpc: string }> = {
-    1: { chain: mainnet, rpc: "https://rpc.ankr.com/eth" },
-    8453: { chain: base, rpc: "https://rpc.ankr.com/base" },
-    42161: { chain: arbitrum, rpc: "https://rpc.ankr.com/arbitrum" },
-    10: { chain: optimism, rpc: "https://rpc.ankr.com/optimism" },
-    137: { chain: polygon, rpc: "https://rpc.ankr.com/polygon" },
-    56: { chain: bsc, rpc: "https://rpc.ankr.com/bsc" },
+    1: { chain: mainnet, rpc: "https://eth.llamarpc.com" },
+    8453: { chain: base, rpc: "https://base.llamarpc.com" },
+    42161: { chain: arbitrum, rpc: "https://arb1.arbitrum.io/rpc" },
+    10: { chain: optimism, rpc: "https://mainnet.optimism.io" },
+    137: { chain: polygon, rpc: "https://polygon-rpc.com" },
+    56: { chain: bsc, rpc: "https://bsc-dataseed.binance.org" },
 };
 
 const SAFE_ABI = [
