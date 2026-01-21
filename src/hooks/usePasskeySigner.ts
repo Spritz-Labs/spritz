@@ -100,8 +100,20 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
         setError(null);
 
         try {
-            // Get the RP ID from the current domain
-            const rpId = window.location.hostname;
+            // Get the RP ID - must match where the passkey was registered
+            // IMPORTANT: Use parent domain (spritz.chat) for all spritz.chat subdomains
+            // to match the registration and login flow
+            const getRpId = (): string => {
+                const hostname = window.location.hostname;
+                if (hostname.includes('spritz.chat')) {
+                    return 'spritz.chat';
+                }
+                if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                    return 'localhost';
+                }
+                return hostname;
+            };
+            const rpId = getRpId();
             const challengeBytes = hexToBytes(challenge);
             
             // Create the assertion options
@@ -117,9 +129,12 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
                 allowCredentials: [{
                     id: base64UrlToArrayBuffer(credential.credentialId),
                     type: "public-key",
-                    // Don't specify transports - let the browser decide
-                    // This is important for iCloud-synced passkeys that may
-                    // be used on different devices than where they were registered
+                    // CRITICAL: Specify transports: ["internal"] to tell Safari to use
+                    // the platform authenticator (Face ID/Touch ID) directly instead of
+                    // showing the cross-device options (iPhone, iPad, Android, Security Key)
+                    // This matches the login flow which uses ["internal"] and works correctly
+                    // iCloud-synced passkeys still work with "internal" transport
+                    transports: ["internal"],
                 }],
                 userVerification: "required",
                 timeout: 60000,

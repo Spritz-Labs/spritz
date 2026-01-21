@@ -1224,9 +1224,11 @@ export async function createPasskeySafeAccountClient(
             allowCredentials: [{
                 id: credentialIdBuffer,
                 type: 'public-key',
-                // CRITICAL: Do NOT specify transports
-                // Safari uses this to determine which UI to show
-                // Specifying transports can force cross-device authentication UI
+                // CRITICAL: Specify transports: ["internal"] to tell Safari to use
+                // the platform authenticator (Face ID/Touch ID) directly instead of
+                // showing the cross-device options (iPhone, iPad, Android, Security Key)
+                // This matches the login flow which uses ["internal"] and works correctly
+                transports: ['internal'],
             }],
         };
 
