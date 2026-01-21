@@ -112,6 +112,16 @@ export default function Home() {
         
         const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
         const lastWalletAddress = localStorage.getItem("spritz_last_wallet_address");
+        const pwaUpdateReload = sessionStorage.getItem("pwa_update_reload");
+        
+        // If this is a PWA update reload, we've already shown the message
+        // Clear the flag after 10 seconds so it doesn't persist forever
+        if (pwaUpdateReload === "true") {
+            console.log("[PWA] App was just updated - showing auth options");
+            setTimeout(() => {
+                sessionStorage.removeItem("pwa_update_reload");
+            }, 10000);
+        }
         
         if (intentionallyDisconnected === "true") {
             console.log("[PWA] Wallet reconnection disabled - user chose other auth method");
@@ -739,6 +749,19 @@ export default function Home() {
                     className="w-full max-w-md mt-auto"
                 >
                     <div className="glass-card rounded-2xl md:rounded-3xl p-5 md:p-8 shadow-2xl">
+                        {/* PWA Update Notice */}
+                        {typeof window !== "undefined" && sessionStorage.getItem("pwa_update_reload") === "true" && (
+                            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span>✅</span>
+                                    <span className="font-medium">App updated!</span>
+                                </div>
+                                <p className="mt-1 text-emerald-400/80 text-xs">
+                                    Please sign in again to continue.
+                                </p>
+                            </div>
+                        )}
+                        
                         {/* Tabs */}
                         <div className="flex bg-zinc-900/50 rounded-xl p-1 mb-6">
                             <button

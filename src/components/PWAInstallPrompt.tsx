@@ -28,6 +28,18 @@ export function PWAInstallPrompt() {
             // Tell the waiting service worker to skip waiting
             waitingWorker.postMessage({ type: "SKIP_WAITING" });
         }
+        
+        // IMPORTANT: Set a flag so the app knows a PWA update triggered the reload
+        // This prevents the wallet reconnection loop from blocking the user
+        // The app should show auth options instead of trying to reconnect
+        try {
+            sessionStorage.setItem("pwa_update_reload", "true");
+            sessionStorage.setItem("wallet_intentionally_disconnected", "true");
+            console.log("[PWA] Update triggered - setting flags to prevent reconnect loop");
+        } catch (e) {
+            console.error("[PWA] Failed to set update flags:", e);
+        }
+        
         // Reload the page to get the new version
         window.location.reload();
     }, [waitingWorker]);

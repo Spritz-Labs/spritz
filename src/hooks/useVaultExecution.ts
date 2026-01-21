@@ -159,21 +159,33 @@ function buildContractSignature(
 // Create a public client for a specific chain (used when wagmi publicClient isn't available)
 function getPublicClientForChain(chainId: number) {
     const chain = VIEM_CHAINS[chainId];
-    if (!chain) return null;
+    if (!chain) {
+        console.warn("[VaultExecution] Unknown chain:", chainId);
+        return null;
+    }
     
-    // Use public RPCs - these are sufficient for read operations
+    // Use reliable public RPCs for read operations
+    // Prioritize official/high-reliability endpoints
     const rpcUrls: Record<number, string> = {
         1: "https://eth.llamarpc.com",
-        8453: "https://base.llamarpc.com",
-        42161: "https://arbitrum.llamarpc.com",
-        10: "https://optimism.llamarpc.com",
-        137: "https://polygon.llamarpc.com",
-        56: "https://bsc.llamarpc.com",
+        8453: "https://mainnet.base.org", // Official Base RPC
+        42161: "https://arb1.arbitrum.io/rpc", // Official Arbitrum RPC
+        10: "https://mainnet.optimism.io", // Official Optimism RPC
+        137: "https://polygon-rpc.com", // Official Polygon RPC
+        56: "https://bsc-dataseed.binance.org", // Official BSC RPC
     };
+    
+    const rpcUrl = rpcUrls[chainId];
+    if (!rpcUrl) {
+        console.warn("[VaultExecution] No RPC URL for chain:", chainId);
+        return null;
+    }
+    
+    console.log("[VaultExecution] Creating public client for chain:", chainId, "RPC:", rpcUrl);
     
     return createPublicClient({
         chain,
-        transport: http(rpcUrls[chainId]),
+        transport: http(rpcUrl),
     });
 }
 
@@ -202,11 +214,20 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         }
     }, [isPasskeyOnly, passkeyUserAddress, passkeySigner]);
     
-    // Get public client - prefer wagmi, fall back to chain-specific
+    // Get public client for a specific chain
+    // IMPORTANT: If chainId is provided, ALWAYS use chain-specific client
+    // because wagmiPublicClient might be on a different chain!
     const getPublicClient = useCallback((chainId?: number) => {
+        // If a specific chain is requested, use chain-specific client
+        if (chainId) {
+            // Only use wagmi client if it's on the same chain
+            if (wagmiPublicClient && wagmiPublicClient.chain?.id === chainId) {
+                return wagmiPublicClient;
+            }
+            return getPublicClientForChain(chainId);
+        }
+        // No chain specified - use wagmi if available, otherwise default to Base
         if (wagmiPublicClient) return wagmiPublicClient;
-        if (chainId) return getPublicClientForChain(chainId);
-        // Default to Base if no chain specified
         return getPublicClientForChain(8453);
     }, [wagmiPublicClient]);
 
@@ -922,15 +943,27 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             
             let nonce: number;
             try {
+                console.log("[VaultExecution] Reading nonce from vault:", safeAddress, "on chain:", chainId);
                 const nonceResult = await publicClient.readContract({
                     address: safeAddress,
                     abi: SAFE_ABI,
                     functionName: "nonce",
                 }) as bigint;
                 nonce = Number(nonceResult);
+                console.log("[VaultExecution] Vault nonce:", nonce);
             } catch (err) {
                 console.error("[VaultExecution] Failed to read vault nonce:", err);
-                return { success: false, error: "Vault may not be deployed yet. Please try again." };
+                console.error("[VaultExecution] Chain ID:", chainId, "Safe address:", safeAddress);
+                
+                // Try to get more info about why it failed
+                try {
+                    const code = await publicClient.getCode({ address: safeAddress });
+                    console.log("[VaultExecution] Contract code exists:", !!code && code !== "0x" && code.length > 2);
+                } catch (codeErr) {
+                    console.error("[VaultExecution] Also failed to get code:", codeErr);
+                }
+                
+                return { success: false, error: "Unable to read vault contract. Please check your network connection and try again." };
             }
             
             // Sign the transaction with the passkey first
