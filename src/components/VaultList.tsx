@@ -628,17 +628,27 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 }
             }
             
-            // If polling timed out, try force-sync as a last resort
-            // The transaction was submitted successfully, so the vault may exist
+            // If polling timed out, do ONE final on-chain check before giving up
+            // DO NOT use force=true here - that should only be for Create2 failures
             if (!deployed) {
-                console.log("[VaultList] Polling timed out, attempting force sync...");
+                console.log("[VaultList] Polling timed out, doing final on-chain verification...");
                 try {
-                    await confirmDeployment(vaultId, txHash, true); // force=true
-                    deployed = true;
-                    console.log("[VaultList] Force sync succeeded!");
-                } catch (forceSyncError) {
-                    console.warn("[VaultList] Force sync failed:", forceSyncError);
-                    // Don't throw - show a helpful message instead
+                    const finalCheckClient = publicClient || getPublicClient(deployInfo.chainId);
+                    const code = await finalCheckClient.getCode({ address: safeAddress as Address });
+                    const actuallyDeployed = code && code !== '0x' && code.length > 2;
+                    
+                    if (actuallyDeployed) {
+                        console.log("[VaultList] Contract exists on-chain! Confirming deployment...");
+                        await confirmDeployment(vaultId, txHash, false); // NOT force - verify on-chain
+                        deployed = true;
+                    } else {
+                        console.warn("[VaultList] Contract NOT deployed on-chain after timeout");
+                        setDeployError("Deployment may have failed. Please try again or check the transaction.");
+                        setIsDeploying(false);
+                        return;
+                    }
+                } catch (finalCheckError) {
+                    console.warn("[VaultList] Final verification failed:", finalCheckError);
                     setDeployError("Transaction sent but verification timed out. Click Sync to check status.");
                     setIsDeploying(false);
                     return;
