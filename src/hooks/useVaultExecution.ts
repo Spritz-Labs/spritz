@@ -543,6 +543,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             }) as Address[];
             
             console.log("[VaultExecution] Vault owners:", owners);
+            console.log("[VaultExecution] Signature signer addresses:", signatures.map(s => s.signerAddress));
 
             // Sort signatures by signer address (Safe requires ascending order)
             const sortedSigs = [...signatures].sort((a, b) => 
@@ -556,6 +557,9 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 isContract: boolean;
                 isOwner: boolean;
             }> = [];
+            
+            // Track non-owner signers for error message
+            const nonOwnerSigners: string[] = [];
 
             for (const sig of sortedSigs) {
                 const signerAddr = sig.signerAddress.toLowerCase() as Address;
@@ -564,6 +568,8 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 const signerCode = await publicClient.getCode({ address: signerAddr });
                 const isContract = signerCode !== undefined && signerCode !== "0x" && signerCode.length > 2;
                 
+                console.log(`[VaultExecution] Signer ${signerAddr.slice(0, 10)}... isOwner=${isOwner}, isContract=${isContract}`);
+                
                 if (isOwner) {
                     signerInfo.push({
                         signerAddress: sig.signerAddress,
@@ -571,11 +577,22 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                         isContract,
                         isOwner,
                     });
+                } else {
+                    nonOwnerSigners.push(signerAddr);
                 }
             }
 
             if (signerInfo.length === 0) {
-                throw new Error("No valid owner signatures found");
+                // Provide a more helpful error message
+                const ownersShort = owners.map(o => `${o.slice(0, 6)}...${o.slice(-4)}`).join(", ");
+                const signersShort = nonOwnerSigners.map(s => `${s.slice(0, 6)}...${s.slice(-4)}`).join(", ");
+                console.error("[VaultExecution] Owner mismatch! Vault owners:", owners);
+                console.error("[VaultExecution] Signature signers:", signatures.map(s => s.signerAddress));
+                throw new Error(
+                    `Vault ownership mismatch: Your Smart Wallet (${signersShort}) is not an owner of this vault. ` +
+                    `Vault owners: ${ownersShort}. This vault may have been created with an outdated Smart Wallet address. ` +
+                    `Please create a new vault to use with your current passkey.`
+                );
             }
 
             // Build the final signatures bytes for Safe
@@ -729,6 +746,9 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 isContract: boolean;
                 isOwner: boolean;
             }> = [];
+            
+            // Track non-owner signers for error message
+            const nonOwnerSigners: string[] = [];
 
             for (const sig of sortedSigs) {
                 const signerAddr = sig.signerAddress.toLowerCase() as Address;
@@ -749,7 +769,21 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                     });
                 } else {
                     console.warn(`[VaultExecution] Skipping signer ${signerAddr} - not an owner`);
+                    nonOwnerSigners.push(signerAddr);
                 }
+            }
+            
+            // Check if we have any valid signatures
+            if (signerInfo.length === 0) {
+                const ownersShort = owners.map(o => `${o.slice(0, 6)}...${o.slice(-4)}`).join(", ");
+                const signersShort = nonOwnerSigners.map(s => `${s.slice(0, 6)}...${s.slice(-4)}`).join(", ");
+                console.error("[VaultExecution] Owner mismatch! Vault owners:", owners);
+                console.error("[VaultExecution] Signature signers:", signatures.map(s => s.signerAddress));
+                throw new Error(
+                    `Vault ownership mismatch: Your Smart Wallet (${signersShort}) is not an owner of this vault. ` +
+                    `Vault owners: ${ownersShort}. This vault may have been created with an outdated Smart Wallet address. ` +
+                    `Please create a new vault to use with your current passkey.`
+                );
             }
 
             // Build the signature bytes
