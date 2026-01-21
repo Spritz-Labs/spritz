@@ -114,6 +114,9 @@ const ERC20_TRANSFER_ABI = [
 
 export type VaultExecutionStatus = "idle" | "checking" | "signing" | "executing" | "success" | "error";
 
+// SafeWebAuthnSharedSigner address - used as the "owner" in Safe's checkNSignatures for WebAuthn
+const SAFE_WEBAUTHN_SHARED_SIGNER = "0x94a4F6affBd8975951142c3999aEAB7ecee555c2" as Address;
+
 /**
  * Build an EIP-1271 contract signature for Safe
  * 
@@ -155,6 +158,71 @@ function buildContractSignature(
     const dynamicLength = 32 + sigLengthBytes; // length field + signature
     
     return { staticPart, dynamicPart, dynamicLength };
+}
+
+/**
+ * Build a NESTED contract signature for passkey/Smart Wallet owners of a vault.
+ * 
+ * When a vault has a Smart Wallet as owner, and that Smart Wallet has a WebAuthn owner,
+ * we need TWO levels of contract signatures:
+ * 
+ * 1. INNER: For Smart Wallet's checkNSignatures
+ *    - r = SafeWebAuthnSharedSigner address
+ *    - s = 65 (offset to WebAuthn data)
+ *    - v = 0
+ *    - dynamic = WebAuthn ABI-encoded signature
+ * 
+ * 2. OUTER: For Vault's checkNSignatures
+ *    - r = Smart Wallet address
+ *    - s = offset to inner signature
+ *    - v = 0
+ *    - dynamic = the complete INNER signature
+ */
+function buildNestedContractSignature(
+    smartWalletAddress: Address,
+    webAuthnSignature: string,
+    dynamicOffset: number
+): { staticPart: string; dynamicPart: string; dynamicLength: number } {
+    // First, build the INNER signature (for Smart Wallet's checkNSignatures)
+    // This points to SafeWebAuthnSharedSigner and contains the WebAuthn data
+    const innerStaticOffset = 65; // Offset within inner signature to its dynamic part
+    
+    // Inner static part: r = SafeWebAuthnSharedSigner, s = 65, v = 0
+    const innerR = SAFE_WEBAUTHN_SHARED_SIGNER.slice(2).toLowerCase().padStart(64, "0");
+    const innerS = innerStaticOffset.toString(16).padStart(64, "0");
+    const innerV = "00";
+    const innerStaticPart = innerR + innerS + innerV; // 65 bytes = 130 hex chars
+    
+    // Inner dynamic part: length + WebAuthn signature
+    const webAuthnHex = webAuthnSignature.startsWith("0x") ? webAuthnSignature.slice(2) : webAuthnSignature;
+    const webAuthnLength = webAuthnHex.length / 2;
+    const innerDynamicLengthHex = webAuthnLength.toString(16).padStart(64, "0");
+    const innerDynamicPart = innerDynamicLengthHex + webAuthnHex;
+    
+    // Complete inner signature
+    const innerSignature = innerStaticPart + innerDynamicPart;
+    const innerSignatureLength = innerSignature.length / 2; // in bytes
+    
+    console.log(`[VaultExecution] Inner signature: static=${innerStaticPart.length/2}B, dynamic=${innerDynamicPart.length/2}B, total=${innerSignatureLength}B`);
+    
+    // Now build the OUTER signature (for Vault's checkNSignatures)
+    // This points to Smart Wallet and contains the complete inner signature
+    const outerR = smartWalletAddress.slice(2).toLowerCase().padStart(64, "0");
+    const outerS = dynamicOffset.toString(16).padStart(64, "0");
+    const outerV = "00";
+    const outerStaticPart = outerR + outerS + outerV; // 65 bytes = 130 hex chars
+    
+    // Outer dynamic part: length of inner signature + inner signature
+    const outerDynamicLengthHex = innerSignatureLength.toString(16).padStart(64, "0");
+    const outerDynamicPart = outerDynamicLengthHex + innerSignature;
+    
+    console.log(`[VaultExecution] Outer signature: staticPart=${outerStaticPart.length/2}B, dynamicPart=${outerDynamicPart.length/2}B`);
+    
+    return {
+        staticPart: outerStaticPart,
+        dynamicPart: outerDynamicPart,
+        dynamicLength: 32 + innerSignatureLength, // length field + inner signature
+    };
 }
 
 // Create a public client for a specific chain (used when wagmi publicClient isn't available)
@@ -747,22 +815,26 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             }
 
             // Build the final signatures bytes for Safe
-            // Contract signatures use special format with v=0
+            // For passkey/Smart Wallet owners, we need NESTED contract signatures:
+            // - Outer: points to Smart Wallet
+            // - Inner: points to SafeWebAuthnSharedSigner with WebAuthn data
             const staticParts: string[] = [];
             const dynamicParts: string[] = [];
             let dynamicOffset = signerInfo.length * 65; // 65 bytes per static signature
 
             for (const info of signerInfo) {
                 if (info.isContract) {
-                    // Build contract signature
-                    const contractSig = buildContractSignature(
+                    // This is a passkey user with Smart Wallet
+                    // Build NESTED contract signature (outer -> inner -> WebAuthn)
+                    console.log("[VaultExecution] Building nested signature for Smart Wallet:", info.signerAddress);
+                    const nestedSig = buildNestedContractSignature(
                         info.signerAddress as Address,
-                        info.signature,
+                        info.signature, // This is the WebAuthn ABI-encoded signature
                         dynamicOffset
                     );
-                    staticParts.push(contractSig.staticPart);
-                    dynamicParts.push(contractSig.dynamicPart);
-                    dynamicOffset += contractSig.dynamicLength;
+                    staticParts.push(nestedSig.staticPart);
+                    dynamicParts.push(nestedSig.dynamicPart);
+                    dynamicOffset += nestedSig.dynamicLength;
                 } else {
                     // Regular EOA signature (65 bytes, no padding needed)
                     const sigHex = info.signature.startsWith("0x") 
