@@ -311,10 +311,22 @@ function DashboardContent({
     } = usePushNotifications(userAddress);
 
     // Track user login for admin analytics
+    // IMPORTANT: Use the actual auth method, not the chain type
+    // walletType prop is about chain (evm/solana), but track-login expects auth method
+    const actualAuthMethod = isPasskeyUser 
+        ? "passkey" 
+        : isEmailUser 
+        ? "email" 
+        : isWorldIdUser 
+        ? "world_id" 
+        : isAlienIdUser 
+        ? "alien_id" 
+        : walletType; // Traditional wallet: evm or solana
+    
     const { dailyBonusAvailable, claimDailyBonus, isClaimingBonus } =
         useLoginTracking({
             walletAddress: userAddress,
-            walletType,
+            walletType: actualAuthMethod,
             chain: isSolanaUser ? "solana" : "ethereum",
             ensName: userENS.ensName,
             username: reachUsername,

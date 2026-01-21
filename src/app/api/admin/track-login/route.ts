@@ -62,7 +62,12 @@ export async function POST(request: NextRequest) {
             };
 
             // Update fields if provided
-            if (walletType) updates.wallet_type = walletType;
+            // IMPORTANT: Don't overwrite wallet_type if it's already set to a non-wallet auth method
+            // (passkey, email, world_id, alien_id) - those are set during their auth flows
+            const protectedWalletTypes = ['passkey', 'email', 'world_id', 'alien_id'];
+            if (walletType && !protectedWalletTypes.includes(existingUser.wallet_type)) {
+                updates.wallet_type = walletType;
+            }
             if (chain) updates.chain = chain;
             if (ensName) updates.ens_name = ensName;
             if (username) updates.username = username;
