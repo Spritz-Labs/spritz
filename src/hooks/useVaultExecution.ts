@@ -637,22 +637,42 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
 
         try {
             const { safeAddress, chainId, to, value, data, signatures } = params;
-            const publicClient = getPublicClient(chainId);
             
+            // Create a fresh client for the specific chain (don't rely on wagmi)
+            const publicClient = getPublicClientForChain(chainId);
             if (!publicClient) {
-                throw new Error(`No public client available for chain ${chainId}`);
+                throw new Error(`Unsupported chain: ${chainId}`);
             }
             
             console.log("[VaultExecution] Executing via Passkey Smart Wallet with", signatures.length, "signatures");
+            console.log("[VaultExecution] Chain:", chainId, "Vault:", safeAddress);
 
-            // Get Safe owners to build proper signatures
-            const owners = await publicClient.readContract({
-                address: safeAddress,
-                abi: SAFE_ABI,
-                functionName: "getOwners",
-            }) as Address[];
+            // Get Safe owners with retry logic
+            let owners: Address[] = [];
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    console.log(`[VaultExecution] Reading vault owners (attempt ${attempt}/${maxRetries})...`);
+                    owners = await publicClient.readContract({
+                        address: safeAddress,
+                        abi: SAFE_ABI,
+                        functionName: "getOwners",
+                    }) as Address[];
+                    console.log("[VaultExecution] Vault owners:", owners);
+                    break;
+                } catch (err) {
+                    console.error(`[VaultExecution] Attempt ${attempt} to read owners failed:`, err);
+                    if (attempt === maxRetries) {
+                        throw new Error("Unable to read vault contract. Please check your network connection.");
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                }
+            }
             
-            console.log("[VaultExecution] Vault owners:", owners);
+            if (owners.length === 0) {
+                throw new Error("Failed to read vault owners");
+            }
+            
             console.log("[VaultExecution] Signature signer addresses:", signatures.map(s => s.signerAddress));
 
             // Sort signatures by signer address (Safe requires ascending order)
@@ -1089,6 +1109,18 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             
             let nonce: number | null = null;
             const maxRetries = 3;
+            
+            // Log the RPC URL being used
+            const rpcUrls: Record<number, string> = {
+                1: "https://rpc.ankr.com/eth",
+                8453: "https://rpc.ankr.com/base",
+                42161: "https://rpc.ankr.com/arbitrum",
+                10: "https://rpc.ankr.com/optimism",
+                137: "https://rpc.ankr.com/polygon",
+                56: "https://rpc.ankr.com/bsc",
+            };
+            console.log(`[VaultExecution] Using RPC: ${rpcUrls[chainId]} for chain ${chainId}`);
+            
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     console.log(`[VaultExecution] Reading nonce from vault (attempt ${attempt}/${maxRetries}):`, safeAddress, "on chain:", chainId);
@@ -1100,8 +1132,10 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                     nonce = Number(nonceResult);
                     console.log("[VaultExecution] Vault nonce:", nonce);
                     break; // Success, exit retry loop
-                } catch (err) {
-                    console.error(`[VaultExecution] Attempt ${attempt} failed:`, err);
+                } catch (err: unknown) {
+                    const errorMessage = err instanceof Error ? err.message : String(err);
+                    const errorName = err instanceof Error ? err.name : "Unknown";
+                    console.error(`[VaultExecution] Attempt ${attempt} failed - ${errorName}: ${errorMessage}`);
                     
                     if (attempt === maxRetries) {
                         console.error("[VaultExecution] Chain ID:", chainId, "Safe address:", safeAddress);
