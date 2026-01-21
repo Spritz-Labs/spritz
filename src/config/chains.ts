@@ -39,7 +39,7 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🔵",
         color: "#0052FF",
         explorerUrl: "https://basescan.org",
-        rpcUrl: "https://rpc.ankr.com/base", // Ankr public RPC (no CORS issues)
+        rpcUrl: "https://base.llamarpc.com", // LlamaRPC - free, no API key
     },
     unichain: {
         id: 130,

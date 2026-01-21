@@ -11,9 +11,8 @@ const publicClient = createPublicClient({
   chain: mainnet,
   transport: fallback([
     http("https://eth.llamarpc.com", { timeout: 10000 }),
-    http("https://rpc.ankr.com/eth", { timeout: 10000 }),
-    http("https://mainnet.rpc.buidlguidl.com", { timeout: 10000 }),
     http("https://cloudflare-eth.com", { timeout: 10000 }),
+    http("https://mainnet.rpc.buidlguidl.com", { timeout: 10000 }),
   ]),
 });
 

@@ -176,10 +176,10 @@ function getPimlicoBundlerUrl(chainId: number): string {
     return url;
 }
 
-// RPC URLs for each supported chain (reliable public RPCs)
+// RPC URLs for each supported chain (free public RPCs - no API key required)
 const CHAIN_RPC_URLS: Record<number, string> = {
     1: "https://eth.llamarpc.com",           // Ethereum Mainnet
-    8453: "https://rpc.ankr.com/base",         // Ankr public RPC (no CORS issues)
+    8453: "https://base.llamarpc.com",        // Base (LlamaRPC - free)
     42161: "https://arb1.arbitrum.io/rpc",    // Arbitrum
     10: "https://mainnet.optimism.io",        // Optimism
     137: "https://polygon-rpc.com",           // Polygon
