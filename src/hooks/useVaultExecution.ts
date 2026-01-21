@@ -885,7 +885,21 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
             
-            // If we have enough signatures, execute via passkey
+            if (!passkeySigner.isReady) {
+                return { 
+                    success: false, 
+                    error: "Unable to load passkey. Please refresh the page and try again." 
+                };
+            }
+            
+            // For passkey users, we need to sign and execute via passkey Smart Wallet
+            // This handles both pre-collected signatures AND threshold=1 (sign on demand)
+            const credential = passkeySigner.credential;
+            if (!credential) {
+                return { success: false, error: "Passkey credential not available" };
+            }
+            
+            // If we have pre-collected signatures, use them
             if (signatures && signatures.length > 0) {
                 return executeWithSignaturesViaPasskey({
                     safeAddress,
@@ -897,12 +911,57 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 });
             }
             
-            if (!passkeySigner.isReady) {
+            // For threshold=1 vaults without pre-collected signatures, 
+            // we need to sign with the passkey and execute
+            console.log("[VaultExecution] Passkey user executing threshold=1 vault transaction");
+            
+            // Get current nonce for the vault
+            if (!publicClient) {
+                return { success: false, error: "Unable to connect to network" };
+            }
+            
+            let nonce: number;
+            try {
+                const nonceResult = await publicClient.readContract({
+                    address: safeAddress,
+                    abi: SAFE_ABI,
+                    functionName: "nonce",
+                }) as bigint;
+                nonce = Number(nonceResult);
+            } catch (err) {
+                console.error("[VaultExecution] Failed to read vault nonce:", err);
+                return { success: false, error: "Vault may not be deployed yet. Please try again." };
+            }
+            
+            // Sign the transaction with the passkey first
+            const signResult = await signTransaction({
+                safeAddress,
+                chainId,
+                to,
+                value,
+                data,
+                nonce,
+            });
+            
+            if (!signResult.success || !signResult.signature) {
                 return { 
                     success: false, 
-                    error: "Unable to load passkey. Please refresh the page and try again." 
+                    error: signResult.error || "Failed to sign transaction with passkey" 
                 };
             }
+            
+            // Execute with the signature
+            return executeWithSignaturesViaPasskey({
+                safeAddress,
+                chainId,
+                to,
+                value,
+                data,
+                signatures: [{
+                    signerAddress: userAddress || passkeyUserAddress!,
+                    signature: signResult.signature,
+                }],
+            });
         }
 
         // Execution requires a wallet client to send the transaction and pay gas
