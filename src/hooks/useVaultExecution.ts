@@ -525,7 +525,8 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 
                 // For WebAuthn/passkey signatures with Safe Smart Wallet:
                 // The signature must be ABI-encoded with all WebAuthn assertion components
-                // Safe's WebAuthn verification expects: (authenticatorData, clientDataFields, r, s)
+                // Safe's WebAuthn verification expects: (bytes authenticatorData, bytes clientDataFields, uint256[2] rs)
+                // NOTE: r and s MUST be encoded as uint256[2] array, NOT as separate values!
                 
                 // 1. Extract r and s from the DER-encoded signature
                 const { r, s } = extractRSFromDER(passkeyResult.signature);
@@ -535,22 +536,21 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 const clientDataFields = extractClientDataFields(passkeyResult.clientDataJSON);
                 
                 // 3. ABI-encode the full WebAuthn signature for Safe verification
+                // CRITICAL: Safe expects (bytes, bytes, uint256[2]) format
                 signature = encodeAbiParameters(
                     [
                         { name: "authenticatorData", type: "bytes" },
                         { name: "clientDataFields", type: "bytes" },
-                        { name: "r", type: "uint256" },
-                        { name: "s", type: "uint256" },
+                        { name: "rs", type: "uint256[2]" },
                     ],
                     [
                         toHex(passkeyResult.authenticatorData),
                         toHex(new TextEncoder().encode(clientDataFields)),
-                        r,
-                        s,
+                        [r, s] as [bigint, bigint],
                     ]
                 );
                 
-                console.log("[VaultExecution] WebAuthn signature encoded for Safe verification");
+                console.log("[VaultExecution] WebAuthn signature encoded for Safe verification (uint256[2] format)");
             } else {
                 throw new Error("No signing method available");
             }
