@@ -165,14 +165,14 @@ function getPublicClientForChain(chainId: number) {
     }
     
     // Use reliable public RPCs for read operations
-    // Prioritize official/high-reliability endpoints
+    // Ankr provides free public RPCs with no CORS issues
     const rpcUrls: Record<number, string> = {
-        1: "https://eth.llamarpc.com",
-        8453: "https://base.llamarpc.com", // More reliable than mainnet.base.org
-        42161: "https://arb1.arbitrum.io/rpc", // Official Arbitrum RPC
-        10: "https://mainnet.optimism.io", // Official Optimism RPC
-        137: "https://polygon-rpc.com", // Official Polygon RPC
-        56: "https://bsc-dataseed.binance.org", // Official BSC RPC
+        1: "https://rpc.ankr.com/eth",
+        8453: "https://rpc.ankr.com/base",
+        42161: "https://rpc.ankr.com/arbitrum",
+        10: "https://rpc.ankr.com/optimism",
+        137: "https://rpc.ankr.com/polygon",
+        56: "https://rpc.ankr.com/bsc",
     };
     
     const rpcUrl = rpcUrls[chainId];

@@ -119,7 +119,7 @@ export const BLOCKSCOUT_URLS: Record<number, string> = {
 // RPC URLs for native balance fallback
 export const RPC_URLS: Record<number, string> = {
     1: "https://eth.llamarpc.com",
-    8453: "https://base.llamarpc.com",
+    8453: "https://rpc.ankr.com/base",
     42161: "https://arb1.arbitrum.io/rpc",
     10: "https://mainnet.optimism.io",
     137: "https://polygon-rpc.com",
