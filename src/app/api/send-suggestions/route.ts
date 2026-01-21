@@ -16,6 +16,7 @@ export interface SendSuggestion {
     avatar?: string;
     ensName?: string;
     isFavorite?: boolean;
+    chainId?: number; // For vaults - the chain the vault is deployed on
 }
 
 /**
@@ -126,6 +127,7 @@ export async function GET(request: NextRequest) {
                         smartWalletAddress: vault.safe_address, // Vault IS a smart wallet
                         label: `${vault.emoji || "🔐"} ${vault.name}`,
                         sublabel: `Vault on ${chainNames[vault.chain_id] || `Chain ${vault.chain_id}`}`,
+                        chainId: vault.chain_id, // Include chain for filtering
                     });
                 }
             }

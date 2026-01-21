@@ -859,13 +859,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         setIsUsdMode(!isUsdMode);
     }, [sendAmount, isUsdMode, tokenPriceUsd, getTokenAmount, getUsdAmount]);
 
-    // Filter suggestions based on recipient input
+    // Filter suggestions based on recipient input and selected chain
+    // For vaults, only show those on the selected chain to prevent cross-chain mistakes
     const filteredSuggestions = useMemo(() => {
+        // Pass the selectedChainId to filter vaults by chain
+        // This prevents users from accidentally sending to a vault on a different chain
         if (recipientInput.length > 0) {
-            return filterSuggestions(recipientInput);
+            return filterSuggestions(recipientInput, selectedChainId);
         }
-        return sendSuggestions;
-    }, [recipientInput, filterSuggestions, sendSuggestions]);
+        return filterSuggestions("", selectedChainId);
+    }, [recipientInput, filterSuggestions, selectedChainId]);
     
     // Check if current address can be saved to address book
     const canSaveToAddressBook = useMemo(() => {

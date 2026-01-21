@@ -12,6 +12,7 @@ interface RecipientInputProps {
     className?: string;
     showSaveOption?: boolean; // Show option to save to address book
     onValidAddress?: (isValid: boolean, resolvedAddress?: string) => void;
+    chainId?: number; // Filter vaults to only show those on this chain
 }
 
 /**
@@ -30,6 +31,7 @@ export function RecipientInput({
     className = "",
     showSaveOption = true,
     onValidAddress,
+    chainId,
 }: RecipientInputProps) {
     const [isFocused, setIsFocused] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -44,8 +46,11 @@ export function RecipientInput({
     const { suggestions, isLoading: suggestionsLoading, filter, refresh: refreshSuggestions } = useSendSuggestions(true);
     const { addEntry, entries } = useAddressBook();
     
-    // Filter suggestions based on input
-    const filteredSuggestions = value.length > 0 ? filter(value) : suggestions;
+    // Filter suggestions based on input and chain
+    // For vaults, only show those on the selected chain to prevent cross-chain mistakes
+    const filteredSuggestions = value.length > 0 
+        ? filter(value, chainId) 
+        : filter("", chainId); // Still filter by chain even with no search query
     
     // Check if current value is a valid address and not already saved
     const isValidAddress = isAddress(value);

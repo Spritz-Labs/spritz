@@ -159,13 +159,15 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         setIsUsdMode(!isUsdMode);
     }, [sendAmount, isUsdMode, vaultTokenPriceUsd, getVaultTokenAmount, getVaultUsdAmount]);
     
-    // Filter suggestions based on recipient input
+    // Filter suggestions based on recipient input and selected vault's chain
+    // For vaults, only show those on the same chain to prevent cross-chain mistakes
     const filteredSuggestions = useMemo(() => {
+        const currentChainId = selectedVault?.chain_id;
         if (ensResolver.input.length > 0) {
-            return filterSuggestions(ensResolver.input);
+            return filterSuggestions(ensResolver.input, currentChainId);
         }
-        return sendSuggestions;
-    }, [ensResolver.input, filterSuggestions, sendSuggestions]);
+        return filterSuggestions("", currentChainId);
+    }, [ensResolver.input, filterSuggestions, selectedVault?.chain_id]);
     
     // Check if current address can be saved to address book
     const canSaveToAddressBook = useMemo(() => {

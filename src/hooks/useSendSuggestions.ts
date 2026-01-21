@@ -11,7 +11,7 @@ interface UseSendSuggestionsReturn {
     isLoading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
-    filter: (query: string) => SendSuggestion[];
+    filter: (query: string, chainId?: number) => SendSuggestion[];
 }
 
 /**
@@ -55,16 +55,34 @@ export function useSendSuggestions(enabled: boolean = true): UseSendSuggestionsR
     }, [enabled, fetchSuggestions]);
 
     // Filter suggestions by query (matches label, address, ENS)
-    const filter = useCallback((query: string): SendSuggestion[] => {
-        if (!query || query.length < 1) return suggestions;
+    // Optionally filter vaults by chainId to prevent cross-chain mistakes
+    const filter = useCallback((query: string, chainId?: number): SendSuggestion[] => {
+        let filtered = suggestions;
         
-        const q = query.toLowerCase();
-        return suggestions.filter(s => 
-            s.label.toLowerCase().includes(q) ||
-            s.address.toLowerCase().includes(q) ||
-            s.ensName?.toLowerCase().includes(q) ||
-            s.sublabel?.toLowerCase().includes(q)
-        );
+        // Filter vaults by chain if chainId is provided
+        // This prevents users from accidentally sending to a vault on a different chain
+        if (chainId !== undefined) {
+            filtered = filtered.filter(s => {
+                // Only filter vaults - friends and address book entries are chain-agnostic
+                if (s.type === "vault") {
+                    return s.chainId === chainId;
+                }
+                return true;
+            });
+        }
+        
+        // Then filter by search query if provided
+        if (query && query.length >= 1) {
+            const q = query.toLowerCase();
+            filtered = filtered.filter(s => 
+                s.label.toLowerCase().includes(q) ||
+                s.address.toLowerCase().includes(q) ||
+                s.ensName?.toLowerCase().includes(q) ||
+                s.sublabel?.toLowerCase().includes(q)
+            );
+        }
+        
+        return filtered;
     }, [suggestions]);
 
     return {
