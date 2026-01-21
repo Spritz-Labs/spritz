@@ -918,6 +918,15 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         if (!selectedVault) return;
         
         try {
+            // Find the user's Smart Wallet address from vault members
+            // This is required for passkey users whose Smart Wallet is the vault owner
+            const userMember = selectedVault.members.find(
+                (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+            );
+            const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
+            
+            console.log("[VaultList] Signing with Smart Wallet:", userSmartWalletAddress || userAddress);
+            
             // Get the transaction details for signing
             const signResult = await vaultExecution.signTransaction({
                 safeAddress: selectedVault.safeAddress as Address,
@@ -926,6 +935,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 value: tx.value || "0",
                 data: (tx.data || "0x") as Hex,
                 nonce: tx.nonce,
+                smartWalletAddress: userSmartWalletAddress, // Pass Smart Wallet address for EIP-1271 signing
             });
             
             if (!signResult.success || !signResult.signature) {
