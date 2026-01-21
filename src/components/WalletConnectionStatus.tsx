@@ -73,9 +73,10 @@ function WalletConnectionStatusInner() {
         };
     }, [isReconnecting, reconnectAttempts, connectionState, dismissed]);
 
-    // Handle "Use passkey" - clear wallet data and reload
+    // Handle "Use passkey" - clear wallet data completely and reload
+    // Pass true to clearSession to also forget the wallet (won't auto-reconnect on next launch)
     const handleUsePasskey = () => {
-        clearSession();
+        clearSession(true); // forgetWallet = true
         // Small delay then reload to reset state
         setTimeout(() => {
             window.location.reload();

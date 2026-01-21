@@ -102,40 +102,24 @@ export default function Home() {
         reconnect({ connectors });
     }, [reconnect, connectors]);
 
-    // DO NOT auto-reconnect on initial page load
-    // This was causing issues where the wallet modal would pop up immediately
-    // preventing users from accessing other auth methods (passkeys, etc.)
-    // Wagmi handles its own internal reconnection for active sessions.
-    // We only manually reconnect when app comes back from background.
+    // PWA Wallet Reconnection Strategy:
+    // - If user intentionally disconnected -> don't reconnect
+    // - If user has NEVER connected wallet -> don't reconnect (show auth options)
+    // - If user HAS previously connected wallet AND has saved session -> reconnect (PWA resume)
+    // The actual reconnection logic is handled by usePWAWalletPersistence hook
     useEffect(() => {
-        // Check if we should skip wallet reconnection entirely
-        if (typeof window !== "undefined") {
-            const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
-            if (intentionallyDisconnected === "true") {
-                console.log("[PWA] Wallet reconnection disabled - user chose other auth method");
-                return;
-            }
-            
-            // Check if wallet data exists but is stale (failed to connect)
-            const wagmiState = localStorage.getItem("wagmi.store");
-            if (wagmiState) {
-                try {
-                    const parsed = JSON.parse(wagmiState);
-                    // If there's no current connection, don't force reconnect
-                    // Let the user choose to connect if they want
-                    if (!parsed?.state?.current) {
-                        console.log("[PWA] No active wallet connection, skipping auto-reconnect");
-                        return;
-                    }
-                } catch {
-                    // Invalid state, clear it
-                    localStorage.removeItem("wagmi.store");
-                }
-            }
+        if (typeof window === "undefined") return;
+        
+        const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
+        const lastWalletAddress = localStorage.getItem("spritz_last_wallet_address");
+        
+        if (intentionallyDisconnected === "true") {
+            console.log("[PWA] Wallet reconnection disabled - user chose other auth method");
+        } else if (!lastWalletAddress) {
+            console.log("[PWA] No previous wallet connection found - showing auth options");
+        } else {
+            console.log("[PWA] Previous wallet user detected - usePWAWalletPersistence will handle reconnect");
         }
-        // Only reconnect if we have a genuinely active session
-        // This is handled by wagmi internally, so we don't need to do anything
-        console.log("[PWA] Letting wagmi handle initial reconnection");
     }, []);
     
     // Reconnect wallet when app comes back to foreground (PWA resume)
