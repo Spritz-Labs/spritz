@@ -1081,33 +1081,54 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             console.log("[VaultExecution] Passkey user executing threshold=1 vault transaction");
             
             // Get current nonce for the vault
-            if (!publicClient) {
-                return { success: false, error: "Unable to connect to network" };
+            // Create a fresh client for the specific chain (don't rely on wagmi)
+            const freshClient = getPublicClientForChain(chainId);
+            if (!freshClient) {
+                return { success: false, error: `Unsupported chain: ${chainId}` };
             }
             
-            let nonce: number;
-            try {
-                console.log("[VaultExecution] Reading nonce from vault:", safeAddress, "on chain:", chainId);
-                const nonceResult = await publicClient.readContract({
-                    address: safeAddress,
-                    abi: SAFE_ABI,
-                    functionName: "nonce",
-                }) as bigint;
-                nonce = Number(nonceResult);
-                console.log("[VaultExecution] Vault nonce:", nonce);
-            } catch (err) {
-                console.error("[VaultExecution] Failed to read vault nonce:", err);
-                console.error("[VaultExecution] Chain ID:", chainId, "Safe address:", safeAddress);
-                
-                // Try to get more info about why it failed
+            let nonce: number | null = null;
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
-                    const code = await publicClient.getCode({ address: safeAddress });
-                    console.log("[VaultExecution] Contract code exists:", !!code && code !== "0x" && code.length > 2);
-                } catch (codeErr) {
-                    console.error("[VaultExecution] Also failed to get code:", codeErr);
+                    console.log(`[VaultExecution] Reading nonce from vault (attempt ${attempt}/${maxRetries}):`, safeAddress, "on chain:", chainId);
+                    const nonceResult = await freshClient.readContract({
+                        address: safeAddress,
+                        abi: SAFE_ABI,
+                        functionName: "nonce",
+                    }) as bigint;
+                    nonce = Number(nonceResult);
+                    console.log("[VaultExecution] Vault nonce:", nonce);
+                    break; // Success, exit retry loop
+                } catch (err) {
+                    console.error(`[VaultExecution] Attempt ${attempt} failed:`, err);
+                    
+                    if (attempt === maxRetries) {
+                        console.error("[VaultExecution] Chain ID:", chainId, "Safe address:", safeAddress);
+                        
+                        // Try to get more info about why it failed
+                        try {
+                            const code = await freshClient.getCode({ address: safeAddress });
+                            const hasCode = !!code && code !== "0x" && code.length > 2;
+                            console.log("[VaultExecution] Contract code exists:", hasCode);
+                            if (!hasCode) {
+                                return { success: false, error: "Vault contract not found. It may not be deployed on this network yet." };
+                            }
+                        } catch (codeErr) {
+                            console.error("[VaultExecution] Also failed to get code:", codeErr);
+                        }
+                        
+                        return { success: false, error: "Unable to read vault contract. Please try again in a moment." };
+                    }
+                    
+                    // Wait before retry
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
                 }
-                
-                return { success: false, error: "Unable to read vault contract. Please check your network connection and try again." };
+            }
+            
+            // This shouldn't happen since we return on max retries
+            if (nonce === null) {
+                return { success: false, error: "Failed to read vault nonce" };
             }
             
             // Sign the transaction with the passkey first
