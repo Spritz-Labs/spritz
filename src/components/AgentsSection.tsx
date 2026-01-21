@@ -6,7 +6,8 @@ import { useAgents, useFavoriteAgents, Agent, DiscoveredAgent, MCPServer, APIToo
 import { CreateAgentModal } from "./CreateAgentModal";
 import { AgentChatModal } from "./AgentChatModal";
 import { EditAgentModal } from "./EditAgentModal";
-import { AgentKnowledgeModal } from "./AgentKnowledgeModal";
+import { AgentKnowledgeModal, type KnowledgeTab } from "./AgentKnowledgeModal";
+import { EpisodeTimelineModal } from "./EpisodeTimelineModal";
 import { ExploreAgentsModal } from "./ExploreAgentsModal";
 
 interface AgentsSectionProps {
@@ -22,8 +23,12 @@ export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isKnowledgeModalOpen, setIsKnowledgeModalOpen] = useState(false);
+    const [knowledgeModalTab, setKnowledgeModalTab] = useState<KnowledgeTab>("knowledge");
+    const [knowledgeGraphQuery, setKnowledgeGraphQuery] = useState<string | null>(null);
+    const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
     const [isExploreModalOpen, setIsExploreModalOpen] = useState(false);
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+    const [timelineAgent, setTimelineAgent] = useState<Agent | null>(null);
     const [selectedDiscoveredAgent, setSelectedDiscoveredAgent] = useState<DiscoveredAgent | null>(null);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isExpanded, setIsExpanded] = useState(true);
@@ -97,7 +102,30 @@ export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading 
 
     const handleOpenKnowledge = (agent: Agent) => {
         setSelectedAgent(agent);
+        setKnowledgeModalTab("knowledge");
+        setKnowledgeGraphQuery(null);
         setIsKnowledgeModalOpen(true);
+    };
+
+    const handleOpenKnowledgeGraph = (entityName: string) => {
+        const agent = selectedAgent ?? selectedDiscoveredAgent;
+        if (!agent) return;
+        setSelectedAgent(agent);
+        setKnowledgeModalTab("graph");
+        setKnowledgeGraphQuery(entityName);
+        setIsKnowledgeModalOpen(true);
+    };
+
+    const handleOpenTimeline = (agent: Agent) => {
+        setTimelineAgent(agent);
+        setIsTimelineModalOpen(true);
+    };
+
+    const handleOpenTimelineForChat = () => {
+        const agent = selectedAgent ?? selectedDiscoveredAgent;
+        if (!agent) return;
+        setTimelineAgent(agent);
+        setIsTimelineModalOpen(true);
     };
 
     const handleSelectDiscoveredAgent = (agent: DiscoveredAgent) => {
@@ -398,6 +426,18 @@ export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading 
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
+                                                        handleOpenTimeline(agent);
+                                                    }}
+                                                    className="hidden sm:block p-1.5 sm:p-2 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                                                    title="Timeline"
+                                                >
+                                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2m6-2a8 8 0 11-16 0 8 8 0 0116 0z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         handleEditAgent(agent);
                                                     }}
                                                     className="p-1.5 sm:p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
@@ -538,6 +578,8 @@ export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading 
                 }}
                 agent={selectedAgent || selectedDiscoveredAgent}
                 userAddress={userAddress}
+                onOpenKnowledgeGraph={handleOpenKnowledgeGraph}
+                onOpenTimeline={handleOpenTimelineForChat}
             />
             <EditAgentModal
                 isOpen={isEditModalOpen}
@@ -555,8 +597,22 @@ export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading 
                 onClose={() => {
                     setIsKnowledgeModalOpen(false);
                     setSelectedAgent(null);
+                    setKnowledgeGraphQuery(null);
+                    setKnowledgeModalTab("knowledge");
                 }}
                 agent={selectedAgent}
+                userAddress={userAddress}
+                initialTab={knowledgeModalTab}
+                knowledgeGraphQuery={knowledgeGraphQuery}
+            />
+            <EpisodeTimelineModal
+                isOpen={isTimelineModalOpen}
+                onClose={() => {
+                    setIsTimelineModalOpen(false);
+                    setTimelineAgent(null);
+                }}
+                agentId={timelineAgent?.id ?? null}
+                agentName={timelineAgent?.name}
                 userAddress={userAddress}
             />
             <ExploreAgentsModal
