@@ -378,6 +378,10 @@ export default function Home() {
     const handleLogout = async () => {
         console.log("[Logout] Starting logout...");
         
+        // IMPORTANT: Set flag FIRST to prevent auto-reconnect after reload
+        // This must be done before any disconnect/reload to prevent race conditions
+        sessionStorage.setItem("wallet_intentionally_disconnected", "true");
+        
         // Call server logout FIRST to clear HTTP-only session cookie
         try {
             await fetch("/api/auth/logout", {
