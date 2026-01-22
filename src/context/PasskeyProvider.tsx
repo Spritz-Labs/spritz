@@ -183,17 +183,52 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const restoreSession = async () => {
             log.debug("[Passkey] Restoring session on mount...");
+            
+            // FIRST: Check if server session is valid (HttpOnly cookie)
+            // This is the PRIMARY auth mechanism - localStorage is just for UI state
+            try {
+                log.debug("[Passkey] Checking server session first...");
+                const res = await fetch("/api/auth/session", {
+                    method: "GET",
+                    credentials: "include", // Send HttpOnly cookie
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.authenticated && data.session?.userAddress) {
+                        log.debug("[Passkey] Valid server session found for:", data.session.userAddress?.slice(0, 10) + "...");
+                        
+                        // Update localStorage to match server session
+                        localStorage.setItem(USER_ADDRESS_KEY, data.session.userAddress);
+                        
+                        setState({
+                            isLoading: false,
+                            isAuthenticated: true,
+                            smartAccountAddress: data.session.userAddress as Address,
+                            error: null,
+                            hasStoredSession: true,
+                            warning: null,
+                        });
+                        return;
+                    }
+                }
+                log.debug("[Passkey] No valid server session");
+            } catch (e) {
+                log.debug("[Passkey] Server session check failed:", e);
+            }
+            
+            // FALLBACK: Check localStorage (for cases where server check fails but session is valid)
             const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
             const storedAddress = localStorage.getItem(USER_ADDRESS_KEY);
             
             log.debug("[Passkey] Stored session exists:", !!storedSession, "length:", storedSession?.length);
             log.debug("[Passkey] Stored address:", storedAddress?.slice(0, 15) + "...");
 
-            // First, check for valid new-system session
+            // Check for valid new-system session in localStorage
             if (storedSession && storedAddress) {
                 const session = validateSession(storedSession);
                 if (session) {
-                    log.debug("[Passkey] Restored valid session, expires:", 
+                    log.debug("[Passkey] Restored valid localStorage session, expires:", 
                         new Date(session.exp).toLocaleDateString());
                     
                     // SECURITY: Try to extend the server session cookie
@@ -265,6 +300,46 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
 
         restoreSession();
     }, []);
+    
+    // Auto-refresh session when app becomes visible (user returns to app)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === "visible" && state.isAuthenticated) {
+                log.debug("[Passkey] App became visible, refreshing session...");
+                // Try to extend the session
+                try {
+                    const res = await fetch("/api/auth/session", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                    });
+                    if (res.ok) {
+                        log.debug("[Passkey] Session refreshed on visibility change");
+                    } else if (res.status === 401) {
+                        // Session expired - user needs to re-authenticate
+                        log.debug("[Passkey] Session expired, user needs to re-authenticate");
+                        localStorage.removeItem(SESSION_STORAGE_KEY);
+                        localStorage.removeItem(USER_ADDRESS_KEY);
+                        setState({
+                            isLoading: false,
+                            isAuthenticated: false,
+                            smartAccountAddress: null,
+                            error: "Session expired. Please sign in again.",
+                            hasStoredSession: false,
+                            warning: null,
+                        });
+                    }
+                } catch (e) {
+                    log.warn("[Passkey] Failed to refresh session on visibility change:", e);
+                }
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, [state.isAuthenticated]);
 
     const clearError = useCallback(() => {
         setState((prev) => ({ ...prev, error: null }));

@@ -49,6 +49,7 @@ export function useAuthImplementation() {
 
     const [credentials, setCredentials] = useState<AuthCredentials | null>(null);
     const credentialsLoaded = useRef(false);
+    const sessionChecked = useRef(false);
     const verificationInProgress = useRef(false);
     const lastVerifiedAddress = useRef<string | null>(null);
 
@@ -64,18 +65,81 @@ export function useAuthImplementation() {
         return true;
     }, [credentials]);
 
-    // Load saved credentials on mount (async with IndexedDB fallback)
+    // Check for existing valid session via HttpOnly cookie (7-day session)
+    // This is the PRIMARY auth mechanism - credentials are just for initial sign-in
+    const checkExistingSession = useCallback(async (): Promise<boolean> => {
+        try {
+            console.log("[Auth] Checking for existing server session...");
+            const res = await fetch("/api/auth/session", {
+                method: "GET",
+                credentials: "include", // Send HttpOnly cookie
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                if (data.authenticated && data.user) {
+                    console.log("[Auth] Valid server session found for:", data.session?.userAddress?.slice(0, 10) + "...");
+                    lastVerifiedAddress.current = data.user.wallet_address;
+                    setState({
+                        isLoading: false,
+                        isAuthenticated: true,
+                        isBetaTester: data.user.beta_access || false,
+                        subscriptionTier: data.user.subscription_tier || "free",
+                        subscriptionExpiresAt: data.user.subscription_expires_at || null,
+                        error: null,
+                        user: {
+                            id: data.user.id,
+                            walletAddress: data.user.wallet_address,
+                            username: data.user.username,
+                            ensName: data.user.ens_name,
+                            email: data.user.email,
+                            emailVerified: data.user.email_verified || false,
+                            points: data.user.points || 0,
+                            inviteCount: data.user.invite_count || 0,
+                        },
+                    });
+                    return true;
+                }
+            }
+            console.log("[Auth] No valid server session");
+            return false;
+        } catch (e) {
+            console.warn("[Auth] Session check failed:", e);
+            return false;
+        }
+    }, []);
+
+    // Load saved credentials on mount AND check for existing session first
     useEffect(() => {
         if (typeof window === "undefined" || credentialsLoaded.current) return;
         credentialsLoaded.current = true;
 
-        const loadCredentials = async () => {
+        const initAuth = async () => {
+            // FIRST: Check if we have a valid server session (HttpOnly cookie)
+            // This handles returning users without requiring them to re-sign
+            if (!sessionChecked.current) {
+                sessionChecked.current = true;
+                const hasSession = await checkExistingSession();
+                if (hasSession) {
+                    // Session is valid - load credentials for reference but don't re-verify
+                    const saved = await authStorage.load(AUTH_CREDENTIALS_KEY);
+                    if (saved) {
+                        setCredentials(saved);
+                    }
+                    return; // Already authenticated via session
+                }
+            }
+
+            // No valid session - check for stored credentials
             try {
                 const saved = await authStorage.load(AUTH_CREDENTIALS_KEY);
 
                 if (saved && !authStorage.isExpired(saved, AUTH_TTL)) {
-                    console.log("[Auth] Loaded valid credentials from storage");
+                    console.log("[Auth] Loaded credentials from storage (session expired, will need re-sign)");
                     setCredentials(saved);
+                    // Note: We DON'T verify here anymore - nonce is consumed
+                    // User will need to sign again when they try to use the app
+                    setState((prev) => ({ ...prev, isLoading: false }));
                 } else {
                     if (saved) {
                         console.log("[Auth] Credentials expired, clearing");
@@ -90,8 +154,8 @@ export function useAuthImplementation() {
             }
         };
 
-        loadCredentials();
-    }, []);
+        initAuth();
+    }, [checkExistingSession]);
 
     // Check for address mismatch - but only after wallet is fully connected (not reconnecting)
     // This prevents premature credential clearing during reconnection
@@ -113,8 +177,49 @@ export function useAuthImplementation() {
         }
     }, [address, credentials, isReconnecting]);
 
-    // Verify credentials with retry logic
-    const verifyWithRetry = useCallback(
+    // Auto-refresh session when app becomes visible (user returns to app)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === "visible" && state.isAuthenticated) {
+                console.log("[Auth] App became visible, refreshing session...");
+                // Try to extend the session
+                try {
+                    const res = await fetch("/api/auth/session", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                    });
+                    if (res.ok) {
+                        console.log("[Auth] Session refreshed on visibility change");
+                        // Optionally refresh user data
+                        const data = await res.json();
+                        if (data.success) {
+                            // Session extended successfully
+                        }
+                    } else if (res.status === 401) {
+                        // Session expired - user needs to re-authenticate
+                        console.log("[Auth] Session expired, user needs to re-authenticate");
+                        setState((prev) => ({
+                            ...prev,
+                            isAuthenticated: false,
+                            user: null,
+                            error: "Session expired. Please sign in again.",
+                        }));
+                    }
+                } catch (e) {
+                    console.warn("[Auth] Failed to refresh session on visibility change:", e);
+                }
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, [state.isAuthenticated]);
+
+    // Process fresh sign-in verification (only called from signIn flow, not on page load)
+    const verifyFreshSignIn = useCallback(
         async (creds: AuthCredentials, attempt = 1): Promise<boolean> => {
             try {
                 const response = await fetch("/api/auth/verify", {
@@ -127,8 +232,8 @@ export function useAuthImplementation() {
                 const data = await response.json();
 
                 if (response.ok && data.verified) {
-                    // Refresh timestamp on successful verification to extend session
-                    await authStorage.refreshTimestamp(AUTH_CREDENTIALS_KEY);
+                    // Save credentials for reference (address tracking)
+                    await authStorage.save(AUTH_CREDENTIALS_KEY, creds);
                     lastVerifiedAddress.current = creds.address;
 
                     setState({
@@ -156,7 +261,7 @@ export function useAuthImplementation() {
 
                 // If signature is invalid, clear credentials
                 if (response.status === 401) {
-                    console.log("[Auth] Invalid signature, clearing credentials");
+                    console.log("[Auth] Invalid signature");
                     await authStorage.remove(AUTH_CREDENTIALS_KEY);
                     setCredentials(null);
                     setState({
@@ -175,7 +280,7 @@ export function useAuthImplementation() {
                 if (attempt < MAX_RETRY_ATTEMPTS) {
                     console.log(`[Auth] Verification failed, retrying (${attempt}/${MAX_RETRY_ATTEMPTS})...`);
                     await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
-                    return verifyWithRetry(creds, attempt + 1);
+                    return verifyFreshSignIn(creds, attempt + 1);
                 }
 
                 throw new Error(data.error || "Verification failed after retries");
@@ -183,11 +288,10 @@ export function useAuthImplementation() {
                 if (attempt < MAX_RETRY_ATTEMPTS) {
                     console.log(`[Auth] Verification error, retrying (${attempt}/${MAX_RETRY_ATTEMPTS})...`);
                     await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
-                    return verifyWithRetry(creds, attempt + 1);
+                    return verifyFreshSignIn(creds, attempt + 1);
                 }
 
                 console.error("[Auth] Verification error after retries:", err);
-                // Don't clear credentials on network errors - keep trying next time
                 setState((prev) => ({
                     ...prev,
                     isLoading: false,
@@ -198,47 +302,6 @@ export function useAuthImplementation() {
         },
         []
     );
-
-    // Verify credentials when they change
-    useEffect(() => {
-        if (!credentials) {
-            setState((prev) => ({
-                ...prev,
-                isAuthenticated: false,
-                isBetaTester: false,
-                subscriptionTier: null,
-                subscriptionExpiresAt: null,
-                user: null,
-                isLoading: false,
-            }));
-            return;
-        }
-
-        // Skip if already verified for this address and still valid
-        if (
-            lastVerifiedAddress.current === credentials.address.toLowerCase() &&
-            state.isAuthenticated &&
-            hasValidCredentials
-        ) {
-            return;
-        }
-
-        // Skip if already verifying
-        if (verificationInProgress.current) return;
-
-        const verify = async () => {
-            verificationInProgress.current = true;
-            setState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-            try {
-                await verifyWithRetry(credentials);
-            } finally {
-                verificationInProgress.current = false;
-            }
-        };
-
-        verify();
-    }, [credentials, hasValidCredentials, verifyWithRetry, state.isAuthenticated]);
 
     // Sign in with SIWE
     const signIn = useCallback(async () => {
@@ -260,7 +323,7 @@ export function useAuthImplementation() {
         setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
         try {
-            // Get message to sign
+            // Get FRESH message to sign (with new nonce)
             const nonceResponse = await fetch(`/api/auth/verify?address=${address}`);
             const { message } = await nonceResponse.json();
 
@@ -275,11 +338,12 @@ export function useAuthImplementation() {
                 chain: "evm",
             };
 
-            // Save credentials to robust storage
-            await authStorage.save(AUTH_CREDENTIALS_KEY, newCredentials);
-            setCredentials(newCredentials);
-
-            return true;
+            // Verify with server and establish session (nonce is fresh, will succeed)
+            const success = await verifyFreshSignIn(newCredentials);
+            if (success) {
+                setCredentials(newCredentials);
+            }
+            return success;
         } catch (err) {
             console.error("[Auth] Sign in error:", err);
             const errorMessage = err instanceof Error ? err.message : "Sign in failed";
@@ -300,7 +364,7 @@ export function useAuthImplementation() {
             }));
             return false;
         }
-    }, [address, isConnected, isReconnecting, signMessageAsync]);
+    }, [address, isConnected, isReconnecting, signMessageAsync, verifyFreshSignIn]);
 
     // Sign out
     const signOut = useCallback(async () => {
@@ -318,23 +382,22 @@ export function useAuthImplementation() {
         });
     }, []);
 
-    // Refresh user data without re-signing
+    // Refresh user data by checking session (don't re-verify credentials - nonce is consumed)
     const refresh = useCallback(async () => {
-        if (!credentials) return;
-
         try {
-            const response = await fetch("/api/auth/verify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(credentials),
-                credentials: "include", // Important for session cookie
+            // Use session endpoint to refresh user data
+            const response = await fetch("/api/auth/session", {
+                method: "GET",
+                credentials: "include", // Send HttpOnly cookie
             });
 
             const data = await response.json();
 
-            if (response.ok && data.verified) {
-                // Refresh timestamp
-                await authStorage.refreshTimestamp(AUTH_CREDENTIALS_KEY);
+            if (response.ok && data.authenticated && data.user) {
+                // Refresh credentials timestamp if we have them
+                if (credentials) {
+                    await authStorage.refreshTimestamp(AUTH_CREDENTIALS_KEY);
+                }
 
                 setState((prev) => ({
                     ...prev,
@@ -348,11 +411,19 @@ export function useAuthImplementation() {
                               username: data.user.username,
                               ensName: data.user.ens_name,
                               email: data.user.email,
-                              emailVerified: data.user.email_verified,
+                              emailVerified: data.user.email_verified || false,
                               points: data.user.points || 0,
                               inviteCount: data.user.invite_count || 0,
                           }
                         : null,
+                }));
+            } else if (response.status === 401 || !data.authenticated) {
+                // Session expired
+                console.log("[Auth] Session expired during refresh");
+                setState((prev) => ({
+                    ...prev,
+                    isAuthenticated: false,
+                    user: null,
                 }));
             }
         } catch (err) {
