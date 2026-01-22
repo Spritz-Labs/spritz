@@ -82,18 +82,25 @@ export function ChatKnowledgeContext({
 
           {context.episode_id && (
             <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+              {(() => {
+                const episodeId = context.episode_id;
+                return (
+                  <>
               <span>Source episode:</span>
               {onEpisodeSelect ? (
                 <button
                   type="button"
-                  onClick={() => onEpisodeSelect(context.episode_id)}
+                  onClick={() => onEpisodeSelect(episodeId)}
                   className="text-blue-300 hover:text-blue-200 transition-colors"
                 >
-                  {context.episode_id}
+                  {episodeId}
                 </button>
               ) : (
-                <span className="text-zinc-300">{context.episode_id}</span>
+                <span className="text-zinc-300">{episodeId}</span>
               )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

@@ -26,7 +26,7 @@ type EpisodeTimelinePanelProps = {
   agentId: string;
   userAddress: string;
   isActive: boolean;
-  scrollRootRef?: React.RefObject<HTMLDivElement>;
+  scrollRootRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
 };
 
