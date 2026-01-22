@@ -197,13 +197,15 @@ export function MessagingKeyStatus({
           <div className="flex items-center gap-2 mt-0.5">
             {status.hasKey ? (
               <>
+                {/* For passkey users, any key is valid - always show Active */}
+                {/* For wallet users, check if source is deterministic (eoa) */}
                 <span className={`inline-flex items-center gap-1 text-xs ${
-                  status.isDeterministic ? "text-emerald-400" : "text-amber-400"
+                  (authType === "passkey" || status.isDeterministic) ? "text-emerald-400" : "text-amber-400"
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${
-                    status.isDeterministic ? "bg-emerald-400" : "bg-amber-400"
+                    (authType === "passkey" || status.isDeterministic) ? "bg-emerald-400" : "bg-amber-400"
                   }`} />
-                  {status.isDeterministic ? "Active" : "Legacy"}
+                  {(authType === "passkey" || status.isDeterministic) ? "Active" : "Legacy"}
                 </span>
                 <span className="text-zinc-500 text-xs">
                   · {getSourceLabel(status.source)}
@@ -216,7 +218,7 @@ export function MessagingKeyStatus({
         </div>
       </div>
       
-      {/* Show upgrade option for legacy keys - wallet users only */}
+      {/* Show upgrade option for legacy keys - wallet users only (passkey users always "Active") */}
       {status.hasKey && !status.isDeterministic && authType === "wallet" && canEnable && (
         <div className="mt-3 pt-3 border-t border-zinc-700/50">
           <p className="text-xs text-zinc-400 mb-2">
@@ -243,8 +245,8 @@ export function MessagingKeyStatus({
         </div>
       )}
       
-      {/* Info for good keys */}
-      {status.hasKey && status.isDeterministic && (
+      {/* Info for good keys - passkey users always show this */}
+      {status.hasKey && (authType === "passkey" || status.isDeterministic) && (
         <p className="text-xs text-zinc-500 mt-2">
           {authType === "passkey" 
             ? "✓ Secured by your passkey" 
