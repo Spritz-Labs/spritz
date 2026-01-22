@@ -644,12 +644,18 @@ export default function Home() {
 
     // Show dashboard if fully authenticated
     if (isFullyAuthenticated && userAddress) {
+        // IMPORTANT: Determine auth method based on HOW user logged in, not what credentials they have
+        // - isSiweAuthenticated = user logged in via wallet signature → "wallet" user
+        // - isPasskeyAuthenticated = user logged in via passkey → "passkey" user
+        // A wallet user with a passkey registered should still be treated as "wallet" user!
+        const isActuallyPasskeyUser = isPasskeyAuthenticated && !isSiweAuthenticated;
+        
         return (
             <>
                 <PWAInstallPrompt />
                 {/* Show wallet connection status banner for wallet-connected PWA users only */}
                 <WalletConnectionStatus 
-                    isPasskeyUser={isPasskeyAuthenticated}
+                    isPasskeyUser={isActuallyPasskeyUser}
                     isEmailUser={isEmailAuthenticated}
                     isWorldIdUser={isWorldIdAuthenticated}
                     isAlienIdUser={isAlienAuthenticated}
@@ -657,7 +663,7 @@ export default function Home() {
                 <Dashboard
                     userAddress={userAddress}
                     onLogout={handleLogout}
-                    isPasskeyUser={isPasskeyAuthenticated}
+                    isPasskeyUser={isActuallyPasskeyUser}
                     isEmailUser={isEmailAuthenticated}
                     isWorldIdUser={isWorldIdAuthenticated}
                     isAlienIdUser={isAlienAuthenticated}
