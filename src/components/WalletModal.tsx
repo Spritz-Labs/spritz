@@ -597,17 +597,6 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     // This ensures EOA users never get passkey prompts
     const effectiveAuthMethod = authMethod || "wallet";
     
-    // Debug log on mount and when authMethod changes
-    useEffect(() => {
-        if (isOpen) {
-            console.log("[WalletModal] Auth state:", { 
-                authMethod, 
-                effectiveAuthMethod,
-                userAddress: userAddress?.slice(0, 10),
-            });
-        }
-    }, [isOpen, authMethod, effectiveAuthMethod, userAddress]);
-    
     // Determine if user authenticated via passkey (needs Safe signing)
     const isPasskeyUser = effectiveAuthMethod === "passkey";
     
@@ -620,7 +609,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     // CRITICAL: Only use passkey signing for non-wallet users
     // Wallet users should NEVER trigger passkey signing - they sign with their connected wallet
     const canUsePasskeySigning = effectiveAuthMethod !== "wallet" && (isPasskeyUser || needsPasskeyForSend);
-
+    
     // Get Smart Wallet (Safe) address
     const { smartWallet, isLoading: isSmartWalletLoading } = useSmartWallet(
         isOpen ? userAddress : null
@@ -739,6 +728,21 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             resetPasskey();
         }
     }, [isOpen, effectiveAuthMethod, resetPasskey]);
+
+    // Debug log on mount and when authMethod changes (after all hooks are declared)
+    useEffect(() => {
+        if (isOpen) {
+            console.log("[WalletModal] Auth state:", { 
+                authMethod, 
+                effectiveAuthMethod,
+                isPasskeyUser,
+                canUsePasskeySigning,
+                isConnected,
+                passkeyStatus,
+                userAddress: userAddress?.slice(0, 10),
+            });
+        }
+    }, [isOpen, authMethod, effectiveAuthMethod, isPasskeyUser, canUsePasskeySigning, isConnected, passkeyStatus, userAddress]);
 
     // Initialize passkey Safe when modal opens for users who can use passkey signing
     // This includes: passkey users, email users, alien_id users, world_id users
@@ -1744,8 +1748,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "send" && (
                                 <div className="flex-1 flex flex-col overflow-y-auto relative">
-                                    {/* Loading state */}
-                                    {((canUsePasskeySigning && passkeyStatus === "loading") || isSmartWalletLoading) ? (
+                                    {/* Loading state - includes passkey users initializing */}
+                                    {((canUsePasskeySigning && (passkeyStatus === "loading" || passkeyStatus === "idle")) || isSmartWalletLoading) ? (
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
                                             <p className="text-sm text-zinc-400">Loading wallet...</p>
@@ -1840,9 +1844,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 </>
                                             )}
                                         </div>
-                                    ) : !isConnected && effectiveAuthMethod === "wallet" ? (
+                                    ) : !isConnected && effectiveAuthMethod === "wallet" && !canUsePasskeySigning ? (
                                         // Only show "Reconnect to Send" for wallet users who need wallet connection
                                         // Passkey/email/digital_id users don't need wallet connection
+                                        // Double-check: ensure we're not showing this to passkey users
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
                                                 <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
