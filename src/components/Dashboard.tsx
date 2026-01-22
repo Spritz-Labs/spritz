@@ -1172,13 +1172,20 @@ function DashboardContent({
         joinedChannels.forEach((channel) => {
             const channelKey = `channel-${channel.id}`;
             const lastMsgTime = lastMessageTimes[channelKey];
+            // Use tracked last message time, or fall back to channel's updated_at/created_at
+            const fallbackTime = channel.updated_at || channel.created_at;
+            const lastMessageAt = lastMsgTime 
+                ? new Date(lastMsgTime) 
+                : fallbackTime 
+                ? new Date(fallbackTime) 
+                : new Date();
             items.push({
                 id: channelKey,
                 type: "channel",
                 name: channel.name,
                 avatar: null,
                 lastMessage: `${channel.member_count} members`,
-                lastMessageAt: lastMsgTime ? new Date(lastMsgTime) : null,
+                lastMessageAt,
                 unreadCount: 0,
                 metadata: {
                     memberCount: channel.member_count,
@@ -1191,13 +1198,16 @@ function DashboardContent({
         groups.forEach((group) => {
             const groupKey = `group-${group.id}`;
             const lastMsgTime = lastMessageTimes[groupKey];
+            // Use tracked last message time, or fall back to current time
+            // Groups don't have created_at in the current type, so use current time as fallback
+            const lastMessageAt = lastMsgTime ? new Date(lastMsgTime) : new Date();
             items.push({
                 id: groupKey,
                 type: "group",
                 name: group.name,
                 avatar: null,
                 lastMessage: `${group.memberCount || 0} members`,
-                lastMessageAt: lastMsgTime ? new Date(lastMsgTime) : null,
+                lastMessageAt,
                 unreadCount: 0,
                 metadata: {
                     memberCount: group.memberCount,

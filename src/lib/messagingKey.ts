@@ -327,16 +327,24 @@ export async function deriveMekFromPasskeyPrf(
       `${MEK_CONTEXT}:prf-salt:${userAddress.toLowerCase()}`
     );
     
+    // Normalize rpId - use parent domain for subdomains
+    let effectiveRpId = rpId;
+    if (rpId.includes("spritz.chat")) {
+      effectiveRpId = "spritz.chat";
+    } else if (rpId === "localhost" || rpId === "127.0.0.1") {
+      effectiveRpId = "localhost";
+    }
+    
+    console.log("[MessagingKey] Requesting passkey PRF with rpId:", effectiveRpId);
+    
     // Request passkey with PRF extension
+    // Don't specify allowCredentials - let user choose from ALL their passkeys for this site
+    // This matches the login/signing behavior and provides better UX
     const credential = await navigator.credentials.get({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rpId,
-        allowCredentials: [{
-          id: base64UrlToArrayBuffer(credentialId),
-          type: "public-key" as const,
-          transports: ["internal" as AuthenticatorTransport],
-        }],
+        rpId: effectiveRpId,
+        // No allowCredentials = browser shows picker with all available passkeys
         userVerification: "required",
         extensions: {
           prf: {
@@ -419,16 +427,23 @@ export async function deriveMekFromPasskeySignature(
       return { success: true, keypair: cached, isNewKey: false };
     }
     
+    // Normalize rpId - use parent domain for subdomains
+    let effectiveRpId = rpId;
+    if (rpId.includes("spritz.chat")) {
+      effectiveRpId = "spritz.chat";
+    } else if (rpId === "localhost" || rpId === "127.0.0.1") {
+      effectiveRpId = "localhost";
+    }
+    
+    console.log("[MessagingKey] Requesting passkey signature with rpId:", effectiveRpId);
+    
     // Just authenticate (we can't get deterministic output without PRF)
+    // Don't specify allowCredentials - let user choose from ALL their passkeys for this site
     const credential = await navigator.credentials.get({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rpId,
-        allowCredentials: [{
-          id: base64UrlToArrayBuffer(credentialId),
-          type: "public-key" as const,
-          transports: ["internal" as AuthenticatorTransport],
-        }],
+        rpId: effectiveRpId,
+        // No allowCredentials = browser shows picker with all available passkeys
         userVerification: "required",
       },
     }) as PublicKeyCredential | null;
