@@ -172,6 +172,43 @@ function DashboardContent({
     });
     const wakuAutoInitAttempted = useRef(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
+    
+    // Passkey credential ID for messaging key derivation
+    const [passkeyCredentialId, setPasskeyCredentialId] = useState<string | null>(null);
+    
+    // Fetch passkey credential ID for passkey users
+    useEffect(() => {
+        if (!isPasskeyUser || !userAddress) {
+            setPasskeyCredentialId(null);
+            return;
+        }
+        
+        const sb = supabase;
+        if (!sb) {
+            console.warn("[Dashboard] Supabase not configured, cannot fetch passkey credential");
+            return;
+        }
+        
+        const fetchCredential = async () => {
+            try {
+                const { data } = await sb
+                    .from("passkey_credentials")
+                    .select("credential_id")
+                    .eq("user_address", userAddress.toLowerCase())
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .single();
+                
+                if (data?.credential_id) {
+                    setPasskeyCredentialId(data.credential_id);
+                }
+            } catch (err) {
+                console.warn("[Dashboard] Could not fetch passkey credential:", err);
+            }
+        };
+        
+        fetchCredential();
+    }, [isPasskeyUser, userAddress]);
 
     // Group chat state
     const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
@@ -4321,6 +4358,7 @@ function DashboardContent({
                 onDisablePush={unsubscribeFromPush}
                 userAddress={userAddress}
                 authType={messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"}
+                passkeyCredentialId={passkeyCredentialId}
                 onOpenStatusModal={() => setIsStatusModalOpen(true)}
                 availableInvites={availableInvites}
                 usedInvites={usedInvites}
