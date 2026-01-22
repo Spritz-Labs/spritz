@@ -86,7 +86,37 @@ export async function GET(request: NextRequest) {
                 .eq("wallet_address", spritzId)
                 .single();
 
-            walletType = determineWalletType(user);
+            // IMPORTANT: Use session authMethod as source of truth
+            // The session knows how the user ACTUALLY logged in
+            // The database wallet_type might be wrong (bug where adding passkey changed wallet users to passkey)
+            const sessionAuthMethod = session.authMethod;
+            
+            // Map session authMethod to walletType
+            let correctWalletType: WalletType = "wallet";
+            if (sessionAuthMethod === "passkey") correctWalletType = "passkey";
+            else if (sessionAuthMethod === "email") correctWalletType = "email";
+            else if (sessionAuthMethod === "world_id" || sessionAuthMethod === "alien_id") correctWalletType = "digitalid";
+            else if (sessionAuthMethod === "wallet" || sessionAuthMethod === "solana") correctWalletType = "wallet";
+            
+            // Check if database is wrong and fix it
+            const dbWalletType = determineWalletType(user);
+            if (dbWalletType !== correctWalletType && correctWalletType === "wallet" && dbWalletType === "passkey") {
+                console.warn("[SmartWallet] FIX: User logged in as wallet but DB says passkey!");
+                console.warn("[SmartWallet] Session authMethod:", sessionAuthMethod, "DB wallet_type:", user?.wallet_type);
+                console.warn("[SmartWallet] Fixing wallet_type to 'wallet' for:", spritzId.slice(0, 10));
+                
+                // Fix the database
+                await supabase
+                    .from("shout_users")
+                    .update({ 
+                        wallet_type: "wallet",
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("wallet_address", spritzId);
+            }
+            
+            // Use the correct wallet type from session
+            walletType = correctWalletType;
             
             // Check if user has a passkey
             const { data: credential } = await supabase

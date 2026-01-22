@@ -392,9 +392,14 @@ export async function POST(request: NextRequest) {
             };
             
             // Fix wallet_type for passkey users who don't have it set correctly
+            // IMPORTANT: Don't change wallet_type for existing "wallet" users!
+            // - "wallet" users can sign with their connected EOA - passkey is optional extra security
             if (!existingUser.wallet_type || existingUser.wallet_type === 'evm') {
                 updateData.wallet_type = 'passkey';
                 console.log("[Passkey] Fixing wallet_type to 'passkey' for user:", storedCredential.user_address.slice(0, 10));
+            } else if (existingUser.wallet_type === 'wallet') {
+                // EOA users keep their wallet type - they can still sign with their wallet!
+                console.log("[Passkey] Wallet user logging in with passkey - keeping wallet_type='wallet':", storedCredential.user_address.slice(0, 10));
             }
             
             // CRITICAL FIX: Update smart_wallet_address if missing or incorrect
