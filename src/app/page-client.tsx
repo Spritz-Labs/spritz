@@ -229,6 +229,9 @@ export default function Home() {
     // Track failed sign-in attempts per wallet to prevent infinite loops
     const failedSignInAttempts = useRef<Map<string, number>>(new Map());
     const hasAutoSignInFailed = useRef<boolean>(false);
+    
+    // Server-side authMethod - source of truth after updates/refreshes
+    const [serverAuthMethod, setServerAuthMethod] = useState<string | null>(null);
 
     // Handle hydration
     useEffect(() => {
@@ -236,6 +239,32 @@ export default function Home() {
         // Check for saved session on mount
         hasSavedSession.current = hasSavedWalletSession();
     }, []);
+    
+    // Fetch authMethod from server session on mount
+    // This ensures correct auth type detection after app updates
+    useEffect(() => {
+        if (!mounted) return;
+        
+        const fetchServerAuthMethod = async () => {
+            try {
+                const res = await fetch("/api/auth/session", {
+                    method: "GET",
+                    credentials: "include",
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.authenticated && data.session?.authMethod) {
+                        console.log("[Auth] Server authMethod:", data.session.authMethod);
+                        setServerAuthMethod(data.session.authMethod);
+                    }
+                }
+            } catch (error) {
+                console.error("[Auth] Failed to fetch server authMethod:", error);
+            }
+        };
+        
+        fetchServerAuthMethod();
+    }, [mounted]);
 
     // Safety timeout - if stuck loading for too long, show recovery option
     useEffect(() => {
@@ -645,10 +674,16 @@ export default function Home() {
     // Show dashboard if fully authenticated
     if (isFullyAuthenticated && userAddress) {
         // IMPORTANT: Determine auth method based on HOW user logged in, not what credentials they have
+        // 1. First check server authMethod (most reliable - survives app updates)
+        // 2. Fall back to client-side detection (for initial login)
+        // - serverAuthMethod = "wallet" → user logged in via wallet signature
+        // - serverAuthMethod = "passkey" → user logged in via passkey
         // - isSiweAuthenticated = user logged in via wallet signature → "wallet" user
         // - isPasskeyAuthenticated = user logged in via passkey → "passkey" user
         // A wallet user with a passkey registered should still be treated as "wallet" user!
-        const isActuallyPasskeyUser = isPasskeyAuthenticated && !isSiweAuthenticated;
+        const isActuallyPasskeyUser = serverAuthMethod 
+            ? serverAuthMethod === "passkey" 
+            : (isPasskeyAuthenticated && !isSiweAuthenticated);
         
         return (
             <>
