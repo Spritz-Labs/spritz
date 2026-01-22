@@ -48,14 +48,15 @@ export function MessagingKeyStatus({
   const rpId = typeof window !== "undefined" ? window.location.hostname : "";
   
   // Determine if key is "good enough" based on source and auth type
-  // For passkey users, passkey-fallback is still good (it's their passkey!)
-  // For wallet users, only eoa is truly deterministic
+  // For passkey users, ANY key is acceptable - they can't easily regenerate
+  // For wallet users, only eoa is truly deterministic (can regenerate by signing)
   const isKeyGood = (source: DerivedMessagingKey["derivedFrom"] | null, userAuthType: AuthType) => {
     if (!source) return false;
     if (source === "eoa") return true;
     if (source === "passkey-prf") return true;
-    // For passkey users, passkey-fallback is acceptable
-    if (source === "passkey-fallback" && userAuthType === "passkey") return true;
+    // For passkey users, any key source is acceptable - they can't sign with a wallet
+    // This includes "passkey-fallback" and "legacy" keys
+    if (userAuthType === "passkey") return true;
     return false;
   };
 
@@ -159,9 +160,9 @@ export function MessagingKeyStatus({
     switch (source) {
       case "eoa": return "Wallet Signature";
       case "passkey-prf": return "Passkey";
-      // For passkey users, don't show "Legacy" - it's still their passkey
       case "passkey-fallback": return authType === "passkey" ? "Passkey" : "Passkey (Legacy)";
-      case "legacy": return "Legacy";
+      // For passkey users, don't show "Legacy" - just say "Passkey" since that's their auth
+      case "legacy": return authType === "passkey" ? "Passkey" : "Legacy";
       default: return "Not set";
     }
   };
