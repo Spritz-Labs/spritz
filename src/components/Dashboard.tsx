@@ -1597,6 +1597,12 @@ function DashboardContent({
         if (!isWakuInitialized) return;
 
         const unsubscribe = onNewMessage(({ senderAddress, content }) => {
+            // Skip notification if we're already viewing this conversation
+            if (chatFriend?.address.toLowerCase() === senderAddress.toLowerCase()) {
+                console.log("[Dashboard] Skipping notification - chat is open for:", senderAddress);
+                return;
+            }
+
             // Pre-fetch all messages for this conversation in background
             // This way when user clicks the toast, messages are already loaded
             prefetchMessages(senderAddress);
@@ -1638,11 +1644,18 @@ function DashboardContent({
         friendsListData,
         notifyMessage,
         userSettings.soundEnabled,
+        chatFriend,
     ]);
 
     // Listen for new channel messages and show toast + notification
     useEffect(() => {
-        const unsubscribe = onNewChannelMessage(({ channelName, senderAddress, content }) => {
+        const unsubscribe = onNewChannelMessage(({ channelId, channelName, senderAddress, content }) => {
+            // Skip notification if we're already viewing this channel
+            if (selectedChannel?.id === channelId) {
+                console.log("[Dashboard] Skipping notification - channel chat is open:", channelName);
+                return;
+            }
+
             // Find sender info
             const senderInfo = getAlphaUserInfo(senderAddress);
             const senderName = senderInfo?.name || formatAddress(senderAddress);
@@ -1666,7 +1679,7 @@ function DashboardContent({
         });
 
         return unsubscribe;
-    }, [onNewChannelMessage, getAlphaUserInfo, notifyMessage, userSettings.soundEnabled]);
+    }, [onNewChannelMessage, getAlphaUserInfo, notifyMessage, userSettings.soundEnabled, selectedChannel]);
 
     const handleSendFriendRequest = async (
         addressOrENS: string
