@@ -457,10 +457,10 @@ export default function TermsOfServicePage() {
                             <p className="text-zinc-300">
                                 <strong>Email:</strong>{" "}
                                 <a
-                                    href="mailto:legal@spritz.chat"
+                                    href="mailto:connect@spritz.chat"
                                     className="text-orange-500 hover:text-orange-400"
                                 >
-                                    legal@spritz.chat
+                                    connect@spritz.chat
                                 </a>
                             </p>
                             <p className="text-zinc-300 mt-2">
