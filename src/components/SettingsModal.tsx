@@ -8,6 +8,7 @@ import { useAddressBook, type AddressBookEntry } from "@/hooks/useSendSuggestion
 import { AvailabilityWindowsModal } from "./AvailabilityWindowsModal";
 import { KeyBackupModal } from "./KeyBackupModal";
 import { PasskeyManager } from "./PasskeyManager";
+import { MessagingKeyStatus } from "./MessagingKeyStatusInline";
 import { supabase } from "@/config/supabase";
 import { isAddress } from "viem";
 
@@ -713,50 +714,8 @@ export function SettingsModal({
                                         </p>
                                     )}
 
-                                    {/* Message Encryption Key Backup */}
-                                    <button
-                                        onClick={() => setShowKeyBackup(true)}
-                                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                                                <svg
-                                                    className="w-4 h-4 text-purple-400"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        strokeWidth={2}
-                                                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                                                    />
-                                                </svg>
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-white font-medium">
-                                                    Message Encryption Key
-                                                </p>
-                                                <p className="text-zinc-500 text-xs">
-                                                    Backup or restore for new devices
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <svg
-                                            className="w-5 h-5 text-zinc-500"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M9 5l7 7-7 7"
-                                            />
-                                        </svg>
-                                    </button>
+                                    {/* Message Encryption - Simplified Status */}
+                                    <MessagingKeyStatus userAddress={userAddress} />
 
                                     {/* Passkeys */}
                                     <button

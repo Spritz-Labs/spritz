@@ -75,6 +75,7 @@ import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
 import { WalletModal } from "./WalletModal";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
+import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -2120,8 +2121,25 @@ function DashboardContent({
         }
     }, [friendsListData, handleVideoCall]);
 
+    // Determine auth type for messaging key
+    const messagingAuthType = isPasskeyUser 
+        ? "passkey" 
+        : isEmailUser 
+        ? "email" 
+        : isWorldIdUser || isAlienIdUser 
+        ? "digitalid" 
+        : isSolanaUser 
+        ? "solana"
+        : "wallet";
+
     return (
         <>
+            {/* Messaging Key Upgrade Banner - shows once for legacy key users */}
+            <MessagingKeyUpgradeBanner
+                userAddress={userAddress}
+                authType={messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"}
+            />
+            
             <div className="min-h-screen bg-zinc-950 flex flex-col">
                 {/* Header */}
                 <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-lg sticky top-0 z-40 safe-area-pt px-2">
