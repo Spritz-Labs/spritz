@@ -1516,8 +1516,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "receive" && (
                                 <div className="relative flex-1 flex flex-col overflow-y-auto">
-                                    {/* Email/Digital ID users without passkey - must create one to unlock wallet */}
-                                    {(smartWallet?.needsPasskey || (needsPasskeyForSend && passkeyStatus === "error")) ? (
+                                    {/* Email/Digital ID users without passkey AND no existing wallet address - must create one */}
+                                    {((smartWallet?.needsPasskey && !smartWalletAddress) || (needsPasskeyForSend && passkeyStatus === "error" && !smartWalletAddress)) ? (
                                         <div className="flex flex-col items-center justify-center text-center p-6">
                                             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-500/10 flex items-center justify-center">
                                                 <span className="text-3xl">🔐</span>
@@ -1576,16 +1576,34 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </p>
                                     </div>
 
-                                    {/* Passkey wallet warning - remind users that passkey = wallet key */}
+                                    {/* Passkey wallet warning - different messages for normal vs lost passkey */}
                                     {smartWallet?.warning && needsPasskeyForSend && (
-                                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4 mx-auto max-w-xs">
-                                            <div className="flex items-start gap-2">
-                                                <span className="text-amber-400 text-sm">🔑</span>
-                                                <p className="text-xs text-amber-200/80">
-                                                    <strong>Your passkey controls this wallet.</strong> Keep it safe - losing your passkey means losing access to funds.
-                                                </p>
+                                        smartWallet?.needsPasskey ? (
+                                            // Lost passkey warning - more prominent
+                                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-4 mx-auto max-w-xs">
+                                                <div className="flex items-start gap-2">
+                                                    <span className="text-red-400 text-lg">⚠️</span>
+                                                    <div>
+                                                        <p className="text-sm text-red-200 font-semibold mb-1">
+                                                            Passkey Not Found
+                                                        </p>
+                                                        <p className="text-xs text-red-200/80">
+                                                            Your wallet address is shown below, but you cannot send transactions until you restore your passkey. Go to Security settings to re-register your passkey.
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
+                                        ) : (
+                                            // Normal warning
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4 mx-auto max-w-xs">
+                                                <div className="flex items-start gap-2">
+                                                    <span className="text-amber-400 text-sm">🔑</span>
+                                                    <p className="text-xs text-amber-200/80">
+                                                        <strong>Your passkey controls this wallet.</strong> Keep it safe - losing your passkey means losing access to funds.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )
                                     )}
 
                                     {/* QR Code - uses Smart Wallet address */}
@@ -1705,34 +1723,42 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             <p className="text-sm text-zinc-400">Loading wallet...</p>
                                         </div>
                                     ) : (smartWallet?.needsPasskey || (canUsePasskeySigning && passkeyStatus === "error" && needsPasskeyForSend)) ? (
-                                        /* Email/Digital ID users without a passkey - prompt to create one */
+                                        /* Email/Digital ID users without a passkey - different message if they have an existing wallet */
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
-                                                <span className="text-3xl">🔐</span>
+                                            <div className={`w-16 h-16 rounded-full ${smartWalletAddress ? 'bg-red-500/20' : 'bg-purple-500/20'} flex items-center justify-center mb-4`}>
+                                                <span className="text-3xl">{smartWalletAddress ? '⚠️' : '🔐'}</span>
                                             </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Create Your Wallet</h3>
+                                            <h3 className="text-lg font-semibold text-white mb-2">
+                                                {smartWalletAddress ? 'Passkey Required' : 'Create Your Wallet'}
+                                            </h3>
                                             <p className="text-sm text-zinc-400 mb-4 max-w-xs">
-                                                {isSolanaUser ? (
+                                                {smartWalletAddress ? (
+                                                    <>Your passkey credentials were not found. Re-register your passkey in Security settings to send transactions.</>
+                                                ) : isSolanaUser ? (
                                                     <>Your Solana wallet can&apos;t sign EVM transactions. Create a passkey to get your EVM wallet.</>
                                                 ) : (
                                                     <>Set up a passkey to create your wallet. Your passkey will be your wallet key - it signs all your transactions.</>
                                                 )}
                                             </p>
-                                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-6 max-w-xs">
-                                                <p className="text-xs text-purple-300">
+                                            <div className={`${smartWalletAddress ? 'bg-red-500/10 border-red-500/30' : 'bg-purple-500/10 border-purple-500/30'} border rounded-xl p-4 mb-6 max-w-xs`}>
+                                                <p className={`text-xs ${smartWalletAddress ? 'text-red-300' : 'text-purple-300'}`}>
                                                     <strong>🔑 Your Passkey = Your Wallet Key</strong>
                                                     <br />
-                                                    <span className="text-zinc-400">Keep it safe - losing it means losing wallet access.</span>
+                                                    <span className="text-zinc-400">
+                                                        {smartWalletAddress 
+                                                            ? 'Go to Security settings to restore or re-register your passkey.' 
+                                                            : 'Keep it safe - losing it means losing wallet access.'}
+                                                    </span>
                                                 </p>
                                             </div>
                                             <button
                                                 onClick={() => setShowPasskeyManager(true)}
-                                                className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
+                                                className={`px-6 py-3 ${smartWalletAddress ? 'bg-red-500 hover:bg-red-600' : 'bg-purple-500 hover:bg-purple-600'} text-white font-medium rounded-xl transition-colors`}
                                             >
-                                                Create Passkey & Wallet
+                                                {smartWalletAddress ? 'Restore Passkey' : 'Create Passkey & Wallet'}
                                             </button>
                                             <p className="text-xs text-zinc-600 mt-4">
-                                                🔒 Your passkey stays on your device
+                                                🔒 {smartWalletAddress ? 'Re-register the same passkey to regain access' : 'Your passkey stays on your device'}
                                             </p>
                                         </div>
                                     ) : canUsePasskeySigning && passkeyStatus === "error" ? (

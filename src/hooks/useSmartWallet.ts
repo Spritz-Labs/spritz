@@ -26,6 +26,40 @@ type UseSmartWalletReturn = {
     refresh: () => Promise<void>;
 };
 
+// Cache key for localStorage
+const SMART_WALLET_CACHE_KEY = "spritz_smart_wallet_cache";
+
+/**
+ * Get cached smart wallet address from localStorage
+ */
+function getCachedSmartWallet(userAddress: string): Address | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const cache = localStorage.getItem(SMART_WALLET_CACHE_KEY);
+        if (!cache) return null;
+        const parsed = JSON.parse(cache);
+        const normalizedAddress = userAddress.toLowerCase();
+        return parsed[normalizedAddress] || null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Cache smart wallet address to localStorage
+ */
+function setCachedSmartWallet(userAddress: string, smartWalletAddress: Address): void {
+    if (typeof window === "undefined") return;
+    try {
+        const cache = localStorage.getItem(SMART_WALLET_CACHE_KEY);
+        const parsed = cache ? JSON.parse(cache) : {};
+        parsed[userAddress.toLowerCase()] = smartWalletAddress;
+        localStorage.setItem(SMART_WALLET_CACHE_KEY, JSON.stringify(parsed));
+    } catch {
+        // Ignore cache errors
+    }
+}
+
 /**
  * Hook to get the user's Smart Wallet (Safe) address.
  * 
@@ -38,17 +72,20 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Don't calculate client-side - wait for API to return the correct address
-    // This prevents showing a potentially incorrect address before the API responds
-    // The server uses permissionless.js which produces the actual Safe address
+    // Try to get cached address for immediate display
+    const cachedAddress = useMemo(() => {
+        if (!userAddress) return null;
+        return getCachedSmartWallet(userAddress);
+    }, [userAddress]);
+
+    // Client-side wallet with cached address (if available)
     const clientSideWallet = useMemo<SmartWalletInfo | null>(() => {
         if (!userAddress) return null;
         
-        // Only provide spritzId client-side, not the Safe address
-        // The Safe address comes from the API to ensure consistency
+        // Use cached address if available for immediate display
         return {
             spritzId: userAddress.toLowerCase() as Address,
-            smartWalletAddress: null, // Wait for API
+            smartWalletAddress: cachedAddress, // Use cached address!
             isDeployed: false,
             walletType: "wallet",
             canSign: true,
@@ -63,7 +100,7 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
                 { chainId: 130, name: "Unichain", sponsorship: "free" },
             ],
         };
-    }, [userAddress]);
+    }, [userAddress, cachedAddress]);
 
     const fetchSmartWallet = useCallback(async () => {
         if (!userAddress) {
@@ -89,12 +126,16 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
 
             const data = await response.json();
             
-            // If user needs a passkey, return the server response as-is
-            // (smartWalletAddress will be null)
+            // If user needs a passkey, they might still have a stored address (lost passkey case)
             if (data.needsPasskey) {
+                // Cache the address if we have one (for lost passkey users)
+                if (data.smartWalletAddress && userAddress) {
+                    setCachedSmartWallet(userAddress, data.smartWalletAddress);
+                }
+                
                 setSmartWallet({
                     spritzId: data.spritzId || (userAddress.toLowerCase() as Address),
-                    smartWalletAddress: null,
+                    smartWalletAddress: data.smartWalletAddress || null, // May have stored address
                     isDeployed: false,
                     walletType: data.walletType || "email",
                     canSign: false,
@@ -102,12 +143,13 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
                     supportedChains: data.supportedChains || [],
                     needsPasskey: true,
                     passkeyCredentialId: null,
+                    warning: data.warning,
                 });
                 return;
             }
             
             // Server address takes priority - it knows the correct Safe owner
-            setSmartWallet({
+            const serverWallet: SmartWalletInfo = {
                 spritzId: data.spritzId,
                 smartWalletAddress: data.smartWalletAddress,
                 isDeployed: data.isDeployed || false,
@@ -118,7 +160,14 @@ export function useSmartWallet(userAddress: string | null): UseSmartWalletReturn
                 needsPasskey: false,
                 passkeyCredentialId: data.passkeyCredentialId,
                 warning: data.warning,
-            });
+            };
+            
+            // Cache the address for offline/session-expired fallback
+            if (data.smartWalletAddress && userAddress) {
+                setCachedSmartWallet(userAddress, data.smartWalletAddress);
+            }
+            
+            setSmartWallet(serverWallet);
         } catch (err) {
             console.error("[useSmartWallet] Error:", err);
             setError(err instanceof Error ? err.message : "Failed to get smart wallet");

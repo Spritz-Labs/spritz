@@ -136,10 +136,19 @@ export async function GET(request: NextRequest) {
                 if (!hasValidPasskey) {
                     // No passkey - user needs to create one first
                     needsPasskey = true;
-                    smartWalletAddress = null;
                     canSign = false;
                     signerType = "none";
-                    console.log("[SmartWallet] Non-wallet user without passkey - needs passkey setup");
+                    
+                    // If they have a stored address from before (lost passkey scenario),
+                    // still return it so they can at least see their balance
+                    if (user?.smart_wallet_address) {
+                        smartWalletAddress = user.smart_wallet_address as Address;
+                        console.log("[SmartWallet] Non-wallet user with stored address but NO passkey:", smartWalletAddress.slice(0, 10));
+                        console.log("[SmartWallet] User can view but cannot transact until passkey is restored");
+                    } else {
+                        smartWalletAddress = null;
+                        console.log("[SmartWallet] Non-wallet user without passkey - needs passkey setup");
+                    }
                     
                 } else {
                     // Has passkey - Safe is owned by the passkey signer
@@ -221,9 +230,13 @@ export async function GET(request: NextRequest) {
             supportedChains: getSupportedChains(),
             // Safe app URL for direct wallet access (even outside Spritz)
             safeAppUrl,
-            // Warning message for non-wallet users
+            // Warning messages for non-wallet users
             ...(requiresPasskeyToSign(walletType) && !needsPasskey && {
                 warning: "Your passkey is your wallet key. If you delete your passkey, you will lose access to this wallet and any funds in it.",
+            }),
+            // Warning for users who have a stored address but lost their passkey
+            ...(needsPasskey && smartWalletAddress && {
+                warning: "Your passkey credentials were not found. You can view your wallet balance but cannot send transactions until you restore or re-register your passkey.",
             }),
         });
 
