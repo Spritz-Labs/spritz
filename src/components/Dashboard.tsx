@@ -4313,6 +4313,7 @@ function DashboardContent({
                 onEnablePush={subscribeToPush}
                 onDisablePush={unsubscribeFromPush}
                 userAddress={userAddress}
+                authType={messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"}
                 onOpenStatusModal={() => setIsStatusModalOpen(true)}
                 availableInvites={availableInvites}
                 usedInvites={usedInvites}

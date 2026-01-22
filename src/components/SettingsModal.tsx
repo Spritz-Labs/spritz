@@ -43,6 +43,9 @@ type SettingsModalProps = {
     onDisablePush: () => Promise<boolean>;
     // Calendar props
     userAddress: string | null;
+    // Auth type for messaging key
+    authType?: "wallet" | "passkey" | "email" | "digitalid" | "solana";
+    passkeyCredentialId?: string | null;
     // Status props
     onOpenStatusModal: () => void;
     // Invites props
@@ -76,6 +79,8 @@ export function SettingsModal({
     onEnablePush,
     onDisablePush,
     userAddress,
+    authType = "wallet",
+    passkeyCredentialId,
     onOpenStatusModal,
     availableInvites,
     usedInvites,
@@ -715,7 +720,11 @@ export function SettingsModal({
                                     )}
 
                                     {/* Message Encryption - Simplified Status */}
-                                    <MessagingKeyStatus userAddress={userAddress} />
+                                    <MessagingKeyStatus 
+                                        userAddress={userAddress} 
+                                        authType={authType}
+                                        passkeyCredentialId={passkeyCredentialId}
+                                    />
 
                                     {/* Passkeys */}
                                     <button

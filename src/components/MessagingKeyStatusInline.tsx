@@ -8,6 +8,7 @@ import {
   getOrDeriveMessagingKey,
   importKeypairToCache,
   type DerivedMessagingKey,
+  type AuthType,
 } from "@/lib/messagingKey";
 
 // Storage keys
@@ -16,6 +17,8 @@ const MESSAGING_KEY_SOURCE_STORAGE = "spritz_messaging_key_source";
 
 interface MessagingKeyStatusProps {
   userAddress: string | null;
+  authType?: AuthType;
+  passkeyCredentialId?: string | null;
 }
 
 type KeyStatus = {
@@ -26,9 +29,13 @@ type KeyStatus = {
 
 /**
  * Simplified messaging key status for settings
- * Shows current status and allows regeneration
+ * Shows current status and allows regeneration for wallet users
  */
-export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
+export function MessagingKeyStatus({ 
+  userAddress, 
+  authType = "wallet",
+  passkeyCredentialId,
+}: MessagingKeyStatusProps) {
   const [status, setStatus] = useState<KeyStatus>({
     hasKey: false,
     source: null,
@@ -38,6 +45,7 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
   const [error, setError] = useState<string | null>(null);
   
   const { data: walletClient } = useWalletClient();
+  const rpId = typeof window !== "undefined" ? window.location.hostname : "";
   
   // Check current key status
   useEffect(() => {
@@ -81,7 +89,16 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
   }, [userAddress]);
   
   const handleRegenerate = useCallback(async () => {
-    if (!userAddress || !walletClient) return;
+    if (!userAddress) return;
+    
+    // For wallet users, require wallet client
+    if (authType === "wallet" && !walletClient) return;
+    
+    // For passkey users, require credential
+    if (authType === "passkey" && !passkeyCredentialId) {
+      setError("Passkey required");
+      return;
+    }
     
     setIsRegenerating(true);
     setError(null);
@@ -92,11 +109,14 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
       localStorage.removeItem(MESSAGING_KEY_SOURCE_STORAGE);
       clearCachedKey(userAddress);
       
-      // Derive new deterministic key
+      // Derive new deterministic key based on auth type
       const result = await getOrDeriveMessagingKey({
-        authType: "wallet",
+        authType,
         userAddress,
-        walletClient,
+        walletClient: walletClient ?? undefined,
+        passkeyCredentialId: passkeyCredentialId ?? undefined,
+        rpId,
+        hasPasskey: !!passkeyCredentialId,
       });
       
       if (result.success && result.keypair) {
@@ -109,17 +129,19 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
         setStatus({
           hasKey: true,
           source: result.keypair.derivedFrom,
-          isDeterministic: true,
+          isDeterministic: result.keypair.derivedFrom === "eoa" || result.keypair.derivedFrom === "passkey-prf",
         });
+      } else if (result.requiresPasskey) {
+        setError("Add a passkey first to enable messaging");
       } else {
-        setError(result.error || "Failed to regenerate key");
+        setError(result.error || "Failed to enable");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to regenerate");
+      setError(err instanceof Error ? err.message : "Failed");
     } finally {
       setIsRegenerating(false);
     }
-  }, [userAddress, walletClient]);
+  }, [userAddress, authType, walletClient, passkeyCredentialId, rpId]);
   
   const getSourceLabel = (source: DerivedMessagingKey["derivedFrom"] | null) => {
     switch (source) {
@@ -131,12 +153,19 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
     }
   };
   
+  // Determine if user can enable/upgrade messaging
+  const canEnable = authType === "wallet" 
+    ? !!walletClient 
+    : authType === "passkey" 
+    ? !!passkeyCredentialId 
+    : false; // Email/DigitalID users need to add passkey first
+  
   return (
     <div className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 mt-2">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-lg bg-[#FF5500]/20 flex items-center justify-center">
           <svg
-            className="w-4 h-4 text-purple-400"
+            className="w-4 h-4 text-[#FF5500]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -155,10 +184,10 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
             {status.hasKey ? (
               <>
                 <span className={`inline-flex items-center gap-1 text-xs ${
-                  status.isDeterministic ? "text-green-400" : "text-amber-400"
+                  status.isDeterministic ? "text-emerald-400" : "text-amber-400"
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${
-                    status.isDeterministic ? "bg-green-400" : "bg-amber-400"
+                    status.isDeterministic ? "bg-emerald-400" : "bg-amber-400"
                   }`} />
                   {status.isDeterministic ? "Active" : "Legacy"}
                 </span>
@@ -173,16 +202,16 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
         </div>
       </div>
       
-      {/* Show upgrade option for legacy keys */}
-      {status.hasKey && !status.isDeterministic && walletClient && (
+      {/* Show upgrade option for legacy keys - wallet users only */}
+      {status.hasKey && !status.isDeterministic && authType === "wallet" && canEnable && (
         <div className="mt-3 pt-3 border-t border-zinc-700/50">
           <p className="text-xs text-zinc-400 mb-2">
-            Upgrade to deterministic keys for seamless cross-device sync.
+            Upgrade for seamless cross-device sync.
           </p>
           <button
             onClick={handleRegenerate}
             disabled={isRegenerating}
-            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2"
+            className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 disabled:bg-[#FF5500]/50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2"
           >
             {isRegenerating ? (
               <>
@@ -203,17 +232,24 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
       {/* Info for deterministic keys */}
       {status.hasKey && status.isDeterministic && (
         <p className="text-xs text-zinc-500 mt-2">
-          ✓ Works on all devices with this wallet
+          ✓ Works on all your devices
         </p>
       )}
       
-      {/* Enable option when no key */}
-      {!status.hasKey && walletClient && (
+      {/* Info for passkey users with legacy keys - can't upgrade easily */}
+      {status.hasKey && !status.isDeterministic && authType === "passkey" && (
+        <p className="text-xs text-zinc-500 mt-2">
+          Your passkey provides secure messaging
+        </p>
+      )}
+      
+      {/* Enable option when no key - wallet users */}
+      {!status.hasKey && authType === "wallet" && canEnable && (
         <div className="mt-3">
           <button
             onClick={handleRegenerate}
             disabled={isRegenerating}
-            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2"
+            className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 disabled:bg-[#FF5500]/50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2"
           >
             {isRegenerating ? (
               <>
@@ -229,6 +265,37 @@ export function MessagingKeyStatus({ userAddress }: MessagingKeyStatusProps) {
           </button>
           {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
         </div>
+      )}
+      
+      {/* Enable option for passkey users */}
+      {!status.hasKey && authType === "passkey" && canEnable && (
+        <div className="mt-3">
+          <button
+            onClick={handleRegenerate}
+            disabled={isRegenerating}
+            className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 disabled:bg-[#FF5500]/50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2"
+          >
+            {isRegenerating ? (
+              <>
+                <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Enabling...
+              </>
+            ) : (
+              "Enable with Passkey"
+            )}
+          </button>
+          {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+        </div>
+      )}
+      
+      {/* Info for non-wallet/passkey users without a key */}
+      {!status.hasKey && !canEnable && (authType === "email" || authType === "digitalid" || authType === "solana") && (
+        <p className="text-xs text-zinc-500 mt-2">
+          Add a passkey to enable secure messaging
+        </p>
       )}
     </div>
   );
