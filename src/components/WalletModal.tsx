@@ -597,6 +597,17 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     // This ensures EOA users never get passkey prompts
     const effectiveAuthMethod = authMethod || "wallet";
     
+    // Debug log on mount and when authMethod changes
+    useEffect(() => {
+        if (isOpen) {
+            console.log("[WalletModal] Auth state:", { 
+                authMethod, 
+                effectiveAuthMethod,
+                userAddress: userAddress?.slice(0, 10),
+            });
+        }
+    }, [isOpen, authMethod, effectiveAuthMethod, userAddress]);
+    
     // Determine if user authenticated via passkey (needs Safe signing)
     const isPasskeyUser = effectiveAuthMethod === "passkey";
     
@@ -719,6 +730,15 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         sendTransaction: sendPasskeyTransaction,
         reset: resetPasskey,
     } = useSafePasskeySend();
+
+    // Reset passkey state when modal opens for WALLET users
+    // This clears any stale passkey errors from previous sessions
+    useEffect(() => {
+        if (isOpen && effectiveAuthMethod === "wallet") {
+            console.log("[WalletModal] Wallet user - resetting passkey state");
+            resetPasskey();
+        }
+    }, [isOpen, effectiveAuthMethod, resetPasskey]);
 
     // Initialize passkey Safe when modal opens for users who can use passkey signing
     // This includes: passkey users, email users, alien_id users, world_id users

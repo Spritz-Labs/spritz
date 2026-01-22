@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, type Address, formatEther, defineChain } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche } from "viem/chains";
-import { supabase } from "@/config/supabase";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Admin addresses (same as other admin endpoints)
 const ADMIN_ADDRESSES = [
@@ -95,17 +98,24 @@ export async function GET(request: NextRequest) {
         // First, try to get the user's smart wallet address from the database
         let safeAddress = userAddress;
         
-        if (supabase) {
-            // Check if this is an EOA with a linked smart wallet
-            const { data: credential } = await supabase
-                .from("passkey_credentials")
+        if (supabaseUrl && supabaseServiceKey) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            
+            // Check if user has a smart wallet address in shout_users
+            const { data: user } = await supabase
+                .from("shout_users")
                 .select("smart_wallet_address")
                 .eq("wallet_address", userAddress.toLowerCase())
                 .maybeSingle();
             
-            if (credential?.smart_wallet_address) {
-                safeAddress = credential.smart_wallet_address;
+            if (user?.smart_wallet_address) {
+                safeAddress = user.smart_wallet_address;
+                console.log("[AdminUserWallets] Found smart wallet:", safeAddress.slice(0, 10));
+            } else {
+                console.log("[AdminUserWallets] No smart wallet found, using user address");
             }
+        } else {
+            console.warn("[AdminUserWallets] Supabase not configured");
         }
 
         // Helper for timeouts
