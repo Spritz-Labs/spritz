@@ -1172,13 +1172,14 @@ function DashboardContent({
         joinedChannels.forEach((channel) => {
             const channelKey = `channel-${channel.id}`;
             const lastMsgTime = lastMessageTimes[channelKey];
-            // Use tracked last message time, or fall back to channel's updated_at/created_at
+            // Use tracked last message time - channels will sort by activity
+            // If not tracked yet, use channel's updated_at as initial fallback
             const fallbackTime = channel.updated_at || channel.created_at;
             const lastMessageAt = lastMsgTime 
                 ? new Date(lastMsgTime) 
                 : fallbackTime 
                 ? new Date(fallbackTime) 
-                : new Date();
+                : null;
             items.push({
                 id: channelKey,
                 type: "channel",
@@ -1198,9 +1199,9 @@ function DashboardContent({
         groups.forEach((group) => {
             const groupKey = `group-${group.id}`;
             const lastMsgTime = lastMessageTimes[groupKey];
-            // Use tracked last message time, or fall back to current time
-            // Groups don't have created_at in the current type, so use current time as fallback
-            const lastMessageAt = lastMsgTime ? new Date(lastMsgTime) : new Date();
+            // Use tracked last message time, or null if not tracked yet
+            // Groups will sort to the bottom until they have messages
+            const lastMessageAt = lastMsgTime ? new Date(lastMsgTime) : null;
             items.push({
                 id: groupKey,
                 type: "group",
@@ -1699,6 +1700,10 @@ function DashboardContent({
     // Listen for new channel messages and show toast + notification
     useEffect(() => {
         const unsubscribe = onNewChannelMessage(({ channelId, channelName, senderAddress, content }) => {
+            // Always update last message time for this channel (for sorting)
+            const channelKey = `channel-${channelId}`;
+            setLastMessageTimes(prev => ({ ...prev, [channelKey]: Date.now() }));
+            
             // Skip notification if we're already viewing this channel
             if (selectedChannel?.id === channelId) {
                 console.log("[Dashboard] Skipping notification - channel chat is open:", channelName);
@@ -4628,6 +4633,13 @@ function DashboardContent({
                     onStartCall={handleStartGroupCall}
                     hasActiveCall={callState !== "idle" || !!currentGroupCall}
                     getUserInfo={getAlphaUserInfo}
+                    onMessageSent={() => {
+                        // Update last message time for this group (for sorting)
+                        if (selectedGroup) {
+                            const groupKey = `group-${selectedGroup.id}`;
+                            updateLastMessageTime(groupKey);
+                        }
+                    }}
                 />
             )}
 
@@ -4674,6 +4686,11 @@ function DashboardContent({
                     onToggleNotifications={() => toggleChannelNotifications(selectedChannel.id)}
                     onSetActiveChannel={setActiveChannel}
                     isAdmin={isAdmin}
+                    onMessageSent={() => {
+                        // Update last message time for this channel (for sorting)
+                        const channelKey = `channel-${selectedChannel.id}`;
+                        updateLastMessageTime(channelKey);
+                    }}
                 />
             )}
 

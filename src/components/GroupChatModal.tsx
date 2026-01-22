@@ -53,6 +53,8 @@ interface GroupChatModalProps {
         name: string | null;
         avatar: string | null;
     } | null;
+    // Callback when message is sent (for updating chat order)
+    onMessageSent?: () => void;
 }
 
 type Message = {
@@ -75,6 +77,7 @@ export function GroupChatModal({
     friends = [],
     onGroupDeleted,
     onStartCall,
+    onMessageSent,
     hasActiveCall = false,
     getUserInfo,
 }: GroupChatModalProps) {
@@ -365,6 +368,8 @@ export function GroupChatModal({
             if (result.success) {
                 setNewMessage("");
                 setReplyingTo(null);
+                // Notify parent that message was sent (for updating chat order)
+                onMessageSent?.();
             } else {
                 setError(result.error || "Failed to send");
             }
@@ -381,6 +386,7 @@ export function GroupChatModal({
         replyingTo,
         members,
         getUserInfo,
+        onMessageSent,
     ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -424,6 +430,8 @@ export function GroupChatModal({
                 }
 
                 setShowPixelArt(false);
+                // Notify parent that message was sent (for updating chat order)
+                onMessageSent?.();
             } catch (err) {
                 setError(
                     `Failed to send pixel art: ${
@@ -434,7 +442,7 @@ export function GroupChatModal({
                 setIsUploadingPixelArt(false);
             }
         },
-        [group, userAddress, sendGroupMessage]
+        [group, userAddress, sendGroupMessage, onMessageSent]
     );
 
     // Check if message is pixel art

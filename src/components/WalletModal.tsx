@@ -1840,7 +1840,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 </>
                                             )}
                                         </div>
-                                    ) : !isConnected && !canUsePasskeySigning ? (
+                                    ) : !isConnected && effectiveAuthMethod === "wallet" ? (
+                                        // Only show "Reconnect to Send" for wallet users who need wallet connection
+                                        // Passkey/email/digital_id users don't need wallet connection
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
                                                 <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

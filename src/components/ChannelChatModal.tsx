@@ -39,6 +39,8 @@ type ChannelChatModalProps = {
     onSetActiveChannel?: (channelId: string | null) => void;
     // Admin controls
     isAdmin?: boolean;
+    // Callback when message is sent (for updating chat order)
+    onMessageSent?: () => void;
 };
 
 export function ChannelChatModal({
@@ -47,6 +49,7 @@ export function ChannelChatModal({
     channel,
     userAddress,
     onLeave,
+    onMessageSent,
     getUserInfo,
     onAddFriend,
     isFriend,
@@ -260,6 +263,9 @@ export function ChannelChatModal({
 
         await sendMessage(content, "text", replyingTo?.id);
         setIsSending(false);
+        
+        // Notify parent that message was sent (for updating chat order)
+        onMessageSent?.();
     };
 
     const handleReaction = async (messageId: string, emoji: string) => {
@@ -345,6 +351,8 @@ export function ChannelChatModal({
 
             // Send the image URL as a message
             await sendMessage(data.url, "image");
+            // Notify parent that message was sent (for updating chat order)
+            onMessageSent?.();
         } catch (error) {
             console.error("Failed to upload image:", error);
             alert("Failed to upload image. Please try again.");

@@ -270,10 +270,15 @@ export function UnifiedChatList({
             if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
             if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
             
-            // Then by last message time
-            const aTime = a.lastMessageAt?.getTime() || 0;
-            const bTime = b.lastMessageAt?.getTime() || 0;
-            return bTime - aTime;
+            // Then by last message time (most recent first)
+            // Chats without messages (null) go to the bottom
+            if (!a.lastMessageAt && !b.lastMessageAt) return 0;
+            if (!a.lastMessageAt) return 1; // a goes after b
+            if (!b.lastMessageAt) return -1; // b goes after a
+            
+            const aTime = a.lastMessageAt.getTime();
+            const bTime = b.lastMessageAt.getTime();
+            return bTime - aTime; // Most recent first
         });
     }, [chats]);
 
