@@ -21,23 +21,36 @@ export async function GET(request: NextRequest) {
         });
     }
     
-    // Optionally fetch fresh user data from database
+    // Fetch fresh user data from database
     let userData = null;
+    let effectiveAuthMethod = session.authMethod;
+    
     if (supabase) {
         const { data: user } = await supabase
             .from("shout_users")
-            .select("id, wallet_address, username, ens_name, email, email_verified, beta_access, subscription_tier, points, invite_count, is_banned, display_name, avatar_url")
+            .select("id, wallet_address, username, ens_name, email, email_verified, beta_access, subscription_tier, points, invite_count, is_banned, display_name, avatar_url, wallet_type")
             .eq("wallet_address", session.userAddress)
             .single();
         
         userData = user;
+        
+        // IMPORTANT: The database wallet_type is the source of truth
+        // If the session says "passkey" but the database says "wallet", 
+        // the user is a wallet/EOA user who registered a passkey
+        // They should still use wallet signing, not passkey signing
+        if (user?.wallet_type) {
+            effectiveAuthMethod = user.wallet_type;
+            if (effectiveAuthMethod !== session.authMethod) {
+                console.log("[Session] Auth method override:", session.authMethod, "->", effectiveAuthMethod, "for", session.userAddress.slice(0, 10));
+            }
+        }
     }
     
     return NextResponse.json({
         authenticated: true,
         session: {
             userAddress: session.userAddress,
-            authMethod: session.authMethod,
+            authMethod: effectiveAuthMethod,
             expiresAt: new Date(session.exp * 1000).toISOString(),
         },
         user: userData,

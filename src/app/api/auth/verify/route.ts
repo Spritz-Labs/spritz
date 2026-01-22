@@ -107,11 +107,12 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (fetchError && fetchError.code === "PGRST116") {
-            // User doesn't exist, create them
+            // User doesn't exist, create them with wallet_type = "wallet"
             const { data: newUser, error: createError } = await supabase
                 .from("shout_users")
                 .insert({
                     wallet_address: normalizedAddress,
+                    wallet_type: "wallet", // IMPORTANT: Set wallet_type for EOA users
                     first_login: new Date().toISOString(),
                     last_login: new Date().toISOString(),
                     login_count: 1,
@@ -129,13 +130,23 @@ export async function POST(request: NextRequest) {
             console.error("[Auth] Error fetching user:", fetchError);
             return NextResponse.json({ error: "Database error" }, { status: 500 });
         } else if (user) {
-            // Update last login
+            // Update last login and ensure wallet_type is correct
+            // If user is logging in via wallet signature, they should be wallet type
+            // (unless they were originally a passkey user - but passkey users can't login via wallet signature)
+            const updateData: Record<string, unknown> = {
+                last_login: new Date().toISOString(),
+                login_count: (user.login_count || 0) + 1,
+            };
+            
+            // Ensure wallet_type is set to "wallet" for users logging in via wallet signature
+            if (!user.wallet_type || user.wallet_type !== "wallet") {
+                updateData.wallet_type = "wallet";
+                console.log("[Auth] Setting wallet_type to 'wallet' for:", normalizedAddress.slice(0, 10));
+            }
+            
             await supabase
                 .from("shout_users")
-                .update({
-                    last_login: new Date().toISOString(),
-                    login_count: (user.login_count || 0) + 1,
-                })
+                .update(updateData)
                 .eq("wallet_address", normalizedAddress);
         }
 
