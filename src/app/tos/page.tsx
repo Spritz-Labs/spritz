@@ -3,14 +3,14 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
     title: "Terms of Service",
-    description: "Terms of Service for Spritz - Read our terms and conditions for using our Web3 communication platform",
+    description: "Terms of Service for Spritz Chat - Decentralized communication platform on Ethereum and Solana",
     robots: {
         index: true,
         follow: true,
     },
     openGraph: {
-        title: "Terms of Service | Spritz",
-        description: "Terms of Service for Spritz - Read our terms and conditions",
+        title: "Terms of Service | Spritz Chat",
+        description: "Terms of Service for Spritz Chat - Read our terms and conditions",
         url: "https://app.spritz.chat/tos",
     },
     alternates: {
@@ -43,427 +43,413 @@ export default function TermsOfServicePage() {
                         </svg>
                         Back to Spritz
                     </Link>
-                    <h1 className="text-4xl font-bold mb-2">Terms of Service</h1>
-                    <p className="text-zinc-400">Last updated: {new Date().toLocaleDateString()}</p>
+                    <h1 className="text-4xl font-bold mb-2">Spritz Chat Terms of Service</h1>
+                    <p className="text-zinc-400">Last updated: January 2026</p>
                 </div>
 
+                {/* Table of Contents */}
+                <nav className="mb-12 p-6 bg-zinc-900/50 rounded-xl border border-zinc-800">
+                    <h2 className="text-xl font-semibold mb-4">Table of Contents</h2>
+                    <ol className="list-decimal list-inside space-y-2 text-zinc-300">
+                        <li><a href="#about" className="text-orange-500 hover:text-orange-400">About Spritz Chat</a></li>
+                        <li><a href="#decentralization" className="text-orange-500 hover:text-orange-400">Decentralization and Architecture</a></li>
+                        <li><a href="#privacy" className="text-orange-500 hover:text-orange-400">Privacy, Data, and Encryption</a></li>
+                        <li><a href="#acceptable-use" className="text-orange-500 hover:text-orange-400">Acceptable Use</a></li>
+                        <li><a href="#blockchain" className="text-orange-500 hover:text-orange-400">Blockchain, Ethereum, and IPFS</a></li>
+                        <li><a href="#third-party" className="text-orange-500 hover:text-orange-400">Third-Party Technologies</a></li>
+                        <li><a href="#licenses" className="text-orange-500 hover:text-orange-400">Licenses</a></li>
+                        <li><a href="#disclaimers" className="text-orange-500 hover:text-orange-400">Disclaimers</a></li>
+                        <li><a href="#financial-risk" className="text-orange-500 hover:text-orange-400">Financial Risk and Loss Disclaimer</a></li>
+                        <li><a href="#liability" className="text-orange-500 hover:text-orange-400">Limitation of Liability</a></li>
+                        <li><a href="#indemnification" className="text-orange-500 hover:text-orange-400">Indemnification</a></li>
+                        <li><a href="#disputes" className="text-orange-500 hover:text-orange-400">Dispute Resolution</a></li>
+                        <li><a href="#availability" className="text-orange-500 hover:text-orange-400">Availability and Termination</a></li>
+                        <li><a href="#other" className="text-orange-500 hover:text-orange-400">Other</a></li>
+                    </ol>
+                </nav>
+
                 {/* Content */}
-                <div className="prose prose-invert max-w-none space-y-8">
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">1. Agreement to Terms</h2>
+                <div className="prose prose-invert max-w-none space-y-10">
+                    
+                    {/* 1. About Spritz Chat */}
+                    <section id="about">
+                        <h2 className="text-2xl font-semibold mb-4">1. About Spritz Chat</h2>
                         <p className="text-zinc-300 leading-relaxed">
-                            By accessing or using Spritz ("the Service"), available at{" "}
-                            <a href="https://app.spritz.chat" className="text-orange-500 hover:text-orange-400">
-                                app.spritz.chat
-                            </a>
-                            , you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these
-                            Terms, you may not access or use the Service.
+                            Spritz Chat (&quot;Spritz Chat,&quot; &quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) provides a decentralized, browser-based 
+                            communication protocol that allows users (&quot;you&quot; or &quot;users&quot;) to communicate directly with one another 
+                            using supported web browsers.
                         </p>
                         <p className="text-zinc-300 leading-relaxed mt-4">
-                            These Terms constitute a legally binding agreement between you and Spritz. We may modify
-                            these Terms at any time, and such modifications shall be effective immediately upon posting.
-                            Your continued use of the Service after any such modifications constitutes your acceptance
-                            of the modified Terms.
+                            Spritz Chat does not require downloading an application. Access to Spritz Chat is provided through 
+                            a link and operates entirely within compatible browsers.
                         </p>
+                        <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                            <p className="text-orange-300 font-medium">
+                                By accessing or using Spritz Chat, you agree to these Terms of Service (&quot;Terms&quot;). If you do not 
+                                agree to these Terms, you must not use Spritz Chat.
+                            </p>
+                        </div>
                     </section>
 
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">2. Eligibility</h2>
-                        <p className="text-zinc-300 leading-relaxed mb-4">You must meet the following criteria to use Spritz:</p>
+                    {/* 2. Decentralization and Architecture */}
+                    <section id="decentralization">
+                        <h2 className="text-2xl font-semibold mb-4">2. Decentralization and Architecture</h2>
+                        
+                        <h3 className="text-xl font-semibold mb-3 mt-6">No Central Operator</h3>
+                        <p className="text-zinc-300 leading-relaxed">
+                            Spritz Chat is a decentralized application (dApp). We do not operate centralized servers for 
+                            storing user messages, metadata, or content.
+                        </p>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">No Custody of User Data</h3>
+                        <p className="text-zinc-300 leading-relaxed mb-4">Spritz Chat:</p>
                         <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>You are at least 18 years of age or the age of majority in your jurisdiction</li>
-                            <li>You have the legal capacity to enter into these Terms</li>
-                            <li>You are not prohibited from using the Service under applicable laws</li>
-                            <li>You have a compatible Web3 wallet or are willing to create a passkey account</li>
-                            <li>You agree to comply with all applicable laws and regulations</li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">3. Account Registration and Security</h2>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">3.1 Wallet Connection</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            To use Spritz, you must connect a Web3 wallet (Ethereum, Base, Solana, or other supported
-                            chains) or create a passkey account. You are solely responsible for:
-                        </p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4 mt-4">
-                            <li>Maintaining the security and confidentiality of your wallet private keys</li>
-                            <li>All activities that occur under your wallet address</li>
-                            <li>Any loss or theft of your wallet or private keys</li>
-                            <li>Any transactions made from your wallet address</li>
-                        </ul>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">3.2 Account Responsibility</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            You are responsible for all activities that occur under your account, regardless of whether
-                            you authorized such activities. You must immediately notify us of any unauthorized use of
-                            your account or any other breach of security.
-                        </p>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">3.3 Username and Identity</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            You may choose to claim a Spritz username. Usernames must not:
-                        </p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4 mt-4">
-                            <li>Infringe on any third-party rights (trademarks, copyrights, etc.)</li>
-                            <li>Be offensive, abusive, or discriminatory</li>
-                            <li>Impersonate another person or entity</li>
-                            <li>Contain profanity or hate speech</li>
-                            <li>Violate any applicable laws</li>
+                            <li>Does not collect, store, or retain user messages</li>
+                            <li>Does not maintain user accounts in a traditional sense</li>
+                            <li>Does not require personal information</li>
+                            <li>Does not control or moderate content</li>
                         </ul>
                         <p className="text-zinc-300 leading-relaxed mt-4">
-                            We reserve the right to revoke or modify usernames that violate these Terms.
+                            Messages are transmitted peer-to-peer or through decentralized infrastructure (Logos Messaging), 
+                            depending on availability.
+                        </p>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">No Download Required</h3>
+                        <p className="text-zinc-300 leading-relaxed">
+                            Spritz Chat operates directly in supported web browsers. You are responsible for ensuring your 
+                            browser and device meet technical requirements.
                         </p>
                     </section>
 
-                    <section>
+                    {/* 3. Privacy, Data, and Encryption */}
+                    <section id="privacy">
+                        <h2 className="text-2xl font-semibold mb-4">3. Privacy, Data, and Encryption</h2>
+                        
+                        <h3 className="text-xl font-semibold mb-3 mt-6">End-to-End Encryption</h3>
+                        <p className="text-zinc-300 leading-relaxed">
+                            All communications are encrypted using cryptographic methods designed to prevent third-party access, 
+                            including access by Spritz Chat developers.
+                        </p>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">No Data Retention</h3>
+                        <p className="text-zinc-300 leading-relaxed mb-4">We do not log, store, index, analyze, or monetize:</p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Messages</li>
+                            <li>Media</li>
+                            <li>Wallet addresses</li>
+                            <li>IP addresses</li>
+                            <li>Usage metadata</li>
+                        </ul>
+                        <p className="text-zinc-300 leading-relaxed mt-4">
+                            Once a message is transmitted, it is not retained by Spritz Chat.
+                        </p>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">User Responsibility</h3>
+                        <p className="text-zinc-300 leading-relaxed mb-4">Because Spritz Chat does not control data:</p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Lost messages cannot be recovered</li>
+                            <li>Compromised keys cannot be reset</li>
+                            <li>You are solely responsible for securing your device, browser, and cryptographic keys</li>
+                        </ul>
+                    </section>
+
+                    {/* 4. Acceptable Use */}
+                    <section id="acceptable-use">
                         <h2 className="text-2xl font-semibold mb-4">4. Acceptable Use</h2>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">4.1 Permitted Uses</h3>
-                        <p className="text-zinc-300 leading-relaxed">You may use Spritz to:</p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>Communicate with other users via messaging, voice, and video calls</li>
-                            <li>Create and participate in group chats</li>
-                            <li>Broadcast livestreams</li>
-                            <li>Create and interact with AI agents</li>
-                            <li>Connect with friends and build your network</li>
-                            <li>Use calendar integration features (if available)</li>
-                        </ul>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">4.2 Prohibited Uses</h3>
-                        <p className="text-zinc-300 leading-relaxed">You agree NOT to:</p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>
-                                <strong>Illegal Activities:</strong> Use the Service for any illegal purpose or in
-                                violation of any local, state, national, or international law
-                            </li>
-                            <li>
-                                <strong>Harassment:</strong> Harass, abuse, threaten, or harm other users
-                            </li>
-                            <li>
-                                <strong>Spam:</strong> Send unsolicited messages, spam, or bulk communications
-                            </li>
-                            <li>
-                                <strong>Malicious Content:</strong> Transmit viruses, malware, or other harmful code
-                            </li>
-                            <li>
-                                <strong>Impersonation:</strong> Impersonate any person or entity or falsely state or
-                                misrepresent your affiliation with any person or entity
-                            </li>
-                            <li>
-                                <strong>Intellectual Property:</strong> Infringe on any intellectual property rights,
-                                including copyrights, trademarks, or patents
-                            </li>
-                            <li>
-                                <strong>Privacy Violations:</strong> Collect, store, or share personal information of
-                                other users without their consent
-                            </li>
-                            <li>
-                                <strong>Fraud:</strong> Engage in fraud, phishing, or other deceptive practices
-                            </li>
-                            <li>
-                                <strong>Manipulation:</strong> Manipulate or interfere with the Service's functionality
-                            </li>
-                            <li>
-                                <strong>Reverse Engineering:</strong> Reverse engineer, decompile, or disassemble any
-                                part of the Service
-                            </li>
-                            <li>
-                                <strong>Commercial Use:</strong> Use the Service for commercial purposes without our
-                                prior written consent (except for permitted features like AI agent monetization)
-                            </li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">5. Content and Intellectual Property</h2>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">5.1 Your Content</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            You retain ownership of any content you create, upload, or transmit through Spritz
-                            ("Your Content"). By using the Service, you grant us a worldwide, non-exclusive,
-                            royalty-free license to use, reproduce, modify, and distribute Your Content solely for the
-                            purpose of providing and improving the Service.
-                        </p>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">5.2 Our Content</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            The Service, including its original content, features, and functionality, is owned by Spritz
-                            and is protected by international copyright, trademark, patent, trade secret, and other
-                            intellectual property laws. You may not copy, modify, distribute, sell, or lease any part of
-                            the Service without our prior written consent.
-                        </p>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">5.3 Third-Party Content</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            The Service may contain content from third parties, including other users. We are not
-                            responsible for the accuracy, completeness, or legality of third-party content. You use such
-                            content at your own risk.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">6. AI Agents</h2>
                         <p className="text-zinc-300 leading-relaxed mb-4">
-                            Spritz allows users to create and interact with AI agents. When using AI agents:
+                            You agree to use Spritz Chat only for lawful purposes and in compliance with applicable laws.
                         </p>
+                        <p className="text-zinc-300 leading-relaxed mb-4">You will not use Spritz Chat to:</p>
                         <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>
-                                You are responsible for the content and behavior of any AI agents you create
-                            </li>
-                            <li>
-                                AI agents must comply with all applicable laws and these Terms
-                            </li>
-                            <li>
-                                We do not guarantee the accuracy, reliability, or appropriateness of AI-generated
-                                content
-                            </li>
-                            <li>
-                                You may monetize your AI agents using x402 payments, subject to applicable laws and
-                                regulations
-                            </li>
-                            <li>
-                                We reserve the right to remove or disable AI agents that violate these Terms
-                            </li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">7. Payments and Transactions</h2>
-                        <p className="text-zinc-300 leading-relaxed mb-4">
-                            Certain features of Spritz may involve payments or transactions:
-                        </p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>
-                                <strong>Blockchain Transactions:</strong> Some features may require blockchain
-                                transactions (e.g., x402 payments). You are responsible for all gas fees and
-                                transaction costs.
-                            </li>
-                            <li>
-                                <strong>Payment Processing:</strong> Payments may be processed through third-party
-                                services. We are not responsible for payment processing errors or disputes.
-                            </li>
-                            <li>
-                                <strong>Refunds:</strong> Refund policies vary by feature and are subject to applicable
-                                laws.
-                            </li>
-                            <li>
-                                <strong>Taxes:</strong> You are responsible for any taxes arising from your use of paid
-                                features.
-                            </li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">8. Privacy</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            Your use of the Service is also governed by our{" "}
-                            <Link href="/privacy" className="text-orange-500 hover:text-orange-400">
-                                Privacy Policy
-                            </Link>
-                            . By using the Service, you consent to the collection and use of your information as
-                            described in the Privacy Policy.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">9. Disclaimers</h2>
-                        <p className="text-zinc-300 leading-relaxed mb-4">
-                            THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER
-                            EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO:
-                        </p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>
-                                We do not guarantee that the Service will be uninterrupted, secure, or error-free
-                            </li>
-                            <li>
-                                We do not guarantee the accuracy, completeness, or usefulness of any information on the
-                                Service
-                            </li>
-                            <li>
-                                We are not responsible for any loss of data, funds, or other damages resulting from
-                                your use of the Service
-                            </li>
-                            <li>
-                                We do not guarantee compatibility with all wallets, devices, or browsers
-                            </li>
-                            <li>
-                                We are not responsible for the actions, content, or information of other users
-                            </li>
-                            <li>
-                                We do not guarantee the security of blockchain transactions or wallet connections
-                            </li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">10. Limitation of Liability</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            TO THE MAXIMUM EXTENT PERMITTED BY LAW, SPRITZ AND ITS AFFILIATES, OFFICERS, DIRECTORS,
-                            EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
-                            CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO:
-                        </p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4 mt-4">
-                            <li>Loss of profits, revenue, data, or use</li>
-                            <li>Loss of cryptocurrency or digital assets</li>
-                            <li>Loss of wallet access or private keys</li>
-                            <li>Business interruption</li>
-                            <li>Personal injury or property damage</li>
-                            <li>Any other damages arising from your use of the Service</li>
+                            <li>Violate any law or regulation</li>
+                            <li>Engage in fraud, deception, or impersonation</li>
+                            <li>Distribute malware or harmful code</li>
+                            <li>Coordinate violence, exploitation, or abuse</li>
+                            <li>Infringe intellectual property rights</li>
+                            <li>Attempt to disrupt the protocol, smart contracts, or underlying blockchain</li>
                         </ul>
                         <p className="text-zinc-300 leading-relaxed mt-4">
-                            OUR TOTAL LIABILITY TO YOU FOR ALL CLAIMS ARISING FROM OR RELATED TO THE SERVICE SHALL NOT
-                            EXCEED THE AMOUNT YOU PAID TO US IN THE TWELVE (12) MONTHS PRIOR TO THE CLAIM, OR $100,
-                            WHICHEVER IS GREATER.
+                            Because Spritz Chat is decentralized, we may not be able to prevent or reverse misuse, but we 
+                            reserve the right to restrict access to interfaces we control.
                         </p>
                     </section>
 
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">11. Indemnification</h2>
+                    {/* 5. Blockchain, Ethereum, and IPFS */}
+                    <section id="blockchain">
+                        <h2 className="text-2xl font-semibold mb-4">5. Blockchain, Ethereum, and IPFS</h2>
+                        
+                        <h3 className="text-xl font-semibold mb-3 mt-6">Ethereum and Base Networks</h3>
+                        <p className="text-zinc-300 leading-relaxed mb-4">
+                            Spritz Chat is built on Ethereum and Base blockchains, with support for Solana. By using Spritz Chat, you acknowledge:
+                        </p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Transactions are irreversible</li>
+                            <li>Smart contracts execute autonomously</li>
+                            <li>Network fees (&quot;gas&quot;) may apply</li>
+                            <li>Network outages or congestion may occur</li>
+                        </ul>
+                        <p className="text-zinc-300 leading-relaxed mt-4">
+                            Spritz Chat does not control Ethereum, Base, Solana, validators, nodes, or protocol upgrades.
+                        </p>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">IPFS Storage</h3>
+                        <p className="text-zinc-300 leading-relaxed mb-4">
+                            Pixel art and other non-message assets may be stored on the InterPlanetary File System (IPFS):
+                        </p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Content stored on IPFS is public and immutable</li>
+                            <li>Content may persist indefinitely</li>
+                            <li>We do not control availability or removal of IPFS content</li>
+                        </ul>
+                        <p className="text-zinc-300 leading-relaxed mt-4 font-medium text-orange-300">
+                            You should not upload content to IPFS unless you understand its permanence.
+                        </p>
+                    </section>
+
+                    {/* 6. Third-Party Technologies */}
+                    <section id="third-party">
+                        <h2 className="text-2xl font-semibold mb-4">6. Third-Party Technologies</h2>
+                        <p className="text-zinc-300 leading-relaxed mb-4">
+                            Spritz Chat relies on third-party open-source technologies, including but not limited to:
+                        </p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Web browsers</li>
+                            <li>Ethereum, Base, and Solana clients</li>
+                            <li>Wallet providers (MetaMask, WalletConnect, Phantom, etc.)</li>
+                            <li>IPFS nodes</li>
+                            <li>Logos Messaging protocol</li>
+                        </ul>
+                        <p className="text-zinc-300 leading-relaxed mt-4">
+                            Your use of those technologies is governed by their respective terms and policies. 
+                            <strong className="text-white"> We are not responsible for third-party services.</strong>
+                        </p>
+                    </section>
+
+                    {/* 7. Licenses */}
+                    <section id="licenses">
+                        <h2 className="text-2xl font-semibold mb-4">7. Licenses</h2>
+                        
+                        <h3 className="text-xl font-semibold mb-3 mt-6">Your Content</h3>
                         <p className="text-zinc-300 leading-relaxed">
-                            You agree to indemnify, defend, and hold harmless Spritz and its affiliates, officers,
-                            directors, employees, and agents from and against any and all claims, damages, obligations,
-                            losses, liabilities, costs, and expenses (including reasonable attorneys' fees) arising
-                            from:
+                            You retain all rights to any content you create or transmit. Spritz Chat does not claim ownership 
+                            of user content.
+                        </p>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">Protocol License</h3>
+                        <p className="text-zinc-300 leading-relaxed mb-4">
+                            Spritz Chat grants you a limited, non-exclusive, non-transferable license to use the Spritz Chat 
+                            interface for its intended purpose.
+                        </p>
+                        <p className="text-zinc-300 leading-relaxed mb-4">You may not:</p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Misrepresent Spritz Chat as centralized</li>
+                            <li>Offer custodial or data-retentive versions under the Spritz Chat name</li>
+                            <li>Use Spritz Chat branding without permission</li>
+                        </ul>
+                    </section>
+
+                    {/* 8. Disclaimers */}
+                    <section id="disclaimers">
+                        <h2 className="text-2xl font-semibold mb-4">8. Disclaimers</h2>
+                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
+                            <p className="text-red-300 font-bold text-lg mb-4">
+                                SPRITZ CHAT IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE.&quot;
+                            </p>
+                            <p className="text-red-300 font-semibold mb-4">
+                                WE MAKE NO WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO:
+                            </p>
+                            <ul className="list-disc list-inside text-red-300 space-y-2 ml-4">
+                                <li>SECURITY</li>
+                                <li>AVAILABILITY</li>
+                                <li>FITNESS FOR A PARTICULAR PURPOSE</li>
+                                <li>NON-INFRINGEMENT</li>
+                            </ul>
+                            <p className="text-red-300 font-semibold mt-4">
+                                WE DO NOT GUARANTEE THAT SPRITZ CHAT WILL BE UNINTERRUPTED, ERROR-FREE, OR IMMUNE FROM ATTACKS.
+                            </p>
+                            <p className="text-red-400 font-bold mt-4 text-lg">
+                                YOU USE SPRITZ CHAT AT YOUR OWN RISK.
+                            </p>
+                        </div>
+                    </section>
+
+                    {/* 9. Financial Risk and Loss Disclaimer - NEW DETAILED SECTION */}
+                    <section id="financial-risk">
+                        <h2 className="text-2xl font-semibold mb-4">9. Financial Risk and Loss Disclaimer</h2>
+                        
+                        <div className="bg-red-500/20 border-2 border-red-500/50 rounded-lg p-6 mb-6">
+                            <h3 className="text-xl font-bold text-red-400 mb-4">⚠️ IMPORTANT: READ CAREFULLY</h3>
+                            <p className="text-red-300 font-semibold leading-relaxed">
+                                SPRITZ CHAT IS NOT RESPONSIBLE FOR ANY FINANCIAL LOSS, INCLUDING BUT NOT LIMITED TO LOSS OF 
+                                CRYPTOCURRENCY, DIGITAL ASSETS, TOKENS, OR ANY OTHER FORM OF VALUE THAT MAY OCCUR WHILE USING 
+                                OUR SERVICE.
+                            </p>
+                        </div>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">Cryptocurrency and Digital Asset Risks</h3>
+                        <p className="text-zinc-300 leading-relaxed mb-4">
+                            By using Spritz Chat, you acknowledge and accept that:
+                        </p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-3 ml-4">
+                            <li>
+                                <strong className="text-white">Volatility:</strong> Cryptocurrency and digital asset values are highly volatile 
+                                and can decrease significantly in value at any time
+                            </li>
+                            <li>
+                                <strong className="text-white">Irreversible Transactions:</strong> Blockchain transactions cannot be reversed, 
+                                cancelled, or refunded once confirmed
+                            </li>
+                            <li>
+                                <strong className="text-white">Wallet Security:</strong> You are solely responsible for the security of your 
+                                wallet, private keys, seed phrases, and passkeys
+                            </li>
+                            <li>
+                                <strong className="text-white">Lost Access:</strong> If you lose access to your wallet or private keys, your 
+                                funds may be permanently lost and cannot be recovered by Spritz Chat
+                            </li>
+                            <li>
+                                <strong className="text-white">Smart Contract Risks:</strong> Smart contracts may contain bugs or vulnerabilities 
+                                that could result in loss of funds
+                            </li>
+                            <li>
+                                <strong className="text-white">Network Failures:</strong> Blockchain network congestion, outages, or failures 
+                                may result in failed transactions or lost funds
+                            </li>
+                            <li>
+                                <strong className="text-white">Hacking and Exploits:</strong> Despite security measures, hacking, phishing, 
+                                and other malicious attacks may result in loss of funds
+                            </li>
+                        </ul>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">No Financial Advice</h3>
+                        <p className="text-zinc-300 leading-relaxed">
+                            Nothing on Spritz Chat constitutes financial, investment, legal, or tax advice. You should consult 
+                            with qualified professionals before making any financial decisions. We do not recommend any particular 
+                            cryptocurrency, token, or investment strategy.
+                        </p>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">No Custody of Funds</h3>
+                        <p className="text-zinc-300 leading-relaxed">
+                            Spritz Chat does not hold, control, or have access to your cryptocurrency or digital assets. 
+                            All funds remain in your personal wallet under your sole control. We cannot:
                         </p>
                         <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4 mt-4">
-                            <li>Your use of the Service</li>
+                            <li>Recover lost or stolen funds</li>
+                            <li>Reverse or cancel transactions</li>
+                            <li>Access your wallet or private keys</li>
+                            <li>Freeze or seize your assets</li>
+                            <li>Guarantee the value or liquidity of any asset</li>
+                        </ul>
+
+                        <h3 className="text-xl font-semibold mb-3 mt-6">Assumption of Risk</h3>
+                        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 mt-4">
+                            <p className="text-zinc-300 leading-relaxed">
+                                BY USING SPRITZ CHAT, YOU EXPRESSLY ACKNOWLEDGE AND ASSUME ALL RISKS ASSOCIATED WITH 
+                                CRYPTOCURRENCY, BLOCKCHAIN TECHNOLOGY, AND DECENTRALIZED APPLICATIONS. YOU AGREE THAT 
+                                SPRITZ CHAT, ITS DEVELOPERS, CONTRIBUTORS, AND AFFILIATES SHALL NOT BE HELD LIABLE FOR 
+                                ANY FINANCIAL LOSSES YOU MAY INCUR, REGARDLESS OF THE CAUSE, INCLUDING BUT NOT LIMITED TO:
+                            </p>
+                            <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4 mt-4">
+                                <li>Market volatility or price fluctuations</li>
+                                <li>Failed or pending transactions</li>
+                                <li>Gas fees or transaction costs</li>
+                                <li>Wallet compromise or unauthorized access</li>
+                                <li>Smart contract failures or exploits</li>
+                                <li>Regulatory actions or legal restrictions</li>
+                                <li>Third-party service failures</li>
+                                <li>User error or negligence</li>
+                                <li>Any other cause whatsoever</li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    {/* 10. Limitation of Liability */}
+                    <section id="liability">
+                        <h2 className="text-2xl font-semibold mb-4">10. Limitation of Liability</h2>
+                        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6">
+                            <p className="text-zinc-300 font-semibold mb-4">
+                                TO THE MAXIMUM EXTENT PERMITTED BY LAW:
+                            </p>
+                            <ul className="list-disc list-inside text-zinc-300 space-y-3 ml-4">
+                                <li>
+                                    SPRITZ CHAT SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, 
+                                    OR PUNITIVE DAMAGES
+                                </li>
+                                <li>
+                                    <strong className="text-white">WE ARE NOT LIABLE FOR LOST DATA, LOST KEYS, LOST FUNDS, 
+                                    OR BLOCKCHAIN FAILURES</strong>
+                                </li>
+                                <li>
+                                    OUR TOTAL LIABILITY SHALL NOT EXCEED ONE HUNDRED U.S. DOLLARS (USD $100)
+                                </li>
+                            </ul>
+                            <p className="text-zinc-400 mt-4 text-sm">
+                                Some jurisdictions do not allow certain limitations; in such cases, liability is limited to 
+                                the maximum extent permitted by law.
+                            </p>
+                        </div>
+                    </section>
+
+                    {/* 11. Indemnification */}
+                    <section id="indemnification">
+                        <h2 className="text-2xl font-semibold mb-4">11. Indemnification</h2>
+                        <p className="text-zinc-300 leading-relaxed mb-4">
+                            You agree to indemnify and hold harmless Spritz Chat, its contributors, and developers from any 
+                            claims arising from:
+                        </p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Your use of Spritz Chat</li>
                             <li>Your violation of these Terms</li>
+                            <li>Your interaction with blockchain or IPFS content</li>
+                            <li>Any financial losses you incur</li>
                             <li>Your violation of any third-party rights</li>
-                            <li>Your violation of any applicable laws or regulations</li>
                             <li>Any content you submit, post, or transmit through the Service</li>
                         </ul>
                     </section>
 
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">12. Termination</h2>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">12.1 Termination by You</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            You may stop using the Service at any time. You may request deletion of your account and
-                            data by contacting us.
-                        </p>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">12.2 Termination by Us</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            We may suspend or terminate your access to the Service immediately, without prior notice, if:
-                        </p>
-                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>You violate these Terms</li>
-                            <li>You engage in fraudulent, abusive, or illegal activity</li>
-                            <li>We are required to do so by law</li>
-                            <li>We discontinue the Service</li>
-                        </ul>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">12.3 Effect of Termination</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            Upon termination, your right to use the Service will immediately cease. We may delete your
-                            account and data, subject to our data retention policies and legal obligations. Provisions
-                            of these Terms that by their nature should survive termination shall survive termination.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">13. Dispute Resolution</h2>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">13.1 Governing Law</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            These Terms shall be governed by and construed in accordance with the laws of [Your
-                            Jurisdiction], without regard to its conflict of law provisions.
-                        </p>
-
-                        <h3 className="text-xl font-semibold mb-3 mt-6">13.2 Dispute Resolution Process</h3>
-                        <p className="text-zinc-300 leading-relaxed">
-                            Any disputes arising out of or relating to these Terms or the Service shall be resolved
-                            through binding arbitration in accordance with the rules of [Arbitration Organization],
-                            except where prohibited by law. You waive your right to a jury trial and to participate in
-                            a class action lawsuit.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">14. Blockchain and Decentralization</h2>
+                    {/* 12. Dispute Resolution */}
+                    <section id="disputes">
+                        <h2 className="text-2xl font-semibold mb-4">12. Dispute Resolution</h2>
                         <p className="text-zinc-300 leading-relaxed mb-4">
-                            Spritz leverages blockchain technology and decentralized protocols. Please be aware that:
+                            Because Spritz Chat is decentralized and non-custodial, disputes are limited.
                         </p>
+                        <p className="text-zinc-300 leading-relaxed mb-4">Unless prohibited by law:</p>
                         <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
-                            <li>
-                                Blockchain transactions are irreversible and publicly visible
-                            </li>
-                            <li>
-                                You are solely responsible for the security of your wallet and private keys
-                            </li>
-                            <li>
-                                We cannot reverse, cancel, or modify blockchain transactions
-                            </li>
-                            <li>
-                                Network fees (gas fees) are determined by the blockchain network, not by us
-                            </li>
-                            <li>
-                                Decentralized protocols may have different security and privacy characteristics than
-                                centralized services
-                            </li>
+                            <li>Any dispute shall be resolved individually</li>
+                            <li>Class actions are waived</li>
+                            <li>Governing law shall be determined by applicable conflict-of-law rules</li>
                         </ul>
                     </section>
 
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">15. Changes to the Service</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            We reserve the right to modify, suspend, or discontinue any part of the Service at any time,
-                            with or without notice. We shall not be liable to you or any third party for any
-                            modification, suspension, or discontinuation of the Service.
+                    {/* 13. Availability and Termination */}
+                    <section id="availability">
+                        <h2 className="text-2xl font-semibold mb-4">13. Availability and Termination</h2>
+                        <p className="text-zinc-300 leading-relaxed mb-4">Spritz Chat may:</p>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>Change interfaces</li>
+                            <li>Modify supported browsers</li>
+                            <li>Discontinue front-end access at any time</li>
+                        </ul>
+                        <p className="text-zinc-300 leading-relaxed mt-4">
+                            Because the protocol is decentralized, smart contracts and content may continue to exist 
+                            independently of us.
                         </p>
                     </section>
 
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">16. Beta Features</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            Some features of Spritz may be labeled as "beta" or "experimental." These features are
-                            provided "as is" and may be unstable, incomplete, or subject to change. We make no guarantees
-                            about beta features and you use them at your own risk.
-                        </p>
+                    {/* 14. Other */}
+                    <section id="other">
+                        <h2 className="text-2xl font-semibold mb-4">14. Other</h2>
+                        <ul className="list-disc list-inside text-zinc-300 space-y-2 ml-4">
+                            <li>These Terms constitute the entire agreement</li>
+                            <li>If any provision is unenforceable, the remainder remains effective</li>
+                            <li>We reserve all rights not expressly granted</li>
+                            <li>Your continued use constitutes acceptance of updated Terms</li>
+                        </ul>
                     </section>
 
+                    {/* Contact */}
                     <section>
-                        <h2 className="text-2xl font-semibold mb-4">17. Third-Party Services</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            The Service may integrate with or link to third-party services, including but not limited to:
-                            wallet providers, blockchain networks, payment processors, and cloud services. We are not
-                            responsible for the availability, accuracy, or practices of third-party services. Your
-                            interactions with third-party services are subject to their respective terms and policies.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">18. Export Restrictions</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            The Service may be subject to export control laws and regulations. You agree to comply with
-                            all applicable export and re-export control laws and regulations, including those of the
-                            United States and other countries.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">19. Severability</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            If any provision of these Terms is found to be unenforceable or invalid, that provision
-                            shall be limited or eliminated to the minimum extent necessary, and the remaining provisions
-                            shall remain in full force and effect.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">20. Entire Agreement</h2>
-                        <p className="text-zinc-300 leading-relaxed">
-                            These Terms, together with our Privacy Policy, constitute the entire agreement between you
-                            and Spritz regarding the use of the Service and supersede all prior agreements and
-                            understandings.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="text-2xl font-semibold mb-4">21. Contact Information</h2>
+                        <h2 className="text-2xl font-semibold mb-4">Contact Information</h2>
                         <p className="text-zinc-300 leading-relaxed mb-4">
                             If you have any questions about these Terms, please contact us:
                         </p>
@@ -486,13 +472,24 @@ export default function TermsOfServicePage() {
                                     app.spritz.chat
                                 </a>
                             </p>
+                            <p className="text-zinc-300 mt-2">
+                                <strong>Documentation:</strong>{" "}
+                                <a
+                                    href="https://docs.spritz.chat"
+                                    className="text-orange-500 hover:text-orange-400"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    docs.spritz.chat
+                                </a>
+                            </p>
                         </div>
                     </section>
                 </div>
 
                 {/* Footer */}
                 <div className="mt-12 pt-8 border-t border-zinc-800 text-center text-zinc-500 text-sm">
-                    <p>© {new Date().getFullYear()} Spritz. All rights reserved.</p>
+                    <p>© {new Date().getFullYear()} Spritz Labs. All rights reserved.</p>
                     <p className="mt-2">
                         <Link href="/privacy" className="text-orange-500 hover:text-orange-400">
                             Privacy Policy
@@ -501,10 +498,18 @@ export default function TermsOfServicePage() {
                         <Link href="/tos" className="text-orange-500 hover:text-orange-400">
                             Terms of Service
                         </Link>
+                        {" • "}
+                        <a 
+                            href="https://docs.spritz.chat" 
+                            className="text-orange-500 hover:text-orange-400"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            Docs
+                        </a>
                     </p>
                 </div>
             </div>
         </div>
     );
 }
-
