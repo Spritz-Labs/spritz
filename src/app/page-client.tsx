@@ -230,8 +230,9 @@ export default function Home() {
     const failedSignInAttempts = useRef<Map<string, number>>(new Map());
     const hasAutoSignInFailed = useRef<boolean>(false);
     
-    // Server-side authMethod - source of truth after updates/refreshes
+    // Server-side session - source of truth after updates/refreshes
     const [serverAuthMethod, setServerAuthMethod] = useState<string | null>(null);
+    const [serverUserAddress, setServerUserAddress] = useState<string | null>(null);
 
     // Handle hydration
     useEffect(() => {
@@ -240,12 +241,12 @@ export default function Home() {
         hasSavedSession.current = hasSavedWalletSession();
     }, []);
     
-    // Fetch authMethod from server session on mount
+    // Fetch session from server on mount
     // This ensures correct auth type detection after app updates
     useEffect(() => {
         if (!mounted) return;
         
-        const fetchServerAuthMethod = async () => {
+        const fetchServerSession = async () => {
             try {
                 const res = await fetch("/api/auth/session", {
                     method: "GET",
@@ -253,17 +254,18 @@ export default function Home() {
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.authenticated && data.session?.authMethod) {
-                        console.log("[Auth] Server authMethod:", data.session.authMethod);
+                    if (data.authenticated && data.session) {
+                        console.log("[Auth] Server session:", data.session.authMethod, data.session.userAddress?.slice(0, 10));
                         setServerAuthMethod(data.session.authMethod);
+                        setServerUserAddress(data.session.userAddress);
                     }
                 }
             } catch (error) {
-                console.error("[Auth] Failed to fetch server authMethod:", error);
+                console.error("[Auth] Failed to fetch server session:", error);
             }
         };
         
-        fetchServerAuthMethod();
+        fetchServerSession();
     }, [mounted]);
 
     // Safety timeout - if stuck loading for too long, show recovery option
@@ -362,15 +364,17 @@ export default function Home() {
     }, [mounted, initializing, isWalletConnected, walletAddress, isSiweAuthenticated, isSiweLoading, signingIn, siweSignIn, walletType]);
 
     // Determine the active user address (supports both EVM and Solana)
-    // Can come from email auth, passkey, Alien identity, World ID, connected wallet, or authenticated SIWE user
+    // Can come from email auth, passkey, Alien identity, World ID, connected wallet, authenticated SIWE user, or server session
     // Note: alienAddress should be consistent (user_id from Alien SDK), not session-based
+    // serverUserAddress is used as fallback for users who have a valid server session but client providers haven't reconnected yet
     const userAddress: string | null = mounted
-        ? emailAddress || passkeyAddress || alienAddress || worldIdAddress || walletAddress || siweUser?.walletAddress || null
+        ? emailAddress || passkeyAddress || alienAddress || worldIdAddress || walletAddress || siweUser?.walletAddress || serverUserAddress || null
         : null;
 
     // Determine wallet type for dashboard
     // Use connected wallet type, or infer from SIWE user address format
     // Email, passkey, Alien, and World ID users use EVM (derived addresses)
+    // For server session fallback, infer from address format or authMethod
     const activeWalletType: WalletType = isEmailAuthenticated
         ? "evm" // Email users always use EVM (derived addresses)
         : isPasskeyAuthenticated
@@ -379,16 +383,21 @@ export default function Home() {
         ? "evm" // Alien users use EVM (identity addresses)
         : isWorldIdAuthenticated
         ? "evm" // World ID users use EVM (nullifier hash as address)
-        : walletType || (siweUser?.walletAddress?.startsWith("0x") ? "evm" : siweUser?.walletAddress ? "solana" : null);
+        : walletType 
+        || (siweUser?.walletAddress?.startsWith("0x") ? "evm" : siweUser?.walletAddress ? "solana" : null)
+        || (serverAuthMethod === "passkey" || serverAuthMethod === "email" ? "evm" : null)
+        || (serverUserAddress?.startsWith("0x") ? "evm" : serverUserAddress ? "solana" : null);
 
     // Require authentication for all users
-    // Email auth, passkey auth, Alien auth, World ID auth, or SIWE/SIWS authentication
+    // Email auth, passkey auth, Alien auth, World ID auth, SIWE/SIWS authentication, or valid server session
+    // serverUserAddress means user has a valid HttpOnly cookie - they're authenticated even if providers haven't reconnected yet
     const isFullyAuthenticated = mounted && (
         isEmailAuthenticated ||
         isPasskeyAuthenticated ||
         isAlienAuthenticated ||
         isWorldIdAuthenticated ||
-        isSiweAuthenticated
+        isSiweAuthenticated ||
+        !!serverUserAddress // User has valid server session (survives app updates)
     );
 
     // Show loading while checking auth state
