@@ -76,6 +76,7 @@ import type { Stream } from "@/app/api/streams/route";
 import { WalletModal } from "./WalletModal";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
 import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
+import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -2134,6 +2135,12 @@ function DashboardContent({
 
     return (
         <>
+            {/* Messaging Key Restore Banner - prompts users to restore key when missing */}
+            <MessagingKeyRestoreBanner
+                userAddress={userAddress}
+                authType={messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"}
+                onOpenSettings={() => setIsSettingsModalOpen(true)}
+            />
             {/* Messaging Key Upgrade Banner - shows once for legacy key users */}
             <MessagingKeyUpgradeBanner
                 userAddress={userAddress}
