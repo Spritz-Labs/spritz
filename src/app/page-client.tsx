@@ -869,30 +869,38 @@ export default function Home() {
                         className="text-center text-zinc-600 text-sm mt-6 mb-0 space-y-2"
                     >
                         <div className="flex items-center justify-center gap-4 flex-wrap">
+                            <a
+                                href="https://docs.spritz.chat"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#FFBBA7] hover:text-[#FFF0E0] transition-colors"
+                            >
+                                Docs
+                            </a>
+                            <span className="text-zinc-700">•</span>
+                            <a
+                                href="https://docs.spritz.chat/blog"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#FFBBA7] hover:text-[#FFF0E0] transition-colors"
+                            >
+                                Blog
+                            </a>
+                            <span className="text-zinc-700">•</span>
                             <Link
                                 href="/privacy"
                                 className="text-[#FFBBA7] hover:text-[#FFF0E0] transition-colors"
                             >
-                                Privacy Policy
+                                Privacy
                             </Link>
                             <span className="text-zinc-700">•</span>
                             <Link
                                 href="/tos"
                                 className="text-[#FFBBA7] hover:text-[#FFF0E0] transition-colors"
                             >
-                                Terms of Service
+                                Terms
                             </Link>
                         </div>
-                        <p>
-                            <a
-                                href="https://walletconnect.com"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[#FFBBA7] hover:text-[#FFF0E0] transition-colors"
-                            >
-                                WalletConnect
-                            </a>
-                        </p>
                     </motion.div>
                 </motion.div>
             </div>
