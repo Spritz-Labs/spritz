@@ -47,6 +47,18 @@ export function MessagingKeyStatus({
   const { data: walletClient } = useWalletClient();
   const rpId = typeof window !== "undefined" ? window.location.hostname : "";
   
+  // Determine if key is "good enough" based on source and auth type
+  // For passkey users, passkey-fallback is still good (it's their passkey!)
+  // For wallet users, only eoa is truly deterministic
+  const isKeyGood = (source: DerivedMessagingKey["derivedFrom"] | null, userAuthType: AuthType) => {
+    if (!source) return false;
+    if (source === "eoa") return true;
+    if (source === "passkey-prf") return true;
+    // For passkey users, passkey-fallback is acceptable
+    if (source === "passkey-fallback" && userAuthType === "passkey") return true;
+    return false;
+  };
+
   // Check current key status
   useEffect(() => {
     if (!userAddress || typeof window === "undefined") {
@@ -60,7 +72,7 @@ export function MessagingKeyStatus({
       setStatus({
         hasKey: true,
         source: cached.derivedFrom,
-        isDeterministic: cached.derivedFrom === "eoa" || cached.derivedFrom === "passkey-prf",
+        isDeterministic: isKeyGood(cached.derivedFrom, authType),
       });
       return;
     }
@@ -79,14 +91,14 @@ export function MessagingKeyStatus({
           setStatus({
             hasKey: true,
             source: storedSource || "legacy",
-            isDeterministic: storedSource === "eoa" || storedSource === "passkey-prf",
+            isDeterministic: isKeyGood(storedSource, authType),
           });
         }
       } catch {
         setStatus({ hasKey: false, source: null, isDeterministic: false });
       }
     }
-  }, [userAddress]);
+  }, [userAddress, authType]);
   
   const handleRegenerate = useCallback(async () => {
     if (!userAddress) return;
@@ -147,7 +159,8 @@ export function MessagingKeyStatus({
     switch (source) {
       case "eoa": return "Wallet Signature";
       case "passkey-prf": return "Passkey";
-      case "passkey-fallback": return "Passkey (Legacy)";
+      // For passkey users, don't show "Legacy" - it's still their passkey
+      case "passkey-fallback": return authType === "passkey" ? "Passkey" : "Passkey (Legacy)";
       case "legacy": return "Legacy";
       default: return "Not set";
     }
@@ -229,17 +242,12 @@ export function MessagingKeyStatus({
         </div>
       )}
       
-      {/* Info for deterministic keys */}
+      {/* Info for good keys */}
       {status.hasKey && status.isDeterministic && (
         <p className="text-xs text-zinc-500 mt-2">
-          ✓ Works on all your devices
-        </p>
-      )}
-      
-      {/* Info for passkey users with legacy keys - can't upgrade easily */}
-      {status.hasKey && !status.isDeterministic && authType === "passkey" && (
-        <p className="text-xs text-zinc-500 mt-2">
-          Your passkey provides secure messaging
+          {authType === "passkey" 
+            ? "✓ Secured by your passkey" 
+            : "✓ Works on all your devices"}
         </p>
       )}
       
