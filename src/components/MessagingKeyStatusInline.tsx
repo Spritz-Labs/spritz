@@ -245,11 +245,13 @@ export function MessagingKeyStatus({
         </div>
       )}
       
-      {/* Info for good keys - passkey users always show this */}
+      {/* Info for good keys - show based on actual key source, not authType */}
       {status.hasKey && (authType === "passkey" || status.isDeterministic) && (
         <p className="text-xs text-zinc-500 mt-2">
-          {authType === "passkey" 
-            ? "✓ Secured by your passkey" 
+          {status.source === "eoa" 
+            ? "✓ Secured by your wallet" 
+            : status.source === "passkey-prf" || status.source === "passkey-fallback"
+            ? "✓ Secured by your passkey"
             : "✓ Works on all your devices"}
         </p>
       )}
