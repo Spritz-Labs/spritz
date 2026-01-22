@@ -23,12 +23,9 @@ import {
   importKeypairToCache,
 } from "@/lib/messagingKey";
 
-// Storage keys for messaging keypairs
-// We use the same key as the existing system for backward compatibility
+// Storage keys for backward compatibility with existing system
 const MESSAGING_KEYPAIR_STORAGE = "waku_messaging_keypair";
-
-// Key to track how the keypair was derived (for UI display)
-const MESSAGING_KEYPAIR_SOURCE_STORAGE = "spritz_messaging_key_source";
+const MESSAGING_KEY_SOURCE_STORAGE = "spritz_messaging_key_source";
 
 export interface MessagingKeyContextType {
   // Status
@@ -43,7 +40,7 @@ export interface MessagingKeyContextType {
   publicKey: string | null;
   
   // Derived from (for UI display)
-  derivedFrom: "eoa" | "passkey-prf" | "passkey-fallback" | "legacy" | null;
+  derivedFrom: DerivedMessagingKey["derivedFrom"] | null;
   
   // Actions
   activateMessaging: () => Promise<MessagingKeyResult>;
@@ -52,6 +49,7 @@ export interface MessagingKeyContextType {
   // Auth info
   authType: AuthType | null;
   hasPasskey: boolean;
+  userAddress: string | null;
 }
 
 const MessagingKeyContext = createContext<MessagingKeyContextType | null>(null);
@@ -69,17 +67,13 @@ export function MessagingKeyProvider({
   authType,
   passkeyCredentialId,
 }: MessagingKeyProviderProps) {
-  const { address: wagmiAddress } = useAccount();
   const { data: walletClient } = useWalletClient();
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keypair, setKeypair] = useState<DerivedMessagingKey | null>(null);
   const [hasPasskey, setHasPasskey] = useState(false);
-  const [derivedFrom, setDerivedFrom] = useState<"eoa" | "passkey-prf" | "passkey-fallback" | "legacy" | null>(null);
-  
-  // Track if we've checked for legacy keypair
-  const [legacyChecked, setLegacyChecked] = useState(false);
+  const [localKeyLoaded, setLocalKeyLoaded] = useState(false);
   
   // Determine rpId for passkey operations
   const rpId = useMemo(() => {
@@ -99,8 +93,7 @@ export function MessagingKeyProvider({
       return;
     }
     
-    const db = supabase; // TypeScript now knows this is non-null
-    
+    const db = supabase; // Captured for TypeScript
     const checkPasskey = async () => {
       try {
         const { data, error: fetchError } = await db
@@ -125,79 +118,67 @@ export function MessagingKeyProvider({
     checkPasskey();
   }, [userAddress]);
   
-  // Check for cached or persisted keypair on mount
-  // This ensures users DON'T need to sign again after page refresh
+  // Load existing keypair from localStorage on mount
+  // This provides instant access without re-authentication
   useEffect(() => {
     if (!userAddress) {
       setKeypair(null);
-      setDerivedFrom(null);
-      setLegacyChecked(false);
+      setLocalKeyLoaded(false);
       return;
     }
     
-    // Check session cache first (survives within same session)
+    // Check session cache first
     const cached = getCachedKey(userAddress);
     if (cached) {
       setKeypair(cached);
-      setDerivedFrom(cached.derivedFrom);
-      setLegacyChecked(true);
-      console.log("[MessagingKey] ✅ Using cached keypair from session");
+      setLocalKeyLoaded(true);
       return;
     }
     
-    // Check localStorage for persisted keypair (survives page refresh/app restart)
-    if (typeof window !== "undefined" && !legacyChecked) {
+    // Check localStorage for persisted keypair
+    if (typeof window !== "undefined") {
       const storedJson = localStorage.getItem(MESSAGING_KEYPAIR_STORAGE);
       if (storedJson) {
         try {
           const stored = JSON.parse(storedJson);
           if (stored.publicKey && stored.privateKey) {
-            // Get the source from storage (if available)
-            const storedSource = localStorage.getItem(MESSAGING_KEYPAIR_SOURCE_STORAGE) as 
-              "eoa" | "passkey-prf" | "passkey-fallback" | null;
+            const storedSource = localStorage.getItem(MESSAGING_KEY_SOURCE_STORAGE) as 
+              DerivedMessagingKey["derivedFrom"] | null;
             
-            // Import stored keypair into session cache
             const storedKeypair: DerivedMessagingKey = {
               publicKey: stored.publicKey,
               privateKey: stored.privateKey,
-              derivedFrom: storedSource || "passkey-fallback",
+              derivedFrom: storedSource || "legacy",
             };
+            
+            // Import to session cache
             importKeypairToCache(userAddress, storedKeypair, storedKeypair.derivedFrom);
             setKeypair(storedKeypair);
-            setDerivedFrom(storedSource || "legacy");
-            console.log("[MessagingKey] ✅ Loaded keypair from localStorage - NO SIGNING NEEDED");
-            console.log("[MessagingKey] Key source:", storedSource || "legacy");
+            console.log("[MessagingKey] ✅ Loaded keypair from localStorage");
           }
         } catch {
-          // Invalid stored data, will need to re-derive
-          console.log("[MessagingKey] Invalid stored keypair, will need activation");
+          console.log("[MessagingKey] Invalid stored keypair");
         }
       }
-      setLegacyChecked(true);
+      setLocalKeyLoaded(true);
     }
-  }, [userAddress, legacyChecked]);
+  }, [userAddress]);
   
   // Determine if messaging requires activation
   const requiresActivation = useMemo(() => {
-    if (!userAddress || !authType) return false;
-    // Has cached/active key? No activation needed
-    if (keypair || (userAddress && hasCachedKey(userAddress))) return false;
-    // Has legacy key? No activation needed
-    if (derivedFrom === "legacy") return false;
-    // Otherwise, needs activation
+    if (!userAddress || !authType || !localKeyLoaded) return false;
+    if (keypair || hasCachedKey(userAddress)) return false;
     return true;
-  }, [userAddress, authType, keypair, derivedFrom]);
+  }, [userAddress, authType, keypair, localKeyLoaded]);
   
   // Determine if user needs to create a passkey first
   const requiresPasskey = useMemo(() => {
     if (!authType) return false;
-    // EOA and passkey users don't need to create a passkey
     if (authType === "wallet" || authType === "passkey") return false;
-    // Email/Digital ID/Solana users need a passkey if they don't have one
     return !hasPasskey;
   }, [authType, hasPasskey]);
   
-  // Activate messaging (derive key)
+  // Activate messaging (derive/restore key)
   const activateMessaging = useCallback(async (): Promise<MessagingKeyResult> => {
     if (!userAddress || !authType) {
       return { success: false, error: "Not authenticated" };
@@ -218,37 +199,20 @@ export function MessagingKeyProvider({
       
       if (result.success && result.keypair) {
         setKeypair(result.keypair);
-        setDerivedFrom(result.keypair.derivedFrom);
         
-        // ✅ PERSIST keypair to localStorage
-        // This means users only need to sign ONCE - key survives page refresh/app restart
+        // Persist to localStorage for fast loading on next visit
         if (typeof window !== "undefined") {
           localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify({
             publicKey: result.keypair.publicKey,
             privateKey: result.keypair.privateKey,
           }));
-          // Also save the derivation source for UI display
-          localStorage.setItem(MESSAGING_KEYPAIR_SOURCE_STORAGE, result.keypair.derivedFrom);
-          console.log("[MessagingKey] ✅ Keypair saved to localStorage - won't need to sign again");
+          localStorage.setItem(MESSAGING_KEY_SOURCE_STORAGE, result.keypair.derivedFrom);
         }
         
-        // Upload public key to Supabase for ECDH key exchange
-        if (supabase) {
-          try {
-            await supabase
-              .from("shout_user_settings")
-              .upsert({
-                wallet_address: userAddress.toLowerCase(),
-                messaging_public_key: result.keypair.publicKey,
-                updated_at: new Date().toISOString(),
-              }, {
-                onConflict: "wallet_address",
-              });
-            console.log("[MessagingKey] Public key uploaded to Supabase");
-          } catch (uploadError) {
-            console.warn("[MessagingKey] Failed to upload public key:", uploadError);
-            // Continue anyway - messaging will work locally
-          }
+        if (result.isNewKey) {
+          console.log("[MessagingKey] ✅ Deterministic keypair derived");
+        } else {
+          console.log("[MessagingKey] ✅ Keypair loaded from cache");
         }
       } else if (result.requiresPasskey) {
         setError(result.error || "Please add a passkey to enable secure messaging");
@@ -266,17 +230,21 @@ export function MessagingKeyProvider({
     }
   }, [userAddress, authType, walletClient, passkeyCredentialId, rpId, hasPasskey]);
   
-  // Deactivate messaging (clear session key)
+  // Deactivate messaging (clear local key)
   const deactivate = useCallback(() => {
     if (userAddress) {
       clearCachedKey(userAddress);
     }
+    // Clear localStorage - key can be re-derived deterministically
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(MESSAGING_KEYPAIR_STORAGE);
+      localStorage.removeItem(MESSAGING_KEY_SOURCE_STORAGE);
+    }
     setKeypair(null);
-    setDerivedFrom(null);
     setError(null);
   }, [userAddress]);
   
-  // Clear everything on logout
+  // Clear cache on unmount
   useEffect(() => {
     return () => {
       clearAllCachedKeys();
@@ -286,6 +254,7 @@ export function MessagingKeyProvider({
   // Derived state
   const isReady = !!keypair;
   const publicKey = keypair?.publicKey || null;
+  const derivedFrom = keypair?.derivedFrom || null;
   
   const value = useMemo(() => ({
     isReady,
@@ -300,6 +269,7 @@ export function MessagingKeyProvider({
     deactivate,
     authType,
     hasPasskey,
+    userAddress,
   }), [
     isReady,
     isLoading,
@@ -313,6 +283,7 @@ export function MessagingKeyProvider({
     deactivate,
     authType,
     hasPasskey,
+    userAddress,
   ]);
   
   return (
@@ -330,9 +301,6 @@ export function useMessagingKeyContext() {
   return context;
 }
 
-/**
- * Optional hook that doesn't throw if outside provider
- */
 export function useMessagingKeyContextOptional(): MessagingKeyContextType | null {
   return useContext(MessagingKeyContext);
 }

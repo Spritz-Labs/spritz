@@ -75,12 +75,12 @@ export function MessagingStatus({ compact = false, showDetails = false, classNam
           )}
         </button>
         
-        {showModal && authType && (
+        {showModal && authType && messagingKey.userAddress && (
           <EnableMessagingModal
             isOpen={showModal}
             onClose={() => setShowModal(false)}
             authType={authType}
-            userAddress={messagingKey.publicKey || ""}
+            userAddress={messagingKey.userAddress}
             onActivate={activateMessaging}
             isLoading={isLoading}
           />
@@ -158,12 +158,12 @@ export function MessagingStatus({ compact = false, showDetails = false, classNam
         </div>
       )}
       
-      {showModal && authType && (
+      {showModal && authType && messagingKey.userAddress && (
         <EnableMessagingModal
           isOpen={showModal}
           onClose={() => setShowModal(false)}
           authType={authType}
-          userAddress={messagingKey.publicKey || ""}
+          userAddress={messagingKey.userAddress}
           onActivate={activateMessaging}
           isLoading={isLoading}
         />
@@ -246,12 +246,12 @@ export function MessagingActivationRequired({
         </motion.div>
       </AnimatePresence>
       
-      {showModal && authType && (
+      {showModal && authType && messagingKey.userAddress && (
         <EnableMessagingModal
           isOpen={showModal}
           onClose={() => setShowModal(false)}
           authType={authType}
-          userAddress={messagingKey.publicKey || ""}
+          userAddress={messagingKey.userAddress}
           onActivate={activateMessaging}
           isLoading={isLoading}
         />

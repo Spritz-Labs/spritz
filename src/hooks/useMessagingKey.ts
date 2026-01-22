@@ -43,7 +43,7 @@ export interface UseMessagingKeyReturn {
   deactivate: () => void;
   
   // Info
-  derivedFrom: "eoa" | "passkey-prf" | "passkey-fallback" | null;
+  derivedFrom: "eoa" | "passkey-prf" | "passkey-fallback" | "legacy" | null;
 }
 
 export interface UseMessagingKeyOptions {

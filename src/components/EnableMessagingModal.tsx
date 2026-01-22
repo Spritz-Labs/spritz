@@ -39,6 +39,13 @@ export function EnableMessagingModal({
   
   const passkeyContext = usePasskeyContext();
   
+  // Clear error and passkey prompt when modal closes
+  const handleClose = () => {
+    setError(null);
+    setShowPasskeyPrompt(false);
+    onClose();
+  };
+  
   const isLoading = externalLoading || isActivating || passkeyContext.isLoading;
   
   const handleActivate = useCallback(async () => {
@@ -49,7 +56,7 @@ export function EnableMessagingModal({
       const result = await onActivate();
       
       if (result.success) {
-        onClose();
+        handleClose();
       } else if (result.requiresPasskey) {
         setShowPasskeyPrompt(true);
       } else {
@@ -60,12 +67,12 @@ export function EnableMessagingModal({
     } finally {
       setIsActivating(false);
     }
-  }, [onActivate, onClose]);
+  }, [onActivate, handleClose]);
   
   const handleAddPasskey = useCallback(async () => {
     if (onAddPasskey) {
       onAddPasskey();
-      onClose();
+      handleClose();
       return;
     }
     
@@ -82,7 +89,7 @@ export function EnableMessagingModal({
         setShowPasskeyPrompt(false);
         const result = await onActivate();
         if (result.success) {
-          onClose();
+          handleClose();
         } else {
           setError(result.error || "Passkey created, but messaging activation failed");
         }
@@ -94,7 +101,7 @@ export function EnableMessagingModal({
     } finally {
       setIsActivating(false);
     }
-  }, [onAddPasskey, onClose, passkeyContext, userAddress, onActivate]);
+  }, [onAddPasskey, handleClose, passkeyContext, userAddress, onActivate]);
   
   // Get content based on auth type and state
   const getContent = () => {
@@ -136,20 +143,20 @@ export function EnableMessagingModal({
           description: (
             <>
               <p className="text-zinc-400 mb-4">
-                Sign a message to generate your encryption key.
+                Sign once to generate your encryption key. It&apos;s deterministic – the same key on every device!
               </p>
               <div className="space-y-3 text-sm text-zinc-500">
                 <div className="flex items-start gap-3">
                   <span className="text-lg">🔄</span>
-                  <span>Same key on all devices using this wallet</span>
+                  <span>Same key on ALL devices with this wallet</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="text-lg">🚫</span>
-                  <span>No keys stored – derived from your wallet</span>
+                  <span>No backup needed – just sign again</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="text-lg">🔐</span>
-                  <span>Only you can decrypt your messages</span>
+                  <span>Only your wallet can derive your key</span>
                 </div>
               </div>
             </>
@@ -165,16 +172,16 @@ export function EnableMessagingModal({
           description: (
             <>
               <p className="text-zinc-400 mb-4">
-                Verify your passkey to enable end-to-end encrypted messaging.
+                Verify your passkey to generate your encryption key. Works on any device with your passkey!
               </p>
               <div className="space-y-3 text-sm text-zinc-500">
                 <div className="flex items-start gap-3">
-                  <span className="text-lg">☁️</span>
-                  <span>Same key synced via iCloud / Google</span>
+                  <span className="text-lg">🔄</span>
+                  <span>Same key on ALL devices (iCloud/Google sync)</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="text-lg">🚫</span>
-                  <span>No keys stored – derived from passkey</span>
+                  <span>No backup needed – just verify again</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="text-lg">🛡️</span>
@@ -225,7 +232,7 @@ export function EnableMessagingModal({
           primaryAction: "Add Passkey to Continue",
           onPrimary: handleAddPasskey,
           secondaryAction: "Skip for Now",
-          onSecondary: onClose,
+          onSecondary: handleClose,
           secondaryNote: "(You won't be able to message until you add one)",
         };
         
@@ -251,7 +258,7 @@ export function EnableMessagingModal({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={handleClose}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
           />
 
@@ -266,7 +273,7 @@ export function EnableMessagingModal({
               {/* Header */}
               <div className="relative p-6 pb-4 text-center">
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="absolute top-4 right-4 p-2 rounded-full hover:bg-zinc-800 transition-colors"
                   aria-label="Close"
                 >
@@ -345,7 +352,7 @@ export function EnableMessagingModal({
               {/* Footer info */}
               <div className="px-6 py-4 bg-zinc-800/30 border-t border-zinc-800">
                 <p className="text-xs text-zinc-500 text-center">
-                  🔒 Your encryption keys are never stored on our servers
+                  🔒 Deterministic: Same key derived every time, nothing stored on servers
                 </p>
               </div>
             </div>
