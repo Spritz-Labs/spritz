@@ -593,15 +593,22 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const { isConnected } = useAccount();
     const { open: openConnectModal } = useAppKit();
     
+    // IMPORTANT: Default to "wallet" if authMethod is not provided
+    // This ensures EOA users never get passkey prompts
+    const effectiveAuthMethod = authMethod || "wallet";
+    
     // Determine if user authenticated via passkey (needs Safe signing)
-    const isPasskeyUser = authMethod === "passkey";
+    const isPasskeyUser = effectiveAuthMethod === "passkey";
     
     // For email/digital_id/world_id/solana users, they should use passkey signing
     // This means we don't store any private keys - passkey is the only signer
     // Solana users need passkey because Solana wallets can't sign EVM transactions
-    const isSolanaUser = authMethod === "solana";
-    const needsPasskeyForSend = authMethod === "email" || authMethod === "alien_id" || authMethod === "world_id" || isSolanaUser;
-    const canUsePasskeySigning = isPasskeyUser || needsPasskeyForSend;
+    const isSolanaUser = effectiveAuthMethod === "solana";
+    const needsPasskeyForSend = effectiveAuthMethod === "email" || effectiveAuthMethod === "alien_id" || effectiveAuthMethod === "world_id" || isSolanaUser;
+    
+    // CRITICAL: Only use passkey signing for non-wallet users
+    // Wallet users should NEVER trigger passkey signing - they sign with their connected wallet
+    const canUsePasskeySigning = effectiveAuthMethod !== "wallet" && (isPasskeyUser || needsPasskeyForSend);
 
     // Get Smart Wallet (Safe) address
     const { smartWallet, isLoading: isSmartWalletLoading } = useSmartWallet(
@@ -715,12 +722,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
     // Initialize passkey Safe when modal opens for users who can use passkey signing
     // This includes: passkey users, email users, alien_id users, world_id users
+    // IMPORTANT: Wallet users (effectiveAuthMethod === "wallet") should NEVER trigger this
     useEffect(() => {
         if (isOpen && canUsePasskeySigning && userAddress && !isPasskeyReady && passkeyStatus === "idle") {
-            console.log("[WalletModal] Initializing passkey Safe for user:", userAddress.slice(0, 10), "authMethod:", authMethod);
+            console.log("[WalletModal] Initializing passkey Safe for user:", userAddress.slice(0, 10), "authMethod:", effectiveAuthMethod);
             initializePasskey(userAddress as Address);
         }
-    }, [isOpen, canUsePasskeySigning, userAddress, isPasskeyReady, passkeyStatus, initializePasskey, authMethod]);
+    }, [isOpen, canUsePasskeySigning, userAddress, isPasskeyReady, passkeyStatus, initializePasskey, effectiveAuthMethod]);
 
     // Onramp (Buy crypto) hook
     const {
@@ -983,7 +991,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         if (canUsePasskeySigning) {
             // Send via passkey-signed Safe transaction
             // This works for passkey, email, alien_id, and world_id users
-            console.log("[WalletModal] Sending via passkey Safe to:", resolvedRecipient, "authMethod:", authMethod);
+            console.log("[WalletModal] Sending via passkey Safe to:", resolvedRecipient, "authMethod:", effectiveAuthMethod);
             hash = await sendPasskeyTransaction(
                 resolvedRecipient,
                 actualSendAmount,
@@ -1033,7 +1041,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 refreshTx();
             }, 15000);
         }
-    }, [sendToken, resolvedRecipient, actualSendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId, useEOAForGas]);
+    }, [sendToken, resolvedRecipient, actualSendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, effectiveAuthMethod, refresh, refreshTx, selectedChainId, useEOAForGas]);
 
     // Reset send form
     const resetSendForm = useCallback(() => {
