@@ -16,6 +16,13 @@ type KnowledgeItem = {
     created_at: string;
     indexed_at: string | null;
     isIndexing?: boolean; // Client-side loading state
+    // Firecrawl fields
+    scrape_method?: "basic" | "firecrawl";
+    crawl_depth?: number;
+    auto_sync?: boolean;
+    sync_interval_hours?: number;
+    last_synced_at?: string | null;
+    exclude_patterns?: string[];
 };
 
 interface AgentKnowledgeModalProps {
@@ -24,6 +31,15 @@ interface AgentKnowledgeModalProps {
     agent: Agent | null;
     userAddress: string;
 }
+
+// Firecrawl advanced options state
+type FirecrawlOptions = {
+    scrapeMethod: "basic" | "firecrawl";
+    crawlDepth: number;
+    autoSync: boolean;
+    syncIntervalHours: number;
+    excludePatterns: string;
+};
 
 const STATUS_CONFIG = {
     pending: { label: "Pending", color: "text-yellow-400", bg: "bg-yellow-500/10", icon: "⏳" },
@@ -38,12 +54,42 @@ const CONTENT_TYPE_ICONS = {
     webpage: "🌐",
 };
 
+// Helper to format time ago
+function formatTimeAgo(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+}
+
 export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: AgentKnowledgeModalProps) {
     const [items, setItems] = useState<KnowledgeItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [newUrl, setNewUrl] = useState("");
     const [isAdding, setIsAdding] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [syncingItemId, setSyncingItemId] = useState<string | null>(null);
+    
+    // Firecrawl options (only for official agents)
+    const [firecrawlOptions, setFirecrawlOptions] = useState<FirecrawlOptions>({
+        scrapeMethod: "basic",
+        crawlDepth: 1,
+        autoSync: false,
+        syncIntervalHours: 24,
+        excludePatterns: "",
+    });
+    
+    // Check if this is an official agent
+    const isOfficialAgent = agent?.visibility === "official";
 
     // Fetch knowledge items
     const fetchItems = useCallback(async () => {
@@ -92,10 +138,33 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
         setError(null);
 
         try {
+            // Build request body with Firecrawl options for official agents
+            const requestBody: Record<string, unknown> = { 
+                userAddress, 
+                url: newUrl.trim() 
+            };
+            
+            // Add Firecrawl options if enabled and official agent
+            if (isOfficialAgent && firecrawlOptions.scrapeMethod === "firecrawl") {
+                requestBody.scrapeMethod = firecrawlOptions.scrapeMethod;
+                requestBody.crawlDepth = firecrawlOptions.crawlDepth;
+                requestBody.autoSync = firecrawlOptions.autoSync;
+                requestBody.syncIntervalHours = firecrawlOptions.syncIntervalHours;
+                
+                // Parse exclude patterns
+                const patterns = firecrawlOptions.excludePatterns
+                    .split("\n")
+                    .map(p => p.trim())
+                    .filter(Boolean);
+                if (patterns.length > 0) {
+                    requestBody.excludePatterns = patterns;
+                }
+            }
+            
             const res = await fetch(`/api/agents/${agent.id}/knowledge`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userAddress, url: newUrl.trim() }),
+                body: JSON.stringify(requestBody),
             });
 
             const data = await res.json();
@@ -106,10 +175,53 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
 
             setItems((prev) => [data.item, ...prev]);
             setNewUrl("");
+            
+            // Reset Firecrawl options after successful add
+            setFirecrawlOptions({
+                scrapeMethod: "basic",
+                crawlDepth: 1,
+                autoSync: false,
+                syncIntervalHours: 24,
+                excludePatterns: "",
+            });
+            setShowAdvanced(false);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to add URL");
         } finally {
             setIsAdding(false);
+        }
+    };
+    
+    // Manual sync trigger for a knowledge item
+    const handleManualSync = async (itemId: string) => {
+        if (!agent || syncingItemId) return;
+
+        setSyncingItemId(itemId);
+        setError(null);
+
+        try {
+            const res = await fetch(`/api/cron/sync-knowledge`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    userAddress,
+                    knowledgeId: itemId,
+                    agentId: agent.id,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to sync");
+            }
+
+            // Refresh items to get updated status
+            await fetchItems();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to sync");
+        } finally {
+            setSyncingItemId(null);
         }
     };
 
@@ -214,7 +326,7 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                         placeholder="Add URL (GitHub, docs, webpage...)"
                                         className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"
                                         onKeyDown={(e) => {
-                                            if (e.key === "Enter") handleAddUrl();
+                                            if (e.key === "Enter" && !showAdvanced) handleAddUrl();
                                         }}
                                     />
                                     <button
@@ -240,6 +352,176 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                 <p className="text-xs text-zinc-500 mt-2">
                                     Add URLs to help your agent learn. Supports GitHub repos, documentation sites, and web pages.
                                 </p>
+                                
+                                {/* Advanced Options (Official Agents Only) */}
+                                {isOfficialAgent && (
+                                    <div className="mt-3">
+                                        <button
+                                            onClick={() => setShowAdvanced(!showAdvanced)}
+                                            className="flex items-center gap-2 text-xs text-orange-400 hover:text-orange-300 transition-colors"
+                                        >
+                                            <svg 
+                                                className={`w-4 h-4 transition-transform ${showAdvanced ? "rotate-90" : ""}`} 
+                                                fill="none" 
+                                                stroke="currentColor" 
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                            </svg>
+                                            <span className="flex items-center gap-1">
+                                                🔥 Firecrawl Options
+                                                <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded text-[10px] font-medium">
+                                                    Official
+                                                </span>
+                                            </span>
+                                        </button>
+                                        
+                                        <AnimatePresence>
+                                            {showAdvanced && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: "auto" }}
+                                                    exit={{ opacity: 0, height: 0 }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="mt-3 p-4 bg-zinc-800/50 border border-orange-500/30 rounded-xl space-y-4">
+                                                        {/* Scrape Method Toggle */}
+                                                        <div>
+                                                            <label className="text-xs font-medium text-zinc-300 mb-2 block">
+                                                                Scrape Method
+                                                            </label>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => setFirecrawlOptions(prev => ({ ...prev, scrapeMethod: "basic" }))}
+                                                                    className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-all ${
+                                                                        firecrawlOptions.scrapeMethod === "basic"
+                                                                            ? "bg-zinc-700 border-zinc-600 text-white"
+                                                                            : "bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                                                                    }`}
+                                                                >
+                                                                    Basic (HTML)
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setFirecrawlOptions(prev => ({ ...prev, scrapeMethod: "firecrawl" }))}
+                                                                    className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-all ${
+                                                                        firecrawlOptions.scrapeMethod === "firecrawl"
+                                                                            ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
+                                                                            : "bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                                                                    }`}
+                                                                >
+                                                                    🔥 Firecrawl
+                                                                </button>
+                                                            </div>
+                                                            <p className="text-[10px] text-zinc-500 mt-1">
+                                                                Firecrawl provides better content extraction and can crawl multiple pages.
+                                                            </p>
+                                                        </div>
+                                                        
+                                                        {firecrawlOptions.scrapeMethod === "firecrawl" && (
+                                                            <>
+                                                                {/* Crawl Depth */}
+                                                                <div>
+                                                                    <label className="text-xs font-medium text-zinc-300 mb-2 block">
+                                                                        Crawl Depth: {firecrawlOptions.crawlDepth} page{firecrawlOptions.crawlDepth > 1 ? "s" : ""}
+                                                                    </label>
+                                                                    <input
+                                                                        type="range"
+                                                                        min={1}
+                                                                        max={5}
+                                                                        value={firecrawlOptions.crawlDepth}
+                                                                        onChange={(e) => setFirecrawlOptions(prev => ({ 
+                                                                            ...prev, 
+                                                                            crawlDepth: parseInt(e.target.value) 
+                                                                        }))}
+                                                                        className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                                                    />
+                                                                    <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
+                                                                        <span>1 (single page)</span>
+                                                                        <span>5 (deep crawl)</span>
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                {/* Auto Sync */}
+                                                                <div className="flex items-center justify-between">
+                                                                    <div>
+                                                                        <label className="text-xs font-medium text-zinc-300 block">
+                                                                            Auto Sync
+                                                                        </label>
+                                                                        <p className="text-[10px] text-zinc-500">
+                                                                            Automatically re-crawl on a schedule
+                                                                        </p>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => setFirecrawlOptions(prev => ({ 
+                                                                            ...prev, 
+                                                                            autoSync: !prev.autoSync 
+                                                                        }))}
+                                                                        className={`w-12 h-6 rounded-full transition-colors relative ${
+                                                                            firecrawlOptions.autoSync 
+                                                                                ? "bg-orange-500" 
+                                                                                : "bg-zinc-700"
+                                                                        }`}
+                                                                    >
+                                                                        <span 
+                                                                            className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                                                firecrawlOptions.autoSync 
+                                                                                    ? "translate-x-7" 
+                                                                                    : "translate-x-1"
+                                                                            }`}
+                                                                        />
+                                                                    </button>
+                                                                </div>
+                                                                
+                                                                {/* Sync Interval (only if auto sync enabled) */}
+                                                                {firecrawlOptions.autoSync && (
+                                                                    <div>
+                                                                        <label className="text-xs font-medium text-zinc-300 mb-2 block">
+                                                                            Sync Interval
+                                                                        </label>
+                                                                        <select
+                                                                            value={firecrawlOptions.syncIntervalHours}
+                                                                            onChange={(e) => setFirecrawlOptions(prev => ({ 
+                                                                                ...prev, 
+                                                                                syncIntervalHours: parseInt(e.target.value) 
+                                                                            }))}
+                                                                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-orange-500"
+                                                                        >
+                                                                            <option value={6}>Every 6 hours</option>
+                                                                            <option value={12}>Every 12 hours</option>
+                                                                            <option value={24}>Every 24 hours (daily)</option>
+                                                                            <option value={48}>Every 2 days</option>
+                                                                            <option value={168}>Every 7 days (weekly)</option>
+                                                                        </select>
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {/* Exclude Patterns */}
+                                                                <div>
+                                                                    <label className="text-xs font-medium text-zinc-300 mb-2 block">
+                                                                        Exclude Patterns (optional)
+                                                                    </label>
+                                                                    <textarea
+                                                                        value={firecrawlOptions.excludePatterns}
+                                                                        onChange={(e) => setFirecrawlOptions(prev => ({ 
+                                                                            ...prev, 
+                                                                            excludePatterns: e.target.value 
+                                                                        }))}
+                                                                        placeholder={"/blog/*\n/pricing\n/login"}
+                                                                        rows={3}
+                                                                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-orange-500 resize-none"
+                                                                    />
+                                                                    <p className="text-[10px] text-zinc-500 mt-1">
+                                                                        One pattern per line. Use * for wildcards.
+                                                                    </p>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -273,23 +555,40 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                 <div className="space-y-3">
                                     {items.map((item) => {
                                         const status = STATUS_CONFIG[item.status];
+                                        const isFirecrawl = item.scrape_method === "firecrawl";
+                                        const isSyncing = syncingItemId === item.id;
+                                        
                                         return (
                                             <motion.div
                                                 key={item.id}
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
-                                                className="group p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-xl hover:border-zinc-600 transition-all"
+                                                className={`group p-4 bg-zinc-800/50 border rounded-xl hover:border-zinc-600 transition-all ${
+                                                    isFirecrawl ? "border-orange-500/30" : "border-zinc-700/50"
+                                                }`}
                                             >
                                                 <div className="flex items-start gap-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-zinc-700/50 flex items-center justify-center text-xl shrink-0">
-                                                        {CONTENT_TYPE_ICONS[item.content_type]}
+                                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl shrink-0 ${
+                                                        isFirecrawl ? "bg-orange-500/20" : "bg-zinc-700/50"
+                                                    }`}>
+                                                        {isFirecrawl ? "🔥" : CONTENT_TYPE_ICONS[item.content_type]}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-2 flex-wrap">
                                                             <h4 className="font-medium text-white truncate">{item.title}</h4>
                                                             <span className={`text-xs px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>
                                                                 {status.icon} {status.label}
                                                             </span>
+                                                            {isFirecrawl && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded font-medium">
+                                                                    Firecrawl
+                                                                </span>
+                                                            )}
+                                                            {item.auto_sync && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">
+                                                                    Auto-sync
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <a
                                                             href={item.url}
@@ -302,11 +601,24 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                         {item.status === "failed" && item.error_message && (
                                                             <p className="text-xs text-red-400 mt-1">{item.error_message}</p>
                                                         )}
-                                                        {item.status === "indexed" && item.chunk_count > 0 && (
-                                                            <p className="text-xs text-zinc-500 mt-1">
-                                                                {item.chunk_count} chunks indexed
-                                                            </p>
-                                                        )}
+                                                        <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+                                                            {item.status === "indexed" && item.chunk_count > 0 && (
+                                                                <span>{item.chunk_count} chunks</span>
+                                                            )}
+                                                            {item.crawl_depth && item.crawl_depth > 1 && (
+                                                                <span>Depth: {item.crawl_depth}</span>
+                                                            )}
+                                                            {item.last_synced_at && (
+                                                                <span title={new Date(item.last_synced_at).toLocaleString()}>
+                                                                    Synced: {formatTimeAgo(item.last_synced_at)}
+                                                                </span>
+                                                            )}
+                                                            {item.auto_sync && item.sync_interval_hours && (
+                                                                <span>
+                                                                    Every {item.sync_interval_hours}h
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-1 shrink-0">
                                                         {/* Index button - show for pending or failed */}
@@ -328,6 +640,27 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                                     </svg>
                                                                 )}
                                                                 Index
+                                                            </button>
+                                                        )}
+                                                        {/* Manual Sync button - show for indexed Firecrawl items */}
+                                                        {item.status === "indexed" && isFirecrawl && isOfficialAgent && (
+                                                            <button
+                                                                onClick={() => handleManualSync(item.id)}
+                                                                disabled={isSyncing}
+                                                                className="px-2 py-1.5 text-xs bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg transition-colors flex items-center gap-1"
+                                                                title="Manually re-sync this source"
+                                                            >
+                                                                {isSyncing ? (
+                                                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                                    </svg>
+                                                                ) : (
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                    </svg>
+                                                                )}
+                                                                Sync
                                                             </button>
                                                         )}
                                                         {/* Processing indicator */}
@@ -362,7 +695,12 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                         {/* Footer */}
                         <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
                             <div className="flex items-center justify-between text-xs text-zinc-500">
-                                <span>{items.length}/10 knowledge sources</span>
+                                <span>
+                                    {items.length}/{isOfficialAgent ? 50 : 10} knowledge sources
+                                    {isOfficialAgent && (
+                                        <span className="ml-2 text-orange-400">🔥 Official</span>
+                                    )}
+                                </span>
                                 <span className="flex items-center gap-2">
                                     {items.filter(i => i.status === "indexed").length > 0 && (
                                         <span className="text-green-400">
@@ -372,6 +710,11 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                     {items.filter(i => i.status === "pending").length > 0 && (
                                         <span className="text-yellow-400">
                                             ⏳ {items.filter(i => i.status === "pending").length} pending
+                                        </span>
+                                    )}
+                                    {isOfficialAgent && items.filter(i => i.auto_sync).length > 0 && (
+                                        <span className="text-orange-400">
+                                            🔄 {items.filter(i => i.auto_sync).length} auto-sync
                                         </span>
                                     )}
                                 </span>
