@@ -205,6 +205,10 @@ export function ChatModal({
             setActiveChatPeer(peerAddress);
             // Also explicitly mark as read to clear any existing unread count
             markAsRead(peerAddress);
+            // Scroll to bottom when opening (if messages already loaded)
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+            }, 150);
             console.log(
                 "[Chat] Opened chat with",
                 peerAddress,

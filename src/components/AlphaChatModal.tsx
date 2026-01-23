@@ -264,12 +264,14 @@ export function AlphaChatModal({
     // Scroll to bottom immediately when modal opens
     useEffect(() => {
         if (isOpen && messages.length > 0) {
+            // Reset scroll tracking when opening
+            userScrolledUpRef.current = false;
             // Use setTimeout to ensure DOM is rendered
             setTimeout(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
             }, 100);
         }
-    }, [isOpen, messages.length]);
+    }, [isOpen]); // Only trigger on isOpen change
 
     // Mark as read when opening and when new messages arrive while open
     useEffect(() => {

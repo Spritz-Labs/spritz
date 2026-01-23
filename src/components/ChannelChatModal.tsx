@@ -243,6 +243,18 @@ export function ChannelChatModal({
         }
     }, [isLoadingMore, hasMore, loadMoreMessages]);
 
+    // Scroll to bottom when modal opens
+    useEffect(() => {
+        if (isOpen && messages.length > 0) {
+            // Reset scroll tracking when opening
+            userScrolledUpRef.current = false;
+            // Use setTimeout to ensure DOM is rendered
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+            }, 100);
+        }
+    }, [isOpen]); // Only trigger on isOpen change, not messages
+
     // Fetch user info for message senders not in cache
     useEffect(() => {
         if (!messages || messages.length === 0) return;

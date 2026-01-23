@@ -169,12 +169,18 @@ export function GroupChatModal({
         }
     }, [messages]);
 
-    // Reset initial load flag when modal opens
+    // Reset initial load flag and scroll to bottom when modal opens
     useEffect(() => {
         if (isOpen) {
             isInitialLoadRef.current = true;
+            // Also scroll immediately if messages are already loaded
+            if (messages.length > 0) {
+                setTimeout(() => {
+                    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+                }, 100);
+            }
         }
-    }, [isOpen]);
+    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Fetch reactions for all messages
     useEffect(() => {
