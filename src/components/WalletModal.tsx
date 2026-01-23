@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { QRCodeSVG } from "qrcode.react";
 import { type Address } from "viem";
-import { useAccount } from "wagmi";
+import { useAccount, useReconnect } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
 import { useWalletBalances, formatUsd, formatTokenBalance } from "@/hooks/useWalletBalances";
 import { useSmartWallet } from "@/hooks/useSmartWallet";
@@ -591,7 +591,10 @@ type WalletTabType = "balances" | "send" | "history" | "receive" | "security";
 export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authMethod }: WalletModalProps) {
     // Check if wallet is connected (for sending)
     const { isConnected } = useAccount();
+    const { reconnect, connectors } = useReconnect();
     const { open: openConnectModal } = useAppKit();
+    const [isAutoReconnecting, setIsAutoReconnecting] = useState(false);
+    const autoReconnectAttemptedRef = useRef(false);
     
     // IMPORTANT: Default to "wallet" if authMethod is not provided
     // This ensures EOA users never get passkey prompts
@@ -753,6 +756,68 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             initializePasskey(userAddress as Address);
         }
     }, [isOpen, canUsePasskeySigning, userAddress, isPasskeyReady, passkeyStatus, initializePasskey, effectiveAuthMethod]);
+
+    // Auto-reconnect wallet for PWA users when Send tab is opened
+    // This runs silently in the background - no UI shown
+    useEffect(() => {
+        // Only for wallet users who are disconnected and on Send tab
+        if (!isOpen || activeTab !== "send" || isConnected || effectiveAuthMethod !== "wallet" || canUsePasskeySigning) {
+            return;
+        }
+        
+        // Only attempt once per modal open to avoid spam
+        if (autoReconnectAttemptedRef.current) {
+            return;
+        }
+        
+        // Check if there's a saved session to reconnect
+        const hasSavedSession = (() => {
+            try {
+                const wagmiState = localStorage.getItem("wagmi.store");
+                if (wagmiState) {
+                    const parsed = JSON.parse(wagmiState);
+                    if (parsed?.state?.current || parsed?.state?.connections) {
+                        return true;
+                    }
+                }
+                for (const key of Object.keys(localStorage)) {
+                    if (key.startsWith("wc@") || key.startsWith("@reown") || key.includes("walletconnect")) {
+                        return true;
+                    }
+                }
+            } catch {
+                // Ignore
+            }
+            return false;
+        })();
+        
+        if (!hasSavedSession) {
+            return;
+        }
+        
+        autoReconnectAttemptedRef.current = true;
+        setIsAutoReconnecting(true);
+        console.log("[WalletModal] Auto-reconnecting wallet for PWA user...");
+        
+        // Attempt silent reconnection
+        try {
+            reconnect({ connectors });
+        } catch {
+            // Silently fail - user can manually reconnect
+        }
+        
+        // Give reconnection a few seconds to complete, then hide spinner
+        setTimeout(() => {
+            setIsAutoReconnecting(false);
+        }, 3000);
+    }, [isOpen, activeTab, isConnected, effectiveAuthMethod, canUsePasskeySigning, reconnect, connectors]);
+    
+    // Reset auto-reconnect flag when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            autoReconnectAttemptedRef.current = false;
+        }
+    }, [isOpen]);
 
     // Onramp (Buy crypto) hook
     const {
@@ -1847,34 +1912,44 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     ) : !isConnected && effectiveAuthMethod === "wallet" && !canUsePasskeySigning ? (
                                         // Only show "Reconnect to Send" for wallet users who need wallet connection
                                         // Passkey/email/digital_id users don't need wallet connection
-                                        // Double-check: ensure we're not showing this to passkey users
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
-                                                <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                                </svg>
-                                            </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Reconnect to Send</h3>
-                                            <p className="text-sm text-zinc-400 mb-4 max-w-xs">
-                                                Your wallet session expired. Reconnect to sign transactions.
-                                            </p>
-                                            <button
-                                                onClick={() => openConnectModal?.()}
-                                                className="w-full max-w-[200px] px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
-                                            >
-                                                Reconnect Wallet
-                                            </button>
-                                            <div className="mt-6 pt-4 border-t border-zinc-800 w-full max-w-xs">
-                                                <p className="text-xs text-zinc-500 mb-3">
-                                                    💡 Set up a passkey to send without reconnecting
-                                                </p>
-                                                <button
-                                                    onClick={() => setActiveTab("security")}
-                                                    className="text-xs text-purple-400 hover:text-purple-300 font-medium"
-                                                >
-                                                    Go to Security →
-                                                </button>
-                                            </div>
+                                            {isAutoReconnecting ? (
+                                                // Auto-reconnecting state - show spinner
+                                                <>
+                                                    <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
+                                                    <p className="text-sm text-zinc-400">Reconnecting wallet...</p>
+                                                </>
+                                            ) : (
+                                                // Disconnected state - show reconnect options
+                                                <>
+                                                    <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+                                                        <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                        </svg>
+                                                    </div>
+                                                    <h3 className="text-lg font-semibold text-white mb-2">Wallet Disconnected</h3>
+                                                    <p className="text-sm text-zinc-400 mb-4 max-w-xs">
+                                                        Your wallet session expired. This commonly happens on mobile PWA apps.
+                                                    </p>
+                                                    <button
+                                                        onClick={() => openConnectModal?.()}
+                                                        className="w-full max-w-[200px] px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
+                                                    >
+                                                        Reconnect Wallet
+                                                    </button>
+                                                    <div className="mt-6 pt-4 border-t border-zinc-800 w-full max-w-xs">
+                                                        <p className="text-xs text-zinc-500 mb-3">
+                                                            💡 <strong>Tip for PWA users:</strong> Set up a passkey to send without needing wallet reconnection
+                                                        </p>
+                                                        <button
+                                                            onClick={() => setActiveTab("security")}
+                                                            className="text-xs text-purple-400 hover:text-purple-300 font-medium"
+                                                        >
+                                                            Go to Security →
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     ) : (
                                     <>
