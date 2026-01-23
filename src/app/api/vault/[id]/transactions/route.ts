@@ -386,25 +386,17 @@ export async function POST(
             return NextResponse.json({ error: "Failed to create transaction" }, { status: 500 });
         }
 
-        // Auto-sign by creator
-        const { error: signError } = await supabase
-            .from("shout_vault_confirmations")
-            .insert({
-                transaction_id: transaction.id,
-                signer_address: membership.smart_wallet_address?.toLowerCase() || user.userAddress.toLowerCase(),
-                signature: "auto_signed_by_proposer", // Placeholder - real signature would come from wallet
-            });
-
-        if (signError) {
-            console.error("[Vault Transactions] Auto-sign error:", signError);
-        }
+        // NOTE: We no longer auto-sign with a placeholder.
+        // The creator must sign properly like all other signers.
+        // This ensures all signatures are real and can be used for execution.
 
         return NextResponse.json({ 
             success: true, 
             transaction,
+            safeTxHash, // Return the hash so creator can sign it
             message: vault.threshold === 1 
-                ? "Transaction ready to execute" 
-                : `Transaction proposed. ${vault.threshold - 1} more signature(s) needed.`
+                ? "Transaction proposed! Sign to execute." 
+                : `Transaction proposed. ${vault.threshold} signature(s) needed.`
         });
     } catch (error) {
         console.error("[Vault Transactions] Error:", error);

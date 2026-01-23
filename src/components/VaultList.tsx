@@ -1185,13 +1185,57 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
             const data = await response.json();
             
-            if (response.ok) {
-                alert(data.message || "Transaction proposed!");
+            if (response.ok && data.transaction) {
                 // Reset form
                 setSendAmount("");
                 setIsUsdMode(false);
                 setSendToken(null);
                 ensResolver.clear();
+                
+                // Now sign the transaction we just created
+                // This ensures the creator's signature is a real one (not a placeholder)
+                const userMember = selectedVault.members.find(
+                    (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+                );
+                const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
+                
+                console.log("[VaultList] Proposer signing their own transaction...");
+                
+                const signResult = await vaultExecution.signTransaction({
+                    safeAddress: selectedVault.safeAddress as Address,
+                    chainId: selectedVault.chainId,
+                    to: data.transaction.to_address as Address,
+                    value: data.transaction.value || "0",
+                    data: (data.transaction.data || "0x") as Hex,
+                    nonce: data.transaction.nonce,
+                    smartWalletAddress: userSmartWalletAddress,
+                });
+                
+                if (signResult.success && signResult.signature) {
+                    // Store the creator's real signature
+                    const signResponse = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({
+                            transactionId: data.transaction.id,
+                            action: "sign",
+                            signature: signResult.signature,
+                            signerAddress: signResult.signerAddress,
+                            safeTxHash: signResult.safeTxHash,
+                        }),
+                    });
+                    
+                    const signData = await signResponse.json();
+                    if (signResponse.ok) {
+                        alert(signData.message || "Transaction proposed and signed!");
+                    } else {
+                        alert(`Transaction proposed but signing failed: ${signData.error}`);
+                    }
+                } else {
+                    alert(`Transaction proposed but signing failed: ${signResult.error || "Unknown error"}`);
+                }
+                
                 // Refresh pending txs and switch to activity tab
                 fetchPendingTxs(selectedVault.id);
                 setActiveTab("activity");
