@@ -43,6 +43,7 @@ interface EditAgentModalProps {
         mcpEnabled?: boolean;
         apiEnabled?: boolean;
         schedulingEnabled?: boolean;
+        publicAccessEnabled?: boolean;
         x402Enabled?: boolean;
         x402PriceCents?: number;
         x402Network?: "base" | "base-sepolia";
@@ -149,6 +150,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [mcpEnabled, setMcpEnabled] = useState(true);
     const [apiEnabled, setApiEnabled] = useState(true);
     const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+    const [publicAccessEnabled, setPublicAccessEnabled] = useState(true); // For Official agents
     const [x402Enabled, setX402Enabled] = useState(false);
     const [x402PriceCents, setX402PriceCents] = useState(1);
     const [x402Network, setX402Network] = useState<"base" | "base-sepolia">("base");
@@ -231,6 +233,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             const agentMcp = agent.mcp_enabled !== false;
             const agentApi = agent.api_enabled !== false;
             const agentScheduling = agent.scheduling_enabled || false;
+            const agentPublicAccess = agent.public_access_enabled !== false; // Defaults to true
             const agentX402 = agent.x402_enabled || false;
             const agentX402Price = agent.x402_price_cents || 1;
             const agentX402Network = agent.x402_network || "base";
@@ -260,6 +263,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setMcpEnabled(agentMcp);
             setApiEnabled(agentApi);
             setSchedulingEnabled(agentScheduling);
+            setPublicAccessEnabled(agentPublicAccess);
             setX402Enabled(agentX402);
             setX402PriceCents(agentX402Price);
             setX402Network(agentX402Network);
@@ -480,6 +484,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 mcpEnabled,
                 apiEnabled,
                 schedulingEnabled,
+                publicAccessEnabled: visibility === "official" ? publicAccessEnabled : undefined,
                 x402Enabled,
                 x402PriceCents,
                 x402Network,
@@ -903,6 +908,18 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                             onChange={setSchedulingEnabled}
                                             color="cyan"
                                         />
+                                        
+                                        {/* Public Access Toggle - Only for Official agents */}
+                                        {visibility === "official" && (
+                                            <CapabilityToggle
+                                                icon="🌐"
+                                                title="Public Access"
+                                                description="Allow anyone to chat via /agent/[id] page"
+                                                enabled={publicAccessEnabled}
+                                                onChange={setPublicAccessEnabled}
+                                                color="orange"
+                                            />
+                                        )}
 
                                         {/* x402 API Access */}
                                         <CapabilityToggle
@@ -1922,9 +1939,9 @@ function CapabilityToggle({
     description: string; 
     enabled: boolean; 
     onChange: (v: boolean) => void;
-    color?: "purple" | "emerald" | "cyan";
+    color?: "purple" | "emerald" | "cyan" | "orange";
 }) {
-    const colorClass = color === "emerald" ? "bg-emerald-500" : color === "cyan" ? "bg-cyan-500" : "bg-purple-500";
+    const colorClass = color === "emerald" ? "bg-emerald-500" : color === "cyan" ? "bg-cyan-500" : color === "orange" ? "bg-orange-500" : "bg-purple-500";
     
     return (
         <div 

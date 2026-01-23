@@ -95,18 +95,59 @@ export async function GET(
     }
 
     try {
-        const { data: agent, error } = await supabase
+        // First try with suggested_questions column
+        let agent: {
+            id: string;
+            name: string;
+            personality: string | null;
+            avatar_emoji: string;
+            avatar_url: string | null;
+            visibility: string;
+            x402_enabled: boolean;
+            x402_price_cents: number;
+            x402_network: string;
+            owner_address: string;
+            tags: string[] | null;
+            suggested_questions?: string[] | null;
+            public_access_enabled?: boolean | null;
+        } | null = null;
+        let queryError = null;
+        
+        const { data, error } = await supabase
             .from("shout_agents")
-            .select("id, name, personality, avatar_emoji, avatar_url, visibility, x402_enabled, x402_price_cents, x402_network, owner_address, tags, suggested_questions")
+            .select("id, name, personality, avatar_emoji, avatar_url, visibility, x402_enabled, x402_price_cents, x402_network, owner_address, tags, suggested_questions, public_access_enabled")
             .eq("id", id)
             .single();
+        
+        if (error) {
+            // If the column doesn't exist, try without it
+            if (error.message?.includes("suggested_questions") || error.message?.includes("public_access_enabled")) {
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from("shout_agents")
+                    .select("id, name, personality, avatar_emoji, avatar_url, visibility, x402_enabled, x402_price_cents, x402_network, owner_address, tags")
+                    .eq("id", id)
+                    .single();
+                agent = fallbackData;
+                queryError = fallbackError;
+            } else {
+                queryError = error;
+            }
+        } else {
+            agent = data;
+        }
 
-        if (error || !agent) {
+        if (queryError || !agent) {
+            console.error("[Public Agent] Query error:", queryError);
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
         }
 
-        // Only allow public or official agents
-        if (agent.visibility !== "public" && agent.visibility !== "official") {
+        // Check visibility: allow public, official (with public access), or official by default
+        const isPublic = agent.visibility === "public";
+        const isOfficial = agent.visibility === "official";
+        // Official agents are publicly accessible by default unless explicitly disabled
+        const officialPublicAccess = agent.public_access_enabled !== false;
+        
+        if (!isPublic && !(isOfficial && officialPublicAccess)) {
             return NextResponse.json({ error: "This agent is not public" }, { status: 403 });
         }
 

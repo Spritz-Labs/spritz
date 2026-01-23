@@ -116,8 +116,13 @@ export async function POST(
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
         }
 
-        // Verify agent is public or official
-        if (agent.visibility !== "public" && agent.visibility !== "official") {
+        // Verify agent is public or official (with public access enabled)
+        const isPublic = agent.visibility === "public";
+        const isOfficial = agent.visibility === "official";
+        // Official agents are publicly accessible by default unless explicitly disabled
+        const officialPublicAccess = agent.public_access_enabled !== false;
+        
+        if (!isPublic && !(isOfficial && officialPublicAccess)) {
             return NextResponse.json({ 
                 error: "Only public agents can be accessed via this API" 
             }, { status: 403 });
@@ -298,6 +303,7 @@ export async function GET(
                 personality, 
                 avatar_emoji, 
                 visibility,
+                public_access_enabled,
                 x402_enabled,
                 x402_price_cents,
                 x402_network,
@@ -312,6 +318,11 @@ export async function GET(
             .single();
 
         if (error || !agent) {
+            return NextResponse.json({ error: "Agent not found or not public" }, { status: 404 });
+        }
+        
+        // For official agents, check if public access is enabled (defaults to true)
+        if (agent.visibility === "official" && agent.public_access_enabled === false) {
             return NextResponse.json({ error: "Agent not found or not public" }, { status: 404 });
         }
 

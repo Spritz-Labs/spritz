@@ -62,6 +62,8 @@ export type Agent = {
     mcp_servers?: MCPServer[];
     // Suggested questions for public page (Official agents can customize)
     suggested_questions?: string[];
+    // Public access control for Official agents
+    public_access_enabled?: boolean;
     // API Tools configuration
     api_tools?: APITool[];
 };
@@ -186,6 +188,8 @@ export function useAgents(userAddress: string | null, isAdmin: boolean = false) 
             useKnowledgeBase?: boolean;
             mcpEnabled?: boolean;
             apiEnabled?: boolean;
+            schedulingEnabled?: boolean;
+            publicAccessEnabled?: boolean;
             x402Enabled?: boolean;
             x402PriceCents?: number;
             x402Network?: "base" | "base-sepolia";
