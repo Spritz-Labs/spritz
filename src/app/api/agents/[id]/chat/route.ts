@@ -588,6 +588,16 @@ Remember: The user asked a question and the answer is in the data above. Just pr
         // Now build the final system instructions with MCP results FIRST
         let systemInstructions = "";
         
+        // Add current date context
+        const now = new Date();
+        const currentDate = now.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        systemInstructions += `CURRENT DATE: Today is ${currentDate}. When users ask about "today", "tomorrow", "this week", etc., use this date as reference.\n\n`;
+        
         // Add MCP results at the VERY TOP if we have them
         if (mcpResultsSection) {
             systemInstructions += mcpResultsSection;

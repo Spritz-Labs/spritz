@@ -115,12 +115,23 @@ export async function POST(request: NextRequest) {
 
             console.log(`[AgentResponse] Generating response for agent ${agent.name} to: "${question}"`);
 
+            // Get current date for context
+            const now = new Date();
+            const currentDate = now.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+
             // Build system prompt
             let systemPrompt = agent.system_instructions || 
                 `You are ${agent.name}. ${agent.personality || "Be helpful and friendly."}`;
             
             // Add context about being in a channel
-            systemPrompt += `\n\nYou are participating in a public chat channel. ${senderName || senderAddress} has mentioned you with a question. Keep your response concise and helpful.
+            systemPrompt += `\n\nCURRENT DATE: Today is ${currentDate}. When users ask about "today", "tomorrow", "this week", etc., use this date as reference.
+
+You are participating in a public chat channel. ${senderName || senderAddress} has mentioned you with a question. Keep your response concise and helpful.
 
 You can use markdown formatting:
 - Use **bold** and *italic* for emphasis

@@ -23,6 +23,19 @@ function buildSystemInstruction(agent: {
     use_knowledge_base: boolean;
     visibility: string;
 }): string {
+    // Get current date for context
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    const dateContext = `
+
+CURRENT DATE: Today is ${currentDate}. When users ask about "today", "tomorrow", "this week", etc., use this date as reference. If the user asks about events on a specific date, check if that date has passed or is in the future relative to today.`;
+
     const baseInstruction = agent.system_instructions || 
         `You are a helpful AI assistant named ${agent.name}.${agent.personality ? ` ${agent.personality}` : ""}`;
     
@@ -40,7 +53,7 @@ IMPORTANT: You can use full markdown formatting in your responses:
 - Only display images if you have a proper URL starting with http:// or https://`
         : "";
     
-    return baseInstruction + markdownGuidance;
+    return baseInstruction + dateContext + markdownGuidance;
 }
 
 // Clean base64 data from content to prevent it from polluting AI context/responses
