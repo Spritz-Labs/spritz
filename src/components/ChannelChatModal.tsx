@@ -102,10 +102,41 @@ export function ChannelChatModal({
         // Check local cache
         return localUserInfoCache.get(address.toLowerCase()) || null;
     }, [getUserInfo, localUserInfoCache]);
+    
+    // Fetch AI agents in this channel
+    const [channelAgents, setChannelAgents] = useState<MentionUser[]>([]);
+    useEffect(() => {
+        async function fetchAgents() {
+            try {
+                const res = await fetch(`/api/channels/${channel.id}/agents`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const agents: MentionUser[] = (data.agents || []).map((agent: any) => ({
+                        address: agent.id, // Use agent ID as "address" for mentions
+                        name: agent.name,
+                        avatar: agent.avatar_url || null,
+                        avatarEmoji: agent.avatar_emoji,
+                        isAgent: true,
+                    }));
+                    setChannelAgents(agents);
+                }
+            } catch (err) {
+                console.error("[ChannelChat] Error fetching channel agents:", err);
+            }
+        }
+        if (isOpen && channel.id) {
+            fetchAgents();
+        }
+    }, [isOpen, channel.id]);
 
-    // Build list of mentionable users from message senders
+    // Build list of mentionable users from message senders + channel agents
     const mentionableUsers: MentionUser[] = useMemo(() => {
         const userMap = new Map<string, MentionUser>();
+        
+        // Add channel agents first (so they appear at the top)
+        channelAgents.forEach((agent) => {
+            userMap.set(agent.address, agent);
+        });
         
         messages.forEach((msg) => {
             const address = msg.sender_address.toLowerCase();
@@ -120,7 +151,7 @@ export function ChannelChatModal({
         });
         
         return Array.from(userMap.values());
-    }, [messages, userAddress, getEffectiveUserInfo]);
+    }, [messages, userAddress, getEffectiveUserInfo, channelAgents]);
 
     // Handle mention click
     const handleMentionClick = useCallback((address: string) => {
@@ -385,13 +416,68 @@ export function ChannelChatModal({
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 
+    // Agent info cache for displaying agent messages
+    const [agentInfoCache, setAgentInfoCache] = useState<Map<string, { name: string; avatar_url?: string; avatar_emoji: string }>>(new Map());
+    
+    // Fetch agent info when we see agent messages
+    useEffect(() => {
+        const agentIds = messages
+            .filter(m => m.sender_address.startsWith("agent:"))
+            .map(m => m.sender_address.replace("agent:", ""))
+            .filter(id => !agentInfoCache.has(id));
+        
+        if (agentIds.length === 0) return;
+        
+        const uniqueIds = [...new Set(agentIds)];
+        uniqueIds.forEach(async (agentId) => {
+            try {
+                const res = await fetch(`/api/public/agents/${agentId}`);
+                if (res.ok) {
+                    const agent = await res.json();
+                    setAgentInfoCache(prev => new Map(prev).set(agentId, {
+                        name: agent.name,
+                        avatar_url: agent.avatar_url,
+                        avatar_emoji: agent.avatar_emoji || "🤖",
+                    }));
+                }
+            } catch (err) {
+                console.error("[ChannelChat] Error fetching agent info:", err);
+            }
+        });
+    }, [messages, agentInfoCache]);
+    
+    // Check if sender is an agent
+    const isAgentMessage = (address: string) => address.startsWith("agent:");
+    const getAgentId = (address: string) => address.replace("agent:", "");
+
     const formatSender = (address: string) => {
+        // Check for agent messages
+        if (address.startsWith("agent:")) {
+            const agentId = address.replace("agent:", "");
+            const agentInfo = agentInfoCache.get(agentId);
+            return agentInfo?.name || "AI Agent";
+        }
         const userInfo = getEffectiveUserInfo(address);
         return userInfo?.name || formatAddress(address);
     };
 
     const getSenderAvatar = (address: string) => {
+        // Check for agent messages
+        if (address.startsWith("agent:")) {
+            const agentId = address.replace("agent:", "");
+            const agentInfo = agentInfoCache.get(agentId);
+            return agentInfo?.avatar_url || null;
+        }
         return getEffectiveUserInfo(address)?.avatar || null;
+    };
+    
+    const getSenderAvatarEmoji = (address: string) => {
+        if (address.startsWith("agent:")) {
+            const agentId = address.replace("agent:", "");
+            const agentInfo = agentInfoCache.get(agentId);
+            return agentInfo?.avatar_emoji || "🤖";
+        }
+        return null;
     };
 
     const isImageUrl = (content: string) => {
@@ -610,12 +696,14 @@ export function ChannelChatModal({
                                     const isOwn =
                                         msg.sender_address.toLowerCase() ===
                                         userAddress.toLowerCase();
+                                    const isAgent = isAgentMessage(msg.sender_address);
                                     const showSender =
                                         index === 0 ||
                                         messages[index - 1].sender_address !== msg.sender_address;
                                     const isImage = msg.message_type === "image" || isImageUrl(msg.content);
                                     const senderAvatar = getSenderAvatar(msg.sender_address);
-                                    const isAlreadyFriend = isFriend?.(msg.sender_address) ?? false;
+                                    const senderAvatarEmoji = getSenderAvatarEmoji(msg.sender_address);
+                                    const isAlreadyFriend = !isAgent && (isFriend?.(msg.sender_address) ?? false);
                                     // Only show user popup on the FIRST message from this sender to avoid duplicates
                                     const isFirstMessageFromSender = messages.findIndex(
                                         m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
@@ -628,38 +716,60 @@ export function ChannelChatModal({
                                             animate={{ opacity: 1, y: 0 }}
                                             className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""}`}
                                         >
-                                            {/* Avatar - clickable for non-own messages */}
+                                            {/* Avatar - clickable for non-own, non-agent messages */}
                                             {!isOwn && (
                                                 <div className="flex-shrink-0 relative">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedUser(
-                                                                selectedUser === msg.sender_address
-                                                                    ? null
-                                                                    : msg.sender_address
-                                                            );
-                                                        }}
-                                                        className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
-                                                    >
-                                                        {senderAvatar ? (
-                                                            <img
-                                                                src={senderAvatar}
-                                                                alt=""
-                                                                className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
-                                                                {formatAddress(msg.sender_address)
-                                                                    .slice(0, 2)
-                                                                    .toUpperCase()}
-                                                            </div>
-                                                        )}
-                                                    </button>
+                                                    {isAgent ? (
+                                                        // Agent avatar (not clickable)
+                                                        <div className="relative">
+                                                            {senderAvatar ? (
+                                                                <img
+                                                                    src={senderAvatar}
+                                                                    alt=""
+                                                                    className="w-8 h-8 rounded-lg object-cover ring-1 ring-purple-500/50"
+                                                                />
+                                                            ) : senderAvatarEmoji ? (
+                                                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-lg ring-1 ring-purple-500/50">
+                                                                    {senderAvatarEmoji}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs ring-1 ring-purple-500/50">
+                                                                    🤖
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        // User avatar (clickable)
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedUser(
+                                                                    selectedUser === msg.sender_address
+                                                                        ? null
+                                                                        : msg.sender_address
+                                                                );
+                                                            }}
+                                                            className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
+                                                        >
+                                                            {senderAvatar ? (
+                                                                <img
+                                                                    src={senderAvatar}
+                                                                    alt=""
+                                                                    className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
+                                                                    {formatAddress(msg.sender_address)
+                                                                        .slice(0, 2)
+                                                                        .toUpperCase()}
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    )}
 
-                                                    {/* User popup - only render once per sender */}
+                                                    {/* User popup - only render once per sender, not for agents */}
                                                     <AnimatePresence>
-                                                        {selectedUser === msg.sender_address && isFirstMessageFromSender && (
+                                                        {selectedUser === msg.sender_address && isFirstMessageFromSender && !isAgent && (
                                                             <motion.div
                                                                 initial={{ opacity: 0, scale: 0.95 }}
                                                                 animate={{ opacity: 1, scale: 1 }}
@@ -719,8 +829,13 @@ export function ChannelChatModal({
                                             {/* Message content */}
                                             <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"} max-w-[80%]`}>
                                                 {showSender && !isOwn && (
-                                                    <p className="text-xs text-zinc-500 mb-1 ml-1 font-medium flex items-center gap-1">
+                                                    <p className={`text-xs mb-1 ml-1 font-medium flex items-center gap-1 ${isAgent ? "text-purple-400" : "text-zinc-500"}`}>
                                                         {formatSender(msg.sender_address)}
+                                                        {isAgent && (
+                                                            <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
+                                                                AI
+                                                            </span>
+                                                        )}
                                                         {msg.is_pinned && (
                                                             <span className="text-amber-400" title="Pinned message">
                                                                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">

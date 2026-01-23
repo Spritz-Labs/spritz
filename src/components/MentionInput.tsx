@@ -49,6 +49,8 @@ export type MentionUser = {
     address: string;
     name: string | null;
     avatar: string | null;
+    isAgent?: boolean; // For AI agents in channels
+    avatarEmoji?: string; // Emoji fallback for agents
 };
 
 type MentionInputProps = {
@@ -336,7 +338,24 @@ export function MentionInput({
                                                     : "hover:bg-zinc-700 text-zinc-300"
                                             }`}
                                         >
-                                            {user.avatar ? (
+                                            {user.isAgent ? (
+                                                // Agent avatar - show image, emoji, or fallback
+                                                user.avatar ? (
+                                                    <img
+                                                        src={user.avatar}
+                                                        alt=""
+                                                        className="w-8 h-8 rounded-lg object-cover ring-1 ring-purple-500/50"
+                                                    />
+                                                ) : user.avatarEmoji ? (
+                                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-lg ring-1 ring-purple-500/50">
+                                                        {user.avatarEmoji}
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold ring-1 ring-purple-500/50">
+                                                        🤖
+                                                    </div>
+                                                )
+                                            ) : user.avatar ? (
                                                 <img
                                                     src={user.avatar}
                                                     alt=""
@@ -348,11 +367,18 @@ export function MentionInput({
                                                 </div>
                                             )}
                                             <div className="flex-1 text-left min-w-0">
-                                                <p className="font-medium truncate">
-                                                    {getDisplayName(user)}
-                                                </p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="font-medium truncate">
+                                                        {getDisplayName(user)}
+                                                    </p>
+                                                    {user.isAgent && (
+                                                        <span className="shrink-0 text-[9px] px-1 py-0.5 bg-purple-500/20 text-purple-400 rounded font-medium">
+                                                            AI
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-zinc-500 truncate">
-                                                    {formatAddress(user.address)}
+                                                    {user.isAgent ? "AI Agent" : formatAddress(user.address)}
                                                 </p>
                                             </div>
                                         </button>

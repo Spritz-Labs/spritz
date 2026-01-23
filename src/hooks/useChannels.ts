@@ -458,6 +458,21 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                 
                 // Clear reply state
                 setReplyingTo(null);
+                
+                // Check for agent mentions and trigger responses (fire and forget)
+                if (content.includes("@[") && content.includes("](")) {
+                    fetch("/api/channels/agent-response", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            messageContent: content,
+                            senderAddress: userAddress,
+                            channelType: "channel",
+                            channelId: channelId,
+                            originalMessageId: data.message?.id,
+                        }),
+                    }).catch(err => console.error("[useChannelMessages] Agent response error:", err));
+                }
 
                 return data.message as ChannelMessage;
             } catch (e) {

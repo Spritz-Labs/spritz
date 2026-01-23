@@ -72,6 +72,11 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [tagInput, setTagInput] = useState("");
     const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(["", "", "", ""]);
     
+    // Channel presence (for Official agents)
+    const [availableChannels, setAvailableChannels] = useState<Array<{id: string; name: string; emoji: string}>>([]);
+    const [channelMemberships, setChannelMemberships] = useState<{global: boolean; channels: string[]}>({ global: false, channels: [] });
+    const [isSavingChannels, setIsSavingChannels] = useState(false);
+    
     // Tag helpers
     const addTag = (tag: string) => {
         const normalizedTag = tag.trim().toLowerCase();
@@ -301,6 +306,98 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setOriginalValues(null);
         }
     }, [agent?.id, isOpen, userAddress]); // Use agent.id to ensure reset when switching agents
+    
+    // Fetch available channels and agent's channel memberships (for Official agents)
+    useEffect(() => {
+        if (!isOpen || !agent?.id || visibility !== "official") return;
+        
+        const agentId = agent.id;
+        
+        // Fetch available public channels
+        async function fetchChannels() {
+            try {
+                const res = await fetch("/api/channels");
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableChannels(data.channels || []);
+                }
+            } catch (err) {
+                console.error("[EditAgent] Error fetching channels:", err);
+            }
+        }
+        
+        // Fetch agent's current channel memberships
+        async function fetchMemberships() {
+            try {
+                const res = await fetch(`/api/agents/${agentId}/channels`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const memberships = data.memberships || [];
+                    const isInGlobal = memberships.some((m: { channel_type: string }) => m.channel_type === "global");
+                    const channelIds = memberships
+                        .filter((m: { channel_type: string }) => m.channel_type === "channel")
+                        .map((m: { channel_id: string }) => m.channel_id);
+                    setChannelMemberships({ global: isInGlobal, channels: channelIds });
+                }
+            } catch (err) {
+                console.error("[EditAgent] Error fetching memberships:", err);
+            }
+        }
+        
+        fetchChannels();
+        fetchMemberships();
+    }, [isOpen, agent?.id, visibility]);
+    
+    // Handle channel membership toggle
+    const toggleChannelMembership = async (channelType: "global" | "channel", channelId?: string) => {
+        if (!agent || !userAddress) return;
+        
+        setIsSavingChannels(true);
+        try {
+            const isCurrentlyIn = channelType === "global" 
+                ? channelMemberships.global 
+                : channelMemberships.channels.includes(channelId!);
+            
+            if (isCurrentlyIn) {
+                // Remove from channel
+                const params = new URLSearchParams({
+                    userAddress,
+                    channelType,
+                    ...(channelId && { channelId }),
+                });
+                await fetch(`/api/agents/${agent.id}/channels?${params}`, { method: "DELETE" });
+                
+                setChannelMemberships(prev => ({
+                    global: channelType === "global" ? false : prev.global,
+                    channels: channelType === "channel" 
+                        ? prev.channels.filter(id => id !== channelId) 
+                        : prev.channels,
+                }));
+            } else {
+                // Add to channel
+                await fetch(`/api/agents/${agent.id}/channels`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userAddress,
+                        channelType,
+                        channelId: channelType === "channel" ? channelId : undefined,
+                    }),
+                });
+                
+                setChannelMemberships(prev => ({
+                    global: channelType === "global" ? true : prev.global,
+                    channels: channelType === "channel" && channelId
+                        ? [...prev.channels, channelId] 
+                        : prev.channels,
+                }));
+            }
+        } catch (err) {
+            console.error("[EditAgent] Error toggling channel membership:", err);
+        } finally {
+            setIsSavingChannels(false);
+        }
+    };
 
     // Fetch embed code
     const fetchEmbedCode = async () => {
@@ -919,6 +1016,73 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                                 onChange={setPublicAccessEnabled}
                                                 color="orange"
                                             />
+                                        )}
+                                        
+                                        {/* Channel Presence - Only for Official agents */}
+                                        {visibility === "official" && (
+                                            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <span className="text-lg">🤖</span>
+                                                    <h4 className="text-sm font-medium text-purple-400">Channel Presence</h4>
+                                                    {isSavingChannels && (
+                                                        <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-zinc-400 mb-4">
+                                                    Add this agent to public channels. Users can @mention the agent to interact.
+                                                </p>
+                                                
+                                                <div className="space-y-2">
+                                                    {/* Global Chat */}
+                                                    <label className="flex items-center gap-3 p-3 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={channelMemberships.global}
+                                                            onChange={() => toggleChannelMembership("global")}
+                                                            disabled={isSavingChannels}
+                                                            className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-orange-500">🌍</span>
+                                                            <span className="text-sm text-white font-medium">Global Chat</span>
+                                                        </div>
+                                                        <span className="ml-auto text-xs text-zinc-500">Spritz Global</span>
+                                                    </label>
+                                                    
+                                                    {/* Public Channels */}
+                                                    {availableChannels.length > 0 && (
+                                                        <div className="border-t border-zinc-700/50 pt-2 mt-2">
+                                                            <p className="text-xs text-zinc-500 mb-2">Public Channels</p>
+                                                            {availableChannels.map(channel => (
+                                                                <label 
+                                                                    key={channel.id}
+                                                                    className="flex items-center gap-3 p-3 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors mb-1"
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={channelMemberships.channels.includes(channel.id)}
+                                                                        onChange={() => toggleChannelMembership("channel", channel.id)}
+                                                                        disabled={isSavingChannels}
+                                                                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                                                                    />
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span>{channel.emoji || "#"}</span>
+                                                                        <span className="text-sm text-white">{channel.name}</span>
+                                                                    </div>
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                {(channelMemberships.global || channelMemberships.channels.length > 0) && (
+                                                    <div className="mt-3 p-2 bg-zinc-800/50 rounded-lg">
+                                                        <p className="text-xs text-zinc-400">
+                                                            💡 Users can mention this agent with <code className="px-1 py-0.5 bg-zinc-700 rounded text-purple-400">@{name || "AgentName"}</code>
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
 
                                         {/* x402 API Access */}

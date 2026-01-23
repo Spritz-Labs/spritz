@@ -122,10 +122,41 @@ export function AlphaChatModal({
     const userPopupRef = useRef<HTMLDivElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
     const inputRef = useRef<HTMLInputElement>(null);
+    
+    // Fetch AI agents in this channel
+    const [channelAgents, setChannelAgents] = useState<MentionUser[]>([]);
+    useEffect(() => {
+        async function fetchAgents() {
+            try {
+                const res = await fetch("/api/channels/global/agents");
+                if (res.ok) {
+                    const data = await res.json();
+                    const agents: MentionUser[] = (data.agents || []).map((agent: any) => ({
+                        address: agent.id, // Use agent ID as "address" for mentions
+                        name: agent.name,
+                        avatar: agent.avatar_url || null,
+                        avatarEmoji: agent.avatar_emoji,
+                        isAgent: true,
+                    }));
+                    setChannelAgents(agents);
+                }
+            } catch (err) {
+                console.error("[AlphaChat] Error fetching channel agents:", err);
+            }
+        }
+        if (isOpen) {
+            fetchAgents();
+        }
+    }, [isOpen]);
 
-    // Build list of mentionable users from message senders
+    // Build list of mentionable users from message senders + channel agents
     const mentionableUsers: MentionUser[] = useMemo(() => {
         const userMap = new Map<string, MentionUser>();
+        
+        // Add channel agents first (so they appear at the top)
+        channelAgents.forEach((agent) => {
+            userMap.set(agent.address, agent);
+        });
         
         // Add all message senders
         messages.forEach((msg) => {
@@ -141,7 +172,7 @@ export function AlphaChatModal({
         });
         
         return Array.from(userMap.values());
-    }, [messages, userAddress, getUserInfo]);
+    }, [messages, userAddress, getUserInfo, channelAgents]);
 
     // Handle mention click - show user popup
     const handleMentionClick = useCallback((address: string) => {
@@ -401,16 +432,72 @@ export function AlphaChatModal({
         content.startsWith("[PIXEL_ART]");
     const getPixelArtUrl = (content: string) =>
         content.replace("[PIXEL_ART]", "");
+    
+    // Agent info cache for displaying agent messages
+    const [agentInfoCache, setAgentInfoCache] = useState<Map<string, { name: string; avatar_url?: string; avatar_emoji: string }>>(new Map());
+    
+    // Fetch agent info when we see agent messages
+    useEffect(() => {
+        const agentIds = messages
+            .filter(m => m.sender_address.startsWith("agent:"))
+            .map(m => m.sender_address.replace("agent:", ""))
+            .filter(id => !agentInfoCache.has(id));
+        
+        if (agentIds.length === 0) return;
+        
+        // Fetch agent info for new agent IDs
+        const uniqueIds = [...new Set(agentIds)];
+        uniqueIds.forEach(async (agentId) => {
+            try {
+                const res = await fetch(`/api/public/agents/${agentId}`);
+                if (res.ok) {
+                    const agent = await res.json();
+                    setAgentInfoCache(prev => new Map(prev).set(agentId, {
+                        name: agent.name,
+                        avatar_url: agent.avatar_url,
+                        avatar_emoji: agent.avatar_emoji || "🤖",
+                    }));
+                }
+            } catch (err) {
+                console.error("[AlphaChat] Error fetching agent info:", err);
+            }
+        });
+    }, [messages, agentInfoCache]);
+    
+    // Check if sender is an agent
+    const isAgentMessage = (address: string) => address.startsWith("agent:");
+    const getAgentId = (address: string) => address.replace("agent:", "");
 
     // Format sender address
     const formatSender = (address: string) => {
+        // Check for agent messages
+        if (address.startsWith("agent:")) {
+            const agentId = address.replace("agent:", "");
+            const agentInfo = agentInfoCache.get(agentId);
+            return agentInfo?.name || "AI Agent";
+        }
         const info = getUserInfo?.(address);
         if (info?.name) return info.name;
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 
     const getSenderAvatar = (address: string) => {
+        // Check for agent messages
+        if (address.startsWith("agent:")) {
+            const agentId = address.replace("agent:", "");
+            const agentInfo = agentInfoCache.get(agentId);
+            return agentInfo?.avatar_url || null;
+        }
         return getUserInfo?.(address)?.avatar || null;
+    };
+    
+    const getSenderAvatarEmoji = (address: string) => {
+        if (address.startsWith("agent:")) {
+            const agentId = address.replace("agent:", "");
+            const agentInfo = agentInfoCache.get(agentId);
+            return agentInfo?.avatar_emoji || "🤖";
+        }
+        return null;
     };
 
     // Get member count (we don't have this easily, so we'll show a placeholder)
@@ -725,9 +812,11 @@ export function AlphaChatModal({
                                                 const isOwn =
                                                     msg.sender_address.toLowerCase() ===
                                                     userAddress.toLowerCase();
+                                                const isAgent = isAgentMessage(msg.sender_address);
                                                 const isPixelArt = isPixelArtMessage(msg.content);
                                                 const senderAvatar = getSenderAvatar(msg.sender_address);
-                                                const isSenderMuted = moderation.isUserMuted(msg.sender_address);
+                                                const senderAvatarEmoji = getSenderAvatarEmoji(msg.sender_address);
+                                                const isSenderMuted = !isAgent && moderation.isUserMuted(msg.sender_address);
                                                 // Only show user popup on the FIRST message from this sender to avoid duplicates
                                                 const isFirstMessageFromSender = messages.findIndex(
                                                     m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
@@ -742,30 +831,52 @@ export function AlphaChatModal({
                                                             isOwn ? "flex-row-reverse" : ""
                                                         }`}
                                                     >
-                                                        {/* Avatar - clickable for non-own messages */}
+                                                        {/* Avatar - clickable for non-own, non-agent messages */}
                                                         {!isOwn && (
                                                             <div className="flex-shrink-0 relative">
-                                                                <button
-                                                                    onClick={() => setSelectedUser(msg.sender_address)}
-                                                                    className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
-                                                                >
-                                                                    {senderAvatar ? (
-                                                                        <img
-                                                                            src={senderAvatar}
-                                                                            alt=""
-                                                                            className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
-                                                                        />
-                                                                    ) : (
-                                                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
-                                                                            {formatSender(msg.sender_address)
-                                                                                .slice(0, 2)
-                                                                                .toUpperCase()}
-                                                                        </div>
-                                                                    )}
-                                                                </button>
+                                                                {isAgent ? (
+                                                                    // Agent avatar (not clickable)
+                                                                    <div className="relative">
+                                                                        {senderAvatar ? (
+                                                                            <img
+                                                                                src={senderAvatar}
+                                                                                alt=""
+                                                                                className="w-8 h-8 rounded-lg object-cover ring-1 ring-purple-500/50"
+                                                                            />
+                                                                        ) : senderAvatarEmoji ? (
+                                                                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-lg ring-1 ring-purple-500/50">
+                                                                                {senderAvatarEmoji}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs ring-1 ring-purple-500/50">
+                                                                                🤖
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    // User avatar (clickable)
+                                                                    <button
+                                                                        onClick={() => setSelectedUser(msg.sender_address)}
+                                                                        className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
+                                                                    >
+                                                                        {senderAvatar ? (
+                                                                            <img
+                                                                                src={senderAvatar}
+                                                                                alt=""
+                                                                                className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
+                                                                                {formatSender(msg.sender_address)
+                                                                                    .slice(0, 2)
+                                                                                    .toUpperCase()}
+                                                                            </div>
+                                                                        )}
+                                                                    </button>
+                                                                )}
                                                                 
-                                                                {/* User popup - only render once per sender */}
-                                                                {selectedUser === msg.sender_address && isFirstMessageFromSender && (
+                                                                {/* User popup - only render once per sender, not for agents */}
+                                                                {selectedUser === msg.sender_address && isFirstMessageFromSender && !isAgent && (
                                                                     <div
                                                                         ref={userPopupRef}
                                                                         className="absolute left-0 bottom-10 z-50 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3 min-w-[200px]"
@@ -900,15 +1011,28 @@ export function AlphaChatModal({
                                                             )}
 
                                                             {!isOwn && (
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setSelectedUser(msg.sender_address);
-                                                                    }}
-                                                                    className="text-xs text-orange-300 mb-1 font-medium hover:text-orange-200 transition-colors"
-                                                                >
-                                                                    {formatSender(msg.sender_address)}
-                                                                </button>
+                                                                isAgent ? (
+                                                                    // Agent sender - not clickable, with AI badge
+                                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                                        <span className="text-xs text-purple-300 font-medium">
+                                                                            {formatSender(msg.sender_address)}
+                                                                        </span>
+                                                                        <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
+                                                                            AI
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    // User sender - clickable
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setSelectedUser(msg.sender_address);
+                                                                        }}
+                                                                        className="text-xs text-orange-300 mb-1 font-medium hover:text-orange-200 transition-colors"
+                                                                    >
+                                                                        {formatSender(msg.sender_address)}
+                                                                    </button>
+                                                                )
                                                             )}
                                                             {isPixelArt ? (
                                                                 <div className="relative group">
