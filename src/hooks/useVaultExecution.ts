@@ -19,7 +19,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import { useAccount, useWalletClient, usePublicClient } from "wagmi";
+import { useAccount, useWalletClient, usePublicClient, useSwitchChain } from "wagmi";
 import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters, createPublicClient, http } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
@@ -356,10 +356,11 @@ function extractClientDataFields(clientDataJSON: string): string {
 }
 
 export function useVaultExecution(passkeyUserAddress?: Address) {
-    const { address: wagmiAddress } = useAccount();
+    const { address: wagmiAddress, chainId: currentChainId } = useAccount();
     const { data: walletClient } = useWalletClient();
     const wagmiPublicClient = usePublicClient();
     const passkeySigner = usePasskeySigner();
+    const { switchChainAsync } = useSwitchChain();
     
     // Use wagmi address if connected, otherwise use passkey address
     const userAddress = wagmiAddress || passkeyUserAddress;
@@ -396,6 +397,46 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         if (wagmiPublicClient) return wagmiPublicClient;
         return getPublicClientForChain(8453);
     }, [wagmiPublicClient]);
+    
+    /**
+     * Ensure wallet is connected to the correct chain for the vault
+     * Automatically switches if needed
+     */
+    const ensureCorrectChain = useCallback(async (targetChainId: number): Promise<{ success: boolean; error?: string }> => {
+        // Passkey users don't need chain switching - they execute via bundler
+        if (isPasskeyOnly) {
+            return { success: true };
+        }
+        
+        // Check if already on correct chain
+        if (currentChainId === targetChainId) {
+            return { success: true };
+        }
+        
+        // Try to switch chains
+        if (!switchChainAsync) {
+            const targetChain = getChainById(targetChainId);
+            return { 
+                success: false, 
+                error: `Please switch your wallet to ${targetChain?.name || `chain ${targetChainId}`} to continue` 
+            };
+        }
+        
+        try {
+            const targetChain = getChainById(targetChainId);
+            console.log(`[VaultExecution] Switching from chain ${currentChainId} to ${targetChainId} (${targetChain?.name})`);
+            await switchChainAsync({ chainId: targetChainId });
+            console.log(`[VaultExecution] Successfully switched to chain ${targetChainId}`);
+            return { success: true };
+        } catch (err) {
+            const targetChain = getChainById(targetChainId);
+            console.error("[VaultExecution] Chain switch failed:", err);
+            return { 
+                success: false, 
+                error: `Failed to switch to ${targetChain?.name || `chain ${targetChainId}`}. Please switch manually.` 
+            };
+        }
+    }, [currentChainId, isPasskeyOnly, switchChainAsync]);
 
     /**
      * Check if the user can sign for a vault
@@ -550,6 +591,14 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         try {
             const { safeAddress, to, value, data, nonce, smartWalletAddress } = params;
             
+            // Ensure we're on the correct chain before signing
+            const chainSwitchResult = await ensureCorrectChain(params.chainId);
+            if (!chainSwitchResult.success) {
+                setError(chainSwitchResult.error || "Failed to switch chain");
+                setStatus("error");
+                return { success: false, error: chainSwitchResult.error };
+            }
+            
             console.log("[VaultExecution] Signing transaction...");
             console.log("[VaultExecution] Using passkey:", canUsePasskey && !hasWalletClient);
             if (smartWalletAddress) {
@@ -689,7 +738,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, getSafeTxHash, getPublicClient, isPasskeyOnly, passkeySigner]);
+    }, [walletClient, userAddress, getSafeTxHash, getPublicClient, isPasskeyOnly, passkeySigner, ensureCorrectChain]);
 
     /**
      * Execute vault transaction via passkey Smart Wallet
@@ -931,6 +980,14 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         try {
             const { safeAddress, chainId, to, value, data, signatures } = params;
             
+            // Ensure we're on the correct chain before executing
+            const chainSwitchResult = await ensureCorrectChain(chainId);
+            if (!chainSwitchResult.success) {
+                setError(chainSwitchResult.error || "Failed to switch chain");
+                setStatus("error");
+                return { success: false, error: chainSwitchResult.error };
+            }
+            
             console.log("[VaultExecution] Executing with", signatures.length, "signatures");
 
             // Verify Safe is deployed by trying to read nonce
@@ -1132,7 +1189,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, getPublicClient, isPasskeyOnly, executeWithSignaturesViaPasskey, passkeySigner, passkeyUserAddress]);
+    }, [walletClient, userAddress, getPublicClient, isPasskeyOnly, executeWithSignaturesViaPasskey, passkeySigner, passkeyUserAddress, ensureCorrectChain]);
 
     /**
      * Execute a vault transaction (for threshold=1 or with pre-collected signatures)
@@ -1257,6 +1314,14 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         setTxHash(null);
 
         try {
+            // Ensure we're on the correct chain before executing
+            const chainSwitchResult = await ensureCorrectChain(chainId);
+            if (!chainSwitchResult.success) {
+                setError(chainSwitchResult.error || "Failed to switch chain");
+                setStatus("error");
+                return { success: false, error: chainSwitchResult.error };
+            }
+            
             console.log("[VaultExecution] Starting execution...");
             console.log("[VaultExecution] Safe address:", safeAddress);
             console.log("[VaultExecution] User EOA:", userAddress);
@@ -1401,7 +1466,7 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             setError(errorMessage);
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, signTransaction, executeWithSignatures, executeWithSignaturesViaPasskey, getPublicClient, isPasskeyOnly, passkeySigner, passkeyUserAddress]);
+    }, [walletClient, userAddress, signTransaction, executeWithSignatures, executeWithSignaturesViaPasskey, getPublicClient, isPasskeyOnly, passkeySigner, passkeyUserAddress, ensureCorrectChain]);
 
     const reset = useCallback(() => {
         setStatus("idle");
