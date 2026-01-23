@@ -7,6 +7,8 @@ import type { PublicChannel } from "@/app/api/channels/route";
 import { QuickReactionPicker } from "./EmojiPicker";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
+import { PixelArtEditor } from "./PixelArtEditor";
+import { PixelArtImage } from "./PixelArtImage";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -78,6 +80,8 @@ export function ChannelChatModal({
     const [isSending, setIsSending] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [showPixelArt, setShowPixelArt] = useState(false);
+    const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [userPopupPosition, setUserPopupPosition] = useState<{ x: number; y: number } | null>(null);
     const [addingFriend, setAddingFriend] = useState<string | null>(null);
@@ -105,7 +109,7 @@ export function ChannelChatModal({
         // Check local cache
         return localUserInfoCache.get(address.toLowerCase()) || null;
     }, [getUserInfo, localUserInfoCache]);
-    
+
     // Fetch AI agents in this channel
     const [channelAgents, setChannelAgents] = useState<MentionUser[]>([]);
     useEffect(() => {
@@ -315,6 +319,41 @@ export function ChannelChatModal({
         
         // Notify parent that message was sent (for updating chat order)
         onMessageSent?.();
+    };
+
+    // Handle sending pixel art
+    const handleSendPixelArt = async (imageData: string) => {
+        setIsUploadingPixelArt(true);
+        try {
+            // Convert base64 to blob
+            const response = await fetch(imageData);
+            const blob = await response.blob();
+            const file = new File([blob], "pixel-art.png", { type: "image/png" });
+            
+            // Upload to storage
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("userAddress", userAddress);
+            
+            const uploadRes = await fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+            });
+            
+            if (!uploadRes.ok) throw new Error("Upload failed");
+            
+            const { url } = await uploadRes.json();
+            
+            // Send as pixel art message
+            await sendMessage(url, "pixel_art");
+            setShowPixelArt(false);
+            onMessageSent?.();
+        } catch (error) {
+            console.error("Failed to send pixel art:", error);
+            alert("Failed to send pixel art. Please try again.");
+        } finally {
+            setIsUploadingPixelArt(false);
+        }
     };
 
     const handleReaction = async (messageId: string, emoji: string) => {
@@ -535,8 +574,8 @@ export function ChannelChatModal({
                     <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
                         {/* Avatar */}
                         <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-lg ml-1">
-                            {channel.emoji}
-                        </div>
+                                {channel.emoji}
+                            </div>
 
                         {/* Title area - takes remaining space */}
                         <div className="flex-1 min-w-0 pr-1">
@@ -544,16 +583,16 @@ export function ChannelChatModal({
                                 <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                     {channel.name}
                                 </h2>
-                                {channel.is_official && (
+                                    {channel.is_official && (
                                     <span className="shrink-0 px-1 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] rounded font-medium">
                                         ✓
-                                    </span>
-                                )}
-                            </div>
+                                        </span>
+                                    )}
+                                </div>
                             <p className="text-zinc-500 text-xs truncate">
-                                {channel.member_count} members
-                            </p>
-                        </div>
+                                    {channel.member_count} members
+                                </p>
+                            </div>
 
                         {/* Action buttons */}
                         <div className="shrink-0 flex items-center">
@@ -587,7 +626,7 @@ export function ChannelChatModal({
                                     aria-label={notificationsEnabled ? "Mute notifications" : "Enable notifications"}
                                 >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        {notificationsEnabled ? (
+                                    {notificationsEnabled ? (
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                         ) : (
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
@@ -604,7 +643,7 @@ export function ChannelChatModal({
                             >
                                 <svg className="w-5 h-5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                </svg>
+                                    </svg>
                                 <span className="hidden sm:inline text-sm">Leave</span>
                             </button>
 
@@ -718,7 +757,8 @@ export function ChannelChatModal({
                                     const showSender =
                                         index === 0 ||
                                         messages[index - 1].sender_address !== msg.sender_address;
-                                    const isImage = msg.message_type === "image" || isImageUrl(msg.content);
+                                    const isPixelArt = msg.message_type === "pixel_art";
+                                    const isImage = !isPixelArt && (msg.message_type === "image" || isImageUrl(msg.content));
                                     const senderAvatar = getSenderAvatar(msg.sender_address);
                                     const senderAvatarEmoji = getSenderAvatarEmoji(msg.sender_address);
                                     const isAlreadyFriend = !isAgent && (isFriend?.(msg.sender_address) ?? false);
@@ -758,31 +798,31 @@ export function ChannelChatModal({
                                                         </div>
                                                     ) : (
                                                         // User avatar (clickable)
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
                                                                 if (selectedUser === msg.sender_address) {
                                                                     setSelectedUser(null);
                                                                 } else {
                                                                     handleUserClick(msg.sender_address, e);
                                                                 }
-                                                            }}
-                                                            className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
-                                                        >
-                                                            {senderAvatar ? (
-                                                                <img
-                                                                    src={senderAvatar}
-                                                                    alt=""
-                                                                    className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
-                                                                />
-                                                            ) : (
-                                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
-                                                                    {formatAddress(msg.sender_address)
-                                                                        .slice(0, 2)
-                                                                        .toUpperCase()}
-                                                                </div>
-                                                            )}
-                                                        </button>
+                                                        }}
+                                                        className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
+                                                    >
+                                                        {senderAvatar ? (
+                                                            <img
+                                                                src={senderAvatar}
+                                                                alt=""
+                                                                className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
+                                                                {formatAddress(msg.sender_address)
+                                                                    .slice(0, 2)
+                                                                    .toUpperCase()}
+                                                            </div>
+                                                        )}
+                                                    </button>
                                                     )}
 
                                                     {/* User popup rendered as fixed position element below */}
@@ -817,7 +857,20 @@ export function ChannelChatModal({
                                                         Pinned
                                                     </p>
                                                 )}
-                                                {isImage ? (
+                                                {isPixelArt ? (
+                                                    <div
+                                                        className={`rounded-2xl overflow-hidden relative group ${
+                                                            isOwn ? "rounded-br-md" : "rounded-bl-md"
+                                                        }`}
+                                                    >
+                                                        <PixelArtImage
+                                                            src={msg.content}
+                                                            size="lg"
+                                                            className="cursor-pointer hover:opacity-90 transition-opacity"
+                                                            onClick={() => setPreviewImage(msg.content)}
+                                                        />
+                                                    </div>
+                                                ) : isImage ? (
                                                     <div
                                                         className={`rounded-2xl overflow-hidden relative group ${
                                                             isOwn ? "rounded-br-md" : "rounded-bl-md"
@@ -856,7 +909,7 @@ export function ChannelChatModal({
                                                                 ? "bg-[#FF5500] text-white rounded-br-md"
                                                                 : isAgent
                                                                     ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
-                                                                    : "bg-zinc-800 text-white rounded-bl-md"
+                                                                : "bg-zinc-800 text-white rounded-bl-md"
                                                         } ${selectedMessage === msg.id ? "ring-2 ring-orange-400/50" : ""}`}
                                                     >
                                                         {/* Reply Preview - More visible styling */}
@@ -925,13 +978,13 @@ export function ChannelChatModal({
                                                                 </ReactMarkdown>
                                                             </div>
                                                         ) : (
-                                                            <p className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}>
-                                                                <MentionText
-                                                                    text={msg.content}
-                                                                    currentUserAddress={userAddress}
-                                                                    onMentionClick={handleMentionClick}
-                                                                />
-                                                            </p>
+                                                        <p className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}>
+                                                            <MentionText
+                                                                text={msg.content}
+                                                                currentUserAddress={userAddress}
+                                                                onMentionClick={handleMentionClick}
+                                                            />
+                                                        </p>
                                                         )}
                                                         
                                                         {/* Reactions Display */}
@@ -1091,6 +1144,30 @@ export function ChannelChatModal({
                                     </svg>
                                 )}
                             </button>
+                            {/* Pixel Art button */}
+                            <button
+                                onClick={() => setShowPixelArt(true)}
+                                className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 hover:text-white transition-colors"
+                                title="Create pixel art"
+                            >
+                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="4" y="4" width="4" height="4" />
+                                    <rect x="8" y="4" width="4" height="4" opacity="0.7" />
+                                    <rect x="12" y="4" width="4" height="4" />
+                                    <rect x="4" y="8" width="4" height="4" opacity="0.7" />
+                                    <rect x="8" y="8" width="4" height="4" />
+                                    <rect x="12" y="8" width="4" height="4" opacity="0.7" />
+                                    <rect x="4" y="12" width="4" height="4" />
+                                    <rect x="8" y="12" width="4" height="4" opacity="0.7" />
+                                    <rect x="12" y="12" width="4" height="4" />
+                                    <rect x="16" y="8" width="4" height="4" opacity="0.5" />
+                                    <rect x="16" y="12" width="4" height="4" opacity="0.5" />
+                                    <rect x="16" y="16" width="4" height="4" opacity="0.3" />
+                                    <rect x="12" y="16" width="4" height="4" opacity="0.3" />
+                                    <rect x="8" y="16" width="4" height="4" opacity="0.3" />
+                                    <rect x="4" y="16" width="4" height="4" opacity="0.3" />
+                                </svg>
+                            </button>
                             <MentionInput
                                 inputRef={inputRef}
                                 value={inputValue}
@@ -1209,6 +1286,14 @@ export function ChannelChatModal({
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* Pixel Art Editor */}
+                <PixelArtEditor
+                    isOpen={showPixelArt}
+                    onClose={() => setShowPixelArt(false)}
+                    onSend={handleSendPixelArt}
+                    isSending={isUploadingPixelArt}
+                />
 
                 {/* Image Preview Modal */}
                 <AnimatePresence>
