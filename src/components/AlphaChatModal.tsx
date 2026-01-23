@@ -983,10 +983,12 @@ export function AlphaChatModal({
                                                         <div
                                                             data-message-bubble
                                                             onClick={() => handleMessageTap(msg.id)}
-                                                            className={`${isFullscreen ? "max-w-[90%]" : "max-w-[75%]"} rounded-2xl px-4 py-2 relative cursor-pointer ${
+                                                            className={`${isFullscreen ? "max-w-[90%]" : "max-w-[75%]"} rounded-2xl px-4 py-2.5 relative cursor-pointer ${
                                                                 isOwn
                                                                     ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-br-md"
-                                                                    : "bg-zinc-800 text-white rounded-bl-md"
+                                                                    : isAgent
+                                                                        ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
+                                                                        : "bg-zinc-800 text-white rounded-bl-md"
                                                             } ${selectedMessage === msg.id ? "ring-2 ring-orange-400/50" : ""}`}
                                                         >
                                                             {/* Reply Preview - More visible styling */}
@@ -1059,32 +1061,38 @@ export function AlphaChatModal({
                                                                 </div>
                                                             ) : isAgent ? (
                                                                 // Agent messages - render markdown with images
-                                                                <div className="prose prose-invert prose-sm max-w-none
-                                                                    prose-p:my-1 prose-p:leading-relaxed
-                                                                    prose-headings:text-white prose-headings:font-semibold prose-headings:mt-2 prose-headings:mb-1
-                                                                    prose-strong:text-purple-300 prose-em:text-zinc-300
-                                                                    prose-ul:my-1 prose-ul:pl-4 prose-li:my-0.5
-                                                                    prose-code:bg-zinc-900 prose-code:text-purple-300 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
-                                                                    prose-a:text-purple-400 prose-a:no-underline hover:prose-a:underline
-                                                                    prose-img:rounded-lg prose-img:border prose-img:border-zinc-700 prose-img:max-h-32 prose-img:w-auto prose-img:my-2
+                                                                <div className="prose prose-sm prose-invert max-w-none
+                                                                    prose-p:my-1.5 prose-p:leading-relaxed prose-p:text-zinc-100
+                                                                    prose-headings:text-white prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
+                                                                    prose-h1:text-base prose-h2:text-sm prose-h3:text-sm
+                                                                    prose-strong:text-purple-200 prose-strong:font-semibold
+                                                                    prose-em:text-zinc-200
+                                                                    prose-ul:my-2 prose-ul:pl-4 prose-ul:space-y-1
+                                                                    prose-ol:my-2 prose-ol:pl-4 prose-ol:space-y-1
+                                                                    prose-li:my-0 prose-li:text-zinc-100 prose-li:marker:text-purple-400
+                                                                    prose-code:bg-black/30 prose-code:text-purple-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-[''] prose-code:after:content-['']
+                                                                    prose-pre:bg-black/30 prose-pre:border prose-pre:border-purple-500/20 prose-pre:rounded-lg prose-pre:my-2 prose-pre:overflow-x-auto
+                                                                    prose-a:text-purple-300 prose-a:no-underline hover:prose-a:underline hover:prose-a:text-purple-200
+                                                                    prose-hr:border-purple-500/30 prose-hr:my-3
+                                                                    prose-blockquote:border-l-purple-400 prose-blockquote:bg-black/20 prose-blockquote:pl-3 prose-blockquote:py-1 prose-blockquote:my-2 prose-blockquote:rounded-r prose-blockquote:text-zinc-300
                                                                 ">
                                                                     <ReactMarkdown
                                                                         remarkPlugins={[remarkGfm]}
                                                                         components={{
                                                                             img: ({ src, alt }) => {
                                                                                 const srcStr = typeof src === "string" ? src : undefined;
-                                                                                if (!srcStr) return <span className="text-xs text-zinc-500">🖼️ {alt || "Image"}</span>;
+                                                                                if (!srcStr) return <span className="text-xs text-purple-300/70">🖼️ {alt || "Image"}</span>;
                                                                                 return (
-                                                                                    <span className="inline-block">
+                                                                                    <span className="inline-block my-2">
                                                                                         <img 
                                                                                             src={srcStr} 
                                                                                             alt={alt || ""} 
-                                                                                            className="max-h-32 rounded-lg border border-zinc-700 bg-zinc-800"
+                                                                                            className="max-h-40 rounded-lg border border-purple-500/30 bg-black/30"
                                                                                             onError={(e) => {
                                                                                                 (e.target as HTMLImageElement).style.display = "none";
                                                                                             }}
                                                                                         />
-                                                                                        {alt && <span className="block text-xs text-zinc-500 mt-0.5">{alt}</span>}
+                                                                                        {alt && <span className="block text-[10px] text-purple-300/70 mt-1">{alt}</span>}
                                                                                     </span>
                                                                                 );
                                                                             },
