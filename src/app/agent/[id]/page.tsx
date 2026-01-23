@@ -308,18 +308,6 @@ export default function PublicAgentPage() {
                                 </div>
                             )}
 
-                            {/* Events Link */}
-                            {agent.has_events && agent.events_count && agent.events_count > 0 && (
-                                <a
-                                    href={`/agent/${id}/events`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 border border-purple-500/30 hover:border-purple-500/50 rounded-full text-purple-300 hover:text-purple-200 text-sm font-medium transition-all"
-                                >
-                                    📅 View {agent.events_count} Events →
-                                </a>
-                            )}
-                            
                             {agent.x402_enabled ? (
                                 <div className="inline-block bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-sm">
                                     <p className="text-yellow-400 font-medium">💰 This agent uses x402 payments</p>
@@ -334,6 +322,18 @@ export default function PublicAgentPage() {
                                         This public agent is free to use
                                     </p>
                                 </div>
+                            )}
+
+                            {/* Events Link */}
+                            {agent.has_events && agent.events_count && agent.events_count > 0 && (
+                                <a
+                                    href={`/agent/${id}/events`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 border border-purple-500/30 hover:border-purple-500/50 rounded-full text-purple-300 hover:text-purple-200 text-sm font-medium transition-all"
+                                >
+                                    📅 View {agent.events_count} Events →
+                                </a>
                             )}
                             
                             {/* CTA to sign up */}
