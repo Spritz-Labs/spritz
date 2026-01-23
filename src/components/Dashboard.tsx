@@ -878,6 +878,78 @@ function DashboardContent({
         }
     });
     
+    // On initial load, scan stored messages to extract last message times for conversations
+    // without tracked times yet. This provides initial ordering based on actual messages.
+    const hasScannedMessages = useRef(false);
+    useEffect(() => {
+        if (typeof window === "undefined" || !userAddress || hasScannedMessages.current) return;
+        hasScannedMessages.current = true;
+        
+        try {
+            // Get stored messages from Waku storage
+            const messagesData = localStorage.getItem("waku_messages");
+            if (!messagesData) return;
+            
+            const allMessages = JSON.parse(messagesData);
+            const updates: Record<string, number> = {};
+            const userAddrLower = userAddress.toLowerCase();
+            
+            Object.entries(allMessages).forEach(([topic, messages]) => {
+                if (!Array.isArray(messages) || messages.length === 0) return;
+                
+                // Find the latest message timestamp
+                let latestTime = 0;
+                messages.forEach((msg: { sentAtNs?: string | bigint }) => {
+                    const timestamp = msg.sentAtNs 
+                        ? Number(BigInt(msg.sentAtNs) / BigInt(1000000)) // Convert nanoseconds to milliseconds
+                        : 0;
+                    if (timestamp > latestTime) {
+                        latestTime = timestamp;
+                    }
+                });
+                
+                if (latestTime === 0) return;
+                
+                // Extract conversation key from topic
+                // DM topics: /shout/1/dm-{addr1}-{addr2}/proto
+                // Group topics: /shout/1/group-{groupId}/proto
+                // Channel topics: handled separately
+                if (topic.includes("/dm-")) {
+                    const match = topic.match(/\/dm-([a-f0-9x-]+)\/proto$/i);
+                    if (match) {
+                        // DM topic format: dm-{addr1}-{addr2} sorted alphabetically
+                        const dmPair = match[1];
+                        const addresses = dmPair.split("-").filter(a => a.startsWith("0x"));
+                        // Find the peer address (not our address)
+                        const peerAddr = addresses.find(a => a.toLowerCase() !== userAddrLower);
+                        if (peerAddr) {
+                            const key = peerAddr.toLowerCase();
+                            if (!lastMessageTimes[key] || latestTime > lastMessageTimes[key]) {
+                                updates[key] = latestTime;
+                            }
+                        }
+                    }
+                } else if (topic.includes("/group-")) {
+                    const match = topic.match(/\/group-([^/]+)\/proto$/);
+                    if (match) {
+                        const groupId = match[1];
+                        const key = `group-${groupId}`;
+                        if (!lastMessageTimes[key] || latestTime > lastMessageTimes[key]) {
+                            updates[key] = latestTime;
+                        }
+                    }
+                }
+            });
+            
+            if (Object.keys(updates).length > 0) {
+                console.log("[Dashboard] Loaded message times from storage:", Object.keys(updates).length, "conversations");
+                setLastMessageTimes(prev => ({ ...prev, ...updates }));
+            }
+        } catch (error) {
+            console.error("[Dashboard] Failed to scan stored messages:", error);
+        }
+    }, [userAddress, lastMessageTimes]);
+    
     // Persist last message times to localStorage
     useEffect(() => {
         if (userAddress && Object.keys(lastMessageTimes).length > 0) {
@@ -1199,9 +1271,12 @@ function DashboardContent({
         groups.forEach((group) => {
             const groupKey = `group-${group.id}`;
             const lastMsgTime = lastMessageTimes[groupKey];
-            // Use tracked last message time, or null if not tracked yet
-            // Groups will sort to the bottom until they have messages
-            const lastMessageAt = lastMsgTime ? new Date(lastMsgTime) : null;
+            // Use tracked last message time, or fall back to group creation time
+            const lastMessageAt = lastMsgTime 
+                ? new Date(lastMsgTime) 
+                : group.createdAt 
+                ? new Date(group.createdAt) 
+                : null;
             items.push({
                 id: groupKey,
                 type: "group",
@@ -4635,6 +4710,13 @@ function DashboardContent({
                     getUserInfo={getAlphaUserInfo}
                     onMessageSent={() => {
                         // Update last message time for this group (for sorting)
+                        if (selectedGroup) {
+                            const groupKey = `group-${selectedGroup.id}`;
+                            updateLastMessageTime(groupKey);
+                        }
+                    }}
+                    onMessageReceived={() => {
+                        // Update last message time when receiving messages (for sorting)
                         if (selectedGroup) {
                             const groupKey = `group-${selectedGroup.id}`;
                             updateLastMessageTime(groupKey);

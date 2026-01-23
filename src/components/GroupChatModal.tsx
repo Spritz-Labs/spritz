@@ -55,6 +55,8 @@ interface GroupChatModalProps {
     } | null;
     // Callback when message is sent (for updating chat order)
     onMessageSent?: () => void;
+    // Callback when message is received (for updating chat order)
+    onMessageReceived?: () => void;
 }
 
 type Message = {
@@ -78,6 +80,7 @@ export function GroupChatModal({
     onGroupDeleted,
     onStartCall,
     onMessageSent,
+    onMessageReceived,
     hasActiveCall = false,
     getUserInfo,
 }: GroupChatModalProps) {
@@ -261,6 +264,8 @@ export function GroupChatModal({
                         setMessages((prev) => {
                             if (prev.some((m) => m.id === newMsg.id))
                                 return prev;
+                            // Notify parent of new message (for sort order)
+                            onMessageReceived?.();
                             return [...prev, newMsg];
                         });
                         markGroupAsRead(group.id);
