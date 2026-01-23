@@ -126,13 +126,16 @@ You can use markdown formatting:
                         const { data: chunks } = await supabase.rpc("match_knowledge_chunks", {
                             p_agent_id: agent.id,
                             p_query_embedding: `[${queryEmbedding.join(",")}]`,
-                            p_match_count: 3,
-                            p_match_threshold: 0.3
+                            p_match_count: 6, // Increased for better coverage
+                            p_match_threshold: 0.25 // Lowered to catch more relevant results
                         });
 
                         if (chunks?.length) {
+                            // Include source title for disambiguation
                             ragContext = "\n\nRelevant context from your knowledge base:\n" + 
-                                chunks.map((c: { content: string }) => c.content).join("\n\n");
+                                chunks.map((c: { content: string; source_title?: string }) => 
+                                    `[Source: ${c.source_title || "Unknown"}]\n${c.content}`
+                                ).join("\n\n---\n\n");
                         }
                     }
                 } catch (err) {

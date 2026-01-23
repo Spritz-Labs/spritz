@@ -255,12 +255,12 @@ async function retrieveRelevantChunks(
             return [];
         }
 
-        // Search for similar chunks
+        // Search for similar chunks - lower threshold for broader coverage
         const { data: chunks, error } = await supabase.rpc("match_knowledge_chunks", {
             p_agent_id: agentId,
             p_query_embedding: `[${queryEmbedding.join(",")}]`,
-            p_match_count: maxChunks,
-            p_match_threshold: 0.5, // Lower threshold to get more results
+            p_match_count: Math.max(maxChunks, 8), // At least 8 chunks for comprehensive context
+            p_match_threshold: 0.25, // Lower threshold to catch more relevant results
         });
 
         if (error) {
@@ -274,8 +274,9 @@ async function retrieveRelevantChunks(
         }
 
         console.log(`[Chat] Found ${chunks.length} relevant chunks`);
-        return chunks.map((c: { content: string; similarity: number }) => 
-            `[Relevance: ${(c.similarity * 100).toFixed(0)}%]\n${c.content}`
+        // Include source title for disambiguation between different knowledge sources
+        return chunks.map((c: { content: string; similarity: number; source_title?: string }) => 
+            `[Source: ${c.source_title || "Unknown"} | Relevance: ${(c.similarity * 100).toFixed(0)}%]\n${c.content}`
         );
     } catch (error) {
         console.error("[Chat] Error in RAG retrieval:", error);

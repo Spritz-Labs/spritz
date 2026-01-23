@@ -75,13 +75,13 @@ async function getRAGContext(agentId: string, message: string): Promise<string |
             return null;
         }
 
-        // Search for relevant chunks
+        // Search for relevant chunks - increased count for more diverse results
         console.log("[Public RAG] Searching for chunks for agent:", agentId);
         const { data: chunks, error } = await supabase.rpc("match_knowledge_chunks", {
             p_agent_id: agentId,
             p_query_embedding: `[${queryEmbedding.join(",")}]`,
-            p_match_count: 5,
-            p_match_threshold: 0.3 // Lower threshold to get more results
+            p_match_count: 8, // Increased from 5 for more comprehensive context
+            p_match_threshold: 0.25 // Lowered to catch more relevant results
         });
 
         if (error) {
@@ -96,10 +96,10 @@ async function getRAGContext(agentId: string, message: string): Promise<string |
 
         console.log("[Public RAG] Found", chunks.length, "relevant chunks");
 
-        // Format context from matching chunks
+        // Format context from matching chunks - include source title for disambiguation
         const context = chunks
-            .map((chunk: { content: string; similarity: number }) => 
-                `[Relevance: ${(chunk.similarity * 100).toFixed(0)}%]\n${chunk.content}`)
+            .map((chunk: { content: string; similarity: number; source_title?: string }) => 
+                `[Source: ${chunk.source_title || "Unknown"} | Relevance: ${(chunk.similarity * 100).toFixed(0)}%]\n${chunk.content}`)
             .join("\n\n---\n\n");
 
         return context;
