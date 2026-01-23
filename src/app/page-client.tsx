@@ -102,6 +102,36 @@ export default function Home() {
         reconnect({ connectors });
     }, [reconnect, connectors]);
 
+    // Request persistent storage for PWA - prevents browser from evicting app data
+    // This is important for wallet sessions, messages, and other cached data
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        
+        const requestPersistentStorage = async () => {
+            if (navigator.storage && navigator.storage.persist) {
+                try {
+                    const isPersisted = await navigator.storage.persisted();
+                    if (isPersisted) {
+                        console.log("[PWA] Storage is already persistent");
+                        return;
+                    }
+                    
+                    const granted = await navigator.storage.persist();
+                    if (granted) {
+                        console.log("[PWA] Persistent storage granted - data will not be evicted");
+                    } else {
+                        console.log("[PWA] Persistent storage denied - data may be evicted by browser");
+                    }
+                } catch (err) {
+                    console.warn("[PWA] Could not request persistent storage:", err);
+                }
+            }
+        };
+        
+        // Request persistent storage (browsers may auto-grant for installed PWAs)
+        requestPersistentStorage();
+    }, []);
+    
     // PWA Wallet Reconnection Strategy:
     // - If user intentionally disconnected -> don't reconnect
     // - If user has NEVER connected wallet -> don't reconnect (show auth options)
