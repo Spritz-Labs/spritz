@@ -103,18 +103,19 @@ IMPORTANT:
 - Use YYYY-MM-DD format for dates (year is ${year})
 - Use HH:MM format for times (24-hour)
 - Determine if event is "official" (main conference), "community" (side event), or "sponsor" (company-hosted)
+- LOOK FOR EVENT URLs! They are usually in the format: https://cryptonomads.org/ETHDenverSideEvents2026/event-slug or similar. Extract these carefully!
 
 Return a JSON array of events. Each event should have:
 {
   "name": "Event Name",
   "description": "Brief description (optional)",
-  "event_type": "party|summit|meetup|conference|hackathon|workshop|networking|other",
+  "event_type": "party|summit|meetup|conference|hackathon|workshop|networking|wellness|other",
   "event_date": "YYYY-MM-DD",
   "start_time": "HH:MM (optional)",
   "end_time": "HH:MM (optional)",
   "venue": "Location name (optional)",
   "organizer": "Organizer name (optional)",
-  "event_url": "URL to event page (optional)",
+  "event_url": "Full URL to event page - IMPORTANT: look for cryptonomads.org URLs or other event links",
   "source": "official|community|sponsor"
 }
 
