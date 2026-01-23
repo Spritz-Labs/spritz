@@ -33,6 +33,7 @@ interface EditAgentModalProps {
     onSave: (agentId: string, updates: {
         name?: string;
         personality?: string;
+        systemInstructions?: string;
         avatarEmoji?: string;
         avatarUrl?: string | null;
         visibility?: "private" | "friends" | "public" | "official";
@@ -64,6 +65,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     // General settings
     const [name, setName] = useState("");
     const [personality, setPersonality] = useState("");
+    const [systemInstructions, setSystemInstructions] = useState("");
     const [emoji, setEmoji] = useState("🤖");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -206,6 +208,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [originalValues, setOriginalValues] = useState<{
         name: string;
         personality: string;
+        systemInstructions: string;
         emoji: string;
         avatarUrl: string | null;
         visibility: "private" | "friends" | "public" | "official";
@@ -229,6 +232,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         if (agent && isOpen) {
             const agentName = agent.name;
             const agentPersonality = agent.personality || "";
+            const agentSystemInstructions = agent.system_instructions || "";
             const agentEmoji = agent.avatar_emoji || "🤖";
             const agentAvatarUrl = agent.avatar_url || null;
             const agentVisibility = agent.visibility;
@@ -251,6 +255,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             // Set all state values
             setName(agentName);
             setPersonality(agentPersonality);
+            setSystemInstructions(agentSystemInstructions);
             setEmoji(agentEmoji);
             setAvatarUrl(agentAvatarUrl);
             setVisibility(agentVisibility);
@@ -284,6 +289,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setOriginalValues({
                 name: agentName,
                 personality: agentPersonality,
+                systemInstructions: agentSystemInstructions,
                 emoji: agentEmoji,
                 avatarUrl: agentAvatarUrl,
                 visibility: agentVisibility,
@@ -571,6 +577,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             await onSave(agent.id, {
                 name: name.trim(),
                 personality: personality.trim(),
+                systemInstructions: systemInstructions.trim() || undefined,
                 avatarEmoji: emoji,
                 avatarUrl,
                 visibility,
@@ -832,8 +839,53 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                             onChange={(e) => setPersonality(e.target.value)}
                                             maxLength={1000}
                                             rows={3}
+                                            placeholder="Friendly and helpful assistant..."
                                             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 resize-none"
                                         />
+                                    </div>
+
+                                    {/* System Instructions (Advanced) */}
+                                    <div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const el = document.getElementById('system-instructions-section');
+                                                if (el) el.classList.toggle('hidden');
+                                            }}
+                                            className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 mb-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            System Instructions (Advanced)
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        <div id="system-instructions-section" className={systemInstructions ? "" : "hidden"}>
+                                            <p className="text-xs text-zinc-500 mb-2">
+                                                Detailed instructions that tell the AI how to behave. Use this for knowledge source context, response formatting, and specific behaviors.
+                                            </p>
+                                            <textarea
+                                                value={systemInstructions}
+                                                onChange={(e) => setSystemInstructions(e.target.value)}
+                                                maxLength={4000}
+                                                rows={6}
+                                                placeholder={`Example for an agent with multiple knowledge sources:
+
+You are a helpful assistant. Your knowledge base has MULTIPLE sources:
+
+1. **source-name.com** = Official documentation
+2. **community-data** = Community-contributed information
+
+When users ask about X, prioritize results from source Y...`}
+                                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 resize-none font-mono text-sm"
+                                            />
+                                            <p className="text-xs text-zinc-500 mt-1 text-right">
+                                                {systemInstructions.length}/4000
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {/* Visibility */}

@@ -179,6 +179,7 @@ export function useAgents(userAddress: string | null, isAdmin: boolean = false) 
         updates: {
             name?: string;
             personality?: string;
+            systemInstructions?: string;
             avatarEmoji?: string;
             avatarUrl?: string | null;
             visibility?: "private" | "friends" | "public" | "official";

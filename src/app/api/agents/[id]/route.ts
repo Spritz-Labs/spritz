@@ -78,7 +78,8 @@ export async function PATCH(
         const { 
             userAddress: bodyUserAddress, 
             name, 
-            personality, 
+            personality,
+            systemInstructions,
             avatarEmoji,
             avatarUrl,
             visibility, 
@@ -153,7 +154,14 @@ export async function PATCH(
         if (name !== undefined) updates.name = name.trim();
         if (personality !== undefined) {
             updates.personality = personality?.trim() || null;
-            // Update system instructions when personality changes
+        }
+        
+        // System instructions: use explicit value if provided, otherwise auto-generate from personality
+        if (systemInstructions !== undefined) {
+            // Direct system instructions override (for advanced users)
+            updates.system_instructions = systemInstructions?.trim() || null;
+        } else if (personality !== undefined) {
+            // Auto-generate from personality (backward compatibility)
             updates.system_instructions = personality
                 ? `You are an AI assistant named "${agentName}". Your personality: ${personality}. Be helpful, friendly, and stay in character.`
                 : `You are an AI assistant named "${agentName}". Be helpful and friendly.`;
