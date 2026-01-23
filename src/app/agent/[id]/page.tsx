@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
+import ReactMarkdown from "react-markdown";
 
 interface Agent {
     id: string;
@@ -146,46 +147,53 @@ export default function PublicAgentPage() {
     return (
         <div className="min-h-screen bg-zinc-950 flex flex-col">
             {/* Header */}
-            <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
-                <div className="max-w-3xl mx-auto px-4 py-4">
-                        <div className="flex items-center gap-4">
+            <header className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-md sticky top-0 z-10">
+                <div className="max-w-3xl mx-auto px-4 py-3">
+                    <div className="flex items-center gap-3">
                         {agent.avatar_url ? (
                             <img 
                                 src={agent.avatar_url} 
                                 alt={agent.name} 
-                                className="w-12 h-12 rounded-xl object-cover"
+                                className="w-11 h-11 rounded-xl object-cover ring-2 ring-zinc-700"
                             />
                         ) : (
-                            <div className="text-4xl">{agent.avatar_emoji}</div>
+                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-2xl ring-2 ring-zinc-700">
+                                {agent.avatar_emoji}
+                            </div>
                         )}
-                        <div className="flex-1">
-                            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                                {agent.name}
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h1 className="text-lg font-bold text-white truncate">{agent.name}</h1>
+                                {agent.visibility === "official" && (
+                                    <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+                                        ⭐ Official
+                                    </span>
+                                )}
                                 {agent.x402_enabled ? (
-                                    <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">
+                                    <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-medium">
                                         💰 ${(agent.x402_price_cents / 100).toFixed(2)}/msg
                                     </span>
                                 ) : (
-                                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
+                                    <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-medium">
                                         ✨ Free
                                     </span>
                                 )}
-                            </h1>
+                            </div>
                             {agent.personality && (
-                                <p className="text-sm text-zinc-400 line-clamp-1">{agent.personality}</p>
+                                <p className="text-xs text-zinc-400 line-clamp-1 mt-0.5">{agent.personality}</p>
                             )}
                         </div>
                         <a 
                             href="/"
-                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                            className="hidden sm:block text-xs text-zinc-500 hover:text-zinc-300 transition-colors whitespace-nowrap"
                         >
-                            Powered by <span className="text-orange-400">Spritz</span>
+                            Powered by <span className="text-orange-400 font-medium">Spritz</span>
                         </a>
                     </div>
                     {agent.tags && agent.tags.length > 0 && (
                         <div className="flex gap-1.5 mt-2 flex-wrap">
                             {agent.tags.map(tag => (
-                                <span key={tag} className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-full">
+                                <span key={tag} className="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-500 rounded-full">
                                     #{tag}
                                 </span>
                             ))}
@@ -285,24 +293,43 @@ export default function PublicAgentPage() {
                                         exit={{ opacity: 0 }}
                                         className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                                     >
-                                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                                        <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                                             msg.role === "user" 
                                                 ? "bg-[#FF5500] text-white" 
-                                                : "bg-zinc-800 text-zinc-100"
+                                                : "bg-zinc-800/80 text-zinc-100 border border-zinc-700/50"
                                         }`}>
                                             {msg.role === "assistant" && (
-                                                <div className="flex items-center gap-2 mb-1 text-xs text-zinc-400">
+                                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-zinc-700/50">
                                                     {agent.avatar_url ? (
-                                                        <img src={agent.avatar_url} alt="" className="w-4 h-4 rounded object-cover" />
+                                                        <img src={agent.avatar_url} alt="" className="w-5 h-5 rounded-md object-cover" />
                                                     ) : (
-                                                        <span>{agent.avatar_emoji}</span>
+                                                        <span className="text-sm">{agent.avatar_emoji}</span>
                                                     )}
-                                                    <span>{agent.name}</span>
+                                                    <span className="text-xs font-medium text-zinc-300">{agent.name}</span>
                                                 </div>
                                             )}
-                                            <div className="whitespace-pre-wrap text-sm">
-                                                {msg.content}
-                                            </div>
+                                            {msg.role === "user" ? (
+                                                <div className="text-sm whitespace-pre-wrap">
+                                                    {msg.content}
+                                                </div>
+                                            ) : (
+                                                <div className="prose prose-sm prose-invert max-w-none
+                                                    prose-p:my-2 prose-p:leading-relaxed
+                                                    prose-headings:text-white prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
+                                                    prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
+                                                    prose-strong:text-orange-300 prose-strong:font-semibold
+                                                    prose-em:text-zinc-300
+                                                    prose-ul:my-2 prose-ul:pl-4 prose-li:my-0.5 prose-li:marker:text-orange-400
+                                                    prose-ol:my-2 prose-ol:pl-4
+                                                    prose-code:bg-zinc-900 prose-code:text-orange-300 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-[''] prose-code:after:content-['']
+                                                    prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700 prose-pre:rounded-lg prose-pre:my-2
+                                                    prose-a:text-orange-400 prose-a:no-underline hover:prose-a:underline
+                                                    prose-hr:border-zinc-700 prose-hr:my-3
+                                                    prose-blockquote:border-l-orange-500 prose-blockquote:bg-zinc-900/50 prose-blockquote:pl-4 prose-blockquote:py-1 prose-blockquote:my-2 prose-blockquote:rounded-r
+                                                ">
+                                                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                                </div>
+                                            )}
                                         </div>
                                     </motion.div>
                                 ))}
@@ -313,14 +340,18 @@ export default function PublicAgentPage() {
                                     animate={{ opacity: 1 }}
                                     className="flex justify-start"
                                 >
-                                    <div className="bg-zinc-800 rounded-2xl px-4 py-3">
-                                        <div className="flex items-center gap-2 text-zinc-400">
+                                    <div className="bg-zinc-800/80 border border-zinc-700/50 rounded-2xl px-4 py-3">
+                                        <div className="flex items-center gap-3 text-zinc-400">
                                             {agent.avatar_url ? (
-                                                <img src={agent.avatar_url} alt="" className="w-5 h-5 rounded object-cover animate-pulse" />
+                                                <img src={agent.avatar_url} alt="" className="w-5 h-5 rounded-md object-cover" />
                                             ) : (
-                                                <span className="animate-pulse">{agent.avatar_emoji}</span>
+                                                <span className="text-sm">{agent.avatar_emoji}</span>
                                             )}
-                                            <span className="text-sm">Thinking...</span>
+                                            <div className="flex items-center gap-1">
+                                                <span className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                                <span className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                <span className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                            </div>
                                         </div>
                                     </div>
                                 </motion.div>
@@ -332,39 +363,46 @@ export default function PublicAgentPage() {
             </main>
 
             {/* Input Area */}
-            <footer className="border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky bottom-0">
-                <div className="max-w-3xl mx-auto px-4 py-4">
+            <footer className="border-t border-zinc-800 bg-gradient-to-t from-zinc-900 via-zinc-900/95 to-zinc-900/80 backdrop-blur-md sticky bottom-0">
+                <div className="max-w-3xl mx-auto px-4 py-3">
                     <form 
                         onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
-                        className="flex gap-3"
+                        className="flex gap-2"
                     >
                         <input
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             placeholder={agent.x402_enabled 
-                                ? `Chat (${agent.x402_price_cents}¢/msg)...` 
-                                : "Type a message..."}
+                                ? `Message (${agent.x402_price_cents}¢/msg)...` 
+                                : "Send a message..."}
                             disabled={sending}
-                            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500] disabled:opacity-50"
+                            className="flex-1 bg-zinc-800/80 border border-zinc-700 rounded-xl px-4 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 disabled:opacity-50 transition-all"
                         />
                         <button
                             type="submit"
                             disabled={!input.trim() || sending}
-                            className="px-6 py-3 bg-[#FF5500] hover:bg-[#E04D00] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"
+                            className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all shadow-lg shadow-orange-500/20 disabled:shadow-none"
                         >
-                            {sending ? "..." : "Send"}
+                            {sending ? (
+                                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                            ) : (
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                            )}
                         </button>
                     </form>
-                    {agent.x402_enabled ? (
-                        <p className="text-xs text-zinc-500 text-center mt-2">
-                            This agent requires x402 payment. Use the SDK for programmatic access with payments.
-                        </p>
-                    ) : (
-                        <p className="text-xs text-zinc-500 text-center mt-2">
-                            Powered by <a href="/" className="text-[#FF5500] hover:underline">Spritz</a> • Public AI Agent
-                        </p>
-                    )}
+                    <p className="text-[10px] text-zinc-500 text-center mt-2">
+                        {agent.x402_enabled ? (
+                            <>x402 payments required • <a href="/" className="text-orange-400 hover:underline">Spritz</a></>
+                        ) : (
+                            <>Powered by <a href="/" className="text-orange-400 hover:underline">Spritz</a> • Public AI Agent</>
+                        )}
+                    </p>
                 </div>
             </footer>
         </div>
