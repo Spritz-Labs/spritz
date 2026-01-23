@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Agent, MCPServer, APITool } from "@/hooks/useAgents";
+import AgentEventsModal from "./AgentEventsModal";
 
 const AGENT_EMOJIS = [
     "🤖", "🧠", "💡", "🎯", "🚀", "⚡", "🔮", "🎨",
@@ -203,6 +204,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [error, setError] = useState<string | null>(null);
     const [showEmbedCode, setShowEmbedCode] = useState(false);
     const [embedData, setEmbedData] = useState<{ code: { sdk: string }; endpoints: { chat: string } } | null>(null);
+    const [showEventsModal, setShowEventsModal] = useState(false);
 
     // Track original values to detect changes
     const [originalValues, setOriginalValues] = useState<{
@@ -1079,6 +1081,28 @@ When users ask about X, prioritize results from source Y...`}
                                                 toggleChannelMembership={toggleChannelMembership}
                                                 agentName={name}
                                             />
+                                        )}
+
+                                        {/* Event Management - Only for Official agents */}
+                                        {visibility === "official" && agent && (
+                                            <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-base">📅</span>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-purple-400">Event Management</h4>
+                                                            <p className="text-xs text-zinc-500">Create an events page for your agent</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowEventsModal(true)}
+                                                        className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm font-medium transition-colors"
+                                                    >
+                                                        Manage Events
+                                                    </button>
+                                                </div>
+                                            </div>
                                         )}
 
                                         {/* x402 API Access */}
@@ -2080,6 +2104,17 @@ When users ask about X, prioritize results from source Y...`}
                         </div>
                     </motion.div>
                 </motion.div>
+            )}
+
+            {/* Events Management Modal */}
+            {agent && userAddress && (
+                <AgentEventsModal
+                    isOpen={showEventsModal}
+                    onClose={() => setShowEventsModal(false)}
+                    agentId={agent.id}
+                    agentName={name || agent.name}
+                    userAddress={userAddress}
+                />
             )}
         </AnimatePresence>
     );
