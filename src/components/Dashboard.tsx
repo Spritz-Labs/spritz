@@ -1722,8 +1722,13 @@ function DashboardContent({
         if (!isWakuInitialized) return;
 
         const unsubscribe = onNewMessage(({ senderAddress, content }) => {
+            const senderAddressLower = senderAddress.toLowerCase();
+            
+            // Always update last message time for this conversation (for sorting)
+            setLastMessageTimes(prev => ({ ...prev, [senderAddressLower]: Date.now() }));
+            
             // Skip notification if we're already viewing this conversation
-            if (chatFriend?.address.toLowerCase() === senderAddress.toLowerCase()) {
+            if (chatFriend?.address.toLowerCase() === senderAddressLower) {
                 console.log("[Dashboard] Skipping notification - chat is open for:", senderAddress);
                 return;
             }
@@ -1734,7 +1739,7 @@ function DashboardContent({
 
             // Find friend info for the sender
             const friend = friendsListData.find(
-                (f) => f.address.toLowerCase() === senderAddress.toLowerCase()
+                (f) => f.address.toLowerCase() === senderAddressLower
             );
             // Priority: nickname > Spritz username > ENS > shortened address
             const senderName =
