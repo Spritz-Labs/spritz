@@ -308,18 +308,11 @@ export default function PublicAgentPage() {
                                 </div>
                             )}
 
-                            {agent.x402_enabled ? (
+                            {agent.x402_enabled && (
                                 <div className="inline-block bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-sm">
                                     <p className="text-yellow-400 font-medium">💰 This agent uses x402 payments</p>
                                     <p className="text-zinc-400 text-xs mt-1">
                                         ${(agent.x402_price_cents / 100).toFixed(2)} per message on {agent.x402_network}
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="inline-block bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3 text-sm">
-                                    <p className="text-emerald-400 font-medium">✨ Free to chat</p>
-                                    <p className="text-zinc-400 text-xs mt-1">
-                                        This public agent is free to use
                                     </p>
                                 </div>
                             )}
