@@ -22,7 +22,7 @@ export async function GET(
     try {
         const { data: agent, error } = await supabase
             .from("shout_agents")
-            .select("id, name, personality, avatar_emoji, visibility, x402_enabled, x402_price_cents, x402_network, owner_address, tags")
+            .select("id, name, personality, avatar_emoji, avatar_url, visibility, x402_enabled, x402_price_cents, x402_network, owner_address, tags")
             .eq("id", id)
             .single();
 

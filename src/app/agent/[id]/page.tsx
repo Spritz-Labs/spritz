@@ -9,6 +9,7 @@ interface Agent {
     name: string;
     personality: string | null;
     avatar_emoji: string;
+    avatar_url?: string | null;
     visibility: string;
     x402_enabled: boolean;
     x402_price_cents: number;
@@ -147,7 +148,15 @@ export default function PublicAgentPage() {
             <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
                 <div className="max-w-3xl mx-auto px-4 py-4">
                         <div className="flex items-center gap-4">
-                        <div className="text-4xl">{agent.avatar_emoji}</div>
+                        {agent.avatar_url ? (
+                            <img 
+                                src={agent.avatar_url} 
+                                alt={agent.name} 
+                                className="w-12 h-12 rounded-xl object-cover"
+                            />
+                        ) : (
+                            <div className="text-4xl">{agent.avatar_emoji}</div>
+                        )}
                         <div className="flex-1">
                             <h1 className="text-xl font-bold text-white flex items-center gap-2">
                                 {agent.name}
@@ -189,7 +198,15 @@ export default function PublicAgentPage() {
                 <div className="max-w-3xl mx-auto px-4 py-6">
                     {messages.length === 0 ? (
                         <div className="text-center py-20">
-                            <div className="text-6xl mb-4">{agent.avatar_emoji}</div>
+                            {agent.avatar_url ? (
+                                <img 
+                                    src={agent.avatar_url} 
+                                    alt={agent.name} 
+                                    className="w-24 h-24 rounded-2xl object-cover mx-auto mb-4"
+                                />
+                            ) : (
+                                <div className="text-6xl mb-4">{agent.avatar_emoji}</div>
+                            )}
                             <h2 className="text-xl font-semibold text-white mb-2">
                                 Chat with {agent.name}
                             </h2>
@@ -230,7 +247,11 @@ export default function PublicAgentPage() {
                                         }`}>
                                             {msg.role === "assistant" && (
                                                 <div className="flex items-center gap-2 mb-1 text-xs text-zinc-400">
-                                                    <span>{agent.avatar_emoji}</span>
+                                                    {agent.avatar_url ? (
+                                                        <img src={agent.avatar_url} alt="" className="w-4 h-4 rounded object-cover" />
+                                                    ) : (
+                                                        <span>{agent.avatar_emoji}</span>
+                                                    )}
                                                     <span>{agent.name}</span>
                                                 </div>
                                             )}
@@ -249,7 +270,11 @@ export default function PublicAgentPage() {
                                 >
                                     <div className="bg-zinc-800 rounded-2xl px-4 py-3">
                                         <div className="flex items-center gap-2 text-zinc-400">
-                                            <span className="animate-pulse">{agent.avatar_emoji}</span>
+                                            {agent.avatar_url ? (
+                                                <img src={agent.avatar_url} alt="" className="w-5 h-5 rounded object-cover animate-pulse" />
+                                            ) : (
+                                                <span className="animate-pulse">{agent.avatar_emoji}</span>
+                                            )}
                                             <span className="text-sm">Thinking...</span>
                                         </div>
                                     </div>
