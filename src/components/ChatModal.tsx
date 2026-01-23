@@ -916,16 +916,23 @@ export function ChatModal({
                                 ? "inset-0"
                                 : "left-4 right-4 top-16 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
-                        style={isFullscreen ? { paddingTop: 'env(safe-area-inset-top)' } : undefined}
                     >
-                        <div className={`bg-zinc-900 flex flex-col h-full overflow-hidden ${
-                            isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"
-                        }`}>
-                            {/* Header */}
-                            <div className="flex items-center gap-3 p-4 border-b border-zinc-800">
+                        <div 
+                            className={`bg-zinc-900 flex flex-col h-full overflow-hidden ${
+                                isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"
+                            }`}
+                            style={isFullscreen ? {
+                                paddingTop: 'env(safe-area-inset-top)',
+                                paddingLeft: 'env(safe-area-inset-left)',
+                                paddingRight: 'env(safe-area-inset-right)',
+                            } : undefined}
+                        >
+                            {/* Header - larger touch targets for mobile */}
+                            <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-3 border-b border-zinc-800">
                                 <button
                                     onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
+                                    aria-label="Go back"
                                 >
                                     <svg
                                         className="w-5 h-5 text-zinc-400"
@@ -962,11 +969,12 @@ export function ChatModal({
                                         {formatAddress(peerAddress)}
                                     </p>
                                 </div>
-                                {/* Search Button */}
+                                {/* Search Button - larger touch target */}
                                 <button
                                     onClick={() => setShowSearch(true)}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
                                     title="Search messages"
+                                    aria-label="Search messages"
                                 >
                                     <svg
                                         className="w-5 h-5"
@@ -982,11 +990,12 @@ export function ChatModal({
                                         />
                                     </svg>
                                 </button>
-                                {/* Fullscreen Toggle */}
+                                {/* Fullscreen Toggle - hidden on mobile, visible on tablet+ */}
                                 <button
                                     onClick={() => setIsFullscreen(!isFullscreen)}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                    className="hidden sm:flex p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
                                     title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                                    aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                                 >
                                     {isFullscreen ? (
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1000,10 +1009,11 @@ export function ChatModal({
                                 </button>
                                 <button
                                     onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -mr-1"
+                                    aria-label="Close chat"
                                 >
                                     <svg
-                                        className="w-6 h-6 text-zinc-400"
+                                        className="w-5 h-5 text-zinc-400"
                                         fill="none"
                                         viewBox="0 0 24 24"
                                         stroke="currentColor"
@@ -1611,8 +1621,11 @@ export function ChatModal({
                                 </div>
                             )}
 
-                            {/* Input */}
-                            <div className={`border-t border-zinc-800 ${isFullscreen ? "p-6 pb-8" : "p-4"}`}>
+                            {/* Input - with safe area padding for bottom */}
+                            <div 
+                                className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
+                                style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
+                            >
                                 <div className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}>
                                     {/* Pixel Art Button */}
                                     <button

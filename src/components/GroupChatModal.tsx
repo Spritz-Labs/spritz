@@ -604,7 +604,7 @@ export function GroupChatModal({
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         className={`fixed z-50 ${
                             isFullscreen
-                                ? "top-4 left-0 right-0 bottom-0"
+                                ? "inset-0"
                                 : "inset-4 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
                     >
@@ -614,12 +614,18 @@ export function GroupChatModal({
                                     ? ""
                                     : "border border-zinc-800 rounded-2xl shadow-2xl"
                             }`}
+                            style={isFullscreen ? {
+                                paddingTop: 'env(safe-area-inset-top)',
+                                paddingLeft: 'env(safe-area-inset-left)',
+                                paddingRight: 'env(safe-area-inset-right)',
+                            } : undefined}
                         >
-                            {/* Header */}
-                            <div className="p-4 border-b border-zinc-800 flex items-center gap-3">
+                            {/* Header - larger touch targets for mobile */}
+                            <div className="px-2 sm:px-4 py-3 border-b border-zinc-800 flex items-center gap-2 sm:gap-3">
                                 <button
                                     onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
+                                    aria-label="Go back"
                                 >
                                     <svg
                                         className="w-5 h-5 text-zinc-400"
@@ -654,7 +660,7 @@ export function GroupChatModal({
                                     </button>
                                 </div>
 
-                                {/* Call Buttons */}
+                                {/* Call Buttons - larger touch targets */}
                                 {onStartCall && (
                                     <div className="flex items-center gap-1">
                                         <button
@@ -666,8 +672,9 @@ export function GroupChatModal({
                                                 )
                                             }
                                             disabled={hasActiveCall}
-                                            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="p-3 hover:bg-zinc-800 rounded-xl transition-colors text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                             title="Start Voice Call"
+                                            aria-label="Start voice call"
                                         >
                                             <svg
                                                 className="w-5 h-5"
@@ -692,8 +699,9 @@ export function GroupChatModal({
                                                 )
                                             }
                                             disabled={hasActiveCall}
-                                            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-[#FFBBA7] hover:text-[#FFF0E0] disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="p-3 hover:bg-zinc-800 rounded-xl transition-colors text-[#FFBBA7] hover:text-[#FFF0E0] disabled:opacity-50 disabled:cursor-not-allowed"
                                             title="Start Video Call"
+                                            aria-label="Start video call"
                                         >
                                             <svg
                                                 className="w-5 h-5"
@@ -712,17 +720,18 @@ export function GroupChatModal({
                                     </div>
                                 )}
 
-                                {/* Fullscreen Toggle */}
+                                {/* Fullscreen Toggle - hidden on mobile */}
                                 <button
                                     onClick={() =>
                                         setIsFullscreen(!isFullscreen)
                                     }
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                    className="hidden sm:flex p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
                                     title={
                                         isFullscreen
                                             ? "Exit fullscreen"
                                             : "Fullscreen"
                                     }
+                                    aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                                 >
                                     {isFullscreen ? (
                                         <svg
@@ -756,12 +765,13 @@ export function GroupChatModal({
                                 </button>
 
                                 {/* Manage Menu */}
-                                <div className="relative">
+                                <div className="relative -mr-1">
                                     <button
                                         onClick={() =>
                                             setShowManageMenu(!showManageMenu)
                                         }
-                                        className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                        className="p-3 hover:bg-zinc-800 rounded-xl transition-colors"
+                                        aria-label="Manage group"
                                     >
                                         <svg
                                             className="w-5 h-5 text-zinc-400"
@@ -1440,8 +1450,11 @@ export function GroupChatModal({
                                 </div>
                             )}
 
-                            {/* Input */}
-                            <div className="p-4 border-t border-zinc-800">
+                            {/* Input - with safe area padding for bottom */}
+                            <div 
+                                className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
+                                style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
+                            >
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => setShowPixelArt(true)}

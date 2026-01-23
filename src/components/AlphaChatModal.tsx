@@ -436,18 +436,26 @@ export function AlphaChatModal({
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         className={`fixed z-50 ${
                             isFullscreen
-                                ? "top-4 left-0 right-0 bottom-0"
+                                ? "inset-0"
                                 : "inset-4 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
                     >
-                        <div className={`bg-zinc-900 h-full flex flex-col overflow-hidden ${
-                            isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"
-                        }`}>
-                            {/* Header */}
-                            <div className="p-4 border-b border-zinc-800 flex items-center gap-3">
+                        <div 
+                            className={`bg-zinc-900 h-full flex flex-col overflow-hidden ${
+                                isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"
+                            }`}
+                            style={isFullscreen ? {
+                                paddingTop: 'env(safe-area-inset-top)',
+                                paddingLeft: 'env(safe-area-inset-left)',
+                                paddingRight: 'env(safe-area-inset-right)',
+                            } : undefined}
+                        >
+                            {/* Header - larger touch targets for mobile */}
+                            <div className="px-2 sm:px-4 py-3 border-b border-zinc-800 flex items-center gap-2 sm:gap-3">
                                 <button
                                     onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
+                                    aria-label="Go back"
                                 >
                                     <svg
                                         className="w-5 h-5 text-zinc-400"
@@ -474,16 +482,17 @@ export function AlphaChatModal({
                                     </p>
                                 </div>
 
-                                {/* Pinned Messages Button */}
+                                {/* Pinned Messages Button - larger touch target */}
                                 {pinnedMessages.length > 0 && (
                                     <button
                                         onClick={() => setShowPinnedMessages(!showPinnedMessages)}
-                                        className={`p-2 rounded-lg flex items-center gap-1 transition-colors ${
+                                        className={`p-3 rounded-xl flex items-center gap-1 transition-colors ${
                                             showPinnedMessages
                                                 ? "bg-amber-500/20 text-amber-400"
                                                 : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
                                         }`}
                                         title="View pinned messages"
+                                        aria-label="View pinned messages"
                                     >
                                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                                             <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
@@ -496,8 +505,9 @@ export function AlphaChatModal({
                                 {isAdmin && (
                                     <button
                                         onClick={() => setShowModerationPanel(true)}
-                                        className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-amber-400 hover:bg-zinc-700 transition-colors"
+                                        className="p-3 rounded-xl bg-zinc-800 text-zinc-400 hover:text-amber-400 hover:bg-zinc-700 transition-colors"
                                         title="Moderation panel"
+                                        aria-label="Moderation panel"
                                     >
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -509,7 +519,7 @@ export function AlphaChatModal({
                                 {isMember && membership && (
                                     <button
                                         onClick={toggleNotifications}
-                                        className={`p-2 rounded-lg transition-colors ${
+                                        className={`p-3 rounded-xl transition-colors ${
                                             membership.notifications_muted
                                                 ? "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
                                                 : "bg-[#FF5500]/20 text-[#FF5500]"
@@ -558,11 +568,12 @@ export function AlphaChatModal({
                                     </button>
                                 )}
 
-                                {/* Fullscreen Toggle */}
+                                {/* Fullscreen Toggle - hidden on mobile */}
                                 <button
                                     onClick={() => setIsFullscreen(!isFullscreen)}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                    className="hidden sm:flex p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
                                     title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                                    aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                                 >
                                     {isFullscreen ? (
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -577,10 +588,11 @@ export function AlphaChatModal({
 
                                 {/* Settings Menu */}
                                 {isMember && (
-                                    <div className="relative">
+                                    <div className="relative -mr-1">
                                         <button
                                             onClick={() => setShowSettings(!showSettings)}
-                                            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                            className="p-3 hover:bg-zinc-800 rounded-xl transition-colors"
+                                            aria-label="Settings"
                                         >
                                             <svg
                                                 className="w-5 h-5 text-zinc-400"
@@ -1166,7 +1178,10 @@ export function AlphaChatModal({
                                     )}
 
                                     {/* Input */}
-                                    <div className={`border-t border-zinc-800 ${isFullscreen ? "p-6 pb-8" : "p-4"}`}>
+                                    <div 
+                                        className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
+                                        style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
+                                    >
                                         <div className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}>
                                             <button
                                                 onClick={() => setShowPixelArt(true)}

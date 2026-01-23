@@ -407,7 +407,7 @@ export function ChannelChatModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? "pt-4" : "p-4"}`}
+                className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? "" : "p-4"}`}
                 style={isFullscreen ? {} : { paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 100px, 120px)' }}
                 onClick={onClose}
             >
@@ -420,14 +420,20 @@ export function ChannelChatModal({
                             ? "w-full h-full max-w-none max-h-none"
                             : "w-full max-w-2xl max-h-[70vh] h-[600px] border border-zinc-800 rounded-2xl"
                     }`}
+                    style={isFullscreen ? {
+                        paddingTop: 'env(safe-area-inset-top)',
+                        paddingLeft: 'env(safe-area-inset-left)',
+                        paddingRight: 'env(safe-area-inset-right)',
+                    } : undefined}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {/* Header */}
-                    <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                    {/* Header - larger touch targets for mobile */}
+                    <div className="px-2 sm:px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                        <div className="flex items-center gap-2 sm:gap-3">
                             <button
                                 onClick={onClose}
-                                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
+                                aria-label="Go back"
                             >
                                 <svg
                                     className="w-5 h-5 text-zinc-400"
@@ -460,27 +466,29 @@ export function ChannelChatModal({
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {/* Pinned Messages Button */}
+                        <div className="flex items-center gap-1 sm:gap-2 -mr-1">
+                            {/* Pinned Messages Button - larger touch target */}
                             {pinnedMessages.length > 0 && (
                                 <button
                                     onClick={() => setShowPinnedMessages(!showPinnedMessages)}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                    className={`flex items-center gap-1.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${
                                         showPinnedMessages
                                             ? "bg-amber-500/20 text-amber-400"
                                             : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
                                     }`}
                                     title="View pinned messages"
+                                    aria-label="View pinned messages"
                                 >
                                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                         <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
                                     </svg>
-                                    <span>{pinnedMessages.length}</span>
+                                    <span className="hidden sm:inline">{pinnedMessages.length}</span>
                                 </button>
                             )}
                             <button
                                 onClick={onLeave}
-                                className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                className="px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                                aria-label="Leave channel"
                             >
                                 Leave
                             </button>
@@ -488,7 +496,7 @@ export function ChannelChatModal({
                             {onToggleNotifications && (
                                 <button
                                     onClick={onToggleNotifications}
-                                    className={`p-2 rounded-lg transition-colors ${
+                                    className={`p-3 rounded-xl transition-colors ${
                                         notificationsEnabled
                                             ? "bg-[#FF5500]/20 text-[#FF5500]"
                                             : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
@@ -498,6 +506,7 @@ export function ChannelChatModal({
                                             ? "Notifications enabled"
                                             : "Notifications muted"
                                     }
+                                    aria-label={notificationsEnabled ? "Mute notifications" : "Enable notifications"}
                                 >
                                     {notificationsEnabled ? (
                                         <svg
@@ -994,8 +1003,11 @@ export function ChannelChatModal({
                         </div>
                     )}
 
-                    {/* Input */}
-                    <div className="p-4 border-t border-zinc-800">
+                    {/* Input - with safe area padding for bottom */}
+                    <div 
+                        className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
+                        style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
+                    >
                         <div className="flex items-center gap-2">
                             {/* Image upload button */}
                             <input
