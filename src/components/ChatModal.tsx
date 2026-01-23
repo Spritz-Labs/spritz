@@ -929,19 +929,8 @@ export function ChatModal({
                         >
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                                {/* Back button */}
-                                <button
-                                    onClick={onClose}
-                                    className="shrink-0 p-2.5 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
-                                    aria-label="Go back"
-                                >
-                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                </button>
-
                                 {/* Avatar */}
-                                <div className="shrink-0">
+                                <div className="shrink-0 ml-1">
                                     {peerAvatar ? (
                                         <img
                                             src={peerAvatar}

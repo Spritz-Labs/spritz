@@ -429,19 +429,8 @@ export function ChannelChatModal({
                 >
                     {/* Header - unified mobile-first design */}
                     <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                        {/* Back button */}
-                        <button
-                            onClick={onClose}
-                            className="shrink-0 p-2.5 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
-                            aria-label="Go back"
-                        >
-                            <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                            </svg>
-                        </button>
-
                         {/* Avatar */}
-                        <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-lg">
+                        <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-lg ml-1">
                             {channel.emoji}
                         </div>
 
@@ -506,13 +495,24 @@ export function ChannelChatModal({
                             {/* Leave button - text on desktop, icon on mobile */}
                             <button
                                 onClick={onLeave}
-                                className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors -mr-1"
+                                className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
                                 aria-label="Leave channel"
                             >
                                 <svg className="w-5 h-5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                 </svg>
                                 <span className="hidden sm:inline text-sm">Leave</span>
+                            </button>
+
+                            {/* Close button (X) */}
+                            <button
+                                onClick={onClose}
+                                className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
+                                aria-label="Close chat"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                             </button>
                         </div>
                     </div>
