@@ -15,6 +15,23 @@ const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 // Regex to extract agent mentions: @[AgentName](agent-uuid)
 const AGENT_MENTION_REGEX = /@\[([^\]]+)\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
 
+// Clean base64 data from content to prevent it from polluting AI context/responses
+function cleanBase64FromContent(content: string): string {
+    // Remove base64 image data (data:image/... format)
+    let cleaned = content.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{100,}/g, '[image removed]');
+    
+    // Remove markdown images with base64 src
+    cleaned = cleaned.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, '[base64 image removed]');
+    
+    // Remove standalone long base64-like strings (100+ chars of base64 alphabet)
+    cleaned = cleaned.replace(/[A-Za-z0-9+/=]{200,}/g, '[encoded data removed]');
+    
+    // Remove <Base64-Image-Removed> placeholders that Firecrawl may have added
+    cleaned = cleaned.replace(/<Base64-Image-Removed>/g, '');
+    
+    return cleaned;
+}
+
 // POST: Process a message and generate agent responses if mentioned
 export async function POST(request: NextRequest) {
     if (!supabase || !ai) {
@@ -108,8 +125,9 @@ export async function POST(request: NextRequest) {
 You can use markdown formatting:
 - Use **bold** and *italic* for emphasis
 - Use bullet points for lists
-- When referencing images from your knowledge base, use markdown: ![Description](URL)
-- If you have image/logo URLs in your context, display them!`;
+- When referencing images, ONLY use markdown with actual HTTP/HTTPS URLs: ![Description](https://example.com/image.png)
+- NEVER output base64 encoded data (data:image/... or long encoded strings) - these are unreadable
+- If you see base64 data in your context, ignore it completely`;
 
             // Get RAG context if knowledge base is enabled
             let ragContext = "";
@@ -131,10 +149,10 @@ You can use markdown formatting:
                         });
 
                         if (chunks?.length) {
-                            // Include source title for disambiguation
+                            // Include source title for disambiguation, clean base64 data
                             ragContext = "\n\nRelevant context from your knowledge base:\n" + 
                                 chunks.map((c: { content: string; source_title?: string }) => 
-                                    `[Source: ${c.source_title || "Unknown"}]\n${c.content}`
+                                    `[Source: ${c.source_title || "Unknown"}]\n${cleanBase64FromContent(c.content)}`
                                 ).join("\n\n---\n\n");
                         }
                     }

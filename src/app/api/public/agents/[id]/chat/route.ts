@@ -34,12 +34,30 @@ IMPORTANT: You can use full markdown formatting in your responses:
 - Use **bold** and *italic* for emphasis
 - Use bullet points and numbered lists for organization
 - Use code blocks for technical content
-- When referencing images or logos from your knowledge base, use markdown image syntax: ![Description](URL)
-- If you have image URLs in your context, display them! Example: ![Sponsor Logo](https://example.com/logo.png)
-- For multiple images/logos, display them in a list or describe them clearly with their URLs`
+- When referencing images from your knowledge base, ONLY use markdown with actual HTTP/HTTPS URLs: ![Description](https://example.com/image.png)
+- NEVER output base64 encoded data (data:image/... or long encoded strings) - these are unreadable to users
+- If you see base64 data in your context, ignore it completely - do not reference or include it
+- Only display images if you have a proper URL starting with http:// or https://`
         : "";
     
     return baseInstruction + markdownGuidance;
+}
+
+// Clean base64 data from content to prevent it from polluting AI context/responses
+function cleanBase64FromContent(content: string): string {
+    // Remove base64 image data (data:image/... format)
+    let cleaned = content.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{100,}/g, '[image removed]');
+    
+    // Remove markdown images with base64 src
+    cleaned = cleaned.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, '[base64 image removed]');
+    
+    // Remove standalone long base64-like strings (100+ chars of base64 alphabet)
+    cleaned = cleaned.replace(/[A-Za-z0-9+/=]{200,}/g, '[encoded data removed]');
+    
+    // Remove <Base64-Image-Removed> placeholders that Firecrawl may have added
+    cleaned = cleaned.replace(/<Base64-Image-Removed>/g, '');
+    
+    return cleaned;
 }
 
 // Generate embedding for a query using Gemini
@@ -97,9 +115,12 @@ async function getRAGContext(agentId: string, message: string): Promise<string |
         console.log("[Public RAG] Found", chunks.length, "relevant chunks");
 
         // Format context from matching chunks - include source title for disambiguation
+        // Clean base64 data from chunks to prevent polluting AI responses
         const context = chunks
-            .map((chunk: { content: string; similarity: number; source_title?: string }) => 
-                `[Source: ${chunk.source_title || "Unknown"} | Relevance: ${(chunk.similarity * 100).toFixed(0)}%]\n${chunk.content}`)
+            .map((chunk: { content: string; similarity: number; source_title?: string }) => {
+                const cleanedContent = cleanBase64FromContent(chunk.content);
+                return `[Source: ${chunk.source_title || "Unknown"} | Relevance: ${(chunk.similarity * 100).toFixed(0)}%]\n${cleanedContent}`;
+            })
             .join("\n\n---\n\n");
 
         return context;

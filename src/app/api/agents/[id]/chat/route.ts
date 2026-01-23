@@ -21,6 +21,23 @@ const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 const mcpToolsCache = new Map<string, { tools: MCPTool[]; fetchedAt: number }>();
 const MCP_CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
+// Clean base64 data from content to prevent it from polluting AI context/responses
+function cleanBase64FromContent(content: string): string {
+    // Remove base64 image data (data:image/... format)
+    let cleaned = content.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{100,}/g, '[image removed]');
+    
+    // Remove markdown images with base64 src
+    cleaned = cleaned.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, '[base64 image removed]');
+    
+    // Remove standalone long base64-like strings (100+ chars of base64 alphabet)
+    cleaned = cleaned.replace(/[A-Za-z0-9+/=]{200,}/g, '[encoded data removed]');
+    
+    // Remove <Base64-Image-Removed> placeholders that Firecrawl may have added
+    cleaned = cleaned.replace(/<Base64-Image-Removed>/g, '');
+    
+    return cleaned;
+}
+
 interface MCPTool {
     name: string;
     description?: string;
@@ -275,8 +292,9 @@ async function retrieveRelevantChunks(
 
         console.log(`[Chat] Found ${chunks.length} relevant chunks`);
         // Include source title for disambiguation between different knowledge sources
+        // Clean base64 data to prevent polluting AI responses
         return chunks.map((c: { content: string; similarity: number; source_title?: string }) => 
-            `[Source: ${c.source_title || "Unknown"} | Relevance: ${(c.similarity * 100).toFixed(0)}%]\n${c.content}`
+            `[Source: ${c.source_title || "Unknown"} | Relevance: ${(c.similarity * 100).toFixed(0)}%]\n${cleanBase64FromContent(c.content)}`
         );
     } catch (error) {
         console.error("[Chat] Error in RAG retrieval:", error);
