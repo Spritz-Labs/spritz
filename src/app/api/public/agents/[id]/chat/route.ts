@@ -116,8 +116,8 @@ export async function POST(
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
         }
 
-        // Verify agent is public
-        if (agent.visibility !== "public") {
+        // Verify agent is public or official
+        if (agent.visibility !== "public" && agent.visibility !== "official") {
             return NextResponse.json({ 
                 error: "Only public agents can be accessed via this API" 
             }, { status: 403 });
@@ -308,7 +308,7 @@ export async function GET(
                 created_at
             `)
             .eq("id", id)
-            .eq("visibility", "public")
+            .in("visibility", ["public", "official"])
             .single();
 
         if (error || !agent) {

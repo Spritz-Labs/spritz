@@ -30,8 +30,8 @@ export async function GET(
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
         }
 
-        // Only allow public agents
-        if (agent.visibility !== "public") {
+        // Only allow public or official agents
+        if (agent.visibility !== "public" && agent.visibility !== "official") {
             return NextResponse.json({ error: "This agent is not public" }, { status: 403 });
         }
 
