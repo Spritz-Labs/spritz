@@ -15,6 +15,33 @@ const supabase = supabaseUrl && supabaseKey
 const geminiApiKey = process.env.GOOGLE_GEMINI_API_KEY;
 const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
+// Build system instruction for agent
+function buildSystemInstruction(agent: {
+    name: string;
+    system_instructions: string | null;
+    personality: string | null;
+    use_knowledge_base: boolean;
+    visibility: string;
+}): string {
+    const baseInstruction = agent.system_instructions || 
+        `You are a helpful AI assistant named ${agent.name}.${agent.personality ? ` ${agent.personality}` : ""}`;
+    
+    // Add markdown and image guidance for official agents with knowledge bases
+    const markdownGuidance = agent.visibility === "official" && agent.use_knowledge_base
+        ? `
+
+IMPORTANT: You can use full markdown formatting in your responses:
+- Use **bold** and *italic* for emphasis
+- Use bullet points and numbered lists for organization
+- Use code blocks for technical content
+- When referencing images or logos from your knowledge base, use markdown image syntax: ![Description](URL)
+- If you have image URLs in your context, display them! Example: ![Sponsor Logo](https://example.com/logo.png)
+- For multiple images/logos, display them in a list or describe them clearly with their URLs`
+        : "";
+    
+    return baseInstruction + markdownGuidance;
+}
+
 // Generate embedding for a query using Gemini
 async function generateQueryEmbedding(query: string): Promise<number[] | null> {
     if (!ai) return null;
@@ -215,7 +242,7 @@ export async function POST(
                 { role: "user", parts: [{ text: fullMessage }] }
             ],
             config: {
-                systemInstruction: agent.system_instructions || `You are a helpful AI assistant named ${agent.name}.`,
+                systemInstruction: buildSystemInstruction(agent),
                 maxOutputTokens: 2048,
                 temperature: 0.7,
             },

@@ -4,6 +4,46 @@ import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+// Custom image component for nice logo/image display
+function MarkdownImage({ src, alt }: { src?: string | Blob; alt?: string }) {
+    const [error, setError] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+    
+    // Convert src to string (ignore Blob for now)
+    const srcStr = typeof src === "string" ? src : undefined;
+    
+    if (!srcStr || error) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded text-xs text-zinc-400">
+                🖼️ {alt || "Image"}
+            </span>
+        );
+    }
+    
+    return (
+        <span className="inline-block my-2">
+            <img
+                src={srcStr}
+                alt={alt || ""}
+                onError={() => setError(true)}
+                onLoad={() => setLoaded(true)}
+                className={`max-w-full h-auto max-h-32 rounded-lg border border-zinc-700 bg-zinc-800 object-contain transition-opacity ${loaded ? "opacity-100" : "opacity-0"}`}
+            />
+            {alt && <span className="block text-xs text-zinc-500 mt-1 text-center">{alt}</span>}
+        </span>
+    );
+}
+
+// Logo grid component for displaying multiple logos nicely
+function LogoGrid({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 my-4">
+            {children}
+        </div>
+    );
+}
 
 interface Agent {
     id: string;
@@ -344,7 +384,14 @@ export default function PublicAgentPage() {
                                                     prose-hr:border-zinc-700 prose-hr:my-3
                                                     prose-blockquote:border-l-orange-500 prose-blockquote:bg-zinc-900/50 prose-blockquote:pl-4 prose-blockquote:py-1 prose-blockquote:my-2 prose-blockquote:rounded-r
                                                 ">
-                                                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={{
+                                                            img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
+                                                        }}
+                                                    >
+                                                        {msg.content}
+                                                    </ReactMarkdown>
                                                 </div>
                                             )}
                                         </div>

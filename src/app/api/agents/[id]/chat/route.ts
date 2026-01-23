@@ -582,6 +582,15 @@ Remember: The user asked a question and the answer is in the data above. Just pr
             systemInstructions += `\n\nYou have access to the following knowledge sources. Use this information to help answer questions when relevant:${knowledgeContext}`;
         }
         
+        // Add markdown/image guidance for official agents with knowledge base
+        if (agent.visibility === "official" && agent.use_knowledge_base) {
+            systemInstructions += `\n\nYou can use markdown formatting:
+- Use **bold** and *italic* for emphasis
+- Use bullet points and numbered lists
+- When referencing images or logos from your knowledge, use markdown: ![Description](URL)
+- If you have image URLs in your context, display them!`;
+        }
+        
         // Add a final reminder if we had MCP results
         if (mcpResultsSection) {
             systemInstructions += `\n\n[REMINDER: Answer using the RETRIEVED INFORMATION at the top. DO NOT output code.]`;

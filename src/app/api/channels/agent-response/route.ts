@@ -103,7 +103,13 @@ export async function POST(request: NextRequest) {
                 `You are ${agent.name}. ${agent.personality || "Be helpful and friendly."}`;
             
             // Add context about being in a channel
-            systemPrompt += `\n\nYou are participating in a public chat channel. ${senderName || senderAddress} has mentioned you with a question. Keep your response concise and helpful. You can use markdown formatting.`;
+            systemPrompt += `\n\nYou are participating in a public chat channel. ${senderName || senderAddress} has mentioned you with a question. Keep your response concise and helpful.
+
+You can use markdown formatting:
+- Use **bold** and *italic* for emphasis
+- Use bullet points for lists
+- When referencing images from your knowledge base, use markdown: ![Description](URL)
+- If you have image/logo URLs in your context, display them!`;
 
             // Get RAG context if knowledge base is enabled
             let ragContext = "";

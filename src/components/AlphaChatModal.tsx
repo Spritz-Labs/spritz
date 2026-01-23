@@ -12,6 +12,8 @@ import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -1054,6 +1056,42 @@ export function AlphaChatModal({
                                                                             showQuickActions
                                                                         />
                                                                     </div>
+                                                                </div>
+                                                            ) : isAgent ? (
+                                                                // Agent messages - render markdown with images
+                                                                <div className="prose prose-invert prose-sm max-w-none
+                                                                    prose-p:my-1 prose-p:leading-relaxed
+                                                                    prose-headings:text-white prose-headings:font-semibold prose-headings:mt-2 prose-headings:mb-1
+                                                                    prose-strong:text-purple-300 prose-em:text-zinc-300
+                                                                    prose-ul:my-1 prose-ul:pl-4 prose-li:my-0.5
+                                                                    prose-code:bg-zinc-900 prose-code:text-purple-300 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
+                                                                    prose-a:text-purple-400 prose-a:no-underline hover:prose-a:underline
+                                                                    prose-img:rounded-lg prose-img:border prose-img:border-zinc-700 prose-img:max-h-32 prose-img:w-auto prose-img:my-2
+                                                                ">
+                                                                    <ReactMarkdown
+                                                                        remarkPlugins={[remarkGfm]}
+                                                                        components={{
+                                                                            img: ({ src, alt }) => {
+                                                                                const srcStr = typeof src === "string" ? src : undefined;
+                                                                                if (!srcStr) return <span className="text-xs text-zinc-500">🖼️ {alt || "Image"}</span>;
+                                                                                return (
+                                                                                    <span className="inline-block">
+                                                                                        <img 
+                                                                                            src={srcStr} 
+                                                                                            alt={alt || ""} 
+                                                                                            className="max-h-32 rounded-lg border border-zinc-700 bg-zinc-800"
+                                                                                            onError={(e) => {
+                                                                                                (e.target as HTMLImageElement).style.display = "none";
+                                                                                            }}
+                                                                                        />
+                                                                                        {alt && <span className="block text-xs text-zinc-500 mt-0.5">{alt}</span>}
+                                                                                    </span>
+                                                                                );
+                                                                            },
+                                                                        }}
+                                                                    >
+                                                                        {msg.content}
+                                                                    </ReactMarkdown>
                                                                 </div>
                                                             ) : (
                                                                 <p className={`break-words ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}>
