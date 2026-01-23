@@ -125,6 +125,8 @@ export function AlphaChatModal({
     const userPopupRef = useRef<HTMLDivElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
     const inputRef = useRef<HTMLInputElement>(null);
+    const userScrolledUpRef = useRef(false);
+    const justSentMessageRef = useRef(false);
     
     // Fetch AI agents in this channel
     const [channelAgents, setChannelAgents] = useState<MentionUser[]>([]);
@@ -206,10 +208,22 @@ export function AlphaChatModal({
             // Only scroll to bottom if there's a new message at the end
             if (lastMessage.id !== lastMessageIdRef.current) {
                 lastMessageIdRef.current = lastMessage.id;
-                // Only auto-scroll if we're near the bottom already
                 const container = messagesContainerRef.current;
-                if (container) {
-                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                
+                // Always scroll if user just sent a message
+                if (justSentMessageRef.current) {
+                    justSentMessageRef.current = false;
+                    userScrolledUpRef.current = false;
+                    setTimeout(() => {
+                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    }, 50);
+                    return;
+                }
+                
+                // Auto-scroll if user hasn't intentionally scrolled up
+                if (container && !userScrolledUpRef.current) {
+                    // Use larger threshold (300px) for "near bottom" detection
+                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
                     if (isNearBottom) {
                         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
                     }
@@ -231,13 +245,17 @@ export function AlphaChatModal({
         }
     }, [messages]);
 
-    // Handle scroll to load more messages
+    // Handle scroll to load more messages and track user scroll position
     const handleScroll = useCallback(() => {
         const container = messagesContainerRef.current;
-        if (!container || isLoadingMore || !hasMore) return;
+        if (!container) return;
+
+        // Track if user has scrolled up significantly (more than 300px from bottom)
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        userScrolledUpRef.current = distanceFromBottom > 300;
 
         // Load more when scrolled near the top (within 100px)
-        if (container.scrollTop < 100) {
+        if (!isLoadingMore && hasMore && container.scrollTop < 100) {
             previousScrollHeightRef.current = container.scrollHeight;
             loadMoreMessages();
         }
@@ -352,6 +370,9 @@ export function AlphaChatModal({
     // Send message
     const handleSend = useCallback(async () => {
         if (!newMessage.trim() || isSending) return;
+
+        // Mark that user just sent a message (for auto-scroll)
+        justSentMessageRef.current = true;
 
         const success = await sendMessage(newMessage.trim(), "text", replyingTo?.id);
         if (success) {

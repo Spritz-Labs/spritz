@@ -95,6 +95,8 @@ export function ChannelChatModal({
     const inputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
+    const userScrolledUpRef = useRef(false);
+    const justSentMessageRef = useRef(false);
 
     // Local cache for user info fetched from API
     const [localUserInfoCache, setLocalUserInfoCache] = useState<
@@ -188,10 +190,22 @@ export function ChannelChatModal({
             // Only scroll to bottom if there's a new message at the end
             if (lastMessage.id !== lastMessageIdRef.current) {
                 lastMessageIdRef.current = lastMessage.id;
-                // Only auto-scroll if we're near the bottom already
                 const container = messagesContainerRef.current;
-                if (container) {
-                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                
+                // Always scroll if user just sent a message
+                if (justSentMessageRef.current) {
+                    justSentMessageRef.current = false;
+                    userScrolledUpRef.current = false;
+                    setTimeout(() => {
+                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    }, 50);
+                    return;
+                }
+                
+                // Auto-scroll if user hasn't intentionally scrolled up
+                if (container && !userScrolledUpRef.current) {
+                    // Use larger threshold (300px) for "near bottom" detection
+                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
                     if (isNearBottom) {
                         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
                     }
@@ -213,13 +227,17 @@ export function ChannelChatModal({
         }
     }, [messages]);
 
-    // Handle scroll to load more messages
+    // Handle scroll to load more messages and track user scroll position
     const handleScroll = useCallback(() => {
         const container = messagesContainerRef.current;
-        if (!container || isLoadingMore || !hasMore) return;
+        if (!container) return;
+
+        // Track if user has scrolled up significantly (more than 300px from bottom)
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        userScrolledUpRef.current = distanceFromBottom > 300;
 
         // Load more when scrolled near the top (within 100px)
-        if (container.scrollTop < 100) {
+        if (!isLoadingMore && hasMore && container.scrollTop < 100) {
             previousScrollHeightRef.current = container.scrollHeight;
             loadMoreMessages();
         }
@@ -313,6 +331,9 @@ export function ChannelChatModal({
         setIsSending(true);
         const content = inputValue.trim();
         setInputValue("");
+        
+        // Mark that user just sent a message (for auto-scroll)
+        justSentMessageRef.current = true;
 
         await sendMessage(content, "text", replyingTo?.id);
         setIsSending(false);
