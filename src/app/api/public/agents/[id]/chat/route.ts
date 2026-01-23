@@ -132,20 +132,34 @@ async function getEventContext(agentId: string, message: string): Promise<string
         // Try to extract a specific date
         const targetDate = extractDateFromMessage(message);
         
+        // First get total count for the date/all events
+        let countQuery = supabase
+            .from("shout_agent_events")
+            .select("*", { count: "exact", head: true })
+            .eq("agent_id", agentId);
+        
+        if (targetDate) {
+            countQuery = countQuery.eq("event_date", targetDate);
+        }
+        
+        const { count: totalCount } = await countQuery;
+        
+        // Now get events, prioritizing featured ones
         let query = supabase
             .from("shout_agent_events")
             .select("name, description, event_type, event_date, start_time, end_time, venue, organizer, event_url, source, is_featured")
             .eq("agent_id", agentId)
+            .order("is_featured", { ascending: false }) // Featured first!
             .order("event_date", { ascending: true })
             .order("start_time", { ascending: true });
         
         if (targetDate) {
             console.log("[Event Context] Filtering for date:", targetDate);
             query = query.eq("event_date", targetDate);
-        } else {
-            // If no specific date, limit to reasonable number
-            query = query.limit(30);
         }
+        
+        // Limit to 8 events for context (AI will pick top 3-4)
+        query = query.limit(8);
         
         const { data: events, error } = await query;
         
@@ -154,7 +168,7 @@ async function getEventContext(agentId: string, message: string): Promise<string
             return null;
         }
         
-        console.log("[Event Context] Found", events.length, "events");
+        console.log("[Event Context] Found", events.length, "events (total:", totalCount, ")");
         
         // Format events for context
         const formatTime = (time: string | null) => {
@@ -176,22 +190,29 @@ async function getEventContext(agentId: string, message: string): Promise<string
                     ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
                     : formatTime(event.start_time)
                 : "Time TBA";
-            const sourceLabel = event.source === "official" ? "OFFICIAL" : event.source === "sponsor" ? "SPONSOR" : "SIDE EVENT";
             const featured = event.is_featured ? "⭐ FEATURED" : "";
             
-            return `- ${featured} [${sourceLabel}] ${event.name}
+            return `- ${featured} ${event.name}
   📅 ${event.event_date} @ ${timeStr}
   ${event.venue ? `📍 ${event.venue}` : ""}
   ${event.organizer ? `🏢 ${event.organizer}` : ""}
-  ${event.event_url ? `🔗 ${event.event_url}` : ""}
-  ${event.description ? `📝 ${event.description}` : ""}`.trim();
+  ${event.event_url ? `🔗 ${event.event_url}` : ""}`.trim();
         });
         
-        const contextHeader = targetDate 
-            ? `\n\n=== STRUCTURED EVENT DATA for ${targetDate} ===\nThese are events from my events database (more reliable than scraped content):\n\n`
-            : `\n\n=== STRUCTURED EVENT DATA ===\nThese are events from my events database:\n\n`;
+        const eventsPageUrl = `https://app.spritz.chat/agent/${agentId}/events`;
+        const dateStr = targetDate || "all dates";
         
-        return contextHeader + eventLines.join("\n\n");
+        const contextHeader = `\n\n=== EVENT DATA (${events.length} of ${totalCount || events.length} total for ${dateStr}) ===
+IMPORTANT: Show only 3-4 TOP events. Featured (⭐) events first!
+Full events page: ${eventsPageUrl}
+
+`;
+        
+        const contextFooter = `\n\n---
+REMINDER: Only show 3-4 events above. Then add:
+"📅 Want to see all ${totalCount || events.length} events? [Browse Full Schedule →](${eventsPageUrl})"`;
+        
+        return contextHeader + eventLines.join("\n\n") + contextFooter;
     } catch (err) {
         console.error("[Event Context] Error:", err);
         return null;
