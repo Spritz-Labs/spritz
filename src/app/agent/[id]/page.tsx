@@ -58,6 +58,8 @@ interface Agent {
     owner_address: string;
     tags?: string[];
     suggested_questions?: string[];
+    has_events?: boolean;
+    events_count?: number;
 }
 
 interface Message {
@@ -304,6 +306,16 @@ export default function PublicAgentPage() {
                                         ))}
                                     </div>
                                 </div>
+                            )}
+
+                            {/* Events Link */}
+                            {agent.has_events && agent.events_count && agent.events_count > 0 && (
+                                <a
+                                    href={`/agent/${id}/events`}
+                                    className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 border border-purple-500/30 hover:border-purple-500/50 rounded-full text-purple-300 hover:text-purple-200 text-sm font-medium transition-all"
+                                >
+                                    📅 View {agent.events_count} Events →
+                                </a>
                             )}
                             
                             {agent.x402_enabled ? (

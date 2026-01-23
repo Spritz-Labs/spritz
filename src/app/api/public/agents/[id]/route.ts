@@ -156,9 +156,25 @@ export async function GET(
             ? agent.suggested_questions.slice(0, 4)
             : generateSuggestedQuestions(agent);
 
+        // Check if agent has events (for Official agents)
+        let eventsCount = 0;
+        let hasEvents = false;
+        
+        if (isOfficial) {
+            const { count } = await supabase
+                .from("shout_agent_events")
+                .select("*", { count: "exact", head: true })
+                .eq("agent_id", id);
+            
+            eventsCount = count || 0;
+            hasEvents = eventsCount > 0;
+        }
+
         return NextResponse.json({
             ...agent,
             suggested_questions: suggestedQuestions,
+            has_events: hasEvents,
+            events_count: eventsCount,
         });
     } catch (error) {
         console.error("[Public Agent] Error:", error);
