@@ -77,6 +77,7 @@ import { WalletModal } from "./WalletModal";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
 import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
 import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
+import { useWakeLock } from "@/hooks/useWakeLock";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -856,6 +857,20 @@ function DashboardContent({
     const [isBrowseChannelsOpen, setIsBrowseChannelsOpen] = useState(false);
     const [selectedChannel, setSelectedChannel] =
         useState<PublicChannel | null>(null);
+
+    // Screen Wake Lock - prevents screen from dimming during calls and active chats
+    // This helps maintain WebSocket connections and improves PWA experience
+    const isInActiveCall = callState === "joining" || callState === "connected" || !!currentGroupCall;
+    const isInActiveChat = !!chatFriend || !!selectedGroup || !!selectedChannel;
+    const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } = useWakeLock(isInActiveCall || isInActiveChat);
+    
+    // Log wake lock status for debugging (only once when state changes)
+    useEffect(() => {
+        if (isWakeLockSupported && (isInActiveCall || isInActiveChat)) {
+            console.log("[Dashboard] Wake lock:", isWakeLockActive ? "active" : "inactive", 
+                { isInActiveCall, isInActiveChat });
+        }
+    }, [isWakeLockActive, isWakeLockSupported, isInActiveCall, isInActiveChat]);
 
     // Waku works with both EVM and Solana addresses
     const wakuContext = useXMTPContext();
