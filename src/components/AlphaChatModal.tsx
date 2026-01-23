@@ -115,6 +115,7 @@ export function AlphaChatModal({
     const [isLeaving, setIsLeaving] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
+    const [userPopupPosition, setUserPopupPosition] = useState<{ x: number; y: number } | null>(null);
     const [isAddingFriend, setIsAddingFriend] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
@@ -177,7 +178,23 @@ export function AlphaChatModal({
     }, [messages, userAddress, getUserInfo, channelAgents]);
 
     // Handle mention click - show user popup
-    const handleMentionClick = useCallback((address: string) => {
+    const handleMentionClick = useCallback((address: string, event?: React.MouseEvent) => {
+        if (event) {
+            const rect = (event.target as HTMLElement).getBoundingClientRect();
+            setUserPopupPosition({ x: rect.left, y: rect.bottom + 8 });
+        }
+        setSelectedUser(address);
+    }, []);
+    
+    // Handle user click with position tracking
+    const handleUserClick = useCallback((address: string, event: React.MouseEvent) => {
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        // Position popup below the clicked element, but check if it would go off screen
+        const viewportHeight = window.innerHeight;
+        const popupHeight = 280; // Approximate popup height
+        const y = rect.bottom + 8;
+        const adjustedY = y + popupHeight > viewportHeight ? rect.top - popupHeight - 8 : y;
+        setUserPopupPosition({ x: Math.max(8, rect.left), y: Math.max(8, adjustedY) });
         setSelectedUser(address);
     }, []);
 
@@ -858,7 +875,7 @@ export function AlphaChatModal({
                                                                 ) : (
                                                                     // User avatar (clickable)
                                                                     <button
-                                                                        onClick={() => setSelectedUser(msg.sender_address)}
+                                                                        onClick={(e) => handleUserClick(msg.sender_address, e)}
                                                                         className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
                                                                     >
                                                                         {senderAvatar ? (
@@ -877,106 +894,6 @@ export function AlphaChatModal({
                                                                     </button>
                                                                 )}
                                                                 
-                                                                {/* User popup - only render once per sender, not for agents */}
-                                                                {selectedUser === msg.sender_address && isFirstMessageFromSender && !isAgent && (
-                                                                    <div
-                                                                        ref={userPopupRef}
-                                                                        className="absolute left-0 bottom-10 z-50 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3 min-w-[200px]"
-                                                                    >
-                                                                        <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-700">
-                                                                            {senderAvatar ? (
-                                                                                <img src={senderAvatar} alt="" className="w-10 h-10 rounded-full" />
-                                                                            ) : (
-                                                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold">
-                                                                                    {formatSender(msg.sender_address).slice(0, 2).toUpperCase()}
-                                                                                </div>
-                                                                            )}
-                                                                            <div className="flex-1 min-w-0">
-                                                                                <p className="text-white font-medium text-sm truncate">
-                                                                                    {formatSender(msg.sender_address)}
-                                                                                </p>
-                                                                                <p className="text-zinc-500 text-xs truncate">
-                                                                                    {msg.sender_address.slice(0, 10)}...{msg.sender_address.slice(-6)}
-                                                                                </p>
-                                                                            </div>
-                                                                        </div>
-                                                                        
-                                                                        {onAddFriend && (
-                                                                            isFriend && isFriend(msg.sender_address) ? (
-                                                                                <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                                    </svg>
-                                                                                    Already friends
-                                                                                </div>
-                                                                            ) : (
-                                                                                <button
-                                                                                    onClick={() => handleAddFriend(msg.sender_address)}
-                                                                                    disabled={isAddingFriend}
-                                                                                    className="w-full flex items-center gap-2 px-3 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                                                                                >
-                                                                                    {isAddingFriend ? (
-                                                                                        <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
-                                                                                    ) : (
-                                                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                                                                        </svg>
-                                                                                    )}
-                                                                                    Add Friend
-                                                                                </button>
-                                                                            )
-                                                                        )}
-                                                                        
-                                                                        {/* Mute Button - Moderators only - placed higher to avoid accidental clicks */}
-                                                                        {moderation.permissions.canMute && (
-                                                                            moderation.isUserMuted(msg.sender_address) ? (
-                                                                                <button
-                                                                                    onClick={async () => {
-                                                                                        await moderation.unmuteUser(msg.sender_address);
-                                                                                        setSelectedUser(null);
-                                                                                    }}
-                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm transition-colors"
-                                                                                >
-                                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                                                                                    </svg>
-                                                                                    Unmute User
-                                                                                </button>
-                                                                            ) : (
-                                                                                <button
-                                                                                    onClick={() => {
-                                                                                        setMuteTarget({
-                                                                                            address: msg.sender_address,
-                                                                                            name: formatSender(msg.sender_address),
-                                                                                        });
-                                                                                        setSelectedUser(null);
-                                                                                    }}
-                                                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
-                                                                                >
-                                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                                                                                    </svg>
-                                                                                    Mute User
-                                                                                </button>
-                                                                            )
-                                                                        )}
-
-                                                                        {/* Copy Address - at bottom, safe for accidental clicks */}
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                navigator.clipboard.writeText(msg.sender_address);
-                                                                                setSelectedUser(null);
-                                                                            }}
-                                                                            className="w-full flex items-center gap-2 px-3 py-2 mt-1 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
-                                                                        >
-                                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                                            </svg>
-                                                                            Copy Address
-                                                                        </button>
-                                                                    </div>
-                                                                )}
                                                             </div>
                                                         )}
 
@@ -1030,7 +947,7 @@ export function AlphaChatModal({
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            setSelectedUser(msg.sender_address);
+                                                                            handleUserClick(msg.sender_address, e);
                                                                         }}
                                                                         className="text-xs text-orange-300 mb-1 font-medium hover:text-orange-200 transition-colors"
                                                                     >
@@ -1383,6 +1300,118 @@ export function AlphaChatModal({
                         channelName="Spritz Global Chat"
                         getUserInfo={getUserInfo}
                     />
+
+                    {/* User Popup - Fixed position near click */}
+                    {selectedUser && userPopupPosition && (
+                        <div
+                            ref={userPopupRef}
+                            className="fixed z-[100] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl p-3 min-w-[220px] max-w-[280px]"
+                            style={{
+                                left: Math.min(userPopupPosition.x, window.innerWidth - 290),
+                                top: userPopupPosition.y,
+                            }}
+                        >
+                            {(() => {
+                                const userInfo = getUserInfo?.(selectedUser);
+                                const isAlreadyFriend = isFriend?.(selectedUser) ?? false;
+                                const isMuted = moderation.isUserMuted(selectedUser);
+                                return (
+                                    <>
+                                        <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-700">
+                                            {userInfo?.avatar ? (
+                                                <img src={userInfo.avatar} alt="" className="w-10 h-10 rounded-full" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold">
+                                                    {(userInfo?.name || selectedUser).slice(0, 2).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-white font-medium text-sm truncate">
+                                                    {userInfo?.name || `${selectedUser.slice(0, 6)}...${selectedUser.slice(-4)}`}
+                                                </p>
+                                                <p className="text-zinc-500 text-xs truncate font-mono">
+                                                    {selectedUser.slice(0, 10)}...{selectedUser.slice(-6)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        
+                                        {onAddFriend && (
+                                            isAlreadyFriend ? (
+                                                <div className="flex items-center gap-2 text-emerald-400 text-sm py-2">
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    Already friends
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleAddFriend(selectedUser)}
+                                                    disabled={isAddingFriend}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                                >
+                                                    {isAddingFriend ? (
+                                                        <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                        </svg>
+                                                    )}
+                                                    Add Friend
+                                                </button>
+                                            )
+                                        )}
+                                        
+                                        {moderation.permissions.canMute && (
+                                            isMuted ? (
+                                                <button
+                                                    onClick={async () => {
+                                                        await moderation.unmuteUser(selectedUser);
+                                                        setSelectedUser(null);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                    </svg>
+                                                    Unmute User
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => {
+                                                        setMuteTarget({
+                                                            address: selectedUser,
+                                                            name: userInfo?.name || selectedUser.slice(0, 10),
+                                                        });
+                                                        setSelectedUser(null);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                    </svg>
+                                                    Mute User
+                                                </button>
+                                            )
+                                        )}
+
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(selectedUser);
+                                                setSelectedUser(null);
+                                            }}
+                                            className="w-full flex items-center gap-2 px-3 py-2 mt-1 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                            Copy Address
+                                        </button>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    )}
 
                     {/* Quick Mute Dialog */}
                     {muteTarget && (

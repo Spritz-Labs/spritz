@@ -79,6 +79,7 @@ export function ChannelChatModal({
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
+    const [userPopupPosition, setUserPopupPosition] = useState<{ x: number; y: number } | null>(null);
     const [addingFriend, setAddingFriend] = useState<string | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
@@ -156,7 +157,22 @@ export function ChannelChatModal({
     }, [messages, userAddress, getEffectiveUserInfo, channelAgents]);
 
     // Handle mention click
-    const handleMentionClick = useCallback((address: string) => {
+    const handleMentionClick = useCallback((address: string, event?: React.MouseEvent) => {
+        if (event) {
+            const rect = (event.target as HTMLElement).getBoundingClientRect();
+            setUserPopupPosition({ x: rect.left, y: rect.bottom + 8 });
+        }
+        setSelectedUser(address);
+    }, []);
+    
+    // Handle user click with position tracking
+    const handleUserClick = useCallback((address: string, event: React.MouseEvent) => {
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const popupHeight = 250;
+        const y = rect.bottom + 8;
+        const adjustedY = y + popupHeight > viewportHeight ? rect.top - popupHeight - 8 : y;
+        setUserPopupPosition({ x: Math.max(8, rect.left), y: Math.max(8, adjustedY) });
         setSelectedUser(address);
     }, []);
 
@@ -745,11 +761,11 @@ export function ChannelChatModal({
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                setSelectedUser(
-                                                                    selectedUser === msg.sender_address
-                                                                        ? null
-                                                                        : msg.sender_address
-                                                                );
+                                                                if (selectedUser === msg.sender_address) {
+                                                                    setSelectedUser(null);
+                                                                } else {
+                                                                    handleUserClick(msg.sender_address, e);
+                                                                }
                                                             }}
                                                             className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
                                                         >
@@ -769,62 +785,7 @@ export function ChannelChatModal({
                                                         </button>
                                                     )}
 
-                                                    {/* User popup - only render once per sender, not for agents */}
-                                                    <AnimatePresence>
-                                                        {selectedUser === msg.sender_address && isFirstMessageFromSender && !isAgent && (
-                                                            <motion.div
-                                                                initial={{ opacity: 0, scale: 0.95 }}
-                                                                animate={{ opacity: 1, scale: 1 }}
-                                                                exit={{ opacity: 0, scale: 0.95 }}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="absolute left-0 bottom-10 z-50 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3 min-w-[200px]"
-                                                            >
-                                                                <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-700">
-                                                                    {senderAvatar ? (
-                                                                        <img src={senderAvatar} alt="" className="w-10 h-10 rounded-full" />
-                                                                    ) : (
-                                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold">
-                                                                            {formatAddress(msg.sender_address).slice(0, 2).toUpperCase()}
-                                                                        </div>
-                                                                    )}
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-white font-medium text-sm truncate">
-                                                                            {formatSender(msg.sender_address)}
-                                                                        </p>
-                                                                        <p className="text-zinc-500 text-xs truncate">
-                                                                            {formatAddress(msg.sender_address)}
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-                                                                {!isAlreadyFriend && onAddFriend && (
-                                                                    <button
-                                                                        onClick={() => handleAddFriend(msg.sender_address)}
-                                                                        disabled={addingFriend === msg.sender_address}
-                                                                        className="w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                                                                    >
-                                                                        {addingFriend === msg.sender_address ? (
-                                                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                                        ) : (
-                                                                            <>
-                                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                                                                </svg>
-                                                                                Add Friend
-                                                                            </>
-                                                                        )}
-                                                                    </button>
-                                                                )}
-                                                                {isAlreadyFriend && (
-                                                                    <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                        </svg>
-                                                                        Already friends
-                                                                    </div>
-                                                                )}
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
+                                                    {/* User popup rendered as fixed position element below */}
                                                 </div>
                                             )}
 
@@ -1165,6 +1126,89 @@ export function ChannelChatModal({
                         </div>
                     </div>
                 </motion.div>
+
+                {/* User Popup - Fixed position near click */}
+                <AnimatePresence>
+                    {selectedUser && userPopupPosition && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="fixed z-[100] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl p-3 min-w-[220px] max-w-[280px]"
+                            style={{
+                                left: Math.min(userPopupPosition.x, typeof window !== "undefined" ? window.innerWidth - 290 : 0),
+                                top: userPopupPosition.y,
+                            }}
+                        >
+                            {(() => {
+                                const userInfo = getUserInfo?.(selectedUser);
+                                const alreadyFriend = isFriend?.(selectedUser);
+                                return (
+                                    <>
+                                        <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-700">
+                                            {userInfo?.avatar ? (
+                                                <img src={userInfo.avatar} alt="" className="w-10 h-10 rounded-full" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold">
+                                                    {(userInfo?.name || selectedUser).slice(0, 2).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-white font-medium text-sm truncate">
+                                                    {userInfo?.name || `${selectedUser.slice(0, 6)}...${selectedUser.slice(-4)}`}
+                                                </p>
+                                                <p className="text-zinc-500 text-xs truncate font-mono">
+                                                    {selectedUser.slice(0, 10)}...{selectedUser.slice(-6)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        
+                                        {!alreadyFriend && onAddFriend && (
+                                            <button
+                                                onClick={() => handleAddFriend(selectedUser)}
+                                                disabled={addingFriend === selectedUser}
+                                                className="w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                            >
+                                                {addingFriend === selectedUser ? (
+                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                        </svg>
+                                                        Add Friend
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                        {alreadyFriend && (
+                                            <div className="flex items-center gap-2 text-emerald-400 text-sm py-2">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                Already friends
+                                            </div>
+                                        )}
+                                        
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(selectedUser);
+                                                setSelectedUser(null);
+                                            }}
+                                            className="w-full flex items-center gap-2 px-3 py-2 mt-1 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                            Copy Address
+                                        </button>
+                                    </>
+                                );
+                            })()}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Image Preview Modal */}
                 <AnimatePresence>
