@@ -281,6 +281,23 @@ export default function PublicAgentPage() {
                                     </p>
                                 </div>
                             )}
+                            
+                            {/* CTA to sign up */}
+                            <div className="mt-8 pt-6 border-t border-zinc-800/50">
+                                <a 
+                                    href="/"
+                                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700 hover:border-zinc-600 rounded-xl text-sm text-zinc-300 hover:text-white transition-all group"
+                                >
+                                    <span className="text-orange-400">🍊</span>
+                                    <span>Sign up for <span className="text-orange-400 font-medium">Spritz</span> for more features</span>
+                                    <svg className="w-4 h-4 text-zinc-500 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </a>
+                                <p className="text-[10px] text-zinc-600 mt-2">
+                                    Create your own AI agents • Chat with friends • Web3 wallet
+                                </p>
+                            </div>
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -396,13 +413,19 @@ export default function PublicAgentPage() {
                             )}
                         </button>
                     </form>
-                    <p className="text-[10px] text-zinc-500 text-center mt-2">
-                        {agent.x402_enabled ? (
-                            <>x402 payments required • <a href="/" className="text-orange-400 hover:underline">Spritz</a></>
-                        ) : (
-                            <>Powered by <a href="/" className="text-orange-400 hover:underline">Spritz</a> • Public AI Agent</>
-                        )}
-                    </p>
+                    <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-zinc-500">
+                        <span>
+                            {agent.x402_enabled ? "x402 payments required" : "Public AI Agent"}
+                        </span>
+                        <span className="text-zinc-700">•</span>
+                        <a 
+                            href="/" 
+                            className="inline-flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors"
+                        >
+                            <span>🍊</span>
+                            <span className="hover:underline">Join Spritz for more</span>
+                        </a>
+                    </div>
                 </div>
             </footer>
         </div>
