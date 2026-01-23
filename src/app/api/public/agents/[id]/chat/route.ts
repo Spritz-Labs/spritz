@@ -77,6 +77,127 @@ async function generateQueryEmbedding(query: string): Promise<number[] | null> {
     }
 }
 
+// Helper to detect if message is asking about events
+function isEventQuery(message: string): boolean {
+    const eventKeywords = [
+        'event', 'events', 'happening', 'schedule', 'party', 'parties',
+        'meetup', 'summit', 'conference', 'hackathon', 'workshop',
+        'side event', 'what\'s on', 'whats on', 'what is on',
+        'feb', 'february', '17th', '18th', '19th', '20th', '21st',
+        '8th', '16th', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+    ];
+    const lowerMessage = message.toLowerCase();
+    return eventKeywords.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Helper to extract date from message (returns YYYY-MM-DD or null)
+function extractDateFromMessage(message: string): string | null {
+    const lowerMessage = message.toLowerCase();
+    
+    // Map common date patterns to 2026 dates for ETHDenver
+    const datePatterns: Record<string, string> = {
+        'feb 8': '2026-02-08', 'february 8': '2026-02-08', '8th': '2026-02-08',
+        'feb 12': '2026-02-12', 'february 12': '2026-02-12', '12th': '2026-02-12',
+        'feb 13': '2026-02-13', 'february 13': '2026-02-13', '13th': '2026-02-13',
+        'feb 14': '2026-02-14', 'february 14': '2026-02-14', '14th': '2026-02-14',
+        'feb 15': '2026-02-15', 'february 15': '2026-02-15', '15th': '2026-02-15',
+        'feb 16': '2026-02-16', 'february 16': '2026-02-16', '16th': '2026-02-16',
+        'feb 17': '2026-02-17', 'february 17': '2026-02-17', '17th': '2026-02-17',
+        'feb 18': '2026-02-18', 'february 18': '2026-02-18', '18th': '2026-02-18',
+        'feb 19': '2026-02-19', 'february 19': '2026-02-19', '19th': '2026-02-19',
+        'feb 20': '2026-02-20', 'february 20': '2026-02-20', '20th': '2026-02-20',
+        'feb 21': '2026-02-21', 'february 21': '2026-02-21', '21st': '2026-02-21',
+    };
+    
+    for (const [pattern, date] of Object.entries(datePatterns)) {
+        if (lowerMessage.includes(pattern)) {
+            return date;
+        }
+    }
+    return null;
+}
+
+// Helper to get structured events from the events table
+async function getEventContext(agentId: string, message: string): Promise<string | null> {
+    if (!supabase) return null;
+    
+    try {
+        // Check if this is an event-related query
+        if (!isEventQuery(message)) {
+            return null;
+        }
+        
+        console.log("[Event Context] Query detected as event-related");
+        
+        // Try to extract a specific date
+        const targetDate = extractDateFromMessage(message);
+        
+        let query = supabase
+            .from("shout_agent_events")
+            .select("name, description, event_type, event_date, start_time, end_time, venue, organizer, event_url, source, is_featured")
+            .eq("agent_id", agentId)
+            .order("event_date", { ascending: true })
+            .order("start_time", { ascending: true });
+        
+        if (targetDate) {
+            console.log("[Event Context] Filtering for date:", targetDate);
+            query = query.eq("event_date", targetDate);
+        } else {
+            // If no specific date, limit to reasonable number
+            query = query.limit(30);
+        }
+        
+        const { data: events, error } = await query;
+        
+        if (error || !events?.length) {
+            console.log("[Event Context] No events found");
+            return null;
+        }
+        
+        console.log("[Event Context] Found", events.length, "events");
+        
+        // Format events for context
+        const formatTime = (time: string | null) => {
+            if (!time) return "";
+            try {
+                const [hours, minutes] = time.split(":");
+                const hour = parseInt(hours);
+                const ampm = hour >= 12 ? "PM" : "AM";
+                const hour12 = hour % 12 || 12;
+                return `${hour12}:${minutes} ${ampm}`;
+            } catch {
+                return time;
+            }
+        };
+        
+        const eventLines = events.map(event => {
+            const timeStr = event.start_time 
+                ? event.end_time 
+                    ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
+                    : formatTime(event.start_time)
+                : "Time TBA";
+            const sourceLabel = event.source === "official" ? "OFFICIAL" : event.source === "sponsor" ? "SPONSOR" : "SIDE EVENT";
+            const featured = event.is_featured ? "⭐ FEATURED" : "";
+            
+            return `- ${featured} [${sourceLabel}] ${event.name}
+  📅 ${event.event_date} @ ${timeStr}
+  ${event.venue ? `📍 ${event.venue}` : ""}
+  ${event.organizer ? `🏢 ${event.organizer}` : ""}
+  ${event.event_url ? `🔗 ${event.event_url}` : ""}
+  ${event.description ? `📝 ${event.description}` : ""}`.trim();
+        });
+        
+        const contextHeader = targetDate 
+            ? `\n\n=== STRUCTURED EVENT DATA for ${targetDate} ===\nThese are events from my events database (more reliable than scraped content):\n\n`
+            : `\n\n=== STRUCTURED EVENT DATA ===\nThese are events from my events database:\n\n`;
+        
+        return contextHeader + eventLines.join("\n\n");
+    } catch (err) {
+        console.error("[Event Context] Error:", err);
+        return null;
+    }
+}
+
 // Helper to get RAG context from knowledge base
 async function getRAGContext(agentId: string, message: string): Promise<string | null> {
     if (!supabase || !ai) {
@@ -244,8 +365,19 @@ export async function POST(
             }
         }
 
+        // Get structured event context for Official agents
+        let eventContext = "";
+        if (agent.visibility === "official") {
+            console.log("[Public Chat] Checking for event context...");
+            const events = await getEventContext(id, message);
+            if (events) {
+                console.log("[Public Chat] Got event context, length:", events.length);
+                eventContext = events + "\n\nPRIORITIZE the structured event data above over scraped content. Include event URLs when available!";
+            }
+        }
+
         // Build the full message with context
-        const fullMessage = message + ragContext;
+        const fullMessage = message + ragContext + eventContext;
 
         // Build config for generate content
         const generateConfig: {
