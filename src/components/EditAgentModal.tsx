@@ -1020,69 +1020,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                         
                                         {/* Channel Presence - Only for Official agents */}
                                         {visibility === "official" && (
-                                            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <span className="text-lg">🤖</span>
-                                                    <h4 className="text-sm font-medium text-purple-400">Channel Presence</h4>
-                                                    {isSavingChannels && (
-                                                        <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                                                    )}
-                                                </div>
-                                                <p className="text-xs text-zinc-400 mb-4">
-                                                    Add this agent to public channels. Users can @mention the agent to interact.
-                                                </p>
-                                                
-                                                <div className="space-y-2">
-                                                    {/* Global Chat */}
-                                                    <label className="flex items-center gap-3 p-3 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={channelMemberships.global}
-                                                            onChange={() => toggleChannelMembership("global")}
-                                                            disabled={isSavingChannels}
-                                                            className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
-                                                        />
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-orange-500">🌍</span>
-                                                            <span className="text-sm text-white font-medium">Global Chat</span>
-                                                        </div>
-                                                        <span className="ml-auto text-xs text-zinc-500">Spritz Global</span>
-                                                    </label>
-                                                    
-                                                    {/* Public Channels */}
-                                                    {availableChannels.length > 0 && (
-                                                        <div className="border-t border-zinc-700/50 pt-2 mt-2">
-                                                            <p className="text-xs text-zinc-500 mb-2">Public Channels</p>
-                                                            {availableChannels.map(channel => (
-                                                                <label 
-                                                                    key={channel.id}
-                                                                    className="flex items-center gap-3 p-3 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors mb-1"
-                                                                >
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={channelMemberships.channels.includes(channel.id)}
-                                                                        onChange={() => toggleChannelMembership("channel", channel.id)}
-                                                                        disabled={isSavingChannels}
-                                                                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
-                                                                    />
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span>{channel.emoji || "#"}</span>
-                                                                        <span className="text-sm text-white">{channel.name}</span>
-                                                                    </div>
-                                                                </label>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                
-                                                {(channelMemberships.global || channelMemberships.channels.length > 0) && (
-                                                    <div className="mt-3 p-2 bg-zinc-800/50 rounded-lg">
-                                                        <p className="text-xs text-zinc-400">
-                                                            💡 Users can mention this agent with <code className="px-1 py-0.5 bg-zinc-700 rounded text-purple-400">@{name || "AgentName"}</code>
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
+                                            <ChannelPresenceSection
+                                                channelMemberships={channelMemberships}
+                                                availableChannels={availableChannels}
+                                                isSavingChannels={isSavingChannels}
+                                                toggleChannelMembership={toggleChannelMembership}
+                                                agentName={name}
+                                            />
                                         )}
 
                                         {/* x402 API Access */}
@@ -2086,6 +2030,157 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 </motion.div>
             )}
         </AnimatePresence>
+    );
+}
+
+// Compact Channel Presence section for Official agents
+function ChannelPresenceSection({
+    channelMemberships,
+    availableChannels,
+    isSavingChannels,
+    toggleChannelMembership,
+    agentName,
+}: {
+    channelMemberships: { global: boolean; channels: string[] };
+    availableChannels: Array<{ id: string; name: string; emoji: string }>;
+    isSavingChannels: boolean;
+    toggleChannelMembership: (type: "global" | "channel", channelId?: string) => void;
+    agentName: string;
+}) {
+    const [showChannelPicker, setShowChannelPicker] = useState(false);
+    const [channelSearch, setChannelSearch] = useState("");
+    
+    // Get selected channel names for display
+    const selectedChannels = availableChannels.filter(c => channelMemberships.channels.includes(c.id));
+    const unselectedChannels = availableChannels.filter(c => !channelMemberships.channels.includes(c.id));
+    const filteredChannels = unselectedChannels.filter(c => 
+        c.name.toLowerCase().includes(channelSearch.toLowerCase())
+    );
+    
+    const totalActive = (channelMemberships.global ? 1 : 0) + channelMemberships.channels.length;
+    
+    return (
+        <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    <span className="text-base">🤖</span>
+                    <h4 className="text-sm font-medium text-purple-400">Channel Presence</h4>
+                    {isSavingChannels && (
+                        <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    )}
+                </div>
+                <span className="text-xs text-zinc-500">
+                    {totalActive > 0 ? `${totalActive} active` : "Not in any channels"}
+                </span>
+            </div>
+            
+            {/* Active channels as compact chips */}
+            <div className="flex flex-wrap gap-1.5 mb-2">
+                {/* Global Chat chip */}
+                <button
+                    onClick={() => toggleChannelMembership("global")}
+                    disabled={isSavingChannels}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                        channelMemberships.global
+                            ? "bg-orange-500/20 text-orange-400 border border-orange-500/40 hover:bg-orange-500/30"
+                            : "bg-zinc-800 text-zinc-500 border border-zinc-700 hover:bg-zinc-700 hover:text-zinc-300"
+                    }`}
+                >
+                    <span>🌍</span>
+                    <span>Global</span>
+                    {channelMemberships.global && (
+                        <svg className="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    )}
+                </button>
+                
+                {/* Selected channel chips */}
+                {selectedChannels.map(channel => (
+                    <button
+                        key={channel.id}
+                        onClick={() => toggleChannelMembership("channel", channel.id)}
+                        disabled={isSavingChannels}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
+                    >
+                        <span>{channel.emoji || "#"}</span>
+                        <span className="max-w-[80px] truncate">{channel.name}</span>
+                        <svg className="w-3 h-3 ml-0.5 text-purple-400/70 hover:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                ))}
+                
+                {/* Add channel button */}
+                {unselectedChannels.length > 0 && (
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowChannelPicker(!showChannelPicker)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700 border-dashed hover:bg-zinc-700 hover:text-white transition-all"
+                        >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Add channel</span>
+                        </button>
+                        
+                        {/* Channel picker dropdown */}
+                        {showChannelPicker && (
+                            <>
+                                <div 
+                                    className="fixed inset-0 z-40" 
+                                    onClick={() => setShowChannelPicker(false)}
+                                />
+                                <div className="absolute top-full left-0 mt-1 w-56 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                                    {/* Search input */}
+                                    <div className="p-2 border-b border-zinc-700">
+                                        <input
+                                            type="text"
+                                            value={channelSearch}
+                                            onChange={(e) => setChannelSearch(e.target.value)}
+                                            placeholder="Search channels..."
+                                            className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    
+                                    {/* Channel list */}
+                                    <div className="max-h-40 overflow-y-auto">
+                                        {filteredChannels.length === 0 ? (
+                                            <p className="p-3 text-xs text-zinc-500 text-center">
+                                                {channelSearch ? "No channels found" : "No more channels"}
+                                            </p>
+                                        ) : (
+                                            filteredChannels.map(channel => (
+                                                <button
+                                                    key={channel.id}
+                                                    onClick={() => {
+                                                        toggleChannelMembership("channel", channel.id);
+                                                        setChannelSearch("");
+                                                        setShowChannelPicker(false);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-700 transition-colors"
+                                                >
+                                                    <span>{channel.emoji || "#"}</span>
+                                                    <span className="text-sm text-white truncate">{channel.name}</span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
+            
+            {/* Help text */}
+            {totalActive > 0 && (
+                <p className="text-[10px] text-zinc-500">
+                    Users can @mention <code className="px-1 py-0.5 bg-zinc-800 rounded text-purple-400">{agentName || "Agent"}</code> in these channels
+                </p>
+            )}
+        </div>
     );
 }
 
