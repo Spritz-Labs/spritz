@@ -37,6 +37,7 @@ interface EditAgentModalProps {
         avatarUrl?: string | null;
         visibility?: "private" | "friends" | "public" | "official";
         tags?: string[];
+        suggestedQuestions?: string[];
         webSearchEnabled?: boolean;
         useKnowledgeBase?: boolean;
         mcpEnabled?: boolean;
@@ -68,6 +69,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [visibility, setVisibility] = useState<"private" | "friends" | "public" | "official">("private");
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
+    const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(["", "", "", ""]);
     
     // Tag helpers
     const addTag = (tag: string) => {
@@ -236,6 +238,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             const agentX402Mode = agent.x402_pricing_mode || "global";
             const agentMcpServers = agent.mcp_servers || [];
             const agentApiTools = agent.api_tools || [];
+            const agentSuggestedQuestions = agent.suggested_questions || [];
 
             // Set all state values
             setName(agentName);
@@ -245,6 +248,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setVisibility(agentVisibility);
             setTags(agentTags);
             setTagInput("");
+            // Pad suggested questions to always have 4 slots
+            setSuggestedQuestions([
+                agentSuggestedQuestions[0] || "",
+                agentSuggestedQuestions[1] || "",
+                agentSuggestedQuestions[2] || "",
+                agentSuggestedQuestions[3] || "",
+            ]);
             setWebSearchEnabled(agentWebSearch);
             setUseKnowledgeBase(agentKnowledgeBase);
             setMcpEnabled(agentMcp);
@@ -452,6 +462,11 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         setError(null);
 
         try {
+            // Filter out empty suggested questions for Official agents
+            const filteredQuestions = visibility === "official" 
+                ? suggestedQuestions.filter(q => q.trim()).map(q => q.trim())
+                : undefined;
+            
             await onSave(agent.id, {
                 name: name.trim(),
                 personality: personality.trim(),
@@ -459,6 +474,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 avatarUrl,
                 visibility,
                 tags,
+                suggestedQuestions: filteredQuestions,
                 webSearchEnabled,
                 useKnowledgeBase,
                 mcpEnabled,
@@ -797,6 +813,39 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                             <p className="text-xs text-zinc-500 mt-2">
                                                 Tags help users find your agent when searching
                                             </p>
+                                        </div>
+                                    )}
+                                    
+                                    {/* Suggested Questions (Official agents only) */}
+                                    {visibility === "official" && (
+                                        <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="text-lg">💬</span>
+                                                <label className="text-sm font-medium text-orange-400">
+                                                    Suggested Questions
+                                                </label>
+                                                <span className="text-xs text-zinc-500 font-normal">(Optional)</span>
+                                            </div>
+                                            <p className="text-xs text-zinc-400 mb-3">
+                                                Custom prompts shown to users on the public agent page. Leave empty for auto-generated questions.
+                                            </p>
+                                            <div className="space-y-2">
+                                                {suggestedQuestions.map((question, idx) => (
+                                                    <input
+                                                        key={idx}
+                                                        type="text"
+                                                        value={question}
+                                                        onChange={(e) => {
+                                                            const newQuestions = [...suggestedQuestions];
+                                                            newQuestions[idx] = e.target.value;
+                                                            setSuggestedQuestions(newQuestions);
+                                                        }}
+                                                        placeholder={`Question ${idx + 1} (e.g., "What can you help me with?")`}
+                                                        maxLength={100}
+                                                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
+                                                    />
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
                                 </>

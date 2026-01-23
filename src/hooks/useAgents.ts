@@ -60,6 +60,8 @@ export type Agent = {
     x402_pricing_mode?: "global" | "per_tool";
     // MCP server configuration
     mcp_servers?: MCPServer[];
+    // Suggested questions for public page (Official agents can customize)
+    suggested_questions?: string[];
     // API Tools configuration
     api_tools?: APITool[];
 };
@@ -179,6 +181,7 @@ export function useAgents(userAddress: string | null, isAdmin: boolean = false) 
             avatarUrl?: string | null;
             visibility?: "private" | "friends" | "public" | "official";
             tags?: string[];
+            suggestedQuestions?: string[];
             webSearchEnabled?: boolean;
             useKnowledgeBase?: boolean;
             mcpEnabled?: boolean;

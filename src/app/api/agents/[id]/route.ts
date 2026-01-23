@@ -89,6 +89,8 @@ export async function PATCH(
             schedulingEnabled,
             // Tags for searchability
             tags,
+            // Suggested questions (Official agents)
+            suggestedQuestions,
             // x402 fields
             x402Enabled,
             x402PriceCents,
@@ -172,6 +174,21 @@ export async function PATCH(
                     .filter((t: string) => t.length > 0)
                 : [];
             updates.tags = validatedTags;
+        }
+        
+        // Suggested questions (max 4, each max 100 chars, only for official agents)
+        if (suggestedQuestions !== undefined) {
+            // Only allow suggested questions for official agents
+            const finalVisibility = visibility || existingAgent.visibility;
+            if (finalVisibility === "official") {
+                const validatedQuestions = Array.isArray(suggestedQuestions) 
+                    ? suggestedQuestions
+                        .slice(0, 4)
+                        .map((q: string) => q.trim().slice(0, 100))
+                        .filter((q: string) => q.length > 0)
+                    : [];
+                updates.suggested_questions = validatedQuestions.length > 0 ? validatedQuestions : null;
+            }
         }
         
         // x402 configuration updates

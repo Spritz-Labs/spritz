@@ -16,6 +16,7 @@ interface Agent {
     x402_network: string;
     owner_address: string;
     tags?: string[];
+    suggested_questions?: string[];
 }
 
 interface Message {
@@ -197,7 +198,7 @@ export default function PublicAgentPage() {
             <main className="flex-1 overflow-y-auto">
                 <div className="max-w-3xl mx-auto px-4 py-6">
                     {messages.length === 0 ? (
-                        <div className="text-center py-20">
+                        <div className="text-center py-12">
                             {agent.avatar_url ? (
                                 <img 
                                     src={agent.avatar_url} 
@@ -213,6 +214,50 @@ export default function PublicAgentPage() {
                             <p className="text-zinc-400 mb-6 max-w-md mx-auto">
                                 {agent.personality || "Ask me anything!"}
                             </p>
+                            
+                            {/* Suggested Questions */}
+                            {agent.suggested_questions && agent.suggested_questions.length > 0 && (
+                                <div className="mb-6 max-w-lg mx-auto">
+                                    <p className="text-xs text-zinc-500 mb-3">Try asking:</p>
+                                    <div className="flex flex-wrap gap-2 justify-center">
+                                        {agent.suggested_questions.map((question, idx) => (
+                                            <button
+                                                key={idx}
+                                                onClick={() => {
+                                                    setInput(question);
+                                                    // Auto-send after a brief delay for UX
+                                                    setTimeout(() => {
+                                                        setMessages(prev => [...prev, { role: "user", content: question }]);
+                                                        setInput("");
+                                                        setSending(true);
+                                                        fetch(`/api/public/agents/${id}/chat`, {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ message: question })
+                                                        }).then(async (res) => {
+                                                            if (res.ok) {
+                                                                const data = await res.json();
+                                                                setMessages(prev => [...prev, { role: "assistant", content: data.message || data.response || "No response" }]);
+                                                            } else {
+                                                                const data = await res.json();
+                                                                setMessages(prev => [...prev, { role: "assistant", content: `❌ Error: ${data.error || "Failed to get response"}` }]);
+                                                            }
+                                                        }).catch(() => {
+                                                            setMessages(prev => [...prev, { role: "assistant", content: "❌ Failed to connect to the agent" }]);
+                                                        }).finally(() => {
+                                                            setSending(false);
+                                                        });
+                                                    }, 100);
+                                                }}
+                                                className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 rounded-xl text-sm text-zinc-300 hover:text-white transition-all"
+                                            >
+                                                {question}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            
                             {agent.x402_enabled ? (
                                 <div className="inline-block bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-sm">
                                     <p className="text-yellow-400 font-medium">💰 This agent uses x402 payments</p>
