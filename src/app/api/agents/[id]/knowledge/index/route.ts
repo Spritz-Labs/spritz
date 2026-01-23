@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenAI } from "@google/genai";
+import { scrapeUrl, fetchContent, isFirecrawlConfigured } from "@/lib/firecrawl";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -43,8 +44,8 @@ function chunkText(text: string, maxChunkSize: number = 1000, overlap: number = 
     return chunks;
 }
 
-// Fetch and clean content from URL
-async function fetchAndCleanContent(url: string): Promise<string | null> {
+// Fetch and clean content from URL (basic method - regex HTML cleaning)
+async function fetchAndCleanContentBasic(url: string): Promise<string | null> {
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
@@ -108,6 +109,48 @@ async function fetchAndCleanContent(url: string): Promise<string | null> {
         console.error("[Indexing] Error fetching URL:", error);
         throw error;
     }
+}
+
+// Fetch content using appropriate method
+async function fetchAndCleanContent(
+    url: string, 
+    options: {
+        scrapeMethod?: "basic" | "firecrawl";
+        crawlDepth?: number;
+        excludePatterns?: string[];
+    } = {}
+): Promise<{ content: string; pageCount: number }> {
+    const { scrapeMethod = "basic", crawlDepth = 1, excludePatterns } = options;
+    
+    // Use Firecrawl if configured and requested
+    if (scrapeMethod === "firecrawl" && isFirecrawlConfigured()) {
+        console.log("[Indexing] Using Firecrawl for URL:", url);
+        
+        try {
+            const result = await fetchContent(url, {
+                crawlDepth,
+                excludePatterns,
+                maxPages: 50,
+            });
+            
+            console.log("[Indexing] Firecrawl returned", result.pageCount, "pages");
+            return {
+                content: result.content,
+                pageCount: result.pageCount,
+            };
+        } catch (error) {
+            console.error("[Indexing] Firecrawl failed, falling back to basic:", error);
+            // Fall back to basic method
+        }
+    }
+    
+    // Basic method
+    console.log("[Indexing] Using basic scraping for URL:", url);
+    const content = await fetchAndCleanContentBasic(url);
+    return {
+        content: content || "",
+        pageCount: 1,
+    };
 }
 
 // Generate embedding using Gemini
@@ -184,16 +227,22 @@ export async function POST(
             .eq("id", knowledgeId);
 
         try {
-            // Fetch content
-            console.log("[Indexing] Fetching content from:", knowledge.url);
-            const content = await fetchAndCleanContent(knowledge.url);
+            // Fetch content using configured method
+            console.log("[Indexing] Fetching content from:", knowledge.url, "method:", knowledge.scrape_method || "basic");
+            const { content, pageCount } = await fetchAndCleanContent(knowledge.url, {
+                scrapeMethod: knowledge.scrape_method || "basic",
+                crawlDepth: knowledge.crawl_depth || 1,
+                excludePatterns: knowledge.exclude_patterns || undefined,
+            });
             
             if (!content || content.length < 100) {
                 throw new Error("Not enough content to index");
             }
 
+            console.log("[Indexing] Fetched", pageCount, "page(s), total content length:", content.length);
+
             // Chunk the content
-            console.log("[Indexing] Chunking content, length:", content.length);
+            console.log("[Indexing] Chunking content...");
             const chunks = chunkText(content);
             console.log("[Indexing] Created", chunks.length, "chunks");
 
@@ -250,17 +299,24 @@ export async function POST(
                 }
             }
 
-            // Update knowledge item as indexed
+            // Update knowledge item as indexed with sync timestamp
             await supabase.rpc("update_knowledge_indexed", {
                 p_knowledge_id: knowledgeId,
                 p_chunk_count: chunkInserts.length,
             });
+
+            // Update last_synced_at for auto-sync tracking
+            await supabase
+                .from("shout_agent_knowledge")
+                .update({ last_synced_at: new Date().toISOString() })
+                .eq("id", knowledgeId);
 
             console.log("[Indexing] Successfully indexed", chunkInserts.length, "chunks");
 
             return NextResponse.json({
                 success: true,
                 chunksIndexed: chunkInserts.length,
+                pagesScraped: pageCount,
             });
 
         } catch (indexError) {
