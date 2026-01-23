@@ -620,159 +620,76 @@ export function GroupChatModal({
                                 paddingRight: 'env(safe-area-inset-right)',
                             } : undefined}
                         >
-                            {/* Header - larger touch targets for mobile */}
-                            <div className="px-2 sm:px-4 py-3 border-b border-zinc-800 flex items-center gap-2 sm:gap-3">
+                            {/* Header - unified mobile-first design */}
+                            <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
+                                {/* Back button */}
                                 <button
                                     onClick={onClose}
-                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
+                                    className="shrink-0 p-2.5 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
                                     aria-label="Go back"
                                 >
-                                    <svg
-                                        className="w-5 h-5 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M15 19l-7-7 7-7"
-                                        />
+                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                     </svg>
                                 </button>
 
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="text-white font-semibold truncate flex items-center gap-2">
-                                        {group.emoji && (
-                                            <span>{group.emoji}</span>
-                                        )}
+                                {/* Avatar */}
+                                <div className="shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                                    {group.emoji ? (
+                                        <span className="text-lg">{group.emoji}</span>
+                                    ) : (
+                                        <span className="text-white font-bold text-sm">{group.name[0].toUpperCase()}</span>
+                                    )}
+                                </div>
+
+                                {/* Title area - takes remaining space */}
+                                <div className="flex-1 min-w-0 pr-1">
+                                    <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                         {group.name}
                                     </h2>
                                     <button
-                                        onClick={() =>
-                                            setShowMembers(!showMembers)
-                                        }
-                                        className="text-zinc-500 text-sm hover:text-zinc-400 transition-colors"
+                                        onClick={() => setShowMembers(!showMembers)}
+                                        className="text-zinc-500 text-xs hover:text-zinc-400 transition-colors"
                                     >
-                                        {members.length} members •{" "}
-                                        {showMembers ? "Hide" : "Show"}
+                                        {members.length} members • {showMembers ? "Hide" : "Show"}
                                     </button>
                                 </div>
 
-                                {/* Call Buttons - larger touch targets */}
-                                {onStartCall && (
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            onClick={() =>
-                                                onStartCall(
-                                                    group.id,
-                                                    group.name,
-                                                    false
-                                                )
-                                            }
-                                            disabled={hasActiveCall}
-                                            className="p-3 hover:bg-zinc-800 rounded-xl transition-colors text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            title="Start Voice Call"
-                                            aria-label="Start voice call"
-                                        >
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
+                                {/* Action buttons */}
+                                <div className="shrink-0 flex items-center">
+                                    {/* Call Buttons - voice only on mobile, both on desktop */}
+                                    {onStartCall && (
+                                        <>
+                                            <button
+                                                onClick={() => onStartCall(group.id, group.name, false)}
+                                                disabled={hasActiveCall}
+                                                className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                                                aria-label="Start voice call"
                                             >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                                                />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            onClick={() =>
-                                                onStartCall(
-                                                    group.id,
-                                                    group.name,
-                                                    true
-                                                )
-                                            }
-                                            disabled={hasActiveCall}
-                                            className="p-3 hover:bg-zinc-800 rounded-xl transition-colors text-[#FFBBA7] hover:text-[#FFF0E0] disabled:opacity-50 disabled:cursor-not-allowed"
-                                            title="Start Video Call"
-                                            aria-label="Start video call"
-                                        >
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => onStartCall(group.id, group.name, true)}
+                                                disabled={hasActiveCall}
+                                                className="hidden sm:flex p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-[#FFBBA7] hover:text-[#FFF0E0] disabled:opacity-50"
+                                                aria-label="Start video call"
                                             >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                                />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                )}
-
-                                {/* Fullscreen Toggle - hidden on mobile */}
-                                <button
-                                    onClick={() =>
-                                        setIsFullscreen(!isFullscreen)
-                                    }
-                                    className="hidden sm:flex p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
-                                    title={
-                                        isFullscreen
-                                            ? "Exit fullscreen"
-                                            : "Fullscreen"
-                                    }
-                                    aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                                >
-                                    {isFullscreen ? (
-                                        <svg
-                                            className="w-5 h-5"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
-                                            />
-                                        </svg>
-                                    ) : (
-                                        <svg
-                                            className="w-5 h-5"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
-                                            />
-                                        </svg>
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                </svg>
+                                            </button>
+                                        </>
                                     )}
-                                </button>
 
-                                {/* Manage Menu */}
-                                <div className="relative -mr-1">
-                                    <button
-                                        onClick={() =>
-                                            setShowManageMenu(!showManageMenu)
-                                        }
-                                        className="p-3 hover:bg-zinc-800 rounded-xl transition-colors"
-                                        aria-label="Manage group"
-                                    >
+                                    {/* Manage Menu */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowManageMenu(!showManageMenu)}
+                                            className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
+                                            aria-label="More options"
+                                        >
                                         <svg
                                             className="w-5 h-5 text-zinc-400"
                                             fill="none"
@@ -866,27 +783,8 @@ export function GroupChatModal({
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
+                                    </div>
                                 </div>
-
-                                {/* Close Button */}
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                                >
-                                    <svg
-                                        className="w-6 h-6 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
                             </div>
 
                             {/* Members Panel */}

@@ -450,150 +450,96 @@ export function AlphaChatModal({
                                 paddingRight: 'env(safe-area-inset-right)',
                             } : undefined}
                         >
-                            {/* Header - larger touch targets for mobile */}
-                            <div className="px-2 sm:px-4 py-3 border-b border-zinc-800 flex items-center gap-2 sm:gap-3">
+                            {/* Header - unified mobile-first design */}
+                            <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
+                                {/* Back button */}
                                 <button
                                     onClick={onClose}
-                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
+                                    className="shrink-0 p-2.5 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
                                     aria-label="Go back"
                                 >
-                                    <svg
-                                        className="w-5 h-5 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M15 19l-7-7 7-7"
-                                        />
+                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                     </svg>
                                 </button>
 
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="text-white font-semibold flex items-center gap-2">
-                                        <span className="text-lg">🍊</span>
-                                        Spritz Global Chat
+                                {/* Avatar */}
+                                <div className="shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+                                    <span className="text-lg">🍊</span>
+                                </div>
+
+                                {/* Title area - takes remaining space */}
+                                <div className="flex-1 min-w-0 pr-1">
+                                    <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
+                                        Global Chat
                                     </h2>
-                                    <p className="text-zinc-500 text-sm">
+                                    <p className="text-zinc-500 text-xs truncate">
                                         {memberCountDisplay}
                                     </p>
                                 </div>
 
-                                {/* Pinned Messages Button - larger touch target */}
-                                {pinnedMessages.length > 0 && (
-                                    <button
-                                        onClick={() => setShowPinnedMessages(!showPinnedMessages)}
-                                        className={`p-3 rounded-xl flex items-center gap-1 transition-colors ${
-                                            showPinnedMessages
-                                                ? "bg-amber-500/20 text-amber-400"
-                                                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
-                                        }`}
-                                        title="View pinned messages"
-                                        aria-label="View pinned messages"
-                                    >
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                                        </svg>
-                                        <span className="text-xs font-medium">{pinnedMessages.length}</span>
-                                    </button>
-                                )}
-
-                                {/* Moderation Button - Admins only */}
-                                {isAdmin && (
-                                    <button
-                                        onClick={() => setShowModerationPanel(true)}
-                                        className="p-3 rounded-xl bg-zinc-800 text-zinc-400 hover:text-amber-400 hover:bg-zinc-700 transition-colors"
-                                        title="Moderation panel"
-                                        aria-label="Moderation panel"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                        </svg>
-                                    </button>
-                                )}
-
-                                {/* Notification Toggle */}
-                                {isMember && membership && (
-                                    <button
-                                        onClick={toggleNotifications}
-                                        className={`p-3 rounded-xl transition-colors ${
-                                            membership.notifications_muted
-                                                ? "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
-                                                : "bg-[#FF5500]/20 text-[#FF5500]"
-                                        }`}
-                                        title={
-                                            membership.notifications_muted
-                                                ? "Notifications muted"
-                                                : "Notifications enabled"
-                                        }
-                                    >
-                                        {membership.notifications_muted ? (
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                                                />
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-                                                />
-                                            </svg>
-                                        ) : (
-                                            <svg
-                                                className="w-5 h-5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                                                />
-                                            </svg>
-                                        )}
-                                    </button>
-                                )}
-
-                                {/* Fullscreen Toggle - hidden on mobile */}
-                                <button
-                                    onClick={() => setIsFullscreen(!isFullscreen)}
-                                    className="hidden sm:flex p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
-                                    title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                                    aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                                >
-                                    {isFullscreen ? (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-                                        </svg>
-                                    ) : (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                                        </svg>
-                                    )}
-                                </button>
-
-                                {/* Settings Menu */}
-                                {isMember && (
-                                    <div className="relative -mr-1">
+                                {/* Action buttons - essential only visible, rest in menu */}
+                                <div className="shrink-0 flex items-center">
+                                    {/* Pinned Messages - icon only on mobile */}
+                                    {pinnedMessages.length > 0 && (
                                         <button
-                                            onClick={() => setShowSettings(!showSettings)}
-                                            className="p-3 hover:bg-zinc-800 rounded-xl transition-colors"
-                                            aria-label="Settings"
+                                            onClick={() => setShowPinnedMessages(!showPinnedMessages)}
+                                            className={`p-2.5 rounded-xl flex items-center gap-1 transition-colors ${
+                                                showPinnedMessages
+                                                    ? "bg-amber-500/20 text-amber-400"
+                                                    : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                            }`}
+                                            aria-label="View pinned messages"
                                         >
+                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                                            </svg>
+                                            <span className="hidden sm:inline text-xs font-medium">{pinnedMessages.length}</span>
+                                        </button>
+                                    )}
+
+                                    {/* Moderation - admin only, hidden on small mobile */}
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => setShowModerationPanel(true)}
+                                            className="hidden sm:flex p-2.5 rounded-xl text-zinc-400 hover:text-amber-400 hover:bg-zinc-800 transition-colors"
+                                            aria-label="Moderation panel"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                            </svg>
+                                        </button>
+                                    )}
+
+                                    {/* Notification Toggle - hidden on small mobile */}
+                                    {isMember && membership && (
+                                        <button
+                                            onClick={toggleNotifications}
+                                            className={`hidden sm:flex p-2.5 rounded-xl transition-colors ${
+                                                membership.notifications_muted
+                                                    ? "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+                                                    : "text-[#FF5500] bg-[#FF5500]/10"
+                                            }`}
+                                            aria-label={membership.notifications_muted ? "Enable notifications" : "Mute notifications"}
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                {membership.notifications_muted ? (
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                ) : (
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                )}
+                                            </svg>
+                                        </button>
+                                    )}
+
+                                    {/* Settings Menu - contains all actions on mobile */}
+                                    {isMember && (
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => setShowSettings(!showSettings)}
+                                                className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
+                                                aria-label="More options"
+                                            >
                                             <svg
                                                 className="w-5 h-5 text-zinc-400"
                                                 fill="none"
@@ -645,30 +591,6 @@ export function AlphaChatModal({
                                         </AnimatePresence>
                                     </div>
                                 )}
-
-                                {/* Close Button */}
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                                >
-                                    <svg
-                                        className="w-6 h-6 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
-
-                                {/* Alpha Icon */}
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
-                                    <span className="text-lg">α</span>
                                 </div>
                             </div>
 

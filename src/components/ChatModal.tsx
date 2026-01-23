@@ -927,105 +927,76 @@ export function ChatModal({
                                 paddingRight: 'env(safe-area-inset-right)',
                             } : undefined}
                         >
-                            {/* Header - larger touch targets for mobile */}
-                            <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-3 border-b border-zinc-800">
+                            {/* Header - unified mobile-first design */}
+                            <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
+                                {/* Back button */}
                                 <button
                                     onClick={onClose}
-                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
+                                    className="shrink-0 p-2.5 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
                                     aria-label="Go back"
                                 >
-                                    <svg
-                                        className="w-5 h-5 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M15 19l-7-7 7-7"
-                                        />
+                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                     </svg>
                                 </button>
-                                {peerAvatar ? (
-                                    <img
-                                        src={peerAvatar}
-                                        alt={displayName}
-                                        className="w-10 h-10 rounded-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
-                                        <span className="text-white font-bold">
-                                            {displayName[0].toUpperCase()}
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="text-white font-semibold truncate">
+
+                                {/* Avatar */}
+                                <div className="shrink-0">
+                                    {peerAvatar ? (
+                                        <img
+                                            src={peerAvatar}
+                                            alt={displayName}
+                                            className="w-9 h-9 rounded-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
+                                            <span className="text-white font-bold text-sm">
+                                                {displayName[0].toUpperCase()}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Title area - takes remaining space */}
+                                <div className="flex-1 min-w-0 pr-1">
+                                    <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                         {displayName}
                                     </h2>
                                     <p className="text-zinc-500 text-xs font-mono truncate">
                                         {formatAddress(peerAddress)}
                                     </p>
                                 </div>
-                                {/* Search Button - larger touch target */}
-                                <button
-                                    onClick={() => setShowSearch(true)}
-                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
-                                    title="Search messages"
-                                    aria-label="Search messages"
-                                >
-                                    <svg
-                                        className="w-5 h-5"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
+
+                                {/* Action buttons - compact on mobile */}
+                                <div className="shrink-0 flex items-center">
+                                    <button
+                                        onClick={() => setShowSearch(true)}
+                                        className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
+                                        aria-label="Search messages"
                                     >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                        />
-                                    </svg>
-                                </button>
-                                {/* Fullscreen Toggle - hidden on mobile, visible on tablet+ */}
-                                <button
-                                    onClick={() => setIsFullscreen(!isFullscreen)}
-                                    className="hidden sm:flex p-3 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
-                                    title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                                    aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                                >
-                                    {isFullscreen ? (
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                         </svg>
-                                    ) : (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                                        </svg>
-                                    )}
-                                </button>
-                                <button
-                                    onClick={onClose}
-                                    className="p-3 hover:bg-zinc-800 rounded-xl transition-colors -mr-1"
-                                    aria-label="Close chat"
-                                >
-                                    <svg
-                                        className="w-5 h-5 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
+                                    </button>
+                                    <button
+                                        onClick={() => setIsFullscreen(!isFullscreen)}
+                                        className="hidden sm:flex p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
+                                        aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                                     >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isFullscreen ? "M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" : "M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"} />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        onClick={onClose}
+                                        className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
+                                        aria-label="Close chat"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Messages */}
