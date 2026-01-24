@@ -14,6 +14,7 @@ export type PublicChannel = {
     name: string;
     description: string | null;
     emoji: string;
+    icon_url: string | null;
     category: string;
     creator_address: string | null;
     is_official: boolean;

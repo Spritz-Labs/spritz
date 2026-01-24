@@ -1412,8 +1412,8 @@ export function GroupChatModal({
                                         onSubmit={handleSend}
                                         placeholder={
                                             replyingTo
-                                                ? "Type your reply... (Shift+Enter for new line)"
-                                                : "Type a message... (@ to mention, Shift+Enter for new line)"
+                                                ? "Type your reply..."
+                                                : "Type a message..."
                                         }
                                         disabled={!isInitialized}
                                         users={mentionableUsers}

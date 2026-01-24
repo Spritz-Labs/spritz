@@ -38,6 +38,7 @@ import { supabase, isSupabaseConfigured } from "@/config/supabase";
 import { StatusModal } from "./StatusModal";
 import { SettingsModal } from "./SettingsModal";
 import { BugReportModal } from "./BugReportModal";
+import { GlobalSearchModal } from "./GlobalSearchModal";
 import { QRCodeModal } from "./QRCodeModal";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { SocialsModal } from "./SocialsModal";
@@ -578,6 +579,22 @@ function DashboardContent({
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isBugReportModalOpen, setIsBugReportModalOpen] = useState(false);
+    const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+
+    // Global keyboard shortcut for search (Cmd+K / Ctrl+K)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault();
+                setIsGlobalSearchOpen(prev => !prev);
+            }
+            if (e.key === "Escape" && isGlobalSearchOpen) {
+                setIsGlobalSearchOpen(false);
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isGlobalSearchOpen]);
 
     // Cache for user info fetched from API
     const [userInfoCache, setUserInfoCache] = useState<
@@ -854,8 +871,11 @@ function DashboardContent({
 
     // Public channels
     const { 
+        channels,
         joinedChannels, 
+        joinChannel,
         leaveChannel, 
+        fetchChannels,
         fetchJoinedChannels,
         toggleChannelNotifications,
         isNotificationsEnabled,
@@ -863,8 +883,82 @@ function DashboardContent({
         setActiveChannel,
     } = useChannels(userAddress);
     const [isBrowseChannelsOpen, setIsBrowseChannelsOpen] = useState(false);
+    const [browseChannelsInitialCreate, setBrowseChannelsInitialCreate] = useState(false);
+    const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [selectedChannel, setSelectedChannel] =
         useState<PublicChannel | null>(null);
+    
+    // Global chat icon from app settings
+    const [globalChatIconUrl, setGlobalChatIconUrl] = useState<string | null>(null);
+    
+    // Fetch global chat icon
+    useEffect(() => {
+        async function fetchGlobalChatIcon() {
+            try {
+                const res = await fetch("/api/admin/settings?key=global_chat_icon");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.settings?.value?.icon_url) {
+                        setGlobalChatIconUrl(data.settings.value.icon_url);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch global chat icon:", err);
+            }
+        }
+        fetchGlobalChatIcon();
+    }, []);
+    
+    // Handle pending channel joins from invite links
+    const hasPendingJoinHandled = useRef(false);
+    useEffect(() => {
+        if (!userAddress || hasPendingJoinHandled.current) return;
+        
+        const handlePendingJoins = async () => {
+            hasPendingJoinHandled.current = true;
+            
+            // Check for pending channel join (from invite link when not logged in)
+            const pendingChannelId = localStorage.getItem("spritz_pending_channel_join");
+            if (pendingChannelId) {
+                localStorage.removeItem("spritz_pending_channel_join");
+                try {
+                    await joinChannel(pendingChannelId);
+                    await fetchJoinedChannels();
+                    // Find the channel and open it
+                    const allChannels = await fetch(`/api/public/channels/${pendingChannelId}`).then(r => r.json());
+                    if (allChannels.channel) {
+                        setSelectedChannel(allChannels.channel);
+                    }
+                } catch (err) {
+                    console.error("[Dashboard] Error joining pending channel:", err);
+                }
+            }
+            
+            // Check for channel to open (from invite link when already logged in)
+            const openChannelId = localStorage.getItem("spritz_open_channel");
+            if (openChannelId) {
+                localStorage.removeItem("spritz_open_channel");
+                // Find the channel in joinedChannels or fetch it
+                const channel = joinedChannels.find(c => c.id === openChannelId);
+                if (channel) {
+                    setSelectedChannel(channel);
+                } else {
+                    // Fetch and set it
+                    try {
+                        const res = await fetch(`/api/public/channels/${openChannelId}`);
+                        const data = await res.json();
+                        if (data.channel) {
+                            setSelectedChannel(data.channel);
+                        }
+                    } catch (err) {
+                        console.error("[Dashboard] Error opening channel:", err);
+                    }
+                }
+            }
+        };
+        
+        handlePendingJoins();
+    }, [userAddress, joinChannel, fetchJoinedChannels, joinedChannels]);
 
     // Screen Wake Lock - prevents screen from dimming during calls and active chats
     // This helps maintain WebSocket connections and improves PWA experience
@@ -1253,7 +1347,7 @@ function DashboardContent({
             id: "global-spritz",
             type: "global",
             name: "Spritz Global",
-            avatar: null,
+            avatar: globalChatIconUrl,
             lastMessage: "Community chat",
             lastMessageAt: globalLastMsgTime ? new Date(globalLastMsgTime) : new Date(),
             unreadCount: alphaUnreadCount,
@@ -1279,7 +1373,7 @@ function DashboardContent({
                 id: channelKey,
                 type: "channel",
                 name: channel.name,
-                avatar: null,
+                avatar: channel.icon_url || null,
                 lastMessage: `${channel.member_count} members`,
                 lastMessageAt,
                 unreadCount: 0,
@@ -3753,9 +3847,10 @@ function DashboardContent({
                                                 </span>
                                             </button>
                                             <button
-                                                onClick={() =>
-                                                    setIsBrowseChannelsOpen(true)
-                                                }
+                                                onClick={() => {
+                                                    setBrowseChannelsInitialCreate(false);
+                                                    setIsBrowseChannelsOpen(true);
+                                                }}
                                                 className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
                                                 title="Browse channels"
                                             >
@@ -3776,14 +3871,12 @@ function DashboardContent({
                                                     Browse
                                                 </span>
                                             </button>
-                                            {isWakuInitialized && (
+                                            {/* Consolidated New Chat Menu */}
+                                            <div className="relative">
                                                 <button
-                                                    onClick={() =>
-                                                        setIsCreateGroupOpen(true)
-                                                    }
-                                                    disabled={friends.length === 0}
-                                                    className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50"
-                                                    title="New group"
+                                                    onClick={() => setShowNewChatMenu(!showNewChatMenu)}
+                                                    className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2"
+                                                    title="Create new"
                                                 >
                                                     <svg
                                                         className="w-4 h-4"
@@ -3801,8 +3894,87 @@ function DashboardContent({
                                                     <span className="hidden sm:inline text-sm font-medium">
                                                         New
                                                     </span>
+                                                    <svg
+                                                        className="w-3 h-3 hidden sm:block"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M19 9l-7 7-7-7"
+                                                        />
+                                                    </svg>
                                                 </button>
-                                            )}
+                                                
+                                                {/* Dropdown Menu */}
+                                                <AnimatePresence>
+                                                    {showNewChatMenu && (
+                                                        <>
+                                                            {/* Backdrop */}
+                                                            <motion.div
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                exit={{ opacity: 0 }}
+                                                                className="fixed inset-0 z-40"
+                                                                onClick={() => setShowNewChatMenu(false)}
+                                                            />
+                                                            {/* Menu */}
+                                                            <motion.div
+                                                                initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                                exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                                className="absolute right-0 top-full mt-2 w-56 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden z-50"
+                                                            >
+                                                                <div className="p-1">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setShowNewChatMenu(false);
+                                                                            setBrowseChannelsInitialCreate(true);
+                                                                            setIsBrowseChannelsOpen(true);
+                                                                        }}
+                                                                        className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                                    >
+                                                                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                                                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                                                                            </svg>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-white text-sm font-medium">Public Channel</p>
+                                                                            <p className="text-zinc-500 text-xs">Anyone can join</p>
+                                                                        </div>
+                                                                    </button>
+                                                                    {isWakuInitialized && (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setShowNewChatMenu(false);
+                                                                                setIsCreateGroupOpen(true);
+                                                                            }}
+                                                                            disabled={friends.length === 0}
+                                                                            className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                        >
+                                                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                                                                <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                                                </svg>
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-white text-sm font-medium">Private Group</p>
+                                                                                <p className="text-zinc-500 text-xs">
+                                                                                    {friends.length === 0 ? "Add friends first" : "Encrypted, invite only"}
+                                                                                </p>
+                                                                            </div>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        </>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -4208,6 +4380,21 @@ function DashboardContent({
                                 <span className="text-xl">📞</span>
                                 <span className="text-[9px] font-medium mt-0.5">
                                     Calls
+                                </span>
+                            </button>
+
+                            {/* Search Button */}
+                            <button
+                                onClick={() => setIsGlobalSearchOpen(true)}
+                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
+                                    isGlobalSearchOpen
+                                        ? "text-blue-400 bg-blue-500/20"
+                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
+                                }`}
+                            >
+                                <span className="text-xl">🔍</span>
+                                <span className="text-[9px] font-medium mt-0.5">
+                                    Search
                                 </span>
                             </button>
 
@@ -4760,14 +4947,17 @@ function DashboardContent({
                 isOpen={isBrowseChannelsOpen}
                 onClose={() => {
                     setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
                     fetchJoinedChannels();
                 }}
                 userAddress={userAddress}
                 onJoinChannel={async (channel) => {
                     setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
                     await fetchJoinedChannels(); // Refresh the list immediately
                     setSelectedChannel(channel);
                 }}
+                initialShowCreate={browseChannelsInitialCreate}
             />
 
             {/* Channel Chat Modal */}
@@ -5005,6 +5195,17 @@ function DashboardContent({
                 isOpen={isBugReportModalOpen}
                 onClose={() => setIsBugReportModalOpen(false)}
                 userAddress={userAddress}
+            />
+
+            {/* Global Search Modal */}
+            <GlobalSearchModal
+                isOpen={isGlobalSearchOpen}
+                onClose={() => setIsGlobalSearchOpen(false)}
+                userAddress={userAddress}
+                onOpenChannel={(channelId) => {
+                    const channel = joinedChannels.find(c => c.id === channelId);
+                    if (channel) setSelectedChannel(channel);
+                }}
             />
 
             {/* Wallet Modal */}

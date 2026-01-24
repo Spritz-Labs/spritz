@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import Image from "next/image";
 
 type GifResult = {
     id: string;
@@ -19,9 +20,8 @@ type GifPickerProps = {
     position?: "top" | "bottom";
 };
 
-// Tenor API key (get your own at https://developers.google.com/tenor)
-// This is a limited public key for demo purposes
-const TENOR_API_KEY = process.env.NEXT_PUBLIC_TENOR_API_KEY || "AIzaSyBqGXJxzv-FPIHPpFAkxYoY6_d9yGZVLlk";
+// GIPHY API key - Get your own at https://developers.giphy.com/
+const GIPHY_API_KEY = process.env.NEXT_PUBLIC_GIPHY_API_KEY || "";
 
 export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPickerProps) {
     const [query, setQuery] = useState("");
@@ -62,18 +62,23 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
     }, [isOpen, onClose]);
 
     const fetchTrending = async () => {
+        if (!GIPHY_API_KEY) {
+            setError("GIPHY API key not configured");
+            return;
+        }
+        
         try {
             setLoading(true);
             setError(null);
             const response = await fetch(
-                `https://tenor.googleapis.com/v2/featured?key=${TENOR_API_KEY}&limit=20&media_filter=gif,tinygif`
+                `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=20&rating=pg-13`
             );
             if (!response.ok) throw new Error("Failed to fetch trending GIFs");
             const data = await response.json();
-            setTrending(parseGifResults(data.results));
+            setTrending(parseGifResults(data.data));
         } catch (err) {
             console.error("Error fetching trending GIFs:", err);
-            setError("Failed to load GIFs");
+            setError("Failed to load GIFs. Check API key.");
         } finally {
             setLoading(false);
         }
@@ -85,15 +90,20 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
             return;
         }
 
+        if (!GIPHY_API_KEY) {
+            setError("GIPHY API key not configured");
+            return;
+        }
+
         try {
             setLoading(true);
             setError(null);
             const response = await fetch(
-                `https://tenor.googleapis.com/v2/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(searchQuery)}&limit=30&media_filter=gif,tinygif`
+                `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(searchQuery)}&limit=30&rating=pg-13`
             );
             if (!response.ok) throw new Error("Failed to search GIFs");
             const data = await response.json();
-            setGifs(parseGifResults(data.results));
+            setGifs(parseGifResults(data.data));
         } catch (err) {
             console.error("Error searching GIFs:", err);
             setError("Failed to search GIFs");
@@ -113,15 +123,15 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
         }, 300);
     };
 
-    // Parse Tenor API results
+    // Parse GIPHY API results
     const parseGifResults = (results: any[]): GifResult[] => {
         return results.map((item) => ({
             id: item.id,
-            url: item.media_formats?.gif?.url || item.media_formats?.mediumgif?.url || "",
-            preview: item.media_formats?.tinygif?.url || item.media_formats?.nanogif?.url || "",
-            width: item.media_formats?.gif?.dims?.[0] || 200,
-            height: item.media_formats?.gif?.dims?.[1] || 200,
-            title: item.content_description || "",
+            url: item.images?.original?.url || item.images?.fixed_height?.url || "",
+            preview: item.images?.fixed_height_small?.url || item.images?.preview_gif?.url || "",
+            width: parseInt(item.images?.fixed_height?.width) || 200,
+            height: parseInt(item.images?.fixed_height?.height) || 200,
+            title: item.title || "",
         }));
     };
 
@@ -174,13 +184,22 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
                             <span className="text-xs text-zinc-500">
                                 {query.trim() ? `Results for "${query}"` : "🔥 Trending"}
                             </span>
+                            {/* GIPHY Attribution - Required by GIPHY API Terms */}
                             <a
-                                href="https://tenor.com"
+                                href="https://giphy.com"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                                className="flex items-center gap-1 hover:opacity-80 transition-opacity"
                             >
-                                Powered by Tenor
+                                <Image
+                                    src="https://giphy.com/static/img/giphy_logo_square_social.png"
+                                    alt="Powered by GIPHY"
+                                    width={20}
+                                    height={20}
+                                    className="rounded"
+                                    unoptimized
+                                />
+                                <span className="text-[10px] text-zinc-500 font-medium">Powered by GIPHY</span>
                             </a>
                         </div>
                     </div>
@@ -197,6 +216,11 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                                 <p className="text-sm">{error}</p>
+                                {!GIPHY_API_KEY && (
+                                    <p className="text-xs text-zinc-600 mt-1 text-center px-4">
+                                        Add NEXT_PUBLIC_GIPHY_API_KEY to your .env.local
+                                    </p>
+                                )}
                                 <button
                                     onClick={() => query.trim() ? searchGifs(query) : fetchTrending()}
                                     className="mt-2 text-xs text-[#FF5500] hover:underline"

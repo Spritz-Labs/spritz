@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChannels } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
+import { ChannelIcon } from "./ChannelIcon";
 
 type BrowseChannelsModalProps = {
     isOpen: boolean;
     onClose: () => void;
     userAddress: string;
     onJoinChannel: (channel: PublicChannel) => void;
+    initialShowCreate?: boolean; // Auto-open the create form
 };
 
 const CATEGORIES = [
@@ -34,13 +36,21 @@ export function BrowseChannelsModal({
     onClose,
     userAddress,
     onJoinChannel,
+    initialShowCreate = false,
 }: BrowseChannelsModalProps) {
     const { channels, isLoading, joinChannel, leaveChannel, createChannel } =
         useChannels(userAddress);
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [joiningChannel, setJoiningChannel] = useState<string | null>(null);
-    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(initialShowCreate);
+    
+    // Reset showCreateModal when the modal opens/closes
+    useEffect(() => {
+        if (isOpen) {
+            setShowCreateModal(initialShowCreate);
+        }
+    }, [isOpen, initialShowCreate]);
     const [newChannel, setNewChannel] = useState({
         name: "",
         description: "",
@@ -212,9 +222,13 @@ export function BrowseChannelsModal({
                                         className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
                                     >
                                         <div className="flex items-start gap-3">
-                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
-                                                {channel.emoji}
-                                            </div>
+                                            <ChannelIcon
+                                                emoji={channel.emoji}
+                                                iconUrl={channel.icon_url}
+                                                name={channel.name}
+                                                size="md"
+                                                className="flex-shrink-0"
+                                            />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <p className="text-white font-medium truncate">

@@ -16,6 +16,7 @@ import { useModeration } from "@/hooks/useModeration";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { ChannelIcon } from "./ChannelIcon";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -124,6 +125,99 @@ export function AlphaChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    
+    // Global chat icon management (for admins)
+    const [globalChatIcon, setGlobalChatIcon] = useState<string | null>(null);
+    const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+    const iconFileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Fetch global chat icon
+    useEffect(() => {
+        async function fetchGlobalChatIcon() {
+            try {
+                const res = await fetch("/api/admin/settings?key=global_chat_icon");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.settings?.value?.icon_url) {
+                        setGlobalChatIcon(data.settings.value.icon_url);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch global chat icon:", err);
+            }
+        }
+        fetchGlobalChatIcon();
+    }, []);
+    
+    const handleGlobalIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !isAdmin) return;
+        
+        setIsUploadingIcon(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("userAddress", userAddress);
+            
+            const res = await fetch("/api/admin/settings/global-chat-icon", {
+                method: "POST",
+                body: formData,
+            });
+            
+            const data = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to upload icon");
+            }
+            
+            setGlobalChatIcon(data.icon_url);
+            
+            // Show success toast
+            const toast = document.createElement("div");
+            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.textContent = "✓ Global chat icon updated!";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        } catch (err) {
+            console.error("Failed to upload icon:", err);
+            const toast = document.createElement("div");
+            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.textContent = err instanceof Error ? err.message : "Failed to upload icon";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        } finally {
+            setIsUploadingIcon(false);
+            e.target.value = "";
+        }
+    };
+    
+    const handleRemoveGlobalIcon = async () => {
+        if (!isAdmin) return;
+        
+        setIsUploadingIcon(true);
+        try {
+            const res = await fetch(`/api/admin/settings/global-chat-icon?userAddress=${userAddress}`, {
+                method: "DELETE",
+            });
+            
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Failed to remove icon");
+            }
+            
+            setGlobalChatIcon(null);
+            
+            const toast = document.createElement("div");
+            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.textContent = "✓ Global chat icon removed!";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        } catch (err) {
+            console.error("Failed to remove icon:", err);
+        } finally {
+            setIsUploadingIcon(false);
+        }
+    };
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const userPopupRef = useRef<HTMLDivElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
@@ -606,10 +700,20 @@ export function AlphaChatModal({
                         >
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                                {/* Avatar */}
-                                <div className="shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center ml-1">
-                                    <span className="text-lg">🍊</span>
-                                </div>
+                                {/* Avatar - shows custom icon if available */}
+                                {globalChatIcon ? (
+                                    <ChannelIcon
+                                        emoji="🍊"
+                                        iconUrl={globalChatIcon}
+                                        name="Global Chat"
+                                        size="sm"
+                                        className="shrink-0 ml-1"
+                                    />
+                                ) : (
+                                    <div className="shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center ml-1">
+                                        <span className="text-lg">🍊</span>
+                                    </div>
+                                )}
 
                                 {/* Title area - takes remaining space */}
                                 <div className="flex-1 min-w-0 pr-1">
@@ -704,8 +808,50 @@ export function AlphaChatModal({
                                                     initial={{ opacity: 0, scale: 0.95, y: -5 }}
                                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                                     exit={{ opacity: 0, scale: 0.95, y: -5 }}
-                                                    className="absolute right-0 top-full mt-1 w-48 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-10"
+                                                    className="absolute right-0 top-full mt-1 w-56 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-10"
                                                 >
+                                                    {/* Change Global Chat Icon - for admins only */}
+                                                    {isAdmin && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => iconFileInputRef.current?.click()}
+                                                                disabled={isUploadingIcon}
+                                                                className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
+                                                            >
+                                                                {isUploadingIcon ? (
+                                                                    <div className="w-4 h-4 border-2 border-zinc-400 border-t-white rounded-full animate-spin" />
+                                                                ) : (
+                                                                    <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                    </svg>
+                                                                )}
+                                                                {globalChatIcon ? "Change Chat Icon" : "Upload Chat Icon"}
+                                                            </button>
+                                                            {globalChatIcon && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        handleRemoveGlobalIcon();
+                                                                        setShowSettings(false);
+                                                                    }}
+                                                                    disabled={isUploadingIcon}
+                                                                    className="w-full px-4 py-3 text-left text-sm text-zinc-400 hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                    </svg>
+                                                                    Remove Custom Icon
+                                                                </button>
+                                                            )}
+                                                            <div className="border-t border-zinc-700" />
+                                                            <input
+                                                                ref={iconFileInputRef}
+                                                                type="file"
+                                                                accept="image/jpeg,image/png,image/gif,image/webp"
+                                                                onChange={handleGlobalIconUpload}
+                                                                className="hidden"
+                                                            />
+                                                        </>
+                                                    )}
                                                     <button
                                                         onClick={() => {
                                                             setShowSettings(false);

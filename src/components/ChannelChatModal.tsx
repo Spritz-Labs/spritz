@@ -11,9 +11,13 @@ import { MentionText } from "./MentionText";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { GifPicker } from "./GifPicker";
+import { PollCreator } from "./PollCreator";
+import { PollDisplay } from "./PollDisplay";
+import { usePolls } from "@/hooks/usePolls";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { ChannelIcon } from "./ChannelIcon";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -81,12 +85,120 @@ export function ChannelChatModal({
         replyingTo, 
         setReplyingTo 
     } = useChannelMessages(channel.id, userAddress);
+    
+    // Polls
+    const { polls, canCreatePoll, fetchPolls, createPoll, vote } = usePolls(channel.id, userAddress);
     const [inputValue, setInputValue] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    
+    // Channel icon management
+    const [canEditIcon, setCanEditIcon] = useState(false);
+    const [channelIcon, setChannelIcon] = useState<string | null>(channel.icon_url || null);
+    const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+    const iconFileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Check if user can edit channel icon (admin, owner, or moderator)
+    useEffect(() => {
+        if (!userAddress) return;
+        
+        // Admins can always edit
+        if (isAdmin) {
+            setCanEditIcon(true);
+            return;
+        }
+        
+        // Check if channel owner
+        if (channel.creator_address?.toLowerCase() === userAddress.toLowerCase()) {
+            setCanEditIcon(true);
+            return;
+        }
+        
+        // Check if moderator (would need API call, simplify by using canCreatePoll which has same permissions)
+        setCanEditIcon(canCreatePoll);
+    }, [userAddress, isAdmin, channel.creator_address, canCreatePoll]);
+    
+    const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        setIsUploadingIcon(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("userAddress", userAddress);
+            
+            const res = await fetch(`/api/channels/${channel.id}/icon`, {
+                method: "POST",
+                body: formData,
+            });
+            
+            const data = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to upload icon");
+            }
+            
+            setChannelIcon(data.icon_url);
+            // Update channel object if possible
+            if (channel) {
+                channel.icon_url = data.icon_url;
+            }
+            
+            // Show success toast
+            const toast = document.createElement("div");
+            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.textContent = "✓ Channel icon updated!";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        } catch (err) {
+            console.error("Failed to upload icon:", err);
+            // Show error toast
+            const toast = document.createElement("div");
+            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.textContent = err instanceof Error ? err.message : "Failed to upload icon";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        } finally {
+            setIsUploadingIcon(false);
+            // Reset input
+            e.target.value = "";
+        }
+    };
+    
+    const handleRemoveIcon = async () => {
+        setIsUploadingIcon(true);
+        try {
+            const res = await fetch(`/api/channels/${channel.id}/icon?userAddress=${userAddress}`, {
+                method: "DELETE",
+            });
+            
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Failed to remove icon");
+            }
+            
+            setChannelIcon(null);
+            if (channel) {
+                channel.icon_url = null;
+            }
+            
+            // Show success toast
+            const toast = document.createElement("div");
+            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.textContent = "✓ Channel icon removed!";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        } catch (err) {
+            console.error("Failed to remove icon:", err);
+        } finally {
+            setIsUploadingIcon(false);
+        }
+    };
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [showPixelArt, setShowPixelArt] = useState(false);
     const [showGifPicker, setShowGifPicker] = useState(false);
+    const [showPollCreator, setShowPollCreator] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [userPopupPosition, setUserPopupPosition] = useState<{ x: number; y: number } | null>(null);
@@ -147,6 +259,13 @@ export function ChannelChatModal({
             fetchAgents();
         }
     }, [isOpen, channel.id]);
+
+    // Fetch polls when channel opens
+    useEffect(() => {
+        if (isOpen && channel.id) {
+            fetchPolls();
+        }
+    }, [isOpen, channel.id, fetchPolls]);
 
     // Build list of mentionable users from message senders + channel agents
     const mentionableUsers: MentionUser[] = useMemo(() => {
@@ -688,10 +807,14 @@ export function ChannelChatModal({
                 >
                     {/* Header - unified mobile-first design */}
                     <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                        {/* Avatar */}
-                        <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-lg ml-1">
-                                {channel.emoji}
-                            </div>
+                        {/* Avatar - shows custom icon if available, otherwise emoji */}
+                        <ChannelIcon
+                            emoji={channel.emoji}
+                            iconUrl={channelIcon}
+                            name={channel.name}
+                            size="sm"
+                            className="shrink-0 ml-1"
+                        />
 
                         {/* Title area - takes remaining space */}
                         <div className="flex-1 min-w-0 pr-1">
@@ -770,6 +893,67 @@ export function ChannelChatModal({
                                             exit={{ opacity: 0, scale: 0.95, y: -5 }}
                                             className="absolute right-0 top-full mt-1 w-52 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
                                         >
+                                            {/* Copy Invite Link */}
+                                            <button
+                                                onClick={() => {
+                                                    const inviteUrl = `${window.location.origin}/channel/${channel.id}`;
+                                                    navigator.clipboard.writeText(inviteUrl);
+                                                    setShowSettings(false);
+                                                    // Show toast notification
+                                                    const toast = document.createElement("div");
+                                                    toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+                                                    toast.textContent = "✓ Invite link copied!";
+                                                    document.body.appendChild(toast);
+                                                    setTimeout(() => toast.remove(), 2000);
+                                                }}
+                                                className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                            >
+                                                <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                </svg>
+                                                Copy Invite Link
+                                            </button>
+                                            {/* Change Channel Icon - for admins, owners, moderators */}
+                                            {canEditIcon && (
+                                                <>
+                                                    <button
+                                                        onClick={() => iconFileInputRef.current?.click()}
+                                                        disabled={isUploadingIcon}
+                                                        className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
+                                                    >
+                                                        {isUploadingIcon ? (
+                                                            <div className="w-5 h-5 border-2 border-zinc-400 border-t-white rounded-full animate-spin" />
+                                                        ) : (
+                                                            <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                            </svg>
+                                                        )}
+                                                        {channelIcon ? "Change Channel Icon" : "Upload Channel Icon"}
+                                                    </button>
+                                                    {channelIcon && (
+                                                        <button
+                                                            onClick={() => {
+                                                                handleRemoveIcon();
+                                                                setShowSettings(false);
+                                                            }}
+                                                            disabled={isUploadingIcon}
+                                                            className="w-full px-4 py-3 text-left text-sm text-zinc-400 hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                            Remove Custom Icon
+                                                        </button>
+                                                    )}
+                                                    <input
+                                                        ref={iconFileInputRef}
+                                                        type="file"
+                                                        accept="image/jpeg,image/png,image/gif,image/webp"
+                                                        onChange={handleIconUpload}
+                                                        className="hidden"
+                                                    />
+                                                </>
+                                            )}
                                             {/* Notification toggle - visible on mobile */}
                                             {onToggleNotifications && (
                                                 <button
@@ -873,6 +1057,29 @@ export function ChannelChatModal({
                             </motion.div>
                         )}
                     </AnimatePresence>
+
+                    {/* Active Polls - shown at top when polls exist */}
+                    {polls.length > 0 && (
+                        <div className="border-b border-zinc-800 p-3 space-y-2 max-h-[200px] overflow-y-auto overscroll-contain">
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Active Polls</span>
+                                <span className="text-xs text-zinc-600">{polls.length} poll{polls.length !== 1 ? "s" : ""}</span>
+                            </div>
+                            {polls.slice(0, 2).map((poll) => (
+                                <PollDisplay
+                                    key={poll.id}
+                                    poll={poll}
+                                    onVote={(optionIndex) => vote(poll.id, optionIndex)}
+                                    compact
+                                />
+                            ))}
+                            {polls.length > 2 && (
+                                <button className="w-full text-center text-xs text-purple-400 hover:text-purple-300 py-2">
+                                    View all {polls.length} polls
+                                </button>
+                            )}
+                        </div>
+                    )}
 
                     {/* Messages - flex-col-reverse so newest at bottom, no scroll needed on open */}
                     <div 
@@ -1430,12 +1637,22 @@ export function ChannelChatModal({
                                     position="top"
                                 />
                             </div>
+                            {/* Poll button - only for admins, moderators, and channel owners */}
+                            {canCreatePoll && (
+                                <button
+                                    onClick={() => setShowPollCreator(true)}
+                                    className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 hover:text-white transition-colors"
+                                    title="Create Poll"
+                                >
+                                    🗳️
+                                </button>
+                            )}
                             <MentionInput
                                 inputRef={inputRef}
                                 value={inputValue}
                                 onChange={setInputValue}
                                 onSubmit={handleSend}
-                                placeholder={`Message #${channel.name} (@ to mention, Shift+Enter for new line)`}
+                                placeholder={`Message #${channel.name}`}
                                 users={mentionableUsers}
                                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
                             />
@@ -1598,6 +1815,15 @@ export function ChannelChatModal({
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* Poll Creator Modal */}
+                <PollCreator
+                    isOpen={showPollCreator}
+                    onClose={() => setShowPollCreator(false)}
+                    onCreatePoll={async (question, options, allowsMultiple, endsAt, isAnonymous) => {
+                        await createPoll(question, options, allowsMultiple, endsAt, isAnonymous);
+                    }}
+                />
             </motion.div>
         </AnimatePresence>
     );

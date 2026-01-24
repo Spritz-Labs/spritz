@@ -11,13 +11,21 @@ type BugReportModalProps = {
 
 const CATEGORIES = [
     "Agents",
-    "Friends",
     "Calls",
+    "Channels",
     "Chats",
-    "Rooms",
+    "Friends",
+    "Groups",
     "Livestream",
+    "Login/Auth",
+    "Notifications",
+    "Points",
+    "Profile",
+    "Rooms",
+    "Scheduling",
     "Settings",
-    "Configuration",
+    "Vault",
+    "Wallet",
     "Other",
 ] as const;
 
