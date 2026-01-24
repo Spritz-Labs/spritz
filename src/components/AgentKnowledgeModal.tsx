@@ -78,6 +78,9 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
     const [error, setError] = useState<string | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [syncingItemId, setSyncingItemId] = useState<string | null>(null);
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
+    const [editOptions, setEditOptions] = useState<FirecrawlOptions | null>(null);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
     
     // Firecrawl options (only for official agents)
     const [firecrawlOptions, setFirecrawlOptions] = useState<FirecrawlOptions>({
@@ -273,6 +276,65 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
             // Refresh to get actual status
             await fetchItems();
         }
+    };
+
+    // Start editing a knowledge item
+    const handleStartEdit = (item: KnowledgeItem) => {
+        setEditingItemId(item.id);
+        setEditOptions({
+            scrapeMethod: item.scrape_method || "basic",
+            crawlDepth: item.crawl_depth || 1,
+            autoSync: item.auto_sync || false,
+            syncIntervalHours: item.sync_interval_hours || 24,
+            excludePatterns: (item.exclude_patterns || []).join("\n"),
+        });
+    };
+
+    // Save edit changes
+    const handleSaveEdit = async () => {
+        if (!agent || !editingItemId || !editOptions) return;
+
+        setIsSavingEdit(true);
+        setError(null);
+
+        try {
+            const res = await fetch(`/api/agents/${agent.id}/knowledge/${editingItemId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userAddress,
+                    scrape_method: editOptions.scrapeMethod,
+                    crawl_depth: editOptions.crawlDepth,
+                    auto_sync: editOptions.autoSync,
+                    sync_interval_hours: editOptions.syncIntervalHours,
+                    exclude_patterns: editOptions.excludePatterns
+                        .split("\n")
+                        .map(p => p.trim())
+                        .filter(p => p),
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to update");
+            }
+
+            // Refresh items to get updated data
+            await fetchItems();
+            setEditingItemId(null);
+            setEditOptions(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to update");
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
+
+    // Cancel edit
+    const handleCancelEdit = () => {
+        setEditingItemId(null);
+        setEditOptions(null);
     };
 
     if (!agent) return null;
@@ -642,6 +704,19 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                                 Index
                                                             </button>
                                                         )}
+                                                        {/* Edit button - show for official agents */}
+                                                        {isOfficialAgent && (
+                                                            <button
+                                                                onClick={() => handleStartEdit(item)}
+                                                                className="px-2 py-1.5 text-xs bg-zinc-700/50 hover:bg-zinc-600/50 text-zinc-300 rounded-lg transition-colors flex items-center gap-1"
+                                                                title="Edit sync settings"
+                                                            >
+                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
                                                         {/* Manual Sync button - show for indexed Firecrawl items */}
                                                         {item.status === "indexed" && isFirecrawl && isOfficialAgent && (
                                                             <button
@@ -685,6 +760,168 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                         </button>
                                                     </div>
                                                 </div>
+                                                
+                                                {/* Edit Form - Expandable */}
+                                                <AnimatePresence>
+                                                    {editingItemId === item.id && editOptions && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, height: 0 }}
+                                                            animate={{ opacity: 1, height: "auto" }}
+                                                            exit={{ opacity: 0, height: 0 }}
+                                                            className="overflow-hidden border-t border-zinc-700/50"
+                                                        >
+                                                            <div className="p-4 bg-zinc-800/30 space-y-4">
+                                                                <div className="text-xs font-medium text-zinc-300 flex items-center gap-2">
+                                                                    <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                    </svg>
+                                                                    Sync Settings
+                                                                </div>
+
+                                                                {/* Scrape Method */}
+                                                                <div>
+                                                                    <label className="text-xs text-zinc-400 mb-1.5 block">Scrape Method</label>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => setEditOptions(prev => prev ? { ...prev, scrapeMethod: "basic" } : null)}
+                                                                            className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
+                                                                                editOptions.scrapeMethod === "basic"
+                                                                                    ? "bg-zinc-700 border-zinc-600 text-white"
+                                                                                    : "bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                                                                            }`}
+                                                                        >
+                                                                            Basic
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setEditOptions(prev => prev ? { ...prev, scrapeMethod: "firecrawl" } : null)}
+                                                                            className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
+                                                                                editOptions.scrapeMethod === "firecrawl"
+                                                                                    ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
+                                                                                    : "bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                                                                            }`}
+                                                                        >
+                                                                            🔥 Firecrawl
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+
+                                                                {editOptions.scrapeMethod === "firecrawl" && (
+                                                                    <>
+                                                                        {/* Crawl Depth */}
+                                                                        <div>
+                                                                            <label className="text-xs text-zinc-400 mb-1.5 block">
+                                                                                Crawl Depth: {editOptions.crawlDepth} page{editOptions.crawlDepth > 1 ? "s" : ""}
+                                                                            </label>
+                                                                            <input
+                                                                                type="range"
+                                                                                min={1}
+                                                                                max={5}
+                                                                                value={editOptions.crawlDepth}
+                                                                                onChange={(e) => setEditOptions(prev => prev ? { 
+                                                                                    ...prev, 
+                                                                                    crawlDepth: parseInt(e.target.value) 
+                                                                                } : null)}
+                                                                                className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                                                            />
+                                                                        </div>
+
+                                                                        {/* Auto Sync Toggle */}
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div>
+                                                                                <label className="text-xs text-zinc-300 block">Auto Sync</label>
+                                                                                <p className="text-[10px] text-zinc-500">Re-crawl automatically on schedule</p>
+                                                                            </div>
+                                                                            <button
+                                                                                onClick={() => setEditOptions(prev => prev ? { 
+                                                                                    ...prev, 
+                                                                                    autoSync: !prev.autoSync 
+                                                                                } : null)}
+                                                                                className={`w-10 h-5 rounded-full transition-colors relative ${
+                                                                                    editOptions.autoSync 
+                                                                                        ? "bg-orange-500" 
+                                                                                        : "bg-zinc-700"
+                                                                                }`}
+                                                                            >
+                                                                                <span 
+                                                                                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                                                        editOptions.autoSync 
+                                                                                            ? "translate-x-5" 
+                                                                                            : "translate-x-0.5"
+                                                                                    }`}
+                                                                                />
+                                                                            </button>
+                                                                        </div>
+
+                                                                        {/* Sync Interval */}
+                                                                        {editOptions.autoSync && (
+                                                                            <div>
+                                                                                <label className="text-xs text-zinc-400 mb-1.5 block">Sync Interval</label>
+                                                                                <select
+                                                                                    value={editOptions.syncIntervalHours}
+                                                                                    onChange={(e) => setEditOptions(prev => prev ? { 
+                                                                                        ...prev, 
+                                                                                        syncIntervalHours: parseInt(e.target.value) 
+                                                                                    } : null)}
+                                                                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-xs focus:outline-none focus:border-orange-500"
+                                                                                >
+                                                                                    <option value={1}>Every 1 hour</option>
+                                                                                    <option value={6}>Every 6 hours</option>
+                                                                                    <option value={12}>Every 12 hours</option>
+                                                                                    <option value={24}>Every 24 hours (daily)</option>
+                                                                                    <option value={48}>Every 2 days</option>
+                                                                                    <option value={168}>Every 7 days (weekly)</option>
+                                                                                </select>
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* Exclude Patterns */}
+                                                                        <div>
+                                                                            <label className="text-xs text-zinc-400 mb-1.5 block">Exclude Patterns</label>
+                                                                            <textarea
+                                                                                value={editOptions.excludePatterns}
+                                                                                onChange={(e) => setEditOptions(prev => prev ? { 
+                                                                                    ...prev, 
+                                                                                    excludePatterns: e.target.value 
+                                                                                } : null)}
+                                                                                placeholder={"/blog/*\n/login"}
+                                                                                rows={2}
+                                                                                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-orange-500 resize-none"
+                                                                            />
+                                                                        </div>
+                                                                    </>
+                                                                )}
+
+                                                                {/* Action Buttons */}
+                                                                <div className="flex gap-2 pt-2">
+                                                                    <button
+                                                                        onClick={handleCancelEdit}
+                                                                        className="flex-1 px-3 py-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={handleSaveEdit}
+                                                                        disabled={isSavingEdit}
+                                                                        className="flex-1 px-3 py-2 text-xs bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-1"
+                                                                    >
+                                                                        {isSavingEdit ? (
+                                                                            <>
+                                                                                <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                                                </svg>
+                                                                                Saving...
+                                                                            </>
+                                                                        ) : (
+                                                                            "Save Changes"
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </motion.div>
                                         );
                                     })}
