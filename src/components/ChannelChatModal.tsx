@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChannelMessages, CHANNEL_REACTION_EMOJIS } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
+import type { ChannelMessage } from "@/app/api/channels/[id]/messages/route";
 import { QuickReactionPicker } from "./EmojiPicker";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
@@ -72,10 +73,12 @@ export function ChannelChatModal({
         isLoadingMore,
         hasMore,
         sendMessage, 
+        editMessage,
+        deleteMessage,
         toggleReaction,
         togglePinMessage,
         loadMoreMessages,
-        replyingTo,
+        replyingTo, 
         setReplyingTo 
     } = useChannelMessages(channel.id, userAddress);
     const [inputValue, setInputValue] = useState("");
@@ -90,6 +93,9 @@ export function ChannelChatModal({
     const [addingFriend, setAddingFriend] = useState<string | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [editingMessage, setEditingMessage] = useState<string | null>(null);
+    const [editContent, setEditContent] = useState("");
+    const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
@@ -461,6 +467,55 @@ export function ChannelChatModal({
             e.preventDefault();
             handleSend();
         }
+    };
+
+    // Handle edit message
+    const handleStartEdit = (msg: ChannelMessage) => {
+        // Check if within 15 minute edit window
+        const createdAt = new Date(msg.created_at);
+        const now = new Date();
+        const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+        
+        if (diffMinutes > 15) {
+            alert("Messages can only be edited within 15 minutes");
+            return;
+        }
+        
+        setEditingMessage(msg.id);
+        setEditContent(msg.content);
+        setSelectedMessage(null);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingMessage || !editContent.trim()) return;
+        
+        const success = await editMessage(editingMessage, editContent.trim());
+        if (success) {
+            setEditingMessage(null);
+            setEditContent("");
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingMessage(null);
+        setEditContent("");
+    };
+
+    // Handle delete message
+    const handleDeleteMessage = async (messageId: string) => {
+        if (!confirm("Delete this message? This cannot be undone.")) return;
+        
+        setIsDeleting(messageId);
+        await deleteMessage(messageId);
+        setIsDeleting(null);
+        setSelectedMessage(null);
+    };
+
+    // Check if message is within edit window (15 minutes)
+    const isWithinEditWindow = (createdAt: string) => {
+        const created = new Date(createdAt);
+        const now = new Date();
+        return (now.getTime() - created.getTime()) / (1000 * 60) <= 15;
     };
 
     const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1043,7 +1098,43 @@ export function ChannelChatModal({
                                                             </div>
                                                         )}
                                                         
-                                                        {isAgent ? (
+                                                        {/* Inline Edit Form */}
+                                                        {editingMessage === msg.id ? (
+                                                            <div className="flex flex-col gap-2">
+                                                                <textarea
+                                                                    value={editContent}
+                                                                    onChange={(e) => setEditContent(e.target.value)}
+                                                                    className="w-full min-w-[200px] px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
+                                                                    rows={3}
+                                                                    autoFocus
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === "Enter" && !e.shiftKey) {
+                                                                            e.preventDefault();
+                                                                            handleSaveEdit();
+                                                                        }
+                                                                        if (e.key === "Escape") {
+                                                                            handleCancelEdit();
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <div className="flex items-center gap-2 text-xs">
+                                                                    <button
+                                                                        onClick={handleSaveEdit}
+                                                                        disabled={!editContent.trim()}
+                                                                        className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                    >
+                                                                        Save
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={handleCancelEdit}
+                                                                        className="px-3 py-1 bg-zinc-600 hover:bg-zinc-500 text-white rounded-lg transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <span className="text-zinc-500">Enter to save, Esc to cancel</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : isAgent ? (
                                                             // Agent messages - render markdown with images
                                                             <div className="prose prose-sm prose-invert max-w-none
                                                                 prose-p:my-1.5 prose-p:leading-relaxed prose-p:text-zinc-100
@@ -1173,6 +1264,35 @@ export function ChannelChatModal({
                                                                             )}
                                                                         </button>
                                                                     )}
+                                                                    {/* Edit Button - Own messages within 15 min */}
+                                                                    {isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text" && (
+                                                                        <button
+                                                                            onClick={() => handleStartEdit(msg)}
+                                                                            className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600 text-zinc-300"
+                                                                            title="Edit message"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    )}
+                                                                    {/* Delete Button - Own messages or admin */}
+                                                                    {(isOwn || isAdmin) && !msg.is_deleted && (
+                                                                        <button
+                                                                            onClick={() => handleDeleteMessage(msg.id)}
+                                                                            disabled={isDeleting === msg.id}
+                                                                            className="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/30 flex items-center justify-center shadow-lg border border-red-500/30 text-red-400"
+                                                                            title="Delete message"
+                                                                        >
+                                                                            {isDeleting === msg.id ? (
+                                                                                <div className="w-4 h-4 border-2 border-red-500/50 border-t-red-400 rounded-full animate-spin" />
+                                                                            ) : (
+                                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                                </svg>
+                                                                            )}
+                                                                        </button>
+                                                                    )}
                                                                 </motion.div>
                                                             )}
                                                         </AnimatePresence>
@@ -1195,6 +1315,7 @@ export function ChannelChatModal({
                                                 )}
                                                 <p className="text-[10px] text-zinc-600 mt-1 px-1">
                                                     {formatTime(msg.created_at)}
+                                                    {msg.is_edited && <span className="ml-1 italic">(edited)</span>}
                                                 </p>
                                             </div>
 

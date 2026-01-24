@@ -1310,7 +1310,7 @@ export function AlphaChatModal({
                                                     value={newMessage}
                                                     onChange={setNewMessage}
                                                     onSubmit={handleSend}
-                                                    placeholder={replyingTo ? "Type your reply... (Shift+Enter for new line)" : "Message the community... (@ to mention, Shift+Enter for new line)"}
+                                                    placeholder={replyingTo ? "Type your reply..." : "Message the community..."}
                                                     users={mentionableUsers}
                                                     className={`w-full bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all ${
                                                         isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"

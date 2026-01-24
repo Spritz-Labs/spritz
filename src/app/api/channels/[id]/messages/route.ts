@@ -22,6 +22,10 @@ export type ChannelMessage = {
     is_pinned?: boolean;
     pinned_by?: string | null;
     pinned_at?: string | null;
+    // Edit/delete fields
+    is_edited?: boolean;
+    edited_at?: string | null;
+    is_deleted?: boolean;
 };
 
 export type ChannelReaction = {

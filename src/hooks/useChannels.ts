@@ -633,6 +633,81 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         return () => clearInterval(interval);
     }, [channelId, fetchMessages]);
 
+    // Edit message (within 15 minute window)
+    const editMessage = useCallback(
+        async (messageId: string, newContent: string) => {
+            if (!channelId || !userAddress || !newContent.trim()) return false;
+
+            try {
+                const res = await fetch(`/api/channels/${channelId}/messages/${messageId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        content: newContent.trim(),
+                        userAddress,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "Failed to edit message");
+                }
+
+                // Update local state
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === messageId
+                            ? { ...msg, content: newContent.trim(), is_edited: true, edited_at: new Date().toISOString() }
+                            : msg
+                    )
+                );
+
+                return true;
+            } catch (err) {
+                console.error("[useChannels] Error editing message:", err);
+                return false;
+            }
+        },
+        [channelId, userAddress]
+    );
+
+    // Delete message (own messages or admin)
+    const deleteMessage = useCallback(
+        async (messageId: string) => {
+            if (!channelId || !userAddress) return false;
+
+            try {
+                const res = await fetch(`/api/channels/${channelId}/messages/${messageId}`, {
+                    method: "DELETE",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "x-user-address": userAddress,
+                    },
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "Failed to delete message");
+                }
+
+                // Update local state - mark as deleted
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === messageId
+                            ? { ...msg, content: "[Message deleted]", is_deleted: true }
+                            : msg
+                    )
+                );
+
+                return true;
+            } catch (err) {
+                console.error("[useChannels] Error deleting message:", err);
+                return false;
+            }
+        },
+        [channelId, userAddress]
+    );
+
     return {
         messages,
         pinnedMessages,
@@ -645,6 +720,8 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         fetchPinnedMessages,
         loadMoreMessages,
         sendMessage,
+        editMessage,
+        deleteMessage,
         toggleReaction,
         togglePinMessage,
         replyingTo,
