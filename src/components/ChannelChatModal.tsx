@@ -11,6 +11,7 @@ import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -1009,6 +1010,11 @@ export function ChannelChatModal({
                                                                     {msg.content}
                                                                 </ReactMarkdown>
                                                             </div>
+                                                        ) : hasMarkdown(msg.content) ? (
+                                                        <ChatMarkdown 
+                                                            content={msg.content} 
+                                                            isOwnMessage={isOwn}
+                                                        />
                                                         ) : (
                                                         <p className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}>
                                                             <MentionText

@@ -26,6 +26,7 @@ import {
 import { MessageSearch } from "./MessageSearch";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { createLogger } from "@/lib/logger";
+import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 
 const log = createLogger("Chat");
 
@@ -1337,6 +1338,17 @@ export function ChatModal({
                                                                 ? msg.content.split("\n\n").slice(1).join("\n\n")
                                                                 : msg.content;
                                                             const emojiOnly = isEmojiOnly(displayContent);
+                                                            
+                                                            // Use ChatMarkdown for code blocks and other markdown
+                                                            if (hasMarkdown(displayContent)) {
+                                                                return (
+                                                                    <ChatMarkdown 
+                                                                        content={displayContent} 
+                                                                        isOwnMessage={isOwn}
+                                                                    />
+                                                                );
+                                                            }
+                                                            
                                                             return (
                                                                 <p className={`break-words whitespace-pre-wrap ${emojiOnly ? "text-4xl leading-tight" : ""}`}>
                                                                     {displayContent}

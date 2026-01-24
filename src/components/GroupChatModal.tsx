@@ -15,6 +15,7 @@ import { QuickReactionPicker } from "./EmojiPicker";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
+import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -1113,6 +1114,17 @@ export function GroupChatModal({
                                                             const displayContent = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n")
                                                                 ? msg.content.split("\n\n").slice(1).join("\n\n")
                                                                 : msg.content;
+                                                            
+                                                            // Use ChatMarkdown for code blocks and other markdown
+                                                            if (hasMarkdown(displayContent)) {
+                                                                return (
+                                                                    <ChatMarkdown 
+                                                                        content={displayContent} 
+                                                                        isOwnMessage={isOwn}
+                                                                    />
+                                                                );
+                                                            }
+                                                            
                                                             return (
                                                                 <p className={`break-words ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : ""}`}>
                                                                     <MentionText
