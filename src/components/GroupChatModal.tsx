@@ -639,19 +639,8 @@ export function GroupChatModal({
                         >
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                                {/* Back button */}
-                                <button
-                                    onClick={onClose}
-                                    className="shrink-0 p-2.5 hover:bg-zinc-800 rounded-xl transition-colors -ml-1"
-                                    aria-label="Go back"
-                                >
-                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                </button>
-
                                 {/* Avatar */}
-                                <div className="shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                                <div className="shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center ml-1">
                                     {group.emoji ? (
                                         <span className="text-lg">{group.emoji}</span>
                                     ) : (
@@ -801,6 +790,17 @@ export function GroupChatModal({
                                         )}
                                     </AnimatePresence>
                                     </div>
+
+                                    {/* Close button (X) */}
+                                    <button
+                                        onClick={onClose}
+                                        className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
+                                        aria-label="Close chat"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
 

@@ -90,6 +90,7 @@ export function ChannelChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -678,17 +679,60 @@ export function ChannelChatModal({
                                 </button>
                             )}
 
-                            {/* Leave button - text on desktop, icon on mobile */}
-                            <button
-                                onClick={onLeave}
-                                className="p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
-                                aria-label="Leave channel"
-                            >
-                                <svg className="w-5 h-5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            {/* Settings Menu (... icon) */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowSettings(!showSettings)}
+                                    className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
+                                    aria-label="More options"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                                     </svg>
-                                <span className="hidden sm:inline text-sm">Leave</span>
-                            </button>
+                                </button>
+                                <AnimatePresence>
+                                    {showSettings && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                                            className="absolute right-0 top-full mt-1 w-52 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
+                                        >
+                                            {/* Notification toggle - visible on mobile */}
+                                            {onToggleNotifications && (
+                                                <button
+                                                    onClick={() => {
+                                                        onToggleNotifications();
+                                                        setShowSettings(false);
+                                                    }}
+                                                    className="sm:hidden w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                >
+                                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        {notificationsEnabled ? (
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                                        ) : (
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                        )}
+                                                    </svg>
+                                                    {notificationsEnabled ? "Mute Notifications" : "Enable Notifications"}
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => {
+                                                    setShowSettings(false);
+                                                    onLeave();
+                                                }}
+                                                className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                </svg>
+                                                Leave Channel
+                                            </button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
 
                             {/* Close button (X) */}
                             <button
