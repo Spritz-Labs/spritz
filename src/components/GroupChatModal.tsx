@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
-import { useXMTPContext, type XMTPGroup } from "@/context/WakuProvider";
+import { useXMTPContext, type XMTPGroup, DECRYPTION_FAILED_MARKER } from "@/context/WakuProvider";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { PixelArtShare } from "./PixelArtShare";
@@ -936,7 +936,9 @@ export function GroupChatModal({
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                    {messages.map((msg) => {
+                                    {messages
+                                    .filter((msg) => msg.content !== DECRYPTION_FAILED_MARKER)
+                                    .map((msg) => {
                                         // Compare addresses case-insensitively
                                         const isOwn = userAddress
                                             ? msg.senderInboxId?.toLowerCase() ===

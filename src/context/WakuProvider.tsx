@@ -48,6 +48,10 @@ export type WakuGroup = {
 
 // Storage keys
 const WAKU_KEYS_STORAGE = "waku_encryption_keys";
+
+// Decryption failure marker - used to identify messages that couldn't be decrypted
+// Export this so components can filter out failed messages
+export const DECRYPTION_FAILED_MARKER = "[Decryption failed]";
 const HIDDEN_GROUPS_KEY = "shout_hidden_groups";
 const GROUPS_STORAGE_KEY = "waku_groups";
 const DM_KEYS_STORAGE = "waku_dm_keys";
@@ -490,8 +494,9 @@ async function decryptFromStorage(
         const decoder = new TextDecoder();
         return decoder.decode(decrypted);
     } catch (err) {
-        log.error("[Waku] Failed to decrypt message:", err);
-        return "[Decryption failed]";
+        // Don't log every decryption failure - can be noisy during key loading
+        log.debug("[Waku] Decryption attempt failed (keys may still be loading)");
+        return DECRYPTION_FAILED_MARKER;
     }
 }
 
@@ -508,7 +513,7 @@ async function decryptWithFallback(
     if (keys.isSecure && keys.ecdhKey) {
         try {
             const content = await decryptFromStorage(encryptedBase64, keys.ecdhKey);
-            if (content !== "[Decryption failed]") {
+            if (content !== DECRYPTION_FAILED_MARKER) {
                 return { content, usedLegacy: false };
             }
         } catch {

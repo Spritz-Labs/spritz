@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
-import { useXMTPContext } from "@/context/WakuProvider";
+import { useXMTPContext, DECRYPTION_FAILED_MARKER } from "@/context/WakuProvider";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { PixelArtShare } from "./PixelArtShare";
@@ -1093,10 +1093,12 @@ export function ChatModal({
 
                                 {/* Messages container - flows bottom to top with column-reverse */}
                                 <div className="space-y-3">
-                                {/* Deduplicate messages by ID before rendering */}
+                                {/* Deduplicate messages by ID and filter out decryption failures */}
                                 {Array.from(
                                     new Map(
-                                        messages.map((m) => [m.id, m])
+                                        messages
+                                            .filter((m) => m.content !== DECRYPTION_FAILED_MARKER)
+                                            .map((m) => [m.id, m])
                                     ).values()
                                 ).map((msg) => {
                                     // Compare addresses case-insensitively
