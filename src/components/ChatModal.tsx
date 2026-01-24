@@ -27,6 +27,7 @@ import { MessageSearch } from "./MessageSearch";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { createLogger } from "@/lib/logger";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { MentionInput } from "./MentionInput";
 
 const log = createLogger("Chat");
 
@@ -1659,28 +1660,22 @@ export function ChatModal({
                                         </svg>
                                     </button>
                                     <div className="flex-1 relative">
-                                        <input
-                                            type="text"
-                                            inputMode="text"
-                                            enterKeyHint="send"
-                                            autoComplete="off"
-                                            autoCorrect="on"
-                                            autoCapitalize="sentences"
+                                        <MentionInput
                                             value={newMessage}
-                                            onChange={(e) => {
-                                                setNewMessage(e.target.value);
+                                            onChange={(val) => {
+                                                setNewMessage(val);
                                                 handleTyping();
                                             }}
-                                            onKeyDown={handleKeyPress}
-                                            onBlur={stopTyping}
+                                            onSubmit={handleSend}
                                             placeholder={
                                                 isInitialized
-                                                    ? "Type a message..."
+                                                    ? "Type a message... (Shift+Enter for new line)"
                                                     : "Initializing..."
                                             }
                                             disabled={
                                                 !isInitialized || !!chatError
                                             }
+                                            users={[]} // DMs don't need mention suggestions
                                             className={`w-full pr-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50 ${
                                                 isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"
                                             }`}
