@@ -1,7 +1,76 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+
+// Regex to match mentions in the format @[name](address) - needs to be defined early
+const MENTION_REGEX_GLOBAL = /@\[([^\]]+)\]\(([^)]+)\)/g;
+
+// Convert raw value (with full mention format) to display value (clean @Name)
+function toDisplayValue(value: string): string {
+    return value.replace(MENTION_REGEX_GLOBAL, "@$1");
+}
+
+// Convert cursor position from display value to raw value
+function displayToRawCursorPos(displayPos: number, rawValue: string): number {
+    let displayIndex = 0;
+    let rawIndex = 0;
+    
+    while (displayIndex < displayPos && rawIndex < rawValue.length) {
+        // Check if we're at a mention start
+        const remaining = rawValue.slice(rawIndex);
+        const mentionMatch = remaining.match(/^@\[([^\]]+)\]\(([^)]+)\)/);
+        
+        if (mentionMatch) {
+            const displayMentionLen = mentionMatch[1].length + 1; // +1 for @
+            const rawMentionLen = mentionMatch[0].length;
+            
+            if (displayIndex + displayMentionLen <= displayPos) {
+                displayIndex += displayMentionLen;
+                rawIndex += rawMentionLen;
+            } else {
+                // Cursor is within the mention display text
+                rawIndex += (displayPos - displayIndex);
+                displayIndex = displayPos;
+            }
+        } else {
+            displayIndex++;
+            rawIndex++;
+        }
+    }
+    
+    return rawIndex;
+}
+
+// Convert cursor position from raw value to display value  
+function rawToDisplayCursorPos(rawPos: number, rawValue: string): number {
+    let displayIndex = 0;
+    let rawIndex = 0;
+    
+    while (rawIndex < rawPos && rawIndex < rawValue.length) {
+        const remaining = rawValue.slice(rawIndex);
+        const mentionMatch = remaining.match(/^@\[([^\]]+)\]\(([^)]+)\)/);
+        
+        if (mentionMatch) {
+            const displayMentionLen = mentionMatch[1].length + 1;
+            const rawMentionLen = mentionMatch[0].length;
+            
+            if (rawIndex + rawMentionLen <= rawPos) {
+                displayIndex += displayMentionLen;
+                rawIndex += rawMentionLen;
+            } else {
+                // Cursor is within the raw mention - put it at end of display mention
+                displayIndex += displayMentionLen;
+                rawIndex = rawPos;
+            }
+        } else {
+            displayIndex++;
+            rawIndex++;
+        }
+    }
+    
+    return displayIndex;
+}
 
 // Common emoji shortcodes (name -> emoji)
 const EMOJI_SHORTCODES: Record<string, string> = {
@@ -82,6 +151,9 @@ export function MentionInput({
     const internalInputRef = useRef<HTMLInputElement>(null);
     const inputRef = externalInputRef || internalInputRef;
     const suggestionsRef = useRef<HTMLDivElement>(null);
+    
+    // Display value shows @Name instead of @[Name](address)
+    const displayValue = useMemo(() => toDisplayValue(value), [value]);
 
     // Filter users based on input
     const filteredUsers = users.filter((user) => {
@@ -109,12 +181,44 @@ export function MentionInput({
 
     // Handle input change
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newValue = e.target.value;
-        const cursorPosition = e.target.selectionStart || 0;
+        const newDisplayValue = e.target.value;
+        const displayCursorPos = e.target.selectionStart || 0;
         
-        onChange(newValue);
+        // Calculate the diff between old and new display values
+        const oldDisplayValue = displayValue;
+        
+        // Figure out what changed
+        // Find the point where they diverge from the start
+        let commonPrefixLen = 0;
+        while (commonPrefixLen < oldDisplayValue.length && 
+               commonPrefixLen < newDisplayValue.length && 
+               oldDisplayValue[commonPrefixLen] === newDisplayValue[commonPrefixLen]) {
+            commonPrefixLen++;
+        }
+        
+        // Find common suffix
+        let commonSuffixLen = 0;
+        while (commonSuffixLen < (oldDisplayValue.length - commonPrefixLen) && 
+               commonSuffixLen < (newDisplayValue.length - commonPrefixLen) &&
+               oldDisplayValue[oldDisplayValue.length - 1 - commonSuffixLen] === 
+               newDisplayValue[newDisplayValue.length - 1 - commonSuffixLen]) {
+            commonSuffixLen++;
+        }
+        
+        // Calculate what was deleted/inserted
+        const deletedInDisplay = oldDisplayValue.slice(commonPrefixLen, oldDisplayValue.length - commonSuffixLen);
+        const insertedInDisplay = newDisplayValue.slice(commonPrefixLen, newDisplayValue.length - commonSuffixLen);
+        
+        // Map positions to raw value
+        const rawPrefixPos = displayToRawCursorPos(commonPrefixLen, value);
+        const rawSuffixPos = displayToRawCursorPos(oldDisplayValue.length - commonSuffixLen, value);
+        
+        // Build new raw value
+        const newRawValue = value.slice(0, rawPrefixPos) + insertedInDisplay + value.slice(rawSuffixPos);
+        
+        onChange(newRawValue);
 
-        const textBeforeCursor = newValue.slice(0, cursorPosition);
+        const textBeforeCursor = newDisplayValue.slice(0, displayCursorPos);
 
         // Check for emoji shortcode trigger (:)
         const lastColonIndex = textBeforeCursor.lastIndexOf(":");
@@ -160,11 +264,15 @@ export function MentionInput({
         if (mentionStartIndex === null) return;
 
         const input = inputRef.current;
-        const cursorPosition = input?.selectionStart || value.length;
+        const displayCursorPos = input?.selectionStart || displayValue.length;
         
-        // Replace @filter with @[name](address)
-        const beforeMention = value.slice(0, mentionStartIndex);
-        const afterCursor = value.slice(cursorPosition);
+        // mentionStartIndex is in display coordinates - convert to raw
+        const rawMentionStart = displayToRawCursorPos(mentionStartIndex, value);
+        const rawCursorPos = displayToRawCursorPos(displayCursorPos, value);
+        
+        // Replace @filter with @[name](address) in raw value
+        const beforeMention = value.slice(0, rawMentionStart);
+        const afterCursor = value.slice(rawCursorPos);
         const mentionText = `@[${getDisplayName(user)}](${user.address}) `;
         
         const newValue = beforeMention + mentionText + afterCursor;
@@ -174,26 +282,32 @@ export function MentionInput({
         setMentionStartIndex(null);
         setSuggestionFilter("");
         
-        // Focus and set cursor position
+        // Focus and set cursor position in display coordinates
         setTimeout(() => {
             if (input) {
-                const newCursorPos = beforeMention.length + mentionText.length;
+                // Display version will show @Name (name.length + 1 for @, + 1 for space)
+                const displayMentionLen = getDisplayName(user).length + 2; // @Name + space
+                const newDisplayCursorPos = mentionStartIndex + displayMentionLen;
                 input.focus();
-                input.setSelectionRange(newCursorPos, newCursorPos);
+                input.setSelectionRange(newDisplayCursorPos, newDisplayCursorPos);
             }
         }, 0);
-    }, [mentionStartIndex, value, onChange, inputRef]);
+    }, [mentionStartIndex, value, displayValue, onChange, inputRef]);
 
     // Handle selecting an emoji
     const selectEmoji = useCallback((emoji: string) => {
         if (mentionStartIndex === null) return;
 
         const input = inputRef.current;
-        const cursorPosition = input?.selectionStart || value.length;
+        const displayCursorPos = input?.selectionStart || displayValue.length;
         
-        // Replace :filter with emoji
-        const beforeEmoji = value.slice(0, mentionStartIndex);
-        const afterCursor = value.slice(cursorPosition);
+        // mentionStartIndex is in display coordinates - convert to raw
+        const rawMentionStart = displayToRawCursorPos(mentionStartIndex, value);
+        const rawCursorPos = displayToRawCursorPos(displayCursorPos, value);
+        
+        // Replace :filter with emoji in raw value
+        const beforeEmoji = value.slice(0, rawMentionStart);
+        const afterCursor = value.slice(rawCursorPos);
         const emojiText = emoji + " ";
         
         const newValue = beforeEmoji + emojiText + afterCursor;
@@ -203,15 +317,15 @@ export function MentionInput({
         setMentionStartIndex(null);
         setSuggestionFilter("");
         
-        // Focus and set cursor position
+        // Focus and set cursor position in display coordinates
         setTimeout(() => {
             if (input) {
-                const newCursorPos = beforeEmoji.length + emojiText.length;
+                const newDisplayCursorPos = mentionStartIndex + emojiText.length;
                 input.focus();
-                input.setSelectionRange(newCursorPos, newCursorPos);
+                input.setSelectionRange(newDisplayCursorPos, newDisplayCursorPos);
             }
         }, 0);
-    }, [mentionStartIndex, value, onChange, inputRef]);
+    }, [mentionStartIndex, value, displayValue, onChange, inputRef]);
 
     // Handle keyboard navigation in suggestions
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -281,7 +395,7 @@ export function MentionInput({
                 autoComplete="off"
                 autoCorrect="on"
                 autoCapitalize="sentences"
-                value={value}
+                value={displayValue}
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
@@ -395,6 +509,7 @@ export function MentionInput({
 
 // Regex to match mentions in the format @[name](address)
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
+// Note: MENTION_REGEX_GLOBAL is defined at the top of the file for toDisplayValue()
 
 // Parse mentions from text
 export function parseMentions(text: string): Array<{
