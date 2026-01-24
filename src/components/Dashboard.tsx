@@ -351,7 +351,7 @@ function DashboardContent({
         ? "alien_id" 
         : walletType; // Traditional wallet: evm or solana
     
-    const { dailyBonusAvailable, claimDailyBonus, isClaimingBonus } =
+    const { dailyBonusAvailable, claimDailyBonus, isClaimingBonus, dismissDailyBonus } =
         useLoginTracking({
             walletAddress: userAddress,
             walletType: actualAuthMethod,
@@ -363,10 +363,12 @@ function DashboardContent({
     // State for daily bonus modal
     const [showDailyBonusModal, setShowDailyBonusModal] = useState(false);
     const [dailyBonusClaimed, setDailyBonusClaimed] = useState(false);
+    const hasShownBonusModal = useRef(false); // Prevent showing modal multiple times
 
-    // Show notification when daily bonus is available
+    // Show notification when daily bonus is available (only once per session)
     useEffect(() => {
-        if (dailyBonusAvailable && !dailyBonusClaimed) {
+        if (dailyBonusAvailable && !dailyBonusClaimed && !hasShownBonusModal.current) {
+            hasShownBonusModal.current = true;
             setShowDailyBonusModal(true);
         }
     }, [dailyBonusAvailable, dailyBonusClaimed]);
@@ -381,6 +383,12 @@ function DashboardContent({
             // Refresh points
             refreshPoints();
         }
+    };
+
+    // Handle dismissing daily bonus modal (user clicks "Maybe later")
+    const handleDismissDailyBonus = () => {
+        setShowDailyBonusModal(false);
+        dismissDailyBonus(); // Remember dismissal for today
     };
 
     // Analytics tracking
@@ -4827,7 +4835,7 @@ function DashboardContent({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                        onClick={() => setShowDailyBonusModal(false)}
+                        onClick={handleDismissDailyBonus}
                     >
                         <motion.div
                             initial={{ scale: 0.8, opacity: 0 }}
@@ -4893,7 +4901,7 @@ function DashboardContent({
                             </button>
 
                             <button
-                                onClick={() => setShowDailyBonusModal(false)}
+                                onClick={handleDismissDailyBonus}
                                 className="mt-3 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
                             >
                                 Maybe later

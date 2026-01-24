@@ -11,6 +11,7 @@ type LoginTrackingParams = {
 };
 
 const TRACKING_KEY = "spritz_last_login_track";
+const DAILY_BONUS_DISMISSED_KEY = "spritz_daily_bonus_dismissed";
 
 export function useLoginTracking({
     walletAddress,
@@ -20,8 +21,32 @@ export function useLoginTracking({
     username,
 }: LoginTrackingParams) {
     const hasTracked = useRef(false);
+    const hasFetchedBonus = useRef(false); // Prevent double fetching
     const [dailyBonusAvailable, setDailyBonusAvailable] = useState(false);
     const [isClaimingBonus, setIsClaimingBonus] = useState(false);
+
+    // Check if daily bonus was already dismissed today
+    const wasDismissedToday = useCallback((): boolean => {
+        try {
+            const dismissed = localStorage.getItem(DAILY_BONUS_DISMISSED_KEY);
+            if (!dismissed) return false;
+            const data = JSON.parse(dismissed);
+            const today = new Date().toISOString().split('T')[0];
+            return data.date === today && data.address === walletAddress?.toLowerCase();
+        } catch {
+            return false;
+        }
+    }, [walletAddress]);
+
+    // Mark daily bonus as dismissed for today
+    const dismissDailyBonus = useCallback(() => {
+        if (!walletAddress) return;
+        const today = new Date().toISOString().split('T')[0];
+        localStorage.setItem(DAILY_BONUS_DISMISSED_KEY, JSON.stringify({
+            date: today,
+            address: walletAddress.toLowerCase(),
+        }));
+    }, [walletAddress]);
 
     const trackLogin = useCallback(async () => {
         if (!walletAddress || hasTracked.current) return;
@@ -38,12 +63,15 @@ export function useLoginTracking({
             Date.now() - trackingData.timestamp < thirtyMinutes
         ) {
             hasTracked.current = true;
-            // Still check daily bonus availability
-            checkDailyBonus();
+            // Still check daily bonus availability (only if not already fetched)
+            if (!hasFetchedBonus.current) {
+                checkDailyBonus();
+            }
             return;
         }
 
         hasTracked.current = true;
+        hasFetchedBonus.current = true; // Prevent double fetching
 
         try {
             // Get invite code from URL if present
@@ -66,8 +94,8 @@ export function useLoginTracking({
 
             const data = await response.json();
             
-            // Check if daily bonus is available
-            if (data.dailyBonusAvailable) {
+            // Check if daily bonus is available (only if not dismissed today)
+            if (data.dailyBonusAvailable && !wasDismissedToday()) {
                 setDailyBonusAvailable(true);
             }
 
@@ -84,22 +112,30 @@ export function useLoginTracking({
         } catch (error) {
             console.error("[Login] Failed to track login:", error);
         }
-    }, [walletAddress, walletType, chain, ensName, username]);
+    }, [walletAddress, walletType, chain, ensName, username, wasDismissedToday]);
 
     // Check daily bonus availability
     const checkDailyBonus = useCallback(async () => {
-        if (!walletAddress) return;
+        if (!walletAddress || hasFetchedBonus.current) return;
+        
+        hasFetchedBonus.current = true; // Prevent double fetching
         
         try {
             const response = await fetch(`/api/points/daily?address=${walletAddress}`, {
                 credentials: "include", // Important for session cookie
             });
             const data = await response.json();
-            setDailyBonusAvailable(data.available || false);
+            
+            // Only set available if not dismissed today
+            if (data.available && !wasDismissedToday()) {
+                setDailyBonusAvailable(true);
+            } else {
+                setDailyBonusAvailable(false);
+            }
         } catch (error) {
             console.error("[Login] Failed to check daily bonus:", error);
         }
-    }, [walletAddress]);
+    }, [walletAddress, wasDismissedToday]);
 
     // Claim daily bonus
     const claimDailyBonus = useCallback(async (): Promise<boolean> => {
@@ -118,6 +154,7 @@ export function useLoginTracking({
             
             if (data.success) {
                 setDailyBonusAvailable(false);
+                dismissDailyBonus(); // Mark as dismissed so it won't show again
                 console.log("[Login] Daily bonus claimed:", data.points, "points");
                 return true;
             } else {
@@ -131,12 +168,17 @@ export function useLoginTracking({
         } finally {
             setIsClaimingBonus(false);
         }
-    }, [walletAddress, dailyBonusAvailable, isClaimingBonus]);
+    }, [walletAddress, dailyBonusAvailable, isClaimingBonus, dismissDailyBonus]);
 
     // Track login on mount
     useEffect(() => {
         trackLogin();
     }, [trackLogin]);
+
+    // Reset hasFetchedBonus when wallet changes
+    useEffect(() => {
+        hasFetchedBonus.current = false;
+    }, [walletAddress]);
 
     return { 
         trackLogin, 
@@ -144,6 +186,7 @@ export function useLoginTracking({
         claimDailyBonus, 
         isClaimingBonus,
         checkDailyBonus,
+        dismissDailyBonus, // Export so Dashboard can call it when user dismisses modal
     };
 }
 
