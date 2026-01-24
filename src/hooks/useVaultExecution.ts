@@ -27,6 +27,27 @@ import { getSafeMessageHashAsync, executeVaultViaPasskey, type PasskeyCredential
 import { usePasskeySigner } from "@/hooks/usePasskeySigner";
 import { getRpcUrl } from "@/lib/rpc";
 
+// Client-side error logging helper
+async function logVaultError(
+    errorMessage: string,
+    context: Record<string, unknown>
+) {
+    try {
+        await fetch("/api/admin/error-log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                errorType: "vault_transaction",
+                errorMessage,
+                context,
+            }),
+        });
+    } catch (e) {
+        console.error("[VaultExecution] Failed to log error:", e);
+    }
+}
+
 // Map chain IDs to viem chain objects
 const VIEM_CHAINS: Record<number, Chain> = {
     1: mainnet,
@@ -736,6 +757,18 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Failed to sign";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility
+            logVaultError(errorMessage, {
+                operation: "sign",
+                safeAddress: params.safeAddress,
+                chainId: params.chainId,
+                userAddress,
+                smartWalletAddress: params.smartWalletAddress,
+                isPasskeyOnly,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
     }, [walletClient, userAddress, getSafeTxHash, getPublicClient, isPasskeyOnly, passkeySigner, ensureCorrectChain]);
@@ -926,9 +959,23 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Execution failed";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility with full passkey context
+            logVaultError(errorMessage, {
+                operation: "passkey_execute",
+                safeAddress: params.safeAddress,
+                chainId: params.chainId,
+                userAddress: passkeyUserAddress,
+                credentialId: passkeySigner.credential?.credentialId,
+                publicKeyX: passkeySigner.credential?.publicKeyX,
+                publicKeyY: passkeySigner.credential?.publicKeyY,
+                signatureCount: params.signatures?.length,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
-    }, [passkeySigner, getPublicClient]);
+    }, [passkeySigner, getPublicClient, passkeyUserAddress]);
 
     /**
      * Execute with multiple signatures (for multi-sig)
@@ -1187,6 +1234,17 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Transaction failed";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility
+            logVaultError(errorMessage, {
+                operation: "execute_with_signatures",
+                safeAddress: params.safeAddress,
+                chainId: params.chainId,
+                userAddress,
+                signatureCount: params.signatures?.length,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
     }, [walletClient, userAddress, getPublicClient, isPasskeyOnly, executeWithSignaturesViaPasskey, passkeySigner, passkeyUserAddress, ensureCorrectChain]);
@@ -1464,6 +1522,19 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Transaction failed";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility
+            logVaultError(errorMessage, {
+                operation: "execute",
+                safeAddress,
+                chainId,
+                userAddress,
+                smartWalletAddress,
+                isPasskeyOnly,
+                hasSignatures: !!signatures && signatures.length > 0,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
     }, [walletClient, userAddress, signTransaction, executeWithSignatures, executeWithSignaturesViaPasskey, getPublicClient, isPasskeyOnly, passkeySigner, passkeyUserAddress, ensureCorrectChain]);

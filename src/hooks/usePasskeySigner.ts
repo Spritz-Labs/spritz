@@ -3,6 +3,27 @@
 import { useState, useCallback } from "react";
 import { type Address, type Hex, keccak256, toHex } from "viem";
 
+// Client-side error logging helper
+async function logPasskeyError(
+    errorMessage: string,
+    context: Record<string, unknown>
+) {
+    try {
+        await fetch("/api/admin/error-log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                errorType: "passkey_signing",
+                errorMessage,
+                context,
+            }),
+        });
+    } catch (e) {
+        console.error("[PasskeySigner] Failed to log error:", e);
+    }
+}
+
 export interface PasskeyCredential {
     credentialId: string;
     publicKeyX: Hex;
@@ -80,6 +101,21 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
         }
     }, []);
 
+    // Get the RP ID - must match where the passkey was registered
+    // IMPORTANT: Use parent domain (spritz.chat) for all spritz.chat subdomains
+    // to match the registration and login flow
+    const getRpId = useCallback((): string => {
+        if (typeof window === 'undefined') return 'spritz.chat';
+        const hostname = window.location.hostname;
+        if (hostname.includes('spritz.chat')) {
+            return 'spritz.chat';
+        }
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'localhost';
+        }
+        return hostname;
+    }, []);
+    
     /**
      * Sign a challenge using the passkey
      * 
@@ -100,19 +136,6 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
         setError(null);
 
         try {
-            // Get the RP ID - must match where the passkey was registered
-            // IMPORTANT: Use parent domain (spritz.chat) for all spritz.chat subdomains
-            // to match the registration and login flow
-            const getRpId = (): string => {
-                const hostname = window.location.hostname;
-                if (hostname.includes('spritz.chat')) {
-                    return 'spritz.chat';
-                }
-                if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                    return 'localhost';
-                }
-                return hostname;
-            };
             const rpId = getRpId();
             const challengeBytes = hexToBytes(challenge);
             
@@ -162,18 +185,39 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
         } catch (err) {
             console.error("[PasskeySigner] Signing error:", err);
             
+            let errorMessage: string;
+            let errorCode: string | undefined;
+            
             // Handle user cancellation
             if (err instanceof DOMException && err.name === "NotAllowedError") {
-                setError("Signing cancelled");
+                errorMessage = "Signing cancelled";
+                errorCode = "WEBAUTHN_NOT_ALLOWED";
             } else {
-                setError(err instanceof Error ? err.message : "Failed to sign");
+                errorMessage = err instanceof Error ? err.message : "Failed to sign";
+                if (err instanceof DOMException) {
+                    errorCode = `WEBAUTHN_${err.name.toUpperCase()}`;
+                }
+            }
+            
+            setError(errorMessage);
+            
+            // Log error for admin visibility (but not cancellations)
+            if (errorCode !== "WEBAUTHN_NOT_ALLOWED") {
+                logPasskeyError(errorMessage, {
+                    operation: "signChallenge",
+                    credentialId: credential?.credentialId,
+                    rpId: getRpId(),
+                    errorCode,
+                    errorName: err instanceof DOMException ? err.name : undefined,
+                    stackTrace: err instanceof Error ? err.stack : undefined,
+                });
             }
             
             return null;
         } finally {
             setIsSigning(false);
         }
-    }, [credential]);
+    }, [credential, getRpId]);
 
     /**
      * Reset the signer state
