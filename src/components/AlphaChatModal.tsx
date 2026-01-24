@@ -125,7 +125,7 @@ export function AlphaChatModal({
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const userPopupRef = useRef<HTMLDivElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const userScrolledUpRef = useRef(false);
     const justSentMessageRef = useRef(false);
     
@@ -1262,8 +1262,8 @@ export function AlphaChatModal({
                                                     inputRef={inputRef}
                                                     value={newMessage}
                                                     onChange={setNewMessage}
-                                                    onKeyDown={handleKeyPress}
-                                                    placeholder={replyingTo ? "Type your reply... (@ to mention)" : "Message the community... (@ to mention)"}
+                                                    onSubmit={handleSend}
+                                                    placeholder={replyingTo ? "Type your reply... (Shift+Enter for new line)" : "Message the community... (@ to mention, Shift+Enter for new line)"}
                                                     users={mentionableUsers}
                                                     className={`w-full bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all ${
                                                         isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"

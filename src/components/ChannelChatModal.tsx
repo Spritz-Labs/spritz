@@ -93,7 +93,7 @@ export function ChannelChatModal({
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
     const userScrolledUpRef = useRef(false);
@@ -1222,8 +1222,8 @@ export function ChannelChatModal({
                                 inputRef={inputRef}
                                 value={inputValue}
                                 onChange={setInputValue}
-                                onKeyDown={handleKeyDown}
-                                placeholder={`Message #${channel.name} (@ to mention)`}
+                                onSubmit={handleSend}
+                                placeholder={`Message #${channel.name} (@ to mention, Shift+Enter for new line)`}
                                 users={mentionableUsers}
                                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
                             />

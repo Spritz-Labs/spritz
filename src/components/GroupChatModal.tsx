@@ -1409,11 +1409,11 @@ export function GroupChatModal({
                                     <MentionInput
                                         value={newMessage}
                                         onChange={setNewMessage}
-                                        onKeyDown={handleKeyPress}
+                                        onSubmit={handleSend}
                                         placeholder={
                                             replyingTo
-                                                ? "Type your reply... (@ to mention)"
-                                                : "Type a message... (@ to mention)"
+                                                ? "Type your reply... (Shift+Enter for new line)"
+                                                : "Type a message... (@ to mention, Shift+Enter for new line)"
                                         }
                                         disabled={!isInitialized}
                                         users={mentionableUsers}
