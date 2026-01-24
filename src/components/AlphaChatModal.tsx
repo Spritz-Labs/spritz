@@ -10,6 +10,7 @@ import { PixelArtShare } from "./PixelArtShare";
 import { QuickReactionPicker } from "./EmojiPicker";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
+import { GifPicker } from "./GifPicker";
 import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
 import ReactMarkdown from "react-markdown";
@@ -111,6 +112,7 @@ export function AlphaChatModal({
 
     const [newMessage, setNewMessage] = useState("");
     const [showPixelArt, setShowPixelArt] = useState(false);
+    const [showGifPicker, setShowGifPicker] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
@@ -422,6 +424,18 @@ export function AlphaChatModal({
         }
     };
 
+    // Handle GIF send
+    const handleSendGif = useCallback(async (gifUrl: string) => {
+        if (!gifUrl || isSending) return;
+        
+        try {
+            // Send GIF as an image message
+            await sendMessage(`[GIF]${gifUrl}`, "text");
+        } catch (err) {
+            console.error("Failed to send GIF:", err);
+        }
+    }, [sendMessage, isSending]);
+
     // Handle pixel art send
     const handleSendPixelArt = useCallback(
         async (imageData: string) => {
@@ -479,6 +493,12 @@ export function AlphaChatModal({
         content.startsWith("[PIXEL_ART]");
     const getPixelArtUrl = (content: string) =>
         content.replace("[PIXEL_ART]", "");
+    
+    // Check if message is a GIF
+    const isGifMessage = (content: string) =>
+        content.startsWith("[GIF]");
+    const getGifUrl = (content: string) =>
+        content.replace("[GIF]", "");
     
     // Agent info cache for displaying agent messages
     const [agentInfoCache, setAgentInfoCache] = useState<Map<string, { name: string; avatar_url?: string; avatar_emoji: string }>>(new Map());
@@ -789,7 +809,8 @@ export function AlphaChatModal({
                                                                         {formatSender(msg.sender_address)}
                                                                     </p>
                                                                     <p className="text-sm text-white break-words line-clamp-2">
-                                                                        {msg.content.startsWith("[PIXEL_ART]") ? "🎨 Pixel Art" : msg.content}
+                                                                        {msg.content.startsWith("[PIXEL_ART]") ? "🎨 Pixel Art" : 
+                                                                         msg.content.startsWith("[GIF]") ? "🎬 GIF" : msg.content}
                                                                     </p>
                                                                 </div>
                                                                 {isAdmin && (
@@ -1036,6 +1057,15 @@ export function AlphaChatModal({
                                                                         {msg.content}
                                                                     </ReactMarkdown>
                                                                 </div>
+                                                            ) : isGifMessage(msg.content) ? (
+                                                                <div className="relative max-w-[280px] rounded-xl overflow-hidden">
+                                                                    <img
+                                                                        src={getGifUrl(msg.content)}
+                                                                        alt="GIF"
+                                                                        className="w-full h-auto rounded-xl"
+                                                                        loading="lazy"
+                                                                    />
+                                                                </div>
                                                             ) : hasMarkdown(msg.content) ? (
                                                                 <ChatMarkdown 
                                                                     content={msg.content} 
@@ -1227,6 +1257,7 @@ export function AlphaChatModal({
                                         style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
                                     >
                                         <div className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}>
+                                            {/* Pixel Art Button */}
                                             <button
                                                 onClick={() => setShowPixelArt(true)}
                                                 className={`rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-orange-400 transition-colors ${isFullscreen ? "p-4" : "p-3"}`}
@@ -1247,6 +1278,22 @@ export function AlphaChatModal({
                                                     />
                                                 </svg>
                                             </button>
+                                            {/* GIF Button */}
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setShowGifPicker(!showGifPicker)}
+                                                    className={`rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-orange-400 transition-colors font-bold text-xs ${isFullscreen ? "px-3 py-4" : "px-2.5 py-3"}`}
+                                                    title="Send GIF"
+                                                >
+                                                    GIF
+                                                </button>
+                                                <GifPicker
+                                                    isOpen={showGifPicker}
+                                                    onClose={() => setShowGifPicker(false)}
+                                                    onSelect={handleSendGif}
+                                                    position="top"
+                                                />
+                                            </div>
                                             {isCurrentUserMuted ? (
                                                 <div className={`flex-1 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 flex items-center justify-center gap-2 ${
                                                     isFullscreen ? "py-4 px-5" : "py-3 px-4"

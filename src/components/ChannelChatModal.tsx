@@ -9,6 +9,7 @@ import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
+import { GifPicker } from "./GifPicker";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
@@ -82,6 +83,7 @@ export function ChannelChatModal({
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [showPixelArt, setShowPixelArt] = useState(false);
+    const [showGifPicker, setShowGifPicker] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [userPopupPosition, setUserPopupPosition] = useState<{ x: number; y: number } | null>(null);
@@ -363,6 +365,21 @@ export function ChannelChatModal({
         
         // Notify parent that message was sent (for updating chat order)
         onMessageSent?.();
+    };
+
+    // Handle sending GIF
+    const handleSendGif = async (gifUrl: string) => {
+        if (!gifUrl || isSending) return;
+        setIsSending(true);
+        try {
+            await sendMessage(`[GIF]${gifUrl}`, "text");
+            setShowGifPicker(false);
+            onMessageSent?.();
+        } catch (error) {
+            console.error("Failed to send GIF:", error);
+        } finally {
+            setIsSending(false);
+        }
     };
 
     // Handle sending pixel art
@@ -835,7 +852,8 @@ export function ChannelChatModal({
                                         index === 0 ||
                                         messages[index - 1].sender_address !== msg.sender_address;
                                     const isPixelArt = msg.message_type === "pixel_art";
-                                    const isImage = !isPixelArt && (msg.message_type === "image" || isImageUrl(msg.content));
+                                    const isGif = msg.content.startsWith("[GIF]");
+                                    const isImage = !isPixelArt && !isGif && (msg.message_type === "image" || isImageUrl(msg.content));
                                     const senderAvatar = getSenderAvatar(msg.sender_address);
                                     const senderAvatarEmoji = getSenderAvatarEmoji(msg.sender_address);
                                     const isAlreadyFriend = !isAgent && (isFriend?.(msg.sender_address) ?? false);
@@ -976,6 +994,19 @@ export function ChannelChatModal({
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                                             </svg>
                                                         </a>
+                                                    </div>
+                                                ) : isGif ? (
+                                                    <div
+                                                        className={`rounded-2xl overflow-hidden relative ${
+                                                            isOwn ? "rounded-br-md" : "rounded-bl-md"
+                                                        }`}
+                                                    >
+                                                        <img
+                                                            src={msg.content.replace("[GIF]", "")}
+                                                            alt="GIF"
+                                                            className="max-w-[280px] h-auto rounded-xl"
+                                                            loading="lazy"
+                                                        />
                                                     </div>
                                                 ) : (
                                                     <div
@@ -1262,6 +1293,22 @@ export function ChannelChatModal({
                                     <rect x="4" y="16" width="4" height="4" opacity="0.3" />
                                 </svg>
                             </button>
+                            {/* GIF button */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowGifPicker(!showGifPicker)}
+                                    className="px-2.5 py-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 hover:text-white transition-colors font-bold text-xs"
+                                    title="Send GIF"
+                                >
+                                    GIF
+                                </button>
+                                <GifPicker
+                                    isOpen={showGifPicker}
+                                    onClose={() => setShowGifPicker(false)}
+                                    onSelect={handleSendGif}
+                                    position="top"
+                                />
+                            </div>
                             <MentionInput
                                 inputRef={inputRef}
                                 value={inputValue}

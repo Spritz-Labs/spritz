@@ -28,6 +28,7 @@ import { useAnalytics } from "@/hooks/useAnalytics";
 import { createLogger } from "@/lib/logger";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { MentionInput } from "./MentionInput";
+import { GifPicker } from "./GifPicker";
 
 const log = createLogger("Chat");
 
@@ -80,6 +81,7 @@ export function ChatModal({
     const [chatState, setChatState] = useState<ChatState>("checking");
     const [bypassCheck, setBypassCheck] = useState(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
+    const [showGifPicker, setShowGifPicker] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
@@ -704,6 +706,18 @@ export function ChatModal({
         }
     };
 
+    // Handle sending GIF
+    const handleSendGif = useCallback(async (gifUrl: string) => {
+        if (!gifUrl) return;
+        
+        try {
+            await sendMessage(peerAddress, `[GIF]${gifUrl}`);
+            setShowGifPicker(false);
+        } catch (err) {
+            console.error("Failed to send GIF:", err);
+        }
+    }, [sendMessage, peerAddress]);
+
     // Handle sending pixel art
     const handleSendPixelArt = useCallback(
         async (imageData: string) => {
@@ -771,6 +785,12 @@ export function ChatModal({
         content.startsWith("[PIXEL_ART]");
     const getPixelArtUrl = (content: string) =>
         content.replace("[PIXEL_ART]", "");
+    
+    // Check if a message is a GIF
+    const isGifMessage = (content: string) =>
+        content.startsWith("[GIF]");
+    const getGifUrl = (content: string) =>
+        content.replace("[GIF]", "");
 
     // Fetch reactions for pixel art messages
     useEffect(() => {
@@ -1126,6 +1146,7 @@ export function ChatModal({
                                     const isPixelArt = isPixelArtMessage(
                                         msg.content
                                     );
+                                    const isGif = isGifMessage(msg.content);
 
                                     return (
                                         <motion.div
@@ -1310,6 +1331,31 @@ export function ChatModal({
                                                             }`}
                                                         >
                                                             🎨 Pixel Art •{" "}
+                                                            {msg.sentAt.toLocaleTimeString(
+                                                                [],
+                                                                {
+                                                                    hour: "2-digit",
+                                                                    minute: "2-digit",
+                                                                }
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                ) : isGif ? (
+                                                    <div className="relative">
+                                                        <img
+                                                            src={getGifUrl(msg.content)}
+                                                            alt="GIF"
+                                                            className="max-w-[280px] h-auto rounded-xl"
+                                                            loading="lazy"
+                                                        />
+                                                        <p
+                                                            className={`text-xs mt-1 ${
+                                                                isOwn
+                                                                    ? "text-[#FFF0E0]"
+                                                                    : "text-zinc-500"
+                                                            }`}
+                                                        >
+                                                            🎬 GIF •{" "}
                                                             {msg.sentAt.toLocaleTimeString(
                                                                 [],
                                                                 {
@@ -1659,6 +1705,23 @@ export function ChatModal({
                                             />
                                         </svg>
                                     </button>
+                                    {/* GIF Button */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowGifPicker(!showGifPicker)}
+                                            disabled={!isInitialized || !!chatError}
+                                            className={`rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "px-3 py-4" : "px-2.5 py-3"}`}
+                                            title="Send GIF"
+                                        >
+                                            GIF
+                                        </button>
+                                        <GifPicker
+                                            isOpen={showGifPicker}
+                                            onClose={() => setShowGifPicker(false)}
+                                            onSelect={handleSendGif}
+                                            position="top"
+                                        />
+                                    </div>
                                     <div className="flex-1 relative">
                                         <MentionInput
                                             value={newMessage}
