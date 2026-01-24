@@ -157,39 +157,40 @@ export function GroupChatModal({
         console.log("[GroupChat] Mention clicked:", address);
     }, []);
 
-    // Scroll to bottom when messages change
+    // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         if (messages.length > 0) {
-            // Use instant scroll for initial load, smooth for new messages
-            const behavior = isInitialLoadRef.current ? "instant" : "smooth";
-            messagesEndRef.current?.scrollIntoView({ behavior });
-            if (isInitialLoadRef.current) {
-                isInitialLoadRef.current = false;
+            const container = messagesContainerRef.current;
+            if (container) {
+                if (isInitialLoadRef.current) {
+                    container.scrollTop = 0; // Bottom with column-reverse
+                    isInitialLoadRef.current = false;
+                } else if (container.scrollTop < 300) {
+                    // Smooth scroll for new messages if near bottom
+                    container.scrollTop = 0;
+                }
             }
         }
     }, [messages]);
 
-    // Track if we've done the initial scroll for this modal session
-    const hasInitialScrolledRef = useRef(false);
-
-    // Reset initial scroll flag when modal closes
+    // Reset scroll state when modal opens/closes
     useEffect(() => {
-        if (!isOpen) {
-            hasInitialScrolledRef.current = false;
+        if (isOpen) {
             isInitialLoadRef.current = true;
+            // With column-reverse, scrollTop=0 is bottom (no scroll needed)
         }
     }, [isOpen]);
 
-    // Scroll to bottom when modal opens and messages are ready
+    // Lock body scroll when modal is open to prevent scroll bleed
     useEffect(() => {
-        if (isOpen && messages.length > 0 && !hasInitialScrolledRef.current) {
-            hasInitialScrolledRef.current = true;
-            // Use setTimeout to ensure DOM is fully rendered
-            setTimeout(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-            }, 150);
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = '';
+            };
         }
-    }, [isOpen, messages.length]); // Trigger when modal opens OR messages load
+    }, [isOpen]);
 
     // Fetch reactions for all messages
     useEffect(() => {
@@ -897,8 +898,8 @@ export function GroupChatModal({
                                 )}
                             </AnimatePresence>
 
-                            {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {/* Messages - flex-col-reverse so newest at bottom */}
+                            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse">
                                 {isLoading ? (
                                     <div className="flex items-center justify-center h-full">
                                         <div className="w-8 h-8 border-2 border-[#FB8D22] border-t-transparent rounded-full animate-spin" />
@@ -934,7 +935,8 @@ export function GroupChatModal({
                                         </div>
                                     </div>
                                 ) : (
-                                    messages.map((msg) => {
+                                    <div className="space-y-3">
+                                    {messages.map((msg) => {
                                         // Compare addresses case-insensitively
                                         const isOwn = userAddress
                                             ? msg.senderInboxId?.toLowerCase() ===
@@ -1311,12 +1313,12 @@ export function GroupChatModal({
                                                             />
                                                         </div>
                                                     )}
-                                                </div>
+                                                    </div>
                                             </motion.div>
                                         );
-                                    })
+                                    })}
+                                    </div>
                                 )}
-                                <div ref={messagesEndRef} />
                             </div>
 
                             {/* Reply Preview */}

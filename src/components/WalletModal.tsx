@@ -1191,6 +1191,16 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         }
     }, [isOpen, resetSendForm]);
 
+    // Lock body scroll when modal is open to prevent scroll bleed
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = '';
+            };
+        }
+    }, [isOpen]);
+
     // Auto-estimate gas when send form is complete
     useEffect(() => {
         if (sendToken && resolvedRecipient && actualSendAmount && parseFloat(actualSendAmount) > 0) {
@@ -1483,7 +1493,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         {/* Tab Content */}
                         <div className="flex-1 flex flex-col overflow-hidden border-t border-zinc-800/50">
                             {activeTab === "balances" && (
-                                <div className="flex-1 overflow-y-auto">
+                                <div className="flex-1 overflow-y-auto overscroll-contain">
                                     {/* Chain selector dropdown */}
                                     <ChainSelectorDropdown
                                         selectedChainId={selectedChainId}
@@ -1612,7 +1622,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "receive" && (
-                                <div className="relative flex-1 flex flex-col overflow-y-auto">
+                                <div className="relative flex-1 flex flex-col overflow-y-auto overscroll-contain">
                                     {/* Email/Digital ID users without passkey AND no existing wallet address - must create one */}
                                     {((smartWallet?.needsPasskey && !smartWalletAddress) || (needsPasskeyForSend && passkeyStatus === "error" && !smartWalletAddress)) ? (
                                         <div className="flex flex-col items-center justify-center text-center p-6">
@@ -1973,7 +1983,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                         </svg>
                                                     </button>
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto">
+                                                <div className="flex-1 overflow-y-auto overscroll-contain">
                                                     {allTokens.length === 0 ? (
                                                         <div className="p-8 text-center text-zinc-500 text-sm">
                                                             No tokens with balance
@@ -2204,7 +2214,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             
                                             {/* Suggestions dropdown */}
                                             {showRecipientSuggestions && !showSaveAddressDialog && (filteredSuggestions.length > 0 || canSaveToAddressBook) && (
-                                                <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                                                <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-64 overflow-y-auto overscroll-contain">
                                                     {/* Save to address book option */}
                                                     {canSaveToAddressBook && (
                                                         <button
@@ -2543,7 +2553,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "history" && (
-                                <div className="flex-1 flex flex-col overflow-y-auto">
+                                <div className="flex-1 flex flex-col overflow-y-auto overscroll-contain">
                                     {/* Header with refresh */}
                                     <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
                                         <span className="text-xs text-zinc-500">
@@ -2565,7 +2575,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     </div>
 
                                     {/* Transaction list */}
-                                    <div className="flex-1 overflow-y-auto">
+                                    <div className="flex-1 overflow-y-auto overscroll-contain">
                                         {isLoadingTx && transactions.length === 0 ? (
                                             <div className="p-8 flex flex-col items-center gap-3">
                                                 <div className="w-8 h-8 border-2 border-zinc-700 border-t-cyan-500 rounded-full animate-spin" />
@@ -2624,7 +2634,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "security" && (
-                                <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+                                <div className="flex-1 p-4 space-y-4 overflow-y-auto overscroll-contain">
                                     {/* Multi-Chain Security - shows Safe status across all chains */}
                                     {smartWallet?.smartWalletAddress && (
                                         <MultiChainSecurity
@@ -2778,7 +2788,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 </div>
                                 
                                 {/* Vaults List */}
-                                <div className="flex-1 p-4 overflow-y-auto">
+                                <div className="flex-1 p-4 overflow-y-auto overscroll-contain">
                                     <VaultList
                                         userAddress={userAddress}
                                         onCreateNew={() => setShowCreateVaultModal(true)}

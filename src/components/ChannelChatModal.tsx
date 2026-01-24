@@ -182,12 +182,12 @@ export function ChannelChatModal({
         setSelectedUser(address);
     }, []);
 
-    // Scroll to bottom only for new messages (not when loading older ones)
+    // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
     const lastMessageIdRef = useRef<string | null>(null);
     useEffect(() => {
         if (messages.length > 0) {
             const lastMessage = messages[messages.length - 1];
-            // Only scroll to bottom if there's a new message at the end
+            // Only scroll if there's a new message at the end
             if (lastMessage.id !== lastMessageIdRef.current) {
                 lastMessageIdRef.current = lastMessage.id;
                 const container = messagesContainerRef.current;
@@ -196,75 +196,73 @@ export function ChannelChatModal({
                 if (justSentMessageRef.current) {
                     justSentMessageRef.current = false;
                     userScrolledUpRef.current = false;
-                    setTimeout(() => {
-                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                    }, 50);
+                    if (container) container.scrollTop = 0; // Bottom with column-reverse
                     return;
                 }
                 
-                // Auto-scroll if user hasn't intentionally scrolled up
-                if (container && !userScrolledUpRef.current) {
-                    // Use larger threshold (300px) for "near bottom" detection
-                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
-                    if (isNearBottom) {
-                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                    }
+                // Auto-scroll if user hasn't scrolled up to read history
+                // With column-reverse, "near bottom" = scrollTop near 0
+                if (container && !userScrolledUpRef.current && container.scrollTop < 300) {
+                    container.scrollTop = 0;
                 }
             }
         }
     }, [messages]);
 
     // Preserve scroll position when loading older messages
+    // With column-reverse, older messages are added at the "end" (visually top)
+    // The scroll position needs to be maintained so user doesn't jump
     useEffect(() => {
         const container = messagesContainerRef.current;
         if (container && previousScrollHeightRef.current > 0) {
+            // With column-reverse, new content adds at top, so we need to add the diff to scrollTop
             const newScrollHeight = container.scrollHeight;
             const scrollDiff = newScrollHeight - previousScrollHeightRef.current;
             if (scrollDiff > 0) {
-                container.scrollTop = scrollDiff;
+                container.scrollTop += scrollDiff;
             }
             previousScrollHeightRef.current = 0;
         }
     }, [messages]);
 
     // Handle scroll to load more messages and track user scroll position
+    // With flex-col-reverse: scrollTop=0 is at BOTTOM (newest), scrolling UP increases scrollTop
     const handleScroll = useCallback(() => {
         const container = messagesContainerRef.current;
         if (!container) return;
 
-        // Track if user has scrolled up significantly (more than 300px from bottom)
-        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-        userScrolledUpRef.current = distanceFromBottom > 300;
+        // With column-reverse, scrollTop > 0 means user scrolled up to see older messages
+        userScrolledUpRef.current = container.scrollTop > 300;
 
-        // Load more when scrolled near the top (within 100px)
-        if (!isLoadingMore && hasMore && container.scrollTop < 100) {
+        // Load more when scrolled near the TOP (older messages) - scrollTop approaches max
+        const scrollMax = container.scrollHeight - container.clientHeight;
+        if (!isLoadingMore && hasMore && scrollMax - container.scrollTop < 100) {
             previousScrollHeightRef.current = container.scrollHeight;
             loadMoreMessages();
         }
     }, [isLoadingMore, hasMore, loadMoreMessages]);
 
-    // Track if we've done the initial scroll for this modal session
-    const hasInitialScrolledRef = useRef(false);
-
-    // Reset initial scroll flag when modal closes
+    // With flex-col-reverse, we start at bottom automatically (scrollTop=0)
+    // Just reset scroll tracking when modal opens
     useEffect(() => {
-        if (!isOpen) {
-            hasInitialScrolledRef.current = false;
+        if (isOpen) {
+            userScrolledUpRef.current = false;
+            // Reset scroll position to bottom (scrollTop=0 with column-reverse)
+            if (messagesContainerRef.current) {
+                messagesContainerRef.current.scrollTop = 0;
+            }
         }
     }, [isOpen]);
 
-    // Scroll to bottom when modal opens and messages are ready
+    // Lock body scroll when modal is open to prevent scroll bleed
     useEffect(() => {
-        if (isOpen && messages.length > 0 && !hasInitialScrolledRef.current) {
-            // Reset scroll tracking when opening
-            userScrolledUpRef.current = false;
-            hasInitialScrolledRef.current = true;
-            // Use setTimeout to ensure DOM is fully rendered
-            setTimeout(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-            }, 150);
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = '';
+            };
         }
-    }, [isOpen, messages.length]); // Trigger when modal opens OR messages load
+    }, [isOpen]);
 
     // Fetch user info for message senders not in cache
     useEffect(() => {
@@ -759,11 +757,11 @@ export function ChannelChatModal({
                         )}
                     </AnimatePresence>
 
-                    {/* Messages */}
+                    {/* Messages - flex-col-reverse so newest at bottom, no scroll needed on open */}
                     <div 
                         ref={messagesContainerRef}
                         onScroll={handleScroll}
-                        className="flex-1 overflow-y-auto p-4 space-y-3"
+                        className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse"
                     >
                         {isLoading && messages.length === 0 ? (
                             <div className="flex items-center justify-center h-full">
@@ -781,19 +779,9 @@ export function ChannelChatModal({
                             </div>
                         ) : (
                             <>
-                                {/* Loading indicator for older messages */}
-                                {isLoadingMore && (
-                                    <div className="flex justify-center py-4">
-                                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-orange-500" />
-                                    </div>
-                                )}
-                                {/* "Load more" indicator when there's more history */}
-                                {!isLoadingMore && hasMore && messages.length > 0 && (
-                                    <div className="flex justify-center py-2">
-                                        <span className="text-xs text-zinc-500">Scroll up to load more</span>
-                                    </div>
-                                )}
-                                {messages.map((msg, index) => {
+                                {/* Messages container - content flows bottom to top with column-reverse */}
+                                <div className="space-y-3">
+                                    {messages.map((msg, index) => {
                                     const isOwn =
                                         msg.sender_address.toLowerCase() ===
                                         userAddress.toLowerCase();
@@ -1134,7 +1122,19 @@ export function ChannelChatModal({
                                         </motion.div>
                                     );
                                 })}
-                                <div ref={messagesEndRef} />
+                                </div>
+                                
+                                {/* Loading indicators at visual TOP (end of DOM with column-reverse) */}
+                                {isLoadingMore && (
+                                    <div className="flex justify-center py-4">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-orange-500" />
+                                    </div>
+                                )}
+                                {!isLoadingMore && hasMore && messages.length > 0 && (
+                                    <div className="flex justify-center py-2">
+                                        <span className="text-xs text-zinc-500">Scroll up to load more</span>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>

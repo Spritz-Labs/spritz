@@ -176,14 +176,21 @@ export function ChatModal({
 
     const displayName = peerName || formatAddress(peerAddress);
 
-    // Scroll to bottom when messages change
+    // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
     useEffect(() => {
         if (messages.length > 0) {
-            // Use instant scroll for initial load, smooth for new messages
-            const behavior = isInitialLoadRef.current ? "instant" : "smooth";
-            messagesEndRef.current?.scrollIntoView({ behavior });
-            if (isInitialLoadRef.current) {
-                isInitialLoadRef.current = false;
+            const container = document.querySelector('[data-chat-messages]');
+            if (container) {
+                // With column-reverse, scrollTop=0 is at the bottom
+                if (isInitialLoadRef.current) {
+                    container.scrollTop = 0;
+                    isInitialLoadRef.current = false;
+                } else {
+                    // Smooth scroll for new messages if near bottom
+                    if (container.scrollTop < 300) {
+                        container.scrollTop = 0;
+                    }
+                }
             }
         }
     }, [messages]);
@@ -195,6 +202,16 @@ export function ChatModal({
         }
     }, [isOpen, isInitialized, isInitializing, initialize]);
 
+    // Lock body scroll when modal is open to prevent scroll bleed
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = '';
+            };
+        }
+    }, [isOpen]);
+
     // Reset state when modal closes
     useEffect(() => {
         if (isOpen) {
@@ -205,10 +222,7 @@ export function ChatModal({
             setActiveChatPeer(peerAddress);
             // Also explicitly mark as read to clear any existing unread count
             markAsRead(peerAddress);
-            // Scroll to bottom when opening (if messages already loaded)
-            setTimeout(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-            }, 150);
+            // With column-reverse, scrollTop=0 is at bottom (no scroll needed)
             console.log(
                 "[Chat] Opened chat with",
                 peerAddress,
@@ -992,8 +1006,8 @@ export function ChatModal({
                                 </div>
                             </div>
 
-                            {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {/* Messages - flex-col-reverse so newest at bottom */}
+                            <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse" data-chat-messages>
                                 {isInitializing && (
                                     <div className="flex items-center justify-center h-full">
                                         <div className="text-center">
@@ -1077,6 +1091,8 @@ export function ChatModal({
                                         </div>
                                     )}
 
+                                {/* Messages container - flows bottom to top with column-reverse */}
+                                <div className="space-y-3">
                                 {/* Deduplicate messages by ID before rendering */}
                                 {Array.from(
                                     new Map(
@@ -1534,7 +1550,7 @@ export function ChatModal({
                                         </motion.div>
                                     );
                                 })}
-                                <div ref={messagesEndRef} />
+                                </div>
 
                                 {/* Typing Indicator */}
                                 {peerTyping && (
