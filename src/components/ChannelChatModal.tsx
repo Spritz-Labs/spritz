@@ -243,17 +243,28 @@ export function ChannelChatModal({
         }
     }, [isLoadingMore, hasMore, loadMoreMessages]);
 
-    // Scroll to bottom when modal opens
+    // Track if we've done the initial scroll for this modal session
+    const hasInitialScrolledRef = useRef(false);
+
+    // Reset initial scroll flag when modal closes
     useEffect(() => {
-        if (isOpen && messages.length > 0) {
+        if (!isOpen) {
+            hasInitialScrolledRef.current = false;
+        }
+    }, [isOpen]);
+
+    // Scroll to bottom when modal opens and messages are ready
+    useEffect(() => {
+        if (isOpen && messages.length > 0 && !hasInitialScrolledRef.current) {
             // Reset scroll tracking when opening
             userScrolledUpRef.current = false;
-            // Use setTimeout to ensure DOM is rendered
+            hasInitialScrolledRef.current = true;
+            // Use setTimeout to ensure DOM is fully rendered
             setTimeout(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-            }, 100);
+            }, 150);
         }
-    }, [isOpen]); // Only trigger on isOpen change, not messages
+    }, [isOpen, messages.length]); // Trigger when modal opens OR messages load
 
     // Fetch user info for message senders not in cache
     useEffect(() => {
