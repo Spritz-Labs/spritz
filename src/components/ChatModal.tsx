@@ -213,6 +213,21 @@ export function ChatModal({
         }
     }, [isOpen]);
 
+    // Track current peer to detect changes
+    const previousPeerRef = useRef<string | null>(null);
+    
+    // Clear messages when peer changes (prevent showing wrong user's messages)
+    useEffect(() => {
+        if (peerAddress && previousPeerRef.current && previousPeerRef.current !== peerAddress) {
+            console.log("[Chat] Peer changed from", previousPeerRef.current, "to", peerAddress, "- clearing messages");
+            setMessages([]);
+            setChatError(null);
+            setChatState("checking");
+            isInitialLoadRef.current = true;
+        }
+        previousPeerRef.current = peerAddress;
+    }, [peerAddress]);
+
     // Reset state when modal closes
     useEffect(() => {
         if (isOpen) {

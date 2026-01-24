@@ -4369,6 +4369,7 @@ function DashboardContent({
             {/* Chat Modal */}
             {userAddress && (
                 <ChatModal
+                    key={chatFriend?.address || "no-chat"} // Force remount when peer changes
                     isOpen={!!chatFriend}
                     onClose={() => setChatFriend(null)}
                     userAddress={userAddress}
@@ -4723,6 +4724,7 @@ function DashboardContent({
             {/* Group Chat Modal */}
             {userAddress && (
                 <GroupChatModal
+                    key={selectedGroup?.id || "no-group"} // Force remount when group changes
                     isOpen={!!selectedGroup}
                     onClose={() => setSelectedGroup(null)}
                     userAddress={userAddress}
@@ -4771,6 +4773,7 @@ function DashboardContent({
             {/* Channel Chat Modal */}
             {selectedChannel && (
                 <ChannelChatModal
+                    key={selectedChannel?.id || "no-channel"} // Force remount when channel changes
                     isOpen={!!selectedChannel}
                     onClose={() => setSelectedChannel(null)}
                     channel={selectedChannel}

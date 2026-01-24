@@ -494,7 +494,28 @@ export function MentionInput({
         
         // Handle Shift+Enter for new line (multiline mode)
         if (multiline && e.key === "Enter" && e.shiftKey) {
-            // Allow default behavior (insert new line)
+            // Explicitly insert newline at cursor position
+            e.preventDefault();
+            const textarea = inputRef.current;
+            if (textarea) {
+                const start = textarea.selectionStart || 0;
+                const end = textarea.selectionEnd || 0;
+                const currentDisplayValue = displayValue;
+                const newDisplayValue = currentDisplayValue.slice(0, start) + "\n" + currentDisplayValue.slice(end);
+                
+                // Convert to raw value
+                const rawStart = displayToRawCursorPos(start, value);
+                const rawEnd = displayToRawCursorPos(end, value);
+                const newRawValue = value.slice(0, rawStart) + "\n" + value.slice(rawEnd);
+                
+                onChange(newRawValue);
+                
+                // Set cursor after newline
+                setTimeout(() => {
+                    textarea.selectionStart = start + 1;
+                    textarea.selectionEnd = start + 1;
+                }, 0);
+            }
             return;
         }
         
