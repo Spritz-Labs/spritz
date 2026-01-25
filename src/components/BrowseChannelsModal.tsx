@@ -16,19 +16,42 @@ type BrowseChannelsModalProps = {
 
 const CATEGORIES = [
     { id: "all", name: "All", emoji: "🌐" },
+    // Location
     { id: "cities", name: "Cities", emoji: "🏙️" },
+    { id: "events", name: "Events", emoji: "🎉" },
+    // Tech & Web3
     { id: "crypto", name: "Crypto", emoji: "₿" },
+    { id: "nfts", name: "NFTs", emoji: "🖼️" },
+    { id: "defi", name: "DeFi", emoji: "🏦" },
+    { id: "daos", name: "DAOs", emoji: "🗳️" },
     { id: "tech", name: "Tech", emoji: "💻" },
+    { id: "dev", name: "Developers", emoji: "👨‍💻" },
+    { id: "ai", name: "AI", emoji: "🤖" },
+    // Entertainment
     { id: "gaming", name: "Gaming", emoji: "🎮" },
     { id: "sports", name: "Sports", emoji: "⚽" },
     { id: "music", name: "Music", emoji: "🎵" },
     { id: "art", name: "Art", emoji: "🎨" },
+    { id: "entertainment", name: "Entertainment", emoji: "🎬" },
+    { id: "memes", name: "Memes", emoji: "😂" },
+    // Learning & Growth
     { id: "finance", name: "Finance", emoji: "📈" },
     { id: "science", name: "Science", emoji: "🔬" },
-    { id: "lifestyle", name: "Lifestyle", emoji: "🌟" },
-    { id: "entertainment", name: "Entertainment", emoji: "🎬" },
+    { id: "education", name: "Education", emoji: "📚" },
     { id: "languages", name: "Languages", emoji: "🗣️" },
+    { id: "careers", name: "Careers", emoji: "💼" },
+    // Lifestyle
+    { id: "lifestyle", name: "Lifestyle", emoji: "🌟" },
+    { id: "food", name: "Food", emoji: "🍕" },
+    { id: "travel", name: "Travel", emoji: "✈️" },
+    { id: "fitness", name: "Fitness", emoji: "💪" },
+    { id: "health", name: "Health", emoji: "❤️‍🩹" },
+    // Social
     { id: "community", name: "Community", emoji: "👥" },
+    { id: "politics", name: "Politics", emoji: "🏛️" },
+    { id: "support", name: "Support", emoji: "🤝" },
+    { id: "random", name: "Random", emoji: "🎲" },
+    { id: "other", name: "Other", emoji: "💬" },
 ];
 
 export function BrowseChannelsModal({
@@ -55,7 +78,7 @@ export function BrowseChannelsModal({
         name: "",
         description: "",
         emoji: "💬",
-        category: "community",
+        category: "other",
         messagingType: "standard" as "standard" | "waku",
     });
     const [createError, setCreateError] = useState<string | null>(null);
