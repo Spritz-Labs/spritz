@@ -17,6 +17,11 @@ import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { TypingIndicator } from "./TypingIndicator";
+import { LongPressReactions } from "./LongPressReactions";
+import { AvatarWithStatus } from "./OnlineStatus";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { fetchOnlineStatuses } from "@/hooks/usePresence";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -103,6 +108,14 @@ export function GroupChatModal({
     const [memberENSData, setMemberENSData] = useState<
         Map<string, ENSResolution>
     >(new Map());
+
+    // Typing indicator for group chat
+    const { typingUsers, setTyping, stopTyping } = useTypingIndicator(
+        group?.id || null,
+        "group",
+        userAddress,
+        getUserInfo?.(userAddress)?.name || undefined
+    );
 
     const { resolveAddresses } = useENS();
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
@@ -362,6 +375,7 @@ export function GroupChatModal({
 
         setIsSending(true);
         setError(null);
+        stopTyping(); // Stop typing indicator when message is sent
 
         try {
             // Include reply context if replying
@@ -1413,6 +1427,16 @@ export function GroupChatModal({
                                 </div>
                             )}
 
+                            {/* Typing Indicator */}
+                            <AnimatePresence>
+                                {typingUsers.length > 0 && (
+                                    <TypingIndicator
+                                        users={typingUsers.map(u => u.name || `${u.address.slice(0, 6)}...`)}
+                                        className="border-t border-zinc-800/50"
+                                    />
+                                )}
+                            </AnimatePresence>
+
                             {/* Input - with safe area padding for bottom */}
                             <div 
                                 className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
@@ -1428,7 +1452,10 @@ export function GroupChatModal({
                                     />
                                     <MentionInput
                                         value={newMessage}
-                                        onChange={setNewMessage}
+                                        onChange={(val) => {
+                                            setNewMessage(val);
+                                            if (val.trim()) setTyping();
+                                        }}
                                         onSubmit={handleSend}
                                         placeholder={
                                             replyingTo

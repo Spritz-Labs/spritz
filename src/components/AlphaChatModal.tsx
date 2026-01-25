@@ -17,6 +17,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChannelIcon } from "./ChannelIcon";
+import { TypingIndicator } from "./TypingIndicator";
+import { LongPressReactions } from "./LongPressReactions";
+import { AvatarWithStatus } from "./OnlineStatus";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { fetchOnlineStatuses } from "@/hooks/usePresence";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -110,6 +115,14 @@ export function AlphaChatModal({
 
     // Moderation hook (null channelId = global/alpha chat)
     const moderation = useModeration(userAddress, null);
+
+    // Typing indicator for global chat
+    const { typingUsers, setTyping, stopTyping } = useTypingIndicator(
+        "global",
+        "global",
+        userAddress,
+        getUserInfo?.(userAddress)?.name || undefined
+    );
 
     const [newMessage, setNewMessage] = useState("");
     const [showPixelArt, setShowPixelArt] = useState(false);
@@ -475,12 +488,13 @@ export function AlphaChatModal({
 
         // Mark that user just sent a message (for auto-scroll)
         justSentMessageRef.current = true;
+        stopTyping(); // Stop typing indicator when message is sent
 
         const success = await sendMessage(newMessage.trim(), "text", replyingTo?.id);
         if (success) {
             setNewMessage("");
         }
-    }, [newMessage, isSending, sendMessage, replyingTo]);
+    }, [newMessage, isSending, sendMessage, replyingTo, stopTyping]);
 
     // Handle reaction
     const handleReaction = async (messageId: string, emoji: string) => {
@@ -1396,6 +1410,16 @@ export function AlphaChatModal({
                                         </div>
                                     )}
 
+                                    {/* Typing Indicator */}
+                                    <AnimatePresence>
+                                        {typingUsers.length > 0 && (
+                                            <TypingIndicator
+                                                users={typingUsers.map(u => u.name || `${u.address.slice(0, 6)}...`)}
+                                                className="border-t border-zinc-800/50"
+                                            />
+                                        )}
+                                    </AnimatePresence>
+
                                     {/* Input */}
                                     <div 
                                         className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
@@ -1423,7 +1447,10 @@ export function AlphaChatModal({
                                                 <MentionInput
                                                     inputRef={inputRef}
                                                     value={newMessage}
-                                                    onChange={setNewMessage}
+                                                    onChange={(val) => {
+                                                        setNewMessage(val);
+                                                        if (val.trim()) setTyping();
+                                                    }}
                                                     onSubmit={handleSend}
                                                     placeholder={replyingTo ? "Type your reply..." : "Message the community..."}
                                                     users={mentionableUsers}
