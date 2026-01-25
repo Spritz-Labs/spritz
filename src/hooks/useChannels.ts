@@ -434,7 +434,7 @@ export function useChannelMessages(channelId: string | null, userAddress: string
     }, [channelId, isLoadingMore, hasMore, messages, processReactions]);
 
     const sendMessage = useCallback(
-        async (content: string, messageType: "text" | "image" | "pixel_art" = "text", replyToId?: string) => {
+        async (content: string, messageType: "text" | "image" | "pixel_art" | "location" = "text", replyToId?: string) => {
             if (!channelId || !userAddress || !content.trim()) return null;
 
             try {

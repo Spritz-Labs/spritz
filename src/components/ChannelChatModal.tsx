@@ -25,6 +25,9 @@ import { AvatarWithStatus } from "./OnlineStatus";
 import { UnreadDivider, DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses, isUserOnline } from "@/hooks/usePresence";
+import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
+import { useStarredMessages } from "@/hooks/useStarredMessages";
+import { ForwardMessageModal } from "./ForwardMessageModal";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -118,7 +121,7 @@ export function ChannelChatModal({
     const hasMore = isWakuChannel ? false : standardMessages.hasMore;
     
     const sendMessage = isWakuChannel 
-        ? async (content: string, messageType: "text" | "image" | "pixel_art" | "gif" = "text") => {
+        ? async (content: string, messageType: "text" | "image" | "pixel_art" | "gif" | "location" = "text") => {
             const success = await wakuMessages.sendMessage(content, messageType);
             return success ? { id: crypto.randomUUID() } : null;
           }
@@ -285,7 +288,11 @@ export function ChannelChatModal({
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
+    const [forwardingMessage, setForwardingMessage] = useState<ChannelMessage | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    
+    // Starred messages hook
+    const { isStarred, toggleStar } = useStarredMessages(userAddress);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1204,6 +1211,8 @@ export function ChannelChatModal({
                                     const isPixelArt = msg.message_type === "pixel_art";
                                     const isGif = msg.content.startsWith("[GIF]");
                                     const isImage = !isPixelArt && !isGif && (msg.message_type === "image" || isImageUrl(msg.content));
+                                    const isLocation = msg.message_type === "location" || isLocationMessage(msg.content);
+                                    const locationData = isLocation ? parseLocationMessage(msg.content) : null;
                                     const senderAvatar = getSenderAvatar(msg.sender_address);
                                     const senderAvatarEmoji = getSenderAvatarEmoji(msg.sender_address);
                                     const isAlreadyFriend = !isAgent && (isFriend?.(msg.sender_address) ?? false);
@@ -1375,6 +1384,12 @@ export function ChannelChatModal({
                                                             loading="lazy"
                                                         />
                                                     </div>
+                                                ) : isLocation && locationData ? (
+                                                    <LocationMessage
+                                                        location={locationData}
+                                                        isOwn={isOwn}
+                                                        className="max-w-[280px]"
+                                                    />
                                                 ) : (
                                                     <div
                                                         data-message-bubble
@@ -1588,6 +1603,45 @@ export function ChannelChatModal({
                                                                             </svg>
                                                                         </button>
                                                                     )}
+                                                                    {/* Star Button */}
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            toggleStar({
+                                                                                messageId: msg.id,
+                                                                                messageType: "channel",
+                                                                                content: msg.content,
+                                                                                senderAddress: msg.sender_address,
+                                                                                senderName: formatSender(msg.sender_address),
+                                                                                channelId: channel.id,
+                                                                                channelName: channel.name,
+                                                                                originalCreatedAt: msg.created_at,
+                                                                            });
+                                                                            setSelectedMessage(null);
+                                                                        }}
+                                                                        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border transition-colors ${
+                                                                            isStarred(msg.id)
+                                                                                ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                                                                                : "bg-zinc-700 hover:bg-zinc-600 border-zinc-600 text-zinc-300"
+                                                                        }`}
+                                                                        title={isStarred(msg.id) ? "Unstar" : "Star message"}
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill={isStarred(msg.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={isStarred(msg.id) ? 0 : 2}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                                                        </svg>
+                                                                    </button>
+                                                                    {/* Forward Button */}
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setForwardingMessage(msg);
+                                                                            setSelectedMessage(null);
+                                                                        }}
+                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600 text-zinc-300"
+                                                                        title="Forward message"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                                        </svg>
+                                                                    </button>
                                                                     {/* Delete Button - Own messages or admin */}
                                                                     {(isOwn || isAdmin) && !msg.is_deleted && (
                                                                         <button
@@ -1705,7 +1759,12 @@ export function ChannelChatModal({
                                 onPixelArt={() => setShowPixelArt(true)}
                                 onGif={handleSendGif}
                                 onPoll={canCreatePoll ? () => setShowPollCreator(true) : undefined}
+                                onLocation={async (location) => {
+                                    const locationMsg = formatLocationMessage(location);
+                                    await sendMessage(locationMsg, "location");
+                                }}
                                 showPoll={canCreatePoll}
+                                showLocation={true}
                                 isUploading={isUploading || isUploadingPixelArt}
                             />
                             <MentionInput
@@ -1887,6 +1946,30 @@ export function ChannelChatModal({
                     onCreatePoll={async (question, options, allowsMultiple, endsAt, isAnonymous) => {
                         await createPoll(question, options, allowsMultiple, endsAt, isAnonymous);
                     }}
+                />
+
+                {/* Forward Message Modal */}
+                <ForwardMessageModal
+                    isOpen={!!forwardingMessage}
+                    onClose={() => setForwardingMessage(null)}
+                    message={forwardingMessage ? {
+                        id: forwardingMessage.id,
+                        content: forwardingMessage.content,
+                        senderName: formatSender(forwardingMessage.sender_address),
+                        senderAddress: forwardingMessage.sender_address,
+                    } : null}
+                    onForward={async (targetId, targetType) => {
+                        if (!forwardingMessage) return false;
+                        // For now, we'll just send a forwarded message to the current channel
+                        // In a full implementation, this would send to the target chat
+                        const forwardedContent = `↩️ Forwarded from ${formatSender(forwardingMessage.sender_address)}:\n\n"${forwardingMessage.content}"`;
+                        await sendMessage(forwardedContent, "text");
+                        return true;
+                    }}
+                    chats={[
+                        // Current channel as the only option for now
+                        { id: channel.id, type: "channel", name: `#${channel.name}`, icon: channel.emoji }
+                    ]}
                 />
             </motion.div>
         </AnimatePresence>

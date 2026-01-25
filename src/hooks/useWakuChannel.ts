@@ -7,7 +7,7 @@ export type WakuChannelMessage = {
     content: string;
     senderAddress: string;
     timestamp: Date;
-    messageType: "text" | "image" | "pixel_art" | "gif";
+    messageType: "text" | "image" | "pixel_art" | "gif" | "location";
 };
 
 type UseWakuChannelProps = {
@@ -75,7 +75,7 @@ export function useWakuChannel({
 
     // Send a message to the Waku channel
     const sendMessage = useCallback(
-        async (content: string, messageType: "text" | "image" | "pixel_art" | "gif" = "text") => {
+        async (content: string, messageType: "text" | "image" | "pixel_art" | "gif" | "location" = "text") => {
             if (!content.trim() || isSending) return false;
             
             setIsSending(true);

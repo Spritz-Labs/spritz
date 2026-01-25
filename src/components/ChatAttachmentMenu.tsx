@@ -3,16 +3,19 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GifPicker } from "./GifPicker";
+import { ShareLocationButton, type LocationData } from "./LocationMessage";
 
-type AttachmentType = "image" | "pixel_art" | "gif" | "poll";
+type AttachmentType = "image" | "pixel_art" | "gif" | "poll" | "location";
 
 type ChatAttachmentMenuProps = {
     onImageUpload?: () => void;
     onPixelArt?: () => void;
     onGif?: (gifUrl: string) => void;
     onPoll?: () => void;
+    onLocation?: (location: LocationData) => void;
     isUploading?: boolean;
     showPoll?: boolean;
+    showLocation?: boolean;
     disabled?: boolean;
     className?: string;
 };
@@ -22,8 +25,10 @@ export function ChatAttachmentMenu({
     onPixelArt,
     onGif,
     onPoll,
+    onLocation,
     isUploading = false,
     showPoll = false,
+    showLocation = true,
     disabled = false,
     className = "",
 }: ChatAttachmentMenuProps) {
@@ -149,6 +154,55 @@ export function ChatAttachmentMenu({
                                 >
                                     <span className="w-5 h-5 flex items-center justify-center text-amber-400">🗳️</span>
                                     <span>Poll</span>
+                                </button>
+                            )}
+                            
+                            {showLocation && onLocation && (
+                                <button
+                                    onClick={() => {
+                                        setIsExpanded(false);
+                                        // Get location and call onLocation
+                                        if (navigator.geolocation) {
+                                            navigator.geolocation.getCurrentPosition(
+                                                async (position) => {
+                                                    const locationData: LocationData = {
+                                                        lat: position.coords.latitude,
+                                                        lng: position.coords.longitude,
+                                                        accuracy: position.coords.accuracy,
+                                                        timestamp: position.timestamp,
+                                                    };
+                                                    
+                                                    // Try reverse geocoding
+                                                    try {
+                                                        const res = await fetch(
+                                                            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${locationData.lat}&lon=${locationData.lng}`
+                                                        );
+                                                        const data = await res.json();
+                                                        if (data.display_name) {
+                                                            locationData.address = data.display_name;
+                                                            if (data.address) {
+                                                                const { road, city, town, village, suburb } = data.address;
+                                                                locationData.name = [road, city || town || village || suburb].filter(Boolean).join(", ");
+                                                            }
+                                                        }
+                                                    } catch {}
+                                                    
+                                                    onLocation(locationData);
+                                                },
+                                                (error) => {
+                                                    console.error("Location error:", error);
+                                                    alert("Could not get your location. Please check permissions.");
+                                                },
+                                                { enableHighAccuracy: true, timeout: 10000 }
+                                            );
+                                        } else {
+                                            alert("Geolocation is not supported by your browser");
+                                        }
+                                    }}
+                                    className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
+                                >
+                                    <span className="w-5 h-5 flex items-center justify-center text-red-400">📍</span>
+                                    <span>Location</span>
                                 </button>
                             )}
                         </div>

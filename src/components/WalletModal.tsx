@@ -1269,7 +1269,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl">💳</span>
-                                    <h2 className="text-lg font-semibold text-white">Spritz Wallets</h2>
+                                    <h2 className="text-lg font-semibold text-white">Spritz Wallet</h2>
                                     <span className="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded-full">
                                         Beta
                                     </span>
