@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GifPicker } from "./GifPicker";
-import { ShareLocationButton, type LocationData } from "./LocationMessage";
+import { type LocationData } from "./LocationMessage";
 
 type AttachmentType = "image" | "pixel_art" | "gif" | "poll" | "location";
 

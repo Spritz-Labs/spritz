@@ -340,13 +340,17 @@ type QuickReactionPickerProps = {
     onClose: () => void;
     onSelect: (emoji: string) => void;
     emojis?: string[];
+    showMoreButton?: boolean;
+    onMoreClick?: () => void;
 };
 
 export function QuickReactionPicker({
     isOpen,
     onClose,
     onSelect,
-    emojis = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯", "🙌", "🎉"],
+    emojis = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯"],
+    showMoreButton = false,
+    onMoreClick,
 }: QuickReactionPickerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState<{
@@ -357,10 +361,11 @@ export function QuickReactionPicker({
         transform?: string;
     }>({});
     const [isMobile, setIsMobile] = useState(false);
+    const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
 
     // Detect mobile
     useEffect(() => {
-        const checkMobile = () => setIsMobile(window.innerWidth < 640);
+        const checkMobile = () => setIsMobile(window.innerWidth < 640 || 'ontouchstart' in window);
         checkMobile();
         window.addEventListener("resize", checkMobile);
         return () => window.removeEventListener("resize", checkMobile);
@@ -381,7 +386,7 @@ export function QuickReactionPicker({
             const pickerRect = picker.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const padding = 12; // Increased padding for mobile
+            const padding = 16;
 
             let newPosition: typeof position = {};
 
@@ -390,7 +395,7 @@ export function QuickReactionPicker({
             const spaceBelow = viewportHeight - parentRect.bottom;
             const showAbove = spaceAbove >= pickerRect.height + padding || spaceBelow < spaceAbove;
 
-            // On mobile, use fixed positioning centered at bottom or top
+            // On mobile, center horizontally
             if (isMobile) {
                 newPosition.left = "50%";
                 newPosition.transform = "translateX(-50%)";
@@ -410,13 +415,10 @@ export function QuickReactionPicker({
                 let left = "50%";
                 let transform = "translateX(-50%)";
 
-                // Adjust if going off left edge
                 if (leftEdge < padding) {
                     left = `${padding - parentRect.left}px`;
                     transform = "translateX(0)";
-                }
-                // Adjust if going off right edge
-                else if (rightEdge > viewportWidth - padding) {
+                } else if (rightEdge > viewportWidth - padding) {
                     left = "auto";
                     const right = `${viewportWidth - parentRect.right - padding}px`;
                     newPosition.right = right;
@@ -436,7 +438,6 @@ export function QuickReactionPicker({
             setPosition(newPosition);
         };
 
-        // Update position after a small delay to ensure element is rendered
         const timeout = setTimeout(updatePosition, 10);
         window.addEventListener("resize", updatePosition);
         window.addEventListener("scroll", updatePosition, true);
@@ -451,7 +452,7 @@ export function QuickReactionPicker({
     useEffect(() => {
         if (!isOpen) return;
 
-        const handleClickOutside = (e: MouseEvent) => {
+        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
             if (
                 containerRef.current &&
                 !containerRef.current.contains(e.target as Node)
@@ -460,42 +461,114 @@ export function QuickReactionPicker({
             }
         };
 
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        // Small delay to prevent immediate close on touch
+        const timeout = setTimeout(() => {
+            document.addEventListener("mousedown", handleClickOutside);
+            document.addEventListener("touchstart", handleClickOutside);
+        }, 50);
+
+        return () => {
+            clearTimeout(timeout);
+            document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("touchstart", handleClickOutside);
+        };
     }, [isOpen, onClose]);
+
+    const handleSelect = (emoji: string) => {
+        setSelectedEmoji(emoji);
+        // Haptic feedback
+        if (navigator.vibrate) {
+            navigator.vibrate(15);
+        }
+        // Small delay for visual feedback before closing
+        setTimeout(() => {
+            onSelect(emoji);
+            onClose();
+            setSelectedEmoji(null);
+        }, 100);
+    };
 
     return (
         <AnimatePresence>
             {isOpen && (
                 <motion.div
                     ref={containerRef}
-                    initial={{ opacity: 0, scale: 0.9, y: 5 }}
+                    initial={{ opacity: 0, scale: 0.85, y: 8 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: 5 }}
-                    className={`absolute bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 shadow-2xl z-50 ${
+                    exit={{ opacity: 0, scale: 0.85, y: 8 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 400 }}
+                    className={`absolute bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 shadow-2xl z-50 ${
                         isMobile 
-                            ? "rounded-2xl p-2 max-w-[calc(100vw-24px)] overflow-x-auto" 
-                            : "rounded-full px-2 py-1"
+                            ? "rounded-2xl p-1.5" 
+                            : "rounded-full px-1.5 py-1"
                     }`}
                     style={position}
                 >
-                    <div className={`flex gap-1 ${isMobile ? "flex-wrap justify-center" : ""}`}>
-                        {emojis.map((emoji) => (
-                            <button
+                    <div className={`flex ${isMobile ? "gap-0.5" : "gap-0.5"}`}>
+                        {emojis.map((emoji, index) => (
+                            <motion.button
                                 key={emoji}
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ 
+                                    type: "spring",
+                                    damping: 15,
+                                    stiffness: 400,
+                                    delay: index * 0.02
+                                }}
+                                onClick={() => handleSelect(emoji)}
+                                className={`flex items-center justify-center rounded-full transition-all ${
+                                    selectedEmoji === emoji 
+                                        ? "bg-[#FF5500]/30 scale-110" 
+                                        : "hover:bg-zinc-800 active:bg-zinc-700"
+                                } ${
+                                    isMobile 
+                                        ? "w-11 h-11 text-2xl active:scale-125" 
+                                        : "w-9 h-9 text-xl hover:scale-125 active:scale-130"
+                                }`}
+                                whileTap={{ scale: 1.3 }}
+                            >
+                                <motion.span
+                                    animate={selectedEmoji === emoji ? { 
+                                        scale: [1, 1.4, 1],
+                                        rotate: [0, -10, 10, 0]
+                                    } : {}}
+                                    transition={{ duration: 0.3 }}
+                                >
+                                    {emoji}
+                                </motion.span>
+                            </motion.button>
+                        ))}
+                        {showMoreButton && onMoreClick && (
+                            <motion.button
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ 
+                                    type: "spring",
+                                    damping: 15,
+                                    stiffness: 400,
+                                    delay: emojis.length * 0.02
+                                }}
                                 onClick={() => {
-                                    onSelect(emoji);
+                                    onMoreClick();
                                     onClose();
                                 }}
-                                className={`flex items-center justify-center hover:bg-zinc-800 rounded-full transition-all active:scale-90 ${
+                                className={`flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 transition-colors ${
                                     isMobile 
-                                        ? "w-10 h-10 text-2xl" 
-                                        : "w-8 h-8 text-lg hover:scale-125"
+                                        ? "w-11 h-11" 
+                                        : "w-9 h-9"
                                 }`}
                             >
-                                {emoji}
-                            </button>
-                        ))}
+                                <svg 
+                                    className={isMobile ? "w-5 h-5 text-zinc-400" : "w-4 h-4 text-zinc-400"} 
+                                    fill="none" 
+                                    viewBox="0 0 24 24" 
+                                    stroke="currentColor"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                            </motion.button>
+                        )}
                     </div>
                 </motion.div>
             )}
