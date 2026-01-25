@@ -1689,12 +1689,14 @@ export function ChatModal({
                                     );
                                 })}
                                 </div>
-
-                                {/* Typing Indicator */}
-                                {peerTyping && (
-                                    <TypingIndicator name={displayName} />
-                                )}
                             </div>
+
+                            {/* Typing Indicator - positioned above input area */}
+                            {peerTyping && (
+                                <div className="px-4 pb-2">
+                                    <TypingIndicator name={displayName} />
+                                </div>
+                            )}
 
                             {/* E2E Encryption Notice with Security Status */}
                             <EncryptionIndicator 
