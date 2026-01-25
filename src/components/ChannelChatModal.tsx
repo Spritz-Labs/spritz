@@ -19,6 +19,12 @@ import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChannelIcon } from "./ChannelIcon";
 import { useWakuChannel, type WakuChannelMessage } from "@/hooks/useWakuChannel";
+import { TypingIndicator } from "./TypingIndicator";
+import { LongPressReactions } from "./LongPressReactions";
+import { AvatarWithStatus } from "./OnlineStatus";
+import { UnreadDivider, DateDivider } from "./UnreadDivider";
+import { useTypingIndicator } from "@/hooks/useTypingIndicator";
+import { fetchOnlineStatuses, isUserOnline } from "@/hooks/usePresence";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -148,6 +154,17 @@ export function ChannelChatModal({
     const [inputValue, setInputValue] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    
+    // Typing indicator
+    const { typingUsers, setTyping, stopTyping } = useTypingIndicator(
+        channel.id,
+        "channel",
+        userAddress,
+        getUserInfo?.(userAddress)?.name || undefined
+    );
+    
+    // Online statuses for channel members
+    const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
     
     // Channel icon management
     const [canEditIcon, setCanEditIcon] = useState(false);
@@ -535,6 +552,7 @@ export function ChannelChatModal({
         if (!inputValue.trim() || isSending) return;
 
         setIsSending(true);
+        stopTyping(); // Stop typing indicator when message is sent
         const content = inputValue.trim();
         setInputValue("");
         
@@ -1629,6 +1647,16 @@ export function ChannelChatModal({
                         </div>
                     )}
 
+                    {/* Typing Indicator */}
+                    <AnimatePresence>
+                        {typingUsers.length > 0 && (
+                            <TypingIndicator
+                                users={typingUsers.map(u => u.name || `${u.address.slice(0, 6)}...`)}
+                                className="border-t border-zinc-800/50"
+                            />
+                        )}
+                    </AnimatePresence>
+
                     {/* Input - with safe area padding for bottom */}
                     <div 
                         className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
@@ -1655,7 +1683,10 @@ export function ChannelChatModal({
                             <MentionInput
                                 inputRef={inputRef}
                                 value={inputValue}
-                                onChange={setInputValue}
+                                onChange={(val) => {
+                                    setInputValue(val);
+                                    if (val.trim()) setTyping();
+                                }}
                                 onSubmit={handleSend}
                                 placeholder={`Message #${channel.name}`}
                                 users={mentionableUsers}
