@@ -1211,10 +1211,21 @@ export function ChannelChatModal({
                                     const isFirstMessageFromSender = messages.findIndex(
                                         m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
                                     ) === index;
+                                    
+                                    // Check if we need a date divider (comparing to previous message)
+                                    const msgDate = new Date(msg.created_at);
+                                    const prevMsg = index > 0 ? messages[index - 1] : null;
+                                    const prevMsgDate = prevMsg ? new Date(prevMsg.created_at) : null;
+                                    const showDateDivider = !prevMsgDate || 
+                                        msgDate.toDateString() !== prevMsgDate.toDateString();
 
                                     return (
-                                        <motion.div
-                                            key={msg.id}
+                                        <div key={msg.id}>
+                                            {/* Date divider when day changes */}
+                                            {showDateDivider && (
+                                                <DateDivider date={msgDate} className="mb-2" />
+                                            )}
+                                            <motion.div
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""}`}
@@ -1623,6 +1634,7 @@ export function ChannelChatModal({
                                             {/* Spacer for own messages (to match avatar space) */}
                                             {isOwn && <div className="w-8 flex-shrink-0" />}
                                         </motion.div>
+                                        </div>
                                     );
                                 })}
                                 </div>

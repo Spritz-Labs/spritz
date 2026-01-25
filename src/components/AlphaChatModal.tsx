@@ -20,6 +20,7 @@ import { ChannelIcon } from "./ChannelIcon";
 import { TypingIndicator } from "./TypingIndicator";
 import { LongPressReactions } from "./LongPressReactions";
 import { AvatarWithStatus } from "./OnlineStatus";
+import { DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
 
@@ -1036,7 +1037,7 @@ export function AlphaChatModal({
                                                 <div className="space-y-3">
                                                 {messages
                                                 .filter(msg => !msg.is_deleted) // Hide deleted messages
-                                                .map((msg, msgIndex) => {
+                                                .map((msg, msgIndex, filteredMsgs) => {
                                                 const isOwn =
                                                     msg.sender_address.toLowerCase() ===
                                                     userAddress.toLowerCase();
@@ -1049,10 +1050,20 @@ export function AlphaChatModal({
                                                 const isFirstMessageFromSender = messages.findIndex(
                                                     m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
                                                 ) === msgIndex;
+                                                
+                                                // Check if we need a date divider
+                                                const msgDate = new Date(msg.created_at);
+                                                const prevMsg = msgIndex > 0 ? filteredMsgs[msgIndex - 1] : null;
+                                                const prevMsgDate = prevMsg ? new Date(prevMsg.created_at) : null;
+                                                const showDateDivider = !prevMsgDate || 
+                                                    msgDate.toDateString() !== prevMsgDate.toDateString();
 
                                                 return (
-                                                    <motion.div
-                                                        key={msg.id}
+                                                    <div key={msg.id}>
+                                                        {showDateDivider && (
+                                                            <DateDivider date={msgDate} className="mb-2" />
+                                                        )}
+                                                        <motion.div
                                                         initial={{ opacity: 0, y: 10 }}
                                                         animate={{ opacity: 1, y: 0 }}
                                                         className={`flex gap-2 ${
@@ -1387,6 +1398,7 @@ export function AlphaChatModal({
                                                             )}
                                                         </div>
                                                     </motion.div>
+                                                    </div>
                                                 );
                                             })}
                                                 </div>

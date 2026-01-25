@@ -20,6 +20,7 @@ import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { TypingIndicator } from "./TypingIndicator";
 import { LongPressReactions } from "./LongPressReactions";
 import { AvatarWithStatus } from "./OnlineStatus";
+import { DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
 
@@ -990,7 +991,7 @@ export function GroupChatModal({
                                     <div className="space-y-3">
                                     {messages
                                     .filter((msg) => msg.content !== DECRYPTION_FAILED_MARKER)
-                                    .map((msg) => {
+                                    .map((msg, msgIndex, filteredMsgs) => {
                                         // Compare addresses case-insensitively
                                         const isOwn = userAddress
                                             ? msg.senderInboxId?.toLowerCase() ===
@@ -1008,10 +1009,20 @@ export function GroupChatModal({
                                         const senderAvatar = senderAddress
                                             ? getMemberAvatar(senderAddress)
                                             : null;
+                                        
+                                        // Check if we need a date divider
+                                        const msgDate = new Date(msg.sentAt);
+                                        const prevMsg = msgIndex > 0 ? filteredMsgs[msgIndex - 1] : null;
+                                        const prevMsgDate = prevMsg ? new Date(prevMsg.sentAt) : null;
+                                        const showDateDivider = !prevMsgDate || 
+                                            msgDate.toDateString() !== prevMsgDate.toDateString();
 
                                         return (
-                                            <motion.div
-                                                key={msg.id}
+                                            <div key={msg.id}>
+                                                {showDateDivider && (
+                                                    <DateDivider date={msgDate} className="mb-2" />
+                                                )}
+                                                <motion.div
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 className={`flex gap-2 ${
@@ -1394,6 +1405,7 @@ export function GroupChatModal({
                                                     )}
                                                     </div>
                                             </motion.div>
+                                            </div>
                                         );
                                     })}
                                     </div>
