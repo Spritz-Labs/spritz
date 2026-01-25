@@ -29,6 +29,7 @@ import { createLogger } from "@/lib/logger";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { MentionInput } from "./MentionInput";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { fetchOnlineStatuses } from "@/hooks/usePresence";
 
 const log = createLogger("Chat");
 
@@ -95,6 +96,16 @@ export function ChatModal({
     const [showSearch, setShowSearch] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [securityStatus, setSecurityStatus] = useState<{ isSecure?: boolean; isLoading: boolean }>({ isLoading: true });
+    const [peerOnline, setPeerOnline] = useState(false);
+
+    // Fetch peer online status
+    useEffect(() => {
+        if (peerAddress) {
+            fetchOnlineStatuses([peerAddress.toLowerCase()]).then(statuses => {
+                setPeerOnline(statuses[peerAddress.toLowerCase()] || false);
+            });
+        }
+    }, [peerAddress]);
 
     // Generate conversation ID for this chat
     const conversationId = [userAddress, peerAddress]
@@ -982,8 +993,8 @@ export function ChatModal({
                         >
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                                {/* Avatar */}
-                                <div className="shrink-0 ml-1">
+                                {/* Avatar with online status */}
+                                <div className="shrink-0 ml-1 relative">
                                     {peerAvatar ? (
                                         <img
                                             src={peerAvatar}
@@ -996,6 +1007,10 @@ export function ChatModal({
                                                 {displayName[0].toUpperCase()}
                                             </span>
                                         </div>
+                                    )}
+                                    {/* Online status dot */}
+                                    {peerOnline && (
+                                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
                                     )}
                                 </div>
 

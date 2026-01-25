@@ -384,6 +384,16 @@ export function ChannelChatModal({
         setSelectedUser(address);
     }, []);
 
+    // Fetch online statuses for message senders
+    useEffect(() => {
+        const uniqueSenders = [...new Set(messages.map(m => m.sender_address.toLowerCase()))];
+        if (uniqueSenders.length === 0) return;
+
+        fetchOnlineStatuses(uniqueSenders).then(statuses => {
+            setOnlineStatuses(statuses);
+        });
+    }, [messages]);
+
     // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
     const lastMessageIdRef = useRef<string | null>(null);
     useEffect(() => {
@@ -1232,32 +1242,38 @@ export function ChannelChatModal({
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        // User avatar (clickable)
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                                if (selectedUser === msg.sender_address) {
-                                                                    setSelectedUser(null);
-                                                                } else {
-                                                                    handleUserClick(msg.sender_address, e);
-                                                                }
-                                                        }}
-                                                        className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
-                                                    >
-                                                        {senderAvatar ? (
-                                                            <img
-                                                                src={senderAvatar}
-                                                                alt=""
-                                                                className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
-                                                                {formatAddress(msg.sender_address)
-                                                                    .slice(0, 2)
-                                                                    .toUpperCase()}
-                                                            </div>
+                                                        // User avatar (clickable) with online status
+                                                    <div className="relative">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                    if (selectedUser === msg.sender_address) {
+                                                                        setSelectedUser(null);
+                                                                    } else {
+                                                                        handleUserClick(msg.sender_address, e);
+                                                                    }
+                                                            }}
+                                                            className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
+                                                        >
+                                                            {senderAvatar ? (
+                                                                <img
+                                                                    src={senderAvatar}
+                                                                    alt=""
+                                                                    className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
+                                                                    {formatAddress(msg.sender_address)
+                                                                        .slice(0, 2)
+                                                                        .toUpperCase()}
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                        {/* Online status dot */}
+                                                        {onlineStatuses[msg.sender_address.toLowerCase()] && (
+                                                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
                                                         )}
-                                                    </button>
+                                                    </div>
                                                     )}
 
                                                     {/* User popup rendered as fixed position element below */}

@@ -123,7 +123,20 @@ export function GroupChatModal({
     );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
+    const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    
+    // Fetch online statuses for group members
+    useEffect(() => {
+        const memberAddresses = members
+            .flatMap(m => m.addresses)
+            .map(a => a.toLowerCase());
+        if (memberAddresses.length === 0) return;
+
+        fetchOnlineStatuses(memberAddresses).then(statuses => {
+            setOnlineStatuses(statuses);
+        });
+    }, [members]);
     const isInitialLoadRef = useRef(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef = useRef<any>(null);
@@ -1007,9 +1020,9 @@ export function GroupChatModal({
                                                         : "justify-start"
                                                 }`}
                                             >
-                                                {/* Avatar for other users */}
+                                                {/* Avatar for other users with online status */}
                                                 {!isOwn && (
-                                                    <div className="flex-shrink-0">
+                                                    <div className="flex-shrink-0 relative">
                                                         {senderAvatar ? (
                                                             <img
                                                                 src={
@@ -1031,6 +1044,10 @@ export function GroupChatModal({
                                                                           .toUpperCase()
                                                                     : "?"}
                                                             </div>
+                                                        )}
+                                                        {/* Online status dot */}
+                                                        {senderAddress && onlineStatuses[senderAddress.toLowerCase()] && (
+                                                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
                                                         )}
                                                     </div>
                                                 )}
