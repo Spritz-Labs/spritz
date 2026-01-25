@@ -100,6 +100,36 @@ export async function GET(request: NextRequest) {
             }
         }
 
+        // Search Alpha (Global) messages
+        if (!type || type === "all" || type === "alpha") {
+            const { data: alphaMessages } = await supabase
+                .from("shout_alpha_messages")
+                .select(`
+                    id,
+                    content,
+                    sender_address,
+                    created_at
+                `)
+                .ilike("content", searchPattern)
+                .eq("is_deleted", false)
+                .order("created_at", { ascending: false })
+                .limit(limit);
+
+            if (alphaMessages) {
+                for (const msg of alphaMessages) {
+                    results.push({
+                        type: "dm", // Using "dm" type for alpha chat for now
+                        id: msg.id,
+                        content: msg.content,
+                        sender_address: msg.sender_address,
+                        created_at: msg.created_at,
+                        peer_name: "Spritz Global",
+                        highlight: highlightMatch(msg.content, query),
+                    });
+                }
+            }
+        }
+
         // Get sender names/usernames
         const senderAddresses = [...new Set(results.map(r => r.sender_address))];
         if (senderAddresses.length > 0) {

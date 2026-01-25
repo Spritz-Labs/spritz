@@ -72,6 +72,8 @@ interface AlphaChatModalProps {
     isFriend?: (address: string) => boolean;
     // Admin controls
     isAdmin?: boolean;
+    // Callback when a message is sent (for updating last message time)
+    onMessageSent?: () => void;
 }
 
 export function AlphaChatModal({
@@ -83,6 +85,7 @@ export function AlphaChatModal({
     onAddFriend,
     isFriend,
     isAdmin = false,
+    onMessageSent,
 }: AlphaChatModalProps) {
     const {
         messages,
@@ -505,8 +508,9 @@ export function AlphaChatModal({
         const success = await sendMessage(newMessage.trim(), "text", replyingTo?.id);
         if (success) {
             setNewMessage("");
+            onMessageSent?.();
         }
-    }, [newMessage, isSending, sendMessage, replyingTo, stopTyping]);
+    }, [newMessage, isSending, sendMessage, replyingTo, stopTyping, onMessageSent]);
 
     // Handle reaction
     const handleReaction = async (messageId: string, emoji: string) => {

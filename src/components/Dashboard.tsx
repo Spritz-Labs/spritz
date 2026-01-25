@@ -4897,6 +4897,9 @@ function DashboardContent({
                     )
                 }
                 isAdmin={isAdmin}
+                onMessageSent={() => {
+                    updateLastMessageTime("global-spritz");
+                }}
             />
 
             {/* Create Group Modal */}
