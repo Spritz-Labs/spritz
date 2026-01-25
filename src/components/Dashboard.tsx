@@ -220,6 +220,7 @@ function DashboardContent({
     
     // Folder modal state
     const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+    const [isChatSearchOpen, setIsChatSearchOpen] = useState(false);
     const [selectedGroup, setSelectedGroup] = useState<XMTPGroup | null>(null);
     
     // Custom avatar cache for friends
@@ -3862,6 +3863,33 @@ function DashboardContent({
                                             Chats
                                         </h2>
                                         <div className="flex items-center gap-1 sm:gap-2">
+                                            {/* Search Toggle Button */}
+                                            <button
+                                                onClick={() => setIsChatSearchOpen(!isChatSearchOpen)}
+                                                className={`w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl transition-all flex items-center justify-center sm:justify-start gap-2 ${
+                                                    isChatSearchOpen
+                                                        ? "bg-[#FF5500] text-white"
+                                                        : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
+                                                }`}
+                                                title="Search chats"
+                                            >
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                                    />
+                                                </svg>
+                                                <span className="hidden sm:inline text-sm font-medium">
+                                                    Search
+                                                </span>
+                                            </button>
                                             {/* Add Folder Button */}
                                             <button
                                                 onClick={() => setIsCreateFolderOpen(true)}
@@ -3885,13 +3913,14 @@ function DashboardContent({
                                                     Folder
                                                 </span>
                                             </button>
+                                            {/* Browse/Explore Channels Button */}
                                             <button
                                                 onClick={() => {
                                                     setBrowseChannelsInitialCreate(false);
                                                     setIsBrowseChannelsOpen(true);
                                                 }}
                                                 className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
-                                                title="Browse channels"
+                                                title="Explore channels"
                                             >
                                                 <svg
                                                     className="w-4 h-4"
@@ -3903,11 +3932,11 @@ function DashboardContent({
                                                         strokeLinecap="round"
                                                         strokeLinejoin="round"
                                                         strokeWidth={2}
-                                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                                     />
                                                 </svg>
                                                 <span className="hidden sm:inline text-sm font-medium">
-                                                    Browse
+                                                    Explore
                                                 </span>
                                             </button>
                                             {/* Consolidated New Chat Menu */}
@@ -4026,6 +4055,8 @@ function DashboardContent({
                                         onVideoClick={handleUnifiedVideoClick}
                                         showCreateFolderModal={isCreateFolderOpen}
                                         onCreateFolderModalClose={() => setIsCreateFolderOpen(false)}
+                                        showSearch={isChatSearchOpen}
+                                        onSearchToggle={() => setIsChatSearchOpen(!isChatSearchOpen)}
                                     />
                                 </div>
                             </div>
