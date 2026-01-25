@@ -285,7 +285,7 @@ function DashboardContent({
     }, [isProfileMenuOpen]);
 
     // Username hook - works for both EVM and Solana addresses
-    const { username: reachUsername, claimUsername } = useUsername(userAddress);
+    const { username: reachUsername, claimUsername, isFetching: isUsernameFetching } = useUsername(userAddress);
 
     // Phone verification hook - works for both EVM and Solana addresses
     const {
@@ -2643,10 +2643,14 @@ function DashboardContent({
                                                             className={`text-xs truncate ${
                                                                 reachUsername
                                                                     ? "text-emerald-400"
+                                                                    : isUsernameFetching
+                                                                    ? "text-zinc-600"
                                                                     : "text-zinc-500"
                                                             }`}
                                                         >
-                                                            {reachUsername
+                                                            {isUsernameFetching
+                                                                ? "Loading..."
+                                                                : reachUsername
                                                                 ? `@${reachUsername}`
                                                                 : "Claim a username (+10 pts)"}
                                                         </p>
