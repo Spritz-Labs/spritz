@@ -30,6 +30,7 @@ import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { MentionInput } from "./MentionInput";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
+import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
 
 const log = createLogger("Chat");
 
@@ -1164,6 +1165,8 @@ export function ChatModal({
                                         msg.content
                                     );
                                     const isGif = isGifMessage(msg.content);
+                                    const isLocation = isLocationMessage(msg.content);
+                                    const locationData = isLocation ? parseLocationMessage(msg.content) : null;
 
                                     return (
                                         <motion.div
@@ -1382,6 +1385,11 @@ export function ChatModal({
                                                             )}
                                                         </p>
                                                     </div>
+                                                ) : isLocation && locationData ? (
+                                                    <LocationMessage
+                                                        location={locationData}
+                                                        isOwn={isOwn}
+                                                    />
                                                 ) : (
                                                     <div 
                                                         data-message-bubble
@@ -1704,6 +1712,12 @@ export function ChatModal({
                                     <ChatAttachmentMenu
                                         onPixelArt={() => setShowPixelArt(true)}
                                         onGif={handleSendGif}
+                                        onLocation={async (location) => {
+                                            const locationMsg = formatLocationMessage(location);
+                                            await sendMessage(peerAddress, locationMsg);
+                                            onMessageSent?.("📍 Location");
+                                        }}
+                                        showLocation={true}
                                         isUploading={isUploadingPixelArt}
                                         disabled={!isInitialized || !!chatError}
                                     />

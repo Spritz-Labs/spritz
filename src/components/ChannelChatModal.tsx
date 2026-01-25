@@ -1759,12 +1759,7 @@ export function ChannelChatModal({
                                 onPixelArt={() => setShowPixelArt(true)}
                                 onGif={handleSendGif}
                                 onPoll={canCreatePoll ? () => setShowPollCreator(true) : undefined}
-                                onLocation={async (location) => {
-                                    const locationMsg = formatLocationMessage(location);
-                                    await sendMessage(locationMsg, "location");
-                                }}
                                 showPoll={canCreatePoll}
-                                showLocation={true}
                                 isUploading={isUploading || isUploadingPixelArt}
                             />
                             <MentionInput

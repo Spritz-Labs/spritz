@@ -17,6 +17,7 @@ import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
 import { TypingIndicator } from "./TypingIndicator";
 import { LongPressReactions } from "./LongPressReactions";
 import { AvatarWithStatus } from "./OnlineStatus";
@@ -1001,6 +1002,8 @@ export function GroupChatModal({
                                             msg.content
                                         );
                                         const isGif = isGifMessage(msg.content);
+                                        const isLocation = isLocationMessage(msg.content);
+                                        const locationData = isLocation ? parseLocationMessage(msg.content) : null;
                                         const senderAddress = members.find(
                                             (m) =>
                                                 m.inboxId === msg.senderInboxId
@@ -1185,6 +1188,11 @@ export function GroupChatModal({
                                                                 loading="lazy"
                                                             />
                                                         </div>
+                                                    ) : isLocation && locationData ? (
+                                                        <LocationMessage
+                                                            location={locationData}
+                                                            isOwn={isOwn}
+                                                        />
                                                     ) : (
                                                         (() => {
                                                             const displayContent = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n")
@@ -1476,6 +1484,13 @@ export function GroupChatModal({
                                     <ChatAttachmentMenu
                                         onPixelArt={() => setShowPixelArt(true)}
                                         onGif={handleSendGif}
+                                        onLocation={async (location) => {
+                                            if (!group) return;
+                                            const locationMsg = formatLocationMessage(location);
+                                            await sendGroupMessage(group.id, locationMsg);
+                                            onMessageSent?.();
+                                        }}
+                                        showLocation={true}
                                         isUploading={isUploadingPixelArt}
                                         disabled={!isInitialized}
                                     />
