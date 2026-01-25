@@ -39,7 +39,7 @@ type MessageReaction = {
     users: string[];
 };
 
-const REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
+const REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯", "🙌", "🎉"];
 
 // Dynamic imports for Waku
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

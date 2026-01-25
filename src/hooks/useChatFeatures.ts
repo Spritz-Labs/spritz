@@ -331,7 +331,7 @@ export type MessageReaction = {
     users: string[];
 };
 
-export const MESSAGE_REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
+export const MESSAGE_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯", "🙌", "🎉"];
 
 export function useMessageReactions(
     userAddress: string | null,

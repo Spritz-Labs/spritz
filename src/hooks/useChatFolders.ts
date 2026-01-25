@@ -10,6 +10,8 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "📌", label: "Pinned", category: "popular" },
     { emoji: "🔔", label: "Important", category: "popular" },
     { emoji: "💬", label: "General", category: "popular" },
+    { emoji: "✨", label: "VIP", category: "popular" },
+    { emoji: "🏆", label: "Best", category: "popular" },
     
     // People & Social
     { emoji: "👨‍👩‍👧", label: "Family", category: "people" },
@@ -17,6 +19,9 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "🤝", label: "Colleagues", category: "people" },
     { emoji: "👥", label: "Team", category: "people" },
     { emoji: "🎉", label: "Party", category: "people" },
+    { emoji: "🤗", label: "Besties", category: "people" },
+    { emoji: "💪", label: "Gym Buddies", category: "people" },
+    { emoji: "🎂", label: "Birthday", category: "people" },
     
     // Work & Productivity
     { emoji: "💼", label: "Work", category: "work" },
@@ -24,6 +29,9 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "💰", label: "Finance", category: "work" },
     { emoji: "🏢", label: "Business", category: "work" },
     { emoji: "📝", label: "Notes", category: "work" },
+    { emoji: "🎓", label: "School", category: "work" },
+    { emoji: "📅", label: "Meetings", category: "work" },
+    { emoji: "✅", label: "Done", category: "work" },
     
     // Interests
     { emoji: "🎮", label: "Gaming", category: "interests" },
@@ -33,6 +41,11 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "🏋️", label: "Fitness", category: "interests" },
     { emoji: "✈️", label: "Travel", category: "interests" },
     { emoji: "🍔", label: "Food", category: "interests" },
+    { emoji: "⚽", label: "Sports", category: "interests" },
+    { emoji: "🎬", label: "Movies", category: "interests" },
+    { emoji: "📷", label: "Photos", category: "interests" },
+    { emoji: "🎸", label: "Band", category: "interests" },
+    { emoji: "🌱", label: "Plants", category: "interests" },
     
     // Tech & Crypto
     { emoji: "🤖", label: "Bots", category: "tech" },
@@ -40,12 +53,20 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "🔗", label: "Web3", category: "tech" },
     { emoji: "⚡", label: "Tech", category: "tech" },
     { emoji: "🛠️", label: "Dev", category: "tech" },
+    { emoji: "🖥️", label: "Coding", category: "tech" },
+    { emoji: "🎲", label: "NFTs", category: "tech" },
+    { emoji: "🌐", label: "DeFi", category: "tech" },
+    { emoji: "🚀", label: "Alpha", category: "tech" },
     
     // Community
     { emoji: "🌍", label: "Community", category: "community" },
     { emoji: "🏠", label: "Local", category: "community" },
     { emoji: "🎯", label: "DAOs", category: "community" },
     { emoji: "🔥", label: "Hot", category: "community" },
+    { emoji: "🌈", label: "Pride", category: "community" },
+    { emoji: "🎪", label: "Events", category: "community" },
+    { emoji: "📣", label: "Announcements", category: "community" },
+    { emoji: "💡", label: "Ideas", category: "community" },
 ];
 
 // Category labels for the folder picker

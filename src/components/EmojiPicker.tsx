@@ -346,7 +346,7 @@ export function QuickReactionPicker({
     isOpen,
     onClose,
     onSelect,
-    emojis = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"],
+    emojis = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯", "🙌", "🎉"],
 }: QuickReactionPickerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState<{
@@ -356,6 +356,15 @@ export function QuickReactionPicker({
         right?: string;
         transform?: string;
     }>({});
+    const [isMobile, setIsMobile] = useState(false);
+
+    // Detect mobile
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 640);
+        checkMobile();
+        window.addEventListener("resize", checkMobile);
+        return () => window.removeEventListener("resize", checkMobile);
+    }, []);
 
     // Calculate position to stay within viewport
     useEffect(() => {
@@ -372,7 +381,7 @@ export function QuickReactionPicker({
             const pickerRect = picker.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const padding = 8; // Padding from edges
+            const padding = 12; // Increased padding for mobile
 
             let newPosition: typeof position = {};
 
@@ -381,35 +390,47 @@ export function QuickReactionPicker({
             const spaceBelow = viewportHeight - parentRect.bottom;
             const showAbove = spaceAbove >= pickerRect.height + padding || spaceBelow < spaceAbove;
 
-            // Check horizontal position
-            const pickerWidth = pickerRect.width;
-            const centerX = parentRect.left + parentRect.width / 2;
-            const leftEdge = centerX - pickerWidth / 2;
-            const rightEdge = centerX + pickerWidth / 2;
-
-            let left = "50%";
-            let transform = "translateX(-50%)";
-
-            // Adjust if going off left edge
-            if (leftEdge < padding) {
-                left = `${padding - parentRect.left}px`;
-                transform = "translateX(0)";
-            }
-            // Adjust if going off right edge
-            else if (rightEdge > viewportWidth - padding) {
-                left = "auto";
-                const right = `${viewportWidth - parentRect.right - padding}px`;
-                newPosition.right = right;
-                transform = "translateX(0)";
-            }
-
-            newPosition.left = left;
-            newPosition.transform = transform;
-
-            if (showAbove) {
-                newPosition.bottom = "calc(100% + 8px)";
+            // On mobile, use fixed positioning centered at bottom or top
+            if (isMobile) {
+                newPosition.left = "50%";
+                newPosition.transform = "translateX(-50%)";
+                
+                if (showAbove) {
+                    newPosition.bottom = "calc(100% + 12px)";
+                } else {
+                    newPosition.top = "calc(100% + 12px)";
+                }
             } else {
-                newPosition.top = "calc(100% + 8px)";
+                // Desktop positioning
+                const pickerWidth = pickerRect.width;
+                const centerX = parentRect.left + parentRect.width / 2;
+                const leftEdge = centerX - pickerWidth / 2;
+                const rightEdge = centerX + pickerWidth / 2;
+
+                let left = "50%";
+                let transform = "translateX(-50%)";
+
+                // Adjust if going off left edge
+                if (leftEdge < padding) {
+                    left = `${padding - parentRect.left}px`;
+                    transform = "translateX(0)";
+                }
+                // Adjust if going off right edge
+                else if (rightEdge > viewportWidth - padding) {
+                    left = "auto";
+                    const right = `${viewportWidth - parentRect.right - padding}px`;
+                    newPosition.right = right;
+                    transform = "translateX(0)";
+                }
+
+                newPosition.left = left;
+                newPosition.transform = transform;
+
+                if (showAbove) {
+                    newPosition.bottom = "calc(100% + 8px)";
+                } else {
+                    newPosition.top = "calc(100% + 8px)";
+                }
             }
 
             setPosition(newPosition);
@@ -425,7 +446,7 @@ export function QuickReactionPicker({
             window.removeEventListener("resize", updatePosition);
             window.removeEventListener("scroll", updatePosition, true);
         };
-    }, [isOpen]);
+    }, [isOpen, isMobile]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -451,21 +472,31 @@ export function QuickReactionPicker({
                     initial={{ opacity: 0, scale: 0.9, y: 5 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: 5 }}
-                    className="absolute bg-zinc-900 border border-zinc-700 rounded-full px-2 py-1 shadow-xl flex gap-1 z-50"
+                    className={`absolute bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 shadow-2xl z-50 ${
+                        isMobile 
+                            ? "rounded-2xl p-2 max-w-[calc(100vw-24px)] overflow-x-auto" 
+                            : "rounded-full px-2 py-1"
+                    }`}
                     style={position}
                 >
-                    {emojis.map((emoji) => (
-                        <button
-                            key={emoji}
-                            onClick={() => {
-                                onSelect(emoji);
-                                onClose();
-                            }}
-                            className="w-8 h-8 flex items-center justify-center text-lg hover:bg-zinc-800 rounded-full transition-all hover:scale-125"
-                        >
-                            {emoji}
-                        </button>
-                    ))}
+                    <div className={`flex gap-1 ${isMobile ? "flex-wrap justify-center" : ""}`}>
+                        {emojis.map((emoji) => (
+                            <button
+                                key={emoji}
+                                onClick={() => {
+                                    onSelect(emoji);
+                                    onClose();
+                                }}
+                                className={`flex items-center justify-center hover:bg-zinc-800 rounded-full transition-all active:scale-90 ${
+                                    isMobile 
+                                        ? "w-10 h-10 text-2xl" 
+                                        : "w-8 h-8 text-lg hover:scale-125"
+                                }`}
+                            >
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
                 </motion.div>
             )}
         </AnimatePresence>

@@ -995,6 +995,17 @@ function DashboardContent({
         }
     });
     
+    // Track last message previews for chat list display (persisted to localStorage)
+    const [lastMessagePreviews, setLastMessagePreviews] = useState<Record<string, string>>(() => {
+        if (typeof window === "undefined") return {};
+        try {
+            const stored = localStorage.getItem(`spritz_last_msg_previews_${userAddress?.toLowerCase()}`);
+            return stored ? JSON.parse(stored) : {};
+        } catch {
+            return {};
+        }
+    });
+    
     // On initial load, scan stored messages to extract last message times for conversations
     // without tracked times yet. This provides initial ordering based on actual messages.
     const hasScannedMessages = useRef(false);
@@ -1080,6 +1091,20 @@ function DashboardContent({
             }
         }
     }, [lastMessageTimes, userAddress]);
+    
+    // Persist last message previews to localStorage
+    useEffect(() => {
+        if (userAddress && Object.keys(lastMessagePreviews).length > 0) {
+            try {
+                localStorage.setItem(
+                    `spritz_last_msg_previews_${userAddress.toLowerCase()}`,
+                    JSON.stringify(lastMessagePreviews)
+                );
+            } catch {
+                // Ignore storage errors
+            }
+        }
+    }, [lastMessagePreviews, userAddress]);
     
     // Update last message times when unread counts change (new message received)
     const prevUnreadCountsRef = useRef<Record<string, number>>({});
@@ -1329,7 +1354,7 @@ function DashboardContent({
                     friend.ensName || 
                     `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`,
                 avatar: friend.avatar,
-                lastMessage: null, // Could be populated from message cache
+                lastMessage: lastMessagePreviews[addressLower] || null,
                 lastMessageAt,
                 unreadCount: unreadCounts[addressLower] || 0,
                 isOnline: false, // Will be updated by FriendsList logic
@@ -1348,7 +1373,7 @@ function DashboardContent({
             type: "global",
             name: "Spritz Global",
             avatar: globalChatIconUrl,
-            lastMessage: "Community chat",
+            lastMessage: lastMessagePreviews["global-spritz"] || "Community chat",
             lastMessageAt: globalLastMsgTime ? new Date(globalLastMsgTime) : new Date(),
             unreadCount: alphaUnreadCount,
             isPinned: true,
@@ -1374,7 +1399,7 @@ function DashboardContent({
                 type: "channel",
                 name: channel.name,
                 avatar: channel.icon_url || null,
-                lastMessage: `${channel.member_count} members`,
+                lastMessage: lastMessagePreviews[channelKey] || `${channel.member_count} members`,
                 lastMessageAt,
                 unreadCount: 0,
                 metadata: {
@@ -1399,7 +1424,7 @@ function DashboardContent({
                 type: "group",
                 name: group.name,
                 avatar: null,
-                lastMessage: `${group.memberCount || 0} members`,
+                lastMessage: lastMessagePreviews[groupKey] || `${group.memberCount || 0} members`,
                 lastMessageAt,
                 unreadCount: 0,
                 metadata: {
@@ -1410,14 +1435,24 @@ function DashboardContent({
         });
         
         return items;
-    }, [friendsListData, unreadCounts, lastMessageTimes, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
+    }, [friendsListData, unreadCounts, lastMessageTimes, lastMessagePreviews, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
     
-    // Function to update last message time when user sends a message
-    const updateLastMessageTime = useCallback((chatKey: string) => {
+    // Function to update last message time and preview when user sends a message
+    const updateLastMessageTime = useCallback((chatKey: string, messagePreview?: string) => {
         setLastMessageTimes(prev => ({
             ...prev,
             [chatKey]: Date.now(),
         }));
+        if (messagePreview) {
+            // Truncate long previews
+            const preview = messagePreview.length > 50 
+                ? messagePreview.slice(0, 50) + "..." 
+                : messagePreview;
+            setLastMessagePreviews(prev => ({
+                ...prev,
+                [chatKey]: preview,
+            }));
+        }
     }, []);
 
     // Open chat from URL parameter (e.g., ?chat=0x123...)
@@ -4563,9 +4598,9 @@ function DashboardContent({
                     peerAddress={chatFriend?.address || ""}
                     peerName={chatFriend?.ensName || chatFriend?.nickname}
                     peerAvatar={chatFriend?.avatar}
-                    onMessageSent={() => {
+                    onMessageSent={(preview) => {
                         if (chatFriend) {
-                            updateLastMessageTime(chatFriend.address.toLowerCase());
+                            updateLastMessageTime(chatFriend.address.toLowerCase(), preview);
                         }
                     }}
                 />

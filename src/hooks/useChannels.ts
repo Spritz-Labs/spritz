@@ -3,7 +3,7 @@ import type { PublicChannel } from "@/app/api/channels/route";
 import type { ChannelMessage, ChannelReaction } from "@/app/api/channels/[id]/messages/route";
 import { createClient } from "@supabase/supabase-js";
 
-export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
+export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯", "🙌", "🎉"];
 
 // Initialize Supabase client for realtime
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
