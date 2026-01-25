@@ -56,6 +56,7 @@ export function BrowseChannelsModal({
         description: "",
         emoji: "💬",
         category: "community",
+        messagingType: "standard" as "standard" | "waku",
     });
     const [createError, setCreateError] = useState<string | null>(null);
 
@@ -97,11 +98,12 @@ export function BrowseChannelsModal({
                 description: newChannel.description.trim() || undefined,
                 emoji: newChannel.emoji,
                 category: newChannel.category,
+                messagingType: newChannel.messagingType,
             });
 
             if (channel) {
                 setShowCreateModal(false);
-                setNewChannel({ name: "", description: "", emoji: "💬", category: "community" });
+                setNewChannel({ name: "", description: "", emoji: "💬", category: "community", messagingType: "standard" });
                 onJoinChannel(channel);
             }
         } catch (e) {
@@ -363,6 +365,57 @@ export function BrowseChannelsModal({
                                                 <option value="entertainment">Entertainment</option>
                                             </select>
                                         </div>
+                                    </div>
+
+                                    {/* Messaging Type Selection */}
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-2">
+                                            Messaging Type
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setNewChannel({ ...newChannel, messagingType: "standard" })}
+                                                className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                    newChannel.messagingType === "standard"
+                                                        ? "border-[#FF5500] bg-[#FF5500]/10"
+                                                        : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-lg">☁️</span>
+                                                    <span className="text-white font-medium text-sm">Standard</span>
+                                                </div>
+                                                <p className="text-zinc-500 text-xs">
+                                                    Fast & reliable cloud storage
+                                                </p>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setNewChannel({ ...newChannel, messagingType: "waku" })}
+                                                className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                    newChannel.messagingType === "waku"
+                                                        ? "border-purple-500 bg-purple-500/10"
+                                                        : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-lg">🌐</span>
+                                                    <span className="text-white font-medium text-sm">Decentralized</span>
+                                                </div>
+                                                <p className="text-zinc-500 text-xs">
+                                                    Censorship-resistant messaging
+                                                </p>
+                                            </button>
+                                        </div>
+                                        {newChannel.messagingType === "waku" && (
+                                            <p className="text-purple-400 text-xs mt-2 flex items-center gap-1">
+                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                                </svg>
+                                                Messages are stored on a decentralized network
+                                            </p>
+                                        )}
                                     </div>
 
                                     {createError && (

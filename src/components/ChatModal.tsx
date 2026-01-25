@@ -28,7 +28,7 @@ import { useAnalytics } from "@/hooks/useAnalytics";
 import { createLogger } from "@/lib/logger";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { MentionInput } from "./MentionInput";
-import { GifPicker } from "./GifPicker";
+import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 
 const log = createLogger("Chat");
 
@@ -81,7 +81,6 @@ export function ChatModal({
     const [chatState, setChatState] = useState<ChatState>("checking");
     const [bypassCheck, setBypassCheck] = useState(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
-    const [showGifPicker, setShowGifPicker] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
@@ -712,7 +711,6 @@ export function ChatModal({
         
         try {
             await sendMessage(peerAddress, `[GIF]${gifUrl}`);
-            setShowGifPicker(false);
         } catch (err) {
             console.error("Failed to send GIF:", err);
         }
@@ -1683,45 +1681,13 @@ export function ChatModal({
                                 style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
                             >
                                 <div className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}>
-                                    {/* Pixel Art Button */}
-                                    <button
-                                        onClick={() => setShowPixelArt(true)}
+                                    {/* Consolidated attachment menu */}
+                                    <ChatAttachmentMenu
+                                        onPixelArt={() => setShowPixelArt(true)}
+                                        onGif={handleSendGif}
+                                        isUploading={isUploadingPixelArt}
                                         disabled={!isInitialized || !!chatError}
-                                        className={`rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "p-4" : "p-3"}`}
-                                        title="Send Pixel Art"
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            strokeWidth={2}
-                                            stroke="currentColor"
-                                            className={isFullscreen ? "w-6 h-6" : "w-5 h-5"}
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"
-                                            />
-                                        </svg>
-                                    </button>
-                                    {/* GIF Button */}
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => setShowGifPicker(!showGifPicker)}
-                                            disabled={!isInitialized || !!chatError}
-                                            className={`rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "px-3 py-4" : "px-2.5 py-3"}`}
-                                            title="Send GIF"
-                                        >
-                                            GIF
-                                        </button>
-                                        <GifPicker
-                                            isOpen={showGifPicker}
-                                            onClose={() => setShowGifPicker(false)}
-                                            onSelect={handleSendGif}
-                                            position="top"
-                                        />
-                                    </div>
+                                    />
                                     <div className="flex-1 relative">
                                         <MentionInput
                                             value={newMessage}
@@ -1732,7 +1698,7 @@ export function ChatModal({
                                             onSubmit={handleSend}
                                             placeholder={
                                                 isInitialized
-                                                    ? "Type a message... (Shift+Enter for new line)"
+                                                    ? "Type a message..."
                                                     : "Initializing..."
                                             }
                                             disabled={

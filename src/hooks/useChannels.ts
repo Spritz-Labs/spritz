@@ -162,6 +162,7 @@ export function useChannels(userAddress: string | null) {
             description?: string;
             emoji?: string;
             category?: string;
+            messagingType?: "standard" | "waku";
         }) => {
             if (!userAddress) return null;
 
@@ -173,6 +174,7 @@ export function useChannels(userAddress: string | null) {
                     body: JSON.stringify({
                         ...params,
                         creatorAddress: userAddress,
+                        messagingType: params.messagingType || "standard",
                     }),
                 });
 

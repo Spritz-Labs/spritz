@@ -16,6 +16,7 @@ import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -466,6 +467,29 @@ export function GroupChatModal({
         },
         [group, userAddress, sendGroupMessage, onMessageSent]
     );
+
+    // Handle GIF send
+    const handleSendGif = useCallback(async (gifUrl: string) => {
+        if (!gifUrl || isSending || !group) return;
+        
+        setIsSending(true);
+        try {
+            const result = await sendGroupMessage(group.id, `[GIF]${gifUrl}`);
+            if (result.success) {
+                onMessageSent?.();
+            }
+        } catch (err) {
+            console.error("Failed to send GIF:", err);
+        } finally {
+            setIsSending(false);
+        }
+    }, [group, isSending, sendGroupMessage, onMessageSent]);
+
+    // Check if message is a GIF
+    const isGifMessage = (content: string) =>
+        content.startsWith("[GIF]");
+    const getGifUrl = (content: string) =>
+        content.replace("[GIF]", "");
 
     // Check if message is pixel art
     const isPixelArtMessage = (content: string) =>
@@ -948,6 +972,7 @@ export function GroupChatModal({
                                         const isPixelArt = isPixelArtMessage(
                                             msg.content
                                         );
+                                        const isGif = isGifMessage(msg.content);
                                         const senderAddress = members.find(
                                             (m) =>
                                                 m.inboxId === msg.senderInboxId
@@ -1108,6 +1133,15 @@ export function GroupChatModal({
                                                                     showQuickActions
                                                                 />
                                                             </div>
+                                                        </div>
+                                                    ) : isGif ? (
+                                                        <div className="relative max-w-[280px] rounded-xl overflow-hidden">
+                                                            <img
+                                                                src={getGifUrl(msg.content)}
+                                                                alt="GIF"
+                                                                className="w-full h-auto rounded-xl"
+                                                                loading="lazy"
+                                                            />
                                                         </div>
                                                     ) : (
                                                         (() => {
@@ -1385,27 +1419,13 @@ export function GroupChatModal({
                                 style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
                             >
                                 <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setShowPixelArt(true)}
+                                    {/* Consolidated attachment menu */}
+                                    <ChatAttachmentMenu
+                                        onPixelArt={() => setShowPixelArt(true)}
+                                        onGif={handleSendGif}
+                                        isUploading={isUploadingPixelArt}
                                         disabled={!isInitialized}
-                                        className="p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-orange-400 transition-colors disabled:opacity-50"
-                                        title="Send Pixel Art"
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            strokeWidth={2}
-                                            stroke="currentColor"
-                                            className="w-5 h-5"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"
-                                            />
-                                        </svg>
-                                    </button>
+                                    />
                                     <MentionInput
                                         value={newMessage}
                                         onChange={setNewMessage}

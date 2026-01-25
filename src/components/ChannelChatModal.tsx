@@ -10,7 +10,7 @@ import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
-import { GifPicker } from "./GifPicker";
+import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { PollCreator } from "./PollCreator";
 import { PollDisplay } from "./PollDisplay";
 import { usePolls } from "@/hooks/usePolls";
@@ -18,6 +18,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChannelIcon } from "./ChannelIcon";
+import { useWakuChannel, type WakuChannelMessage } from "@/hooks/useWakuChannel";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -69,22 +70,78 @@ export function ChannelChatModal({
     onSetActiveChannel,
     isAdmin = false,
 }: ChannelChatModalProps) {
-    const { 
-        messages, 
-        pinnedMessages,
-        reactions,
-        isLoading,
-        isLoadingMore,
-        hasMore,
-        sendMessage, 
-        editMessage,
-        deleteMessage,
-        toggleReaction,
-        togglePinMessage,
-        loadMoreMessages,
-        replyingTo, 
-        setReplyingTo 
-    } = useChannelMessages(channel.id, userAddress);
+    // Determine if this is a Waku channel
+    const isWakuChannel = channel.messaging_type === "waku";
+    
+    // Standard channel messaging (Supabase)
+    const standardMessages = useChannelMessages(channel.id, userAddress);
+    
+    // Waku channel messaging (decentralized)
+    const wakuMessages = useWakuChannel({
+        channelId: channel.id,
+        contentTopic: channel.waku_content_topic || "",
+        symmetricKey: channel.waku_symmetric_key || "",
+        userAddress,
+        onNewMessage: onMessageSent,
+    });
+    
+    // Normalize message interface based on channel type
+    const messages = isWakuChannel 
+        ? wakuMessages.messages.map(m => ({
+            id: m.id,
+            channel_id: channel.id,
+            content: m.content,
+            sender_address: m.senderAddress,
+            created_at: m.timestamp.toISOString(),
+            message_type: m.messageType,
+            is_edited: false,
+            edited_at: null,
+            is_deleted: false,
+            is_pinned: false,
+            pinned_by: null,
+            pinned_at: null,
+            reply_to_id: null,
+            reply_to: null,
+        }))
+        : standardMessages.messages;
+    
+    const pinnedMessages = isWakuChannel ? [] : standardMessages.pinnedMessages;
+    const reactions = isWakuChannel ? {} : standardMessages.reactions;
+    const isLoading = isWakuChannel ? wakuMessages.isLoading : standardMessages.isLoading;
+    const isLoadingMore = isWakuChannel ? false : standardMessages.isLoadingMore;
+    const hasMore = isWakuChannel ? false : standardMessages.hasMore;
+    
+    const sendMessage = isWakuChannel 
+        ? async (content: string, messageType: "text" | "image" | "pixel_art" | "gif" = "text") => {
+            const success = await wakuMessages.sendMessage(content, messageType);
+            return success ? { id: crypto.randomUUID() } : null;
+          }
+        : standardMessages.sendMessage;
+    
+    const editMessage = isWakuChannel 
+        ? async () => false // Not supported yet for Waku
+        : standardMessages.editMessage;
+    
+    const deleteMessage = isWakuChannel 
+        ? async () => false // Not supported yet for Waku
+        : standardMessages.deleteMessage;
+    
+    const toggleReaction = isWakuChannel 
+        ? async () => {} // Not supported yet for Waku
+        : standardMessages.toggleReaction;
+    
+    const togglePinMessage = isWakuChannel 
+        ? async () => {} // Not supported yet for Waku
+        : standardMessages.togglePinMessage;
+    
+    const loadMoreMessages = isWakuChannel 
+        ? async () => {} // Not supported yet for Waku
+        : standardMessages.loadMoreMessages;
+    
+    const replyingTo = isWakuChannel ? null : standardMessages.replyingTo;
+    const setReplyingTo = isWakuChannel 
+        ? () => {} 
+        : standardMessages.setReplyingTo;
     
     // Polls
     const { polls, canCreatePoll, fetchPolls, createPoll, vote } = usePolls(channel.id, userAddress);
@@ -197,7 +254,6 @@ export function ChannelChatModal({
     };
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [showPixelArt, setShowPixelArt] = useState(false);
-    const [showGifPicker, setShowGifPicker] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -498,7 +554,6 @@ export function ChannelChatModal({
         setIsSending(true);
         try {
             await sendMessage(`[GIF]${gifUrl}`, "text");
-            setShowGifPicker(false);
             onMessageSent?.();
         } catch (error) {
             console.error("Failed to send GIF:", error);
@@ -827,9 +882,14 @@ export function ChannelChatModal({
                                         ✓
                                         </span>
                                     )}
+                                    {isWakuChannel && (
+                                    <span className="shrink-0 px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[10px] rounded font-medium flex items-center gap-0.5">
+                                        🌐
+                                        </span>
+                                    )}
                                 </div>
                             <p className="text-zinc-500 text-xs truncate">
-                                    {channel.member_count} members
+                                    {channel.member_count} members{isWakuChannel && " • Decentralized"}
                                 </p>
                             </div>
 
@@ -1574,79 +1634,24 @@ export function ChannelChatModal({
                         className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
                         style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
                     >
+                        {/* Hidden file input */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                        />
                         <div className="flex items-center gap-2">
-                            {/* Image upload button */}
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/jpeg,image/png,image/gif,image/webp"
-                                onChange={handleImageSelect}
-                                className="hidden"
+                            {/* Consolidated attachment menu */}
+                            <ChatAttachmentMenu
+                                onImageUpload={() => fileInputRef.current?.click()}
+                                onPixelArt={() => setShowPixelArt(true)}
+                                onGif={handleSendGif}
+                                onPoll={canCreatePoll ? () => setShowPollCreator(true) : undefined}
+                                showPoll={canCreatePoll}
+                                isUploading={isUploading || isUploadingPixelArt}
                             />
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={isUploading}
-                                className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 hover:text-white transition-colors disabled:opacity-50"
-                                title="Upload image"
-                            >
-                                {isUploading ? (
-                                    <div className="w-5 h-5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                )}
-                            </button>
-                            {/* Pixel Art button */}
-                            <button
-                                onClick={() => setShowPixelArt(true)}
-                                className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 hover:text-white transition-colors"
-                                title="Create pixel art"
-                            >
-                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                                    <rect x="4" y="4" width="4" height="4" />
-                                    <rect x="8" y="4" width="4" height="4" opacity="0.7" />
-                                    <rect x="12" y="4" width="4" height="4" />
-                                    <rect x="4" y="8" width="4" height="4" opacity="0.7" />
-                                    <rect x="8" y="8" width="4" height="4" />
-                                    <rect x="12" y="8" width="4" height="4" opacity="0.7" />
-                                    <rect x="4" y="12" width="4" height="4" />
-                                    <rect x="8" y="12" width="4" height="4" opacity="0.7" />
-                                    <rect x="12" y="12" width="4" height="4" />
-                                    <rect x="16" y="8" width="4" height="4" opacity="0.5" />
-                                    <rect x="16" y="12" width="4" height="4" opacity="0.5" />
-                                    <rect x="16" y="16" width="4" height="4" opacity="0.3" />
-                                    <rect x="12" y="16" width="4" height="4" opacity="0.3" />
-                                    <rect x="8" y="16" width="4" height="4" opacity="0.3" />
-                                    <rect x="4" y="16" width="4" height="4" opacity="0.3" />
-                                </svg>
-                            </button>
-                            {/* GIF button */}
-                            <div className="relative">
-                                <button
-                                    onClick={() => setShowGifPicker(!showGifPicker)}
-                                    className="px-2.5 py-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 hover:text-white transition-colors font-bold text-xs"
-                                    title="Send GIF"
-                                >
-                                    GIF
-                                </button>
-                                <GifPicker
-                                    isOpen={showGifPicker}
-                                    onClose={() => setShowGifPicker(false)}
-                                    onSelect={handleSendGif}
-                                    position="top"
-                                />
-                            </div>
-                            {/* Poll button - only for admins, moderators, and channel owners */}
-                            {canCreatePoll && (
-                                <button
-                                    onClick={() => setShowPollCreator(true)}
-                                    className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 hover:text-white transition-colors"
-                                    title="Create Poll"
-                                >
-                                    🗳️
-                                </button>
-                            )}
                             <MentionInput
                                 inputRef={inputRef}
                                 value={inputValue}

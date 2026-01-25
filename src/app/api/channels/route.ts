@@ -24,6 +24,10 @@ export type PublicChannel = {
     created_at: string;
     updated_at: string;
     is_member?: boolean;
+    // Waku/Logos messaging support
+    messaging_type: "standard" | "waku";
+    waku_symmetric_key?: string | null;
+    waku_content_topic?: string | null;
 };
 
 // GET /api/channels - List all public channels
@@ -80,6 +84,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ channels: channelsWithMembership });
 }
 
+// Helper to generate a random symmetric key for Waku encryption
+function generateSymmetricKey(): string {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Buffer.from(array).toString("base64");
+}
+
+// Helper to generate a Waku content topic
+function generateContentTopic(channelId: string, channelName: string): string {
+    const safeName = channelName.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 20);
+    return `/spritz/1/channel-${safeName}-${channelId.slice(0, 8)}/proto`;
+}
+
 // POST /api/channels - Create a new channel
 export async function POST(request: NextRequest) {
     // Rate limit - strict for channel creation
@@ -91,7 +108,14 @@ export async function POST(request: NextRequest) {
         const session = await getAuthenticatedUser(request);
         
         const body = await request.json();
-        const { name, description, emoji, category, creatorAddress: bodyCreatorAddress } = body;
+        const { 
+            name, 
+            description, 
+            emoji, 
+            category, 
+            creatorAddress: bodyCreatorAddress,
+            messagingType = "standard" // "standard" or "waku"
+        } = body;
         
         // Use session address, fall back to body for backward compatibility
         const creatorAddress = session?.userAddress || bodyCreatorAddress;
@@ -99,6 +123,14 @@ export async function POST(request: NextRequest) {
         if (!name || !creatorAddress) {
             return NextResponse.json(
                 { error: "Name and authentication are required" },
+                { status: 400 }
+            );
+        }
+        
+        // Validate messaging type
+        if (messagingType !== "standard" && messagingType !== "waku") {
+            return NextResponse.json(
+                { error: "Invalid messaging type. Must be 'standard' or 'waku'" },
                 { status: 400 }
             );
         }
@@ -126,17 +158,28 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Prepare channel data
+        const channelData: Record<string, unknown> = {
+            name: sanitizedName.trim(),
+            description: sanitizedDescription?.trim() || null,
+            emoji: emoji || "💬",
+            category: category || "community",
+            creator_address: creatorAddress.toLowerCase(),
+            is_official: false,
+            member_count: 1,
+            messaging_type: messagingType,
+        };
+
+        // For Waku channels, generate encryption key and content topic
+        if (messagingType === "waku") {
+            const tempId = crypto.randomUUID();
+            channelData.waku_symmetric_key = generateSymmetricKey();
+            channelData.waku_content_topic = generateContentTopic(tempId, sanitizedName);
+        }
+
         const { data: channel, error } = await supabase
             .from("shout_public_channels")
-            .insert({
-                name: sanitizedName.trim(),
-                description: sanitizedDescription?.trim() || null,
-                emoji: emoji || "💬",
-                category: category || "community",
-                creator_address: creatorAddress.toLowerCase(),
-                is_official: false,
-                member_count: 1, // Creator is first member
-            })
+            .insert(channelData)
             .select()
             .single();
 
@@ -146,6 +189,16 @@ export async function POST(request: NextRequest) {
                 { error: "Failed to create channel" },
                 { status: 500 }
             );
+        }
+
+        // Update content topic with actual channel ID for Waku channels
+        if (messagingType === "waku" && channel) {
+            const correctTopic = generateContentTopic(channel.id, sanitizedName);
+            await supabase
+                .from("shout_public_channels")
+                .update({ waku_content_topic: correctTopic })
+                .eq("id", channel.id);
+            channel.waku_content_topic = correctTopic;
         }
 
         // Auto-join the creator
