@@ -268,6 +268,6 @@ export const GIF_CATEGORIES = [
     { emoji: "❤️", label: "Love", query: "love" },
     { emoji: "😢", label: "Sad", query: "sad" },
     { emoji: "🤔", label: "Thinking", query: "thinking" },
-    { emoji: "👏", label: "Clap", query: "clapping" },
+    { emoji: "🙏", label: "Thanks", query: "thank you" },
     { emoji: "🔥", label: "Fire", query: "fire lit" },
 ];

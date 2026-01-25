@@ -3,6 +3,25 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Optimized animation variants for better performance
+const backdropVariants = {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+};
+
+const mobileSheetVariants = {
+    initial: { opacity: 0, y: 50 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: 50 },
+};
+
+const desktopBarVariants = {
+    initial: { opacity: 0, scale: 0.9 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.9 },
+};
+
 type LongPressReactionsProps = {
     children: React.ReactNode;
     reactions?: string[];
@@ -16,7 +35,7 @@ type LongPressReactionsProps = {
     longPressDuration?: number;
 };
 
-const DEFAULT_REACTIONS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯"];
+const DEFAULT_REACTIONS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "🙏", "💯"];
 
 export function LongPressReactions({
     children,
@@ -237,24 +256,27 @@ export function LongPressReactions({
                     <>
                         {/* Backdrop with blur */}
                         <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
-                            className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-[200]"
+                            variants={backdropVariants}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            transition={{ duration: 0.12 }}
+                            className="fixed inset-0 bg-black/50 z-[200]"
                             onClick={() => setShowReactions(false)}
+                            style={{ willChange: "opacity" }}
                         />
 
                         {/* Reaction Bar - Different styles for mobile vs desktop */}
                         {isMobile ? (
                             // Mobile: Bottom sheet style
                             <motion.div
-                                initial={{ opacity: 0, y: 100 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 100 }}
-                                transition={{ type: "spring", damping: 30, stiffness: 400 }}
+                                variants={mobileSheetVariants}
+                                initial="initial"
+                                animate="animate"
+                                exit="exit"
+                                transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
                                 className="fixed bottom-0 left-0 right-0 z-[201] px-4 pb-safe"
-                                style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+                                style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', willChange: "transform, opacity" }}
                             >
                                 <div className="bg-zinc-900 border border-zinc-700 rounded-t-3xl shadow-2xl overflow-hidden">
                                     {/* Drag handle */}
@@ -265,23 +287,14 @@ export function LongPressReactions({
                                     {/* Emoji Reactions */}
                                     <div className="px-4 pb-4">
                                         <div className="flex justify-center gap-1 flex-wrap">
-                                            {reactions.map((emoji, index) => (
-                                                <motion.button
+                                            {reactions.map((emoji) => (
+                                                <button
                                                     key={emoji}
-                                                    initial={{ scale: 0, y: 20 }}
-                                                    animate={{ scale: 1, y: 0 }}
-                                                    transition={{ 
-                                                        type: "spring",
-                                                        damping: 15,
-                                                        stiffness: 400,
-                                                        delay: index * 0.025 
-                                                    }}
                                                     onClick={() => handleReactionSelect(emoji)}
-                                                    className="w-14 h-14 flex items-center justify-center text-3xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-2xl transition-colors"
-                                                    whileTap={{ scale: 1.2 }}
+                                                    className="w-14 h-14 flex items-center justify-center text-3xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 active:scale-110 rounded-2xl transition-all duration-100"
                                                 >
                                                     {emoji}
-                                                </motion.button>
+                                                </button>
                                             ))}
                                         </div>
                                     </div>
@@ -338,10 +351,11 @@ export function LongPressReactions({
                         ) : (
                             // Desktop: Floating bar
                             <motion.div
-                                initial={{ opacity: 0, scale: 0.8, y: position.showAbove ? 10 : -10 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.8, y: position.showAbove ? 10 : -10 }}
-                                transition={{ type: "spring", damping: 25, stiffness: 400 }}
+                                variants={desktopBarVariants}
+                                initial="initial"
+                                animate="animate"
+                                exit="exit"
+                                transition={{ duration: 0.15, ease: "easeOut" }}
                                 className="fixed z-[201] flex flex-col items-center gap-2"
                                 style={{
                                     left: position.x,
@@ -349,28 +363,19 @@ export function LongPressReactions({
                                         ? `calc(100vh - ${position.y}px)` 
                                         : position.y,
                                     transform: "translateX(-50%)",
+                                    willChange: "transform, opacity",
                                 }}
                             >
                                 {/* Emoji Reactions */}
-                                <div className="flex items-center gap-0.5 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-full px-2 py-1.5 shadow-2xl">
-                                    {reactions.map((emoji, index) => (
-                                        <motion.button
+                                <div className="flex items-center gap-0.5 bg-zinc-900/95 border border-zinc-700 rounded-full px-2 py-1.5 shadow-2xl">
+                                    {reactions.map((emoji) => (
+                                        <button
                                             key={emoji}
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            transition={{ 
-                                                type: "spring",
-                                                damping: 15,
-                                                stiffness: 400,
-                                                delay: index * 0.02 
-                                            }}
                                             onClick={() => handleReactionSelect(emoji)}
-                                            className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-zinc-700 rounded-full transition-all"
-                                            whileHover={{ scale: 1.3, y: -5 }}
-                                            whileTap={{ scale: 1.4 }}
+                                            className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-zinc-700 hover:scale-125 active:scale-130 rounded-full transition-transform duration-100"
                                         >
                                             {emoji}
-                                        </motion.button>
+                                        </button>
                                     ))}
                                 </div>
 

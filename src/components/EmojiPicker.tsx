@@ -348,7 +348,7 @@ export function QuickReactionPicker({
     isOpen,
     onClose,
     onSelect,
-    emojis = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯"],
+    emojis = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "🙏", "💯"],
     showMoreButton = false,
     onMoreClick,
 }: QuickReactionPickerProps) {
@@ -493,62 +493,39 @@ export function QuickReactionPicker({
             {isOpen && (
                 <motion.div
                     ref={containerRef}
-                    initial={{ opacity: 0, scale: 0.85, y: 8 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.85, y: 8 }}
-                    transition={{ type: "spring", damping: 25, stiffness: 400 }}
-                    className={`absolute bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 shadow-2xl z-50 ${
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.12, ease: "easeOut" }}
+                    className={`absolute bg-zinc-900/95 border border-zinc-700/80 shadow-2xl z-50 ${
                         isMobile 
                             ? "rounded-2xl p-1.5" 
                             : "rounded-full px-1.5 py-1"
                     }`}
-                    style={position}
+                    style={{ ...position, willChange: "transform, opacity" }}
                 >
                     <div className={`flex ${isMobile ? "gap-0.5" : "gap-0.5"}`}>
-                        {emojis.map((emoji, index) => (
-                            <motion.button
+                        {emojis.map((emoji) => (
+                            <button
                                 key={emoji}
-                                initial={{ scale: 0, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                transition={{ 
-                                    type: "spring",
-                                    damping: 15,
-                                    stiffness: 400,
-                                    delay: index * 0.02
-                                }}
                                 onClick={() => handleSelect(emoji)}
-                                className={`flex items-center justify-center rounded-full transition-all ${
+                                className={`flex items-center justify-center rounded-full transition-all duration-100 ${
                                     selectedEmoji === emoji 
                                         ? "bg-[#FF5500]/30 scale-110" 
                                         : "hover:bg-zinc-800 active:bg-zinc-700"
                                 } ${
                                     isMobile 
-                                        ? "w-11 h-11 text-2xl active:scale-125" 
-                                        : "w-9 h-9 text-xl hover:scale-125 active:scale-130"
+                                        ? "w-11 h-11 text-2xl active:scale-110" 
+                                        : "w-9 h-9 text-xl hover:scale-110 active:scale-115"
                                 }`}
-                                whileTap={{ scale: 1.3 }}
                             >
-                                <motion.span
-                                    animate={selectedEmoji === emoji ? { 
-                                        scale: [1, 1.4, 1],
-                                        rotate: [0, -10, 10, 0]
-                                    } : {}}
-                                    transition={{ duration: 0.3 }}
-                                >
+                                <span className={selectedEmoji === emoji ? "animate-bounce" : ""}>
                                     {emoji}
-                                </motion.span>
-                            </motion.button>
+                                </span>
+                            </button>
                         ))}
                         {showMoreButton && onMoreClick && (
-                            <motion.button
-                                initial={{ scale: 0, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                transition={{ 
-                                    type: "spring",
-                                    damping: 15,
-                                    stiffness: 400,
-                                    delay: emojis.length * 0.02
-                                }}
+                            <button
                                 onClick={() => {
                                     onMoreClick();
                                     onClose();
@@ -567,7 +544,7 @@ export function QuickReactionPicker({
                                 >
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                 </svg>
-                            </motion.button>
+                            </button>
                         )}
                     </div>
                 </motion.div>

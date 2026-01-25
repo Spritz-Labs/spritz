@@ -9,7 +9,7 @@ interface ReactionWallWidgetProps {
     size: string;
 }
 
-const DEFAULT_EMOJIS = ['❤️', '🔥', '👏', '🎉', '💯', '🚀', '✨', '🙌'];
+const DEFAULT_EMOJIS = ['❤️', '🔥', '🙏', '🎉', '💯', '🚀', '✨', '🙌'];
 
 export function ReactionWallWidget({ config, size }: ReactionWallWidgetProps) {
     const { allowedEmojis = DEFAULT_EMOJIS, reactions = {} } = config;

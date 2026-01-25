@@ -35,7 +35,7 @@ export type AlphaMessageReaction = {
     users: string[];
 };
 
-export const ALPHA_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "👏", "💯", "🙌", "🎉"];
+export const ALPHA_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "🙏", "💯", "🙌", "🎉"];
 
 export type AlphaMembership = {
     user_address: string;

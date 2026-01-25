@@ -9,7 +9,7 @@ export type Reaction = {
   hasReacted: boolean;
 };
 
-export const REACTION_EMOJIS = ["❤️", "🔥", "👍", "🤙", "😍", "⭐", "👏", "💯", "🙌", "✨"];
+export const REACTION_EMOJIS = ["❤️", "🔥", "👍", "🤙", "😍", "⭐", "🙏", "💯", "🙌", "✨"];
 
 export function useReactions(userAddress: string | null) {
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
