@@ -31,6 +31,8 @@ import { MentionInput } from "./MentionInput";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
 import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
+import { useMutedConversations, useBlockedUsers, useReportUser } from "@/hooks/useMuteBlockReport";
+import { MuteOptionsModal, BlockUserModal, ReportUserModal, ConversationActionsMenu } from "./MuteBlockReportModals";
 
 const log = createLogger("Chat");
 
@@ -98,6 +100,12 @@ export function ChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [securityStatus, setSecurityStatus] = useState<{ isSecure?: boolean; isLoading: boolean }>({ isLoading: true });
     const [peerOnline, setPeerOnline] = useState(false);
+    
+    // Mute/Block/Report state
+    const [showActionsMenu, setShowActionsMenu] = useState(false);
+    const [showMuteModal, setShowMuteModal] = useState(false);
+    const [showBlockModal, setShowBlockModal] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
 
     // Fetch peer online status
     useEffect(() => {
@@ -132,6 +140,16 @@ export function ChatModal({
         fetchReactions: fetchMsgReactions,
         toggleReaction: toggleMsgReaction,
     } = useMessageReactions(userAddress, conversationId);
+    
+    // Mute/Block/Report hooks
+    const { isMuted, muteConversation, unmuteConversation, getMuteInfo } = useMutedConversations(userAddress);
+    const { isBlockedByMe, blockUser, unblockUser } = useBlockedUsers(userAddress);
+    const { reportUser, isSubmitting: isReportSubmitting } = useReportUser(userAddress);
+    
+    const conversationMuted = isMuted("dm", peerAddress);
+    const peerBlocked = isBlockedByMe(peerAddress);
+    const muteInfo = getMuteInfo("dm", peerAddress);
+    
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const isInitialLoadRef = useRef(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1031,6 +1049,15 @@ export function ChatModal({
 
                                 {/* Action buttons - compact on mobile */}
                                 <div className="shrink-0 flex items-center">
+                                    {/* Muted indicator */}
+                                    {conversationMuted && (
+                                        <span className="p-2 text-zinc-500" title="Muted">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                            </svg>
+                                        </span>
+                                    )}
                                     <button
                                         onClick={() => setShowSearch(true)}
                                         className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
@@ -1038,6 +1065,16 @@ export function ChatModal({
                                     >
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                    </button>
+                                    {/* More options button */}
+                                    <button
+                                        onClick={() => setShowActionsMenu(true)}
+                                        className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
+                                        aria-label="More options"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                                         </svg>
                                     </button>
                                     <button
@@ -1925,6 +1962,72 @@ export function ChatModal({
                         isOpen={showSearch}
                         userAddress={userAddress}
                         peerName={displayName}
+                    />
+                    
+                    {/* Conversation Actions Menu */}
+                    <ConversationActionsMenu
+                        isOpen={showActionsMenu}
+                        onClose={() => setShowActionsMenu(false)}
+                        onMute={() => setShowMuteModal(true)}
+                        onBlock={() => setShowBlockModal(true)}
+                        onReport={() => setShowReportModal(true)}
+                        isMuted={conversationMuted}
+                        isBlocked={peerBlocked}
+                        showMute={true}
+                        showBlock={true}
+                        showReport={true}
+                    />
+                    
+                    {/* Mute Options Modal */}
+                    <MuteOptionsModal
+                        isOpen={showMuteModal}
+                        onClose={() => setShowMuteModal(false)}
+                        onMute={async (duration) => {
+                            const success = await muteConversation("dm", peerAddress, duration);
+                            return success;
+                        }}
+                        onUnmute={async () => {
+                            const success = await unmuteConversation("dm", peerAddress);
+                            return success;
+                        }}
+                        isMuted={conversationMuted}
+                        conversationName={displayName}
+                        muteUntil={muteInfo?.muted_until}
+                    />
+                    
+                    {/* Block User Modal */}
+                    <BlockUserModal
+                        isOpen={showBlockModal}
+                        onClose={() => setShowBlockModal(false)}
+                        onBlock={async () => {
+                            const success = await blockUser(peerAddress);
+                            return success;
+                        }}
+                        onUnblock={async () => {
+                            const success = await unblockUser(peerAddress);
+                            return success;
+                        }}
+                        isBlocked={peerBlocked}
+                        userName={displayName}
+                        userAddress={peerAddress}
+                    />
+                    
+                    {/* Report User Modal */}
+                    <ReportUserModal
+                        isOpen={showReportModal}
+                        onClose={() => setShowReportModal(false)}
+                        onReport={async (params) => {
+                            return await reportUser({
+                                reportedAddress: peerAddress,
+                                reportType: params.reportType,
+                                description: params.description,
+                                conversationType: "dm",
+                                conversationId: peerAddress,
+                                alsoBlock: params.alsoBlock,
+                            });
+                        }}
+                        userName={displayName}
+                        userAddress={peerAddress}
                     />
                 </>
             )}
