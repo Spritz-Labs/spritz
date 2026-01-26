@@ -9,7 +9,7 @@ import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { DateDivider } from "./UnreadDivider";
-import { MessageMenuTrigger } from "./UnifiedMessageMenu";
+import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -117,6 +117,7 @@ export function InstantRoomChat({
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nodeRef = useRef<any>(null);
@@ -531,22 +532,16 @@ export function InstantRoomChat({
                                         msg.isMe ? "items-end" : "items-start"
                                     }`}
                                 >
-                                    <MessageMenuTrigger
-                                        config={{
-                                            messageContent: msg.content,
-                                            isOwn: msg.isMe,
-                                            isPinned: false,
-                                            canEdit: false, // Instant room messages can't be edited
-                                            hasMedia: false,
-                                        }}
-                                        callbacks={{
-                                            onReaction: (emoji) => toggleReaction(msg.id, emoji),
-                                            onReply: () => setReplyingTo(msg),
-                                            onCopy: () => navigator.clipboard.writeText(msg.content),
-                                        }}
-                                    >
                                     <div
                                         data-message-bubble
+                                        onClick={() => {
+                                            setSelectedMessage(selectedMessage === msg.id ? null : msg.id);
+                                            setSelectedMessageConfig(selectedMessage === msg.id ? null : {
+                                                messageId: msg.id,
+                                                messageContent: msg.content,
+                                                isOwn: msg.isMe,
+                                            });
+                                        }}
                                         className={`max-w-[85%] rounded-2xl px-3 py-2 relative cursor-pointer ${
                                             msg.isMe
                                                 ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
@@ -621,7 +616,6 @@ export function InstantRoomChat({
                                         )}
 
                                     </div>
-                                    </MessageMenuTrigger>
                                     <span className="text-xs text-zinc-500 mt-1 px-1">
                                         {formatTime(msg.timestamp)}
                                     </span>
@@ -689,6 +683,23 @@ export function InstantRoomChat({
                             </button>
                         </div>
                     </div>
+                    {/* Message Action Bar */}
+                    <MessageActionBar
+                        isOpen={!!selectedMessage && !!selectedMessageConfig}
+                        onClose={() => {
+                            setSelectedMessage(null);
+                            setSelectedMessageConfig(null);
+                        }}
+                        config={selectedMessageConfig}
+                        callbacks={{
+                            onReaction: selectedMessageConfig ? (emoji) => toggleReaction(selectedMessageConfig.messageId, emoji) : undefined,
+                            onReply: selectedMessageConfig ? () => {
+                                const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                                if (msg) setReplyingTo(msg);
+                            } : undefined,
+                            onCopy: () => {},
+                        }}
+                    />
                 </motion.div>
             )}
         </AnimatePresence>

@@ -40,7 +40,7 @@ import { ImageGallery, useImageGallery, extractImagesFromMessages } from "./Imag
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { useMessageEdit, EditIndicator, EditControls } from "@/hooks/useMessageEdit";
 import { SwipeableMessage } from "./SwipeableMessage";
-import { MessageMenuTrigger } from "./UnifiedMessageMenu";
+import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 const log = createLogger("Chat");
 
@@ -106,6 +106,7 @@ export function ChatModal({
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showSearch, setShowSearch] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
     const [securityStatus, setSecurityStatus] = useState<{ isSecure?: boolean; isLoading: boolean }>({ isLoading: true });
     const [peerOnline, setPeerOnline] = useState(false);
     
@@ -681,10 +682,16 @@ export function ChatModal({
     }, [isOpen, markMessagesRead, markAsRead, peerAddress]);
 
     // Toggle message selection for mobile tap actions
-    const handleMessageTap = useCallback((messageId: string) => {
-        setSelectedMessage(prev => prev === messageId ? null : messageId);
+    const handleMessageTap = useCallback((messageId: string, config: MessageActionConfig) => {
+        if (selectedMessage === messageId) {
+            setSelectedMessage(null);
+            setSelectedMessageConfig(null);
+        } else {
+            setSelectedMessage(messageId);
+            setSelectedMessageConfig(config);
+        }
         setShowMsgReactions(null);
-    }, []);
+    }, [selectedMessage]);
 
     // Close selected message when clicking outside
     useEffect(() => {
@@ -1282,26 +1289,6 @@ export function ChatModal({
                                                         </svg>
                                                     }
                                                 >
-                                                    <MessageMenuTrigger
-                                                        config={{
-                                                            messageContent: isPixelArt || isGif || isLocation ? undefined : msg.content,
-                                                            isOwn,
-                                                            isPinned: false,
-                                                            canEdit: isOwn && canEditMessage(msg.sentAt),
-                                                            hasMedia: isPixelArt || isGif,
-                                                            isPixelArt,
-                                                            mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
-                                                        }}
-                                                        callbacks={{
-                                                            onReaction: (emoji) => toggleMsgReaction(msg.id, emoji),
-                                                            onReply: () => setReplyingTo(msg),
-                                                            onCopy: () => navigator.clipboard.writeText(msg.content),
-                                                            onDelete: isOwn ? () => {
-                                                                // Mark as deleted (optimistic)
-                                                                setMessages(prev => prev.filter(m => m.id !== msg.id));
-                                                            } : undefined,
-                                                        }}
-                                                    >
                                                     <motion.div
                                                         initial={{ opacity: 0, y: 10 }}
                                                         animate={{ opacity: 1, y: 0 }}
@@ -1339,18 +1326,28 @@ export function ChatModal({
                                                 }`}
                                             >
                                                 {isPixelArt ? (
-                                                    <div className="pixel-art-message relative group">
+                                                    <div 
+                                                        className={`pixel-art-message relative group cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl" : ""}`}
+                                                        onClick={() => handleMessageTap(msg.id, {
+                                                            messageId: msg.id,
+                                                            messageContent: msg.content,
+                                                            isOwn,
+                                                            hasMedia: true,
+                                                            isPixelArt: true,
+                                                            mediaUrl: getPixelArtUrl(msg.content),
+                                                        })}
+                                                    >
                                                         <PixelArtImage
                                                             src={getPixelArtUrl(
                                                                 msg.content
                                                             )}
-                                                            onClick={() =>
+                                                            onClick={() => {
                                                                 setViewingImage(
                                                                     getPixelArtUrl(
                                                                         msg.content
                                                                     )
-                                                                )
-                                                            }
+                                                                );
+                                                            }}
                                                             size="md"
                                                         />
 
@@ -1504,7 +1501,16 @@ export function ChatModal({
                                                         </p>
                                                     </div>
                                                 ) : isGif ? (
-                                                    <div className="relative">
+                                                    <div 
+                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl p-1" : ""}`}
+                                                        onClick={() => handleMessageTap(msg.id, {
+                                                            messageId: msg.id,
+                                                            messageContent: msg.content,
+                                                            isOwn,
+                                                            hasMedia: true,
+                                                            mediaUrl: getGifUrl(msg.content),
+                                                        })}
+                                                    >
                                                         <img
                                                             src={getGifUrl(msg.content)}
                                                             alt="GIF"
@@ -1536,8 +1542,16 @@ export function ChatModal({
                                                 ) : (
                                                     <div 
                                                         data-message-bubble
-                                                        onClick={() => handleMessageTap(msg.id)}
-                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/30 rounded-lg -m-1 p-1" : ""}`}
+                                                        onClick={() => handleMessageTap(msg.id, {
+                                                            messageId: msg.id,
+                                                            messageContent: msg.content,
+                                                            isOwn,
+                                                            canEdit: isOwn && canEditMessage(msg.sentAt),
+                                                            hasMedia: isPixelArt || isGif,
+                                                            isPixelArt,
+                                                            mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
+                                                        })}
+                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl" : ""}`}
                                                     >
                                                         {/* Reply Preview - Check for reply pattern in message content */}
                                                         {msg.content.startsWith("↩️ ") && msg.content.includes("\n\n") && (
@@ -1792,7 +1806,6 @@ export function ChatModal({
                                                 )}
                                             </div>
                                         </motion.div>
-                                                    </MessageMenuTrigger>
                                                 </SwipeableMessage>
                                             </div>
                                         );
@@ -2170,6 +2183,28 @@ export function ChatModal({
                         }}
                         userName={displayName}
                         userAddress={peerAddress}
+                    />
+                    
+                    {/* Message Action Bar - shows when a message is selected */}
+                    <MessageActionBar
+                        isOpen={!!selectedMessage && !!selectedMessageConfig}
+                        onClose={() => {
+                            setSelectedMessage(null);
+                            setSelectedMessageConfig(null);
+                        }}
+                        config={selectedMessageConfig}
+                        callbacks={{
+                            onReaction: selectedMessageConfig ? (emoji) => toggleMsgReaction(selectedMessageConfig.messageId, emoji) : undefined,
+                            onReply: selectedMessageConfig ? () => {
+                                const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                                if (msg) setReplyingTo(msg);
+                            } : undefined,
+                            onCopy: () => {},
+                            onDelete: selectedMessageConfig?.isOwn ? () => {
+                                setMessages(prev => prev.filter(m => m.id !== selectedMessageConfig?.messageId));
+                            } : undefined,
+                        }}
+                        reactions={MESSAGE_REACTION_EMOJIS}
                     />
                 </>
             )}

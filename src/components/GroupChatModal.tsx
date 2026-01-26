@@ -29,7 +29,7 @@ import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
-import { MessageMenuTrigger } from "./UnifiedMessageMenu";
+import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -130,6 +130,7 @@ export function GroupChatModal({
         null
     );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1084,24 +1085,17 @@ export function GroupChatModal({
                                                         )}
                                                     </div>
                                                 )}
-                                                <MessageMenuTrigger
-                                                    config={{
-                                                        messageContent: isPixelArt || isGif || isLocation ? undefined : msg.content,
-                                                        isOwn,
-                                                        isPinned: false,
-                                                        canEdit: false, // XMTP group messages can't be edited
-                                                        hasMedia: isPixelArt || isGif,
-                                                        isPixelArt,
-                                                        mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
-                                                    }}
-                                                    callbacks={{
-                                                        onReaction: (emoji) => toggleMsgReaction(msg.id, emoji),
-                                                        onReply: () => setReplyingTo(msg),
-                                                        onCopy: () => navigator.clipboard.writeText(msg.content),
-                                                        onDelete: isOwn ? () => {
-                                                            // Remove from local state
-                                                            setMessages(prev => prev.filter(m => m.id !== msg.id));
-                                                        } : undefined,
+                                                <div
+                                                    onClick={() => {
+                                                        setSelectedMessage(selectedMessage === msg.id ? null : msg.id);
+                                                        setSelectedMessageConfig(selectedMessage === msg.id ? null : {
+                                                            messageId: msg.id,
+                                                            messageContent: msg.content,
+                                                            isOwn,
+                                                            hasMedia: isPixelArt || isGif,
+                                                            isPixelArt,
+                                                            mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
+                                                        });
                                                     }}
                                                 >
                                                 <div
@@ -1284,7 +1278,7 @@ export function GroupChatModal({
                                                     </p>
 
                                                     </div>
-                                                </MessageMenuTrigger>
+                                                </div>
                                             </motion.div>
                                             </div>
                                         );
@@ -1568,6 +1562,27 @@ export function GroupChatModal({
                             </>
                         )}
                     </AnimatePresence>
+                    {/* Message Action Bar */}
+                    <MessageActionBar
+                        isOpen={!!selectedMessage && !!selectedMessageConfig}
+                        onClose={() => {
+                            setSelectedMessage(null);
+                            setSelectedMessageConfig(null);
+                        }}
+                        config={selectedMessageConfig}
+                        callbacks={{
+                            onReaction: selectedMessageConfig ? (emoji) => toggleMsgReaction(selectedMessageConfig.messageId, emoji) : undefined,
+                            onReply: selectedMessageConfig ? () => {
+                                const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                                if (msg) setReplyingTo(msg);
+                            } : undefined,
+                            onCopy: () => {},
+                            onDelete: selectedMessageConfig?.isOwn ? () => {
+                                setMessages(prev => prev.filter(m => m.id !== selectedMessageConfig?.messageId));
+                            } : undefined,
+                        }}
+                        reactions={MESSAGE_REACTION_EMOJIS}
+                    />
                 </>
             )}
         </AnimatePresence>

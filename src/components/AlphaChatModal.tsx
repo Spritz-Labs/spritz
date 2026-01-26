@@ -28,7 +28,7 @@ import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
-import { MessageMenuTrigger } from "./UnifiedMessageMenu";
+import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -145,6 +145,7 @@ export function AlphaChatModal({
     const [isAddingFriend, setIsAddingFriend] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1146,27 +1147,20 @@ export function AlphaChatModal({
                                                             </div>
                                                         )}
 
-                                                        <MessageMenuTrigger
-                                                            config={{
-                                                                messageContent: isPixelArt ? undefined : msg.content,
-                                                                isOwn,
-                                                                isPinned: msg.is_pinned,
-                                                                canEdit: false, // Alpha messages can't be edited
-                                                                hasMedia: isPixelArt,
-                                                                isPixelArt,
-                                                                mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : undefined,
-                                                            }}
-                                                            callbacks={{
-                                                                onReaction: (emoji) => alphaChat.toggleReaction(msg.id, emoji),
-                                                                onReply: () => alphaChat.setReplyingTo(msg),
-                                                                onCopy: () => navigator.clipboard.writeText(msg.content),
-                                                                onPin: (isAdmin || moderation.permissions.canPin) && !msg.is_pinned ? () => handlePinMessage(msg.id, false) : undefined,
-                                                                onUnpin: (isAdmin || moderation.permissions.canPin) && msg.is_pinned ? () => handlePinMessage(msg.id, true) : undefined,
-                                                                onDelete: ((isOwn || isAdmin || moderation.permissions.canDelete) && !msg.is_deleted) ? () => handleDeleteMessage(msg.id) : undefined,
-                                                            }}
-                                                        >
                                                         <div
                                                             data-message-bubble
+                                                            onClick={() => {
+                                                                setSelectedMessage(selectedMessage === msg.id ? null : msg.id);
+                                                                setSelectedMessageConfig(selectedMessage === msg.id ? null : {
+                                                                    messageId: msg.id,
+                                                                    messageContent: msg.content,
+                                                                    isOwn,
+                                                                    isPinned: msg.is_pinned,
+                                                                    hasMedia: isPixelArt,
+                                                                    isPixelArt,
+                                                                    mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : undefined,
+                                                                });
+                                                            }}
                                                             className={`${isFullscreen ? "max-w-[90%]" : "max-w-[75%]"} rounded-2xl px-4 py-2.5 relative cursor-pointer ${
                                                                 isOwn
                                                                     ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-br-md"
@@ -1337,7 +1331,6 @@ export function AlphaChatModal({
                                                             </div>
 
                                                         </div>
-                                                        </MessageMenuTrigger>
                                                     </motion.div>
                                                     </div>
                                                 );
@@ -1617,6 +1610,28 @@ export function AlphaChatModal({
                             onMute={handleMuteUser}
                         />
                     )}
+                    
+                    {/* Message Action Bar */}
+                    <MessageActionBar
+                        isOpen={!!selectedMessage && !!selectedMessageConfig}
+                        onClose={() => {
+                            setSelectedMessage(null);
+                            setSelectedMessageConfig(null);
+                        }}
+                        config={selectedMessageConfig}
+                        callbacks={{
+                            onReaction: selectedMessageConfig ? (emoji) => alphaChat.toggleReaction(selectedMessageConfig.messageId, emoji) : undefined,
+                            onReply: selectedMessageConfig ? () => {
+                                const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                                if (msg) alphaChat.setReplyingTo(msg);
+                            } : undefined,
+                            onCopy: () => {},
+                            onPin: selectedMessageConfig?.isPinned === false ? () => handlePinMessage(selectedMessageConfig?.messageId || "", false) : undefined,
+                            onUnpin: selectedMessageConfig?.isPinned ? () => handlePinMessage(selectedMessageConfig?.messageId || "", true) : undefined,
+                            onDelete: selectedMessageConfig?.isOwn ? () => handleDeleteMessage(selectedMessageConfig?.messageId || "") : undefined,
+                        }}
+                        reactions={ALPHA_REACTION_EMOJIS}
+                    />
                 </>
             )}
         </AnimatePresence>

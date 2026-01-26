@@ -33,7 +33,7 @@ import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
-import { MessageMenuTrigger } from "./UnifiedMessageMenu";
+import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -287,6 +287,7 @@ export function ChannelChatModal({
     const [addingFriend, setAddingFriend] = useState<string | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
     const [editingMessage, setEditingMessage] = useState<string | null>(null);
     const [editContent, setEditContent] = useState("");
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -1410,36 +1411,20 @@ export function ChannelChatModal({
                                                         className="max-w-[280px]"
                                                     />
                                                 ) : (
-                                                    <MessageMenuTrigger
-                                                        config={{
-                                                            messageContent: (msg.message_type === "pixel_art" || msg.message_type === "image") ? undefined : msg.content,
-                                                            isOwn,
-                                                            isPinned: msg.is_pinned,
-                                                            isStarred: isStarred(msg.id),
-                                                            canEdit: isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text",
-                                                            hasMedia: msg.message_type === "pixel_art" || msg.message_type === "image",
-                                                            isPixelArt: msg.message_type === "pixel_art",
-                                                            mediaUrl: (msg.message_type === "pixel_art" || msg.message_type === "image") ? msg.content : isGif ? msg.content.replace("[GIF]", "") : undefined,
-                                                        }}
-                                                        callbacks={{
-                                                            onReaction: (emoji) => handleReaction(msg.id, emoji),
-                                                            onReply: () => setReplyingTo(msg),
-                                                            onCopy: () => navigator.clipboard.writeText(msg.content),
-                                                            onForward: () => setForwardingMessage(msg),
-                                                            onPin: isAdmin ? () => handlePinMessage(msg.id, false) : undefined,
-                                                            onUnpin: isAdmin && msg.is_pinned ? () => handlePinMessage(msg.id, true) : undefined,
-                                                            onStar: () => toggleStar({
+                                                    <div
+                                                        onClick={() => {
+                                                            setSelectedMessage(selectedMessage === msg.id ? null : msg.id);
+                                                            setSelectedMessageConfig(selectedMessage === msg.id ? null : {
                                                                 messageId: msg.id,
-                                                                messageType: "channel",
-                                                                content: msg.content,
-                                                                senderAddress: msg.sender_address,
-                                                                senderName: formatSender(msg.sender_address),
-                                                                channelId: channel.id,
-                                                                channelName: channel.name,
-                                                                originalCreatedAt: msg.created_at,
-                                                            }),
-                                                            onEdit: (isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text") ? () => handleStartEdit(msg) : undefined,
-                                                            onDelete: (isOwn || isAdmin) && !msg.is_deleted ? () => handleDeleteMessage(msg.id) : undefined,
+                                                                messageContent: msg.content,
+                                                                isOwn,
+                                                                isPinned: msg.is_pinned,
+                                                                isStarred: isStarred(msg.id),
+                                                                canEdit: isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text",
+                                                                hasMedia: msg.message_type === "pixel_art" || msg.message_type === "image",
+                                                                isPixelArt: msg.message_type === "pixel_art",
+                                                                mediaUrl: (msg.message_type === "pixel_art" || msg.message_type === "image") ? msg.content : isGif ? msg.content.replace("[GIF]", "") : undefined,
+                                                            });
                                                         }}
                                                     >
                                                     <div
@@ -1575,7 +1560,7 @@ export function ChannelChatModal({
                                                             isOwnMessage={isOwn}
                                                         />
                                                     </div>
-                                                    </MessageMenuTrigger>
+                                                    </div>
                                                 )}
                                                 <p className="text-[10px] text-zinc-600 mt-1 px-1">
                                                     {formatTime(msg.created_at)}
@@ -1863,6 +1848,32 @@ export function ChannelChatModal({
                         // Current channel as the only option for now
                         { id: channel.id, type: "channel", name: `#${channel.name}`, icon: channel.emoji }
                     ]}
+                />
+                
+                {/* Message Action Bar */}
+                <MessageActionBar
+                    isOpen={!!selectedMessage && !!selectedMessageConfig}
+                    onClose={() => {
+                        setSelectedMessage(null);
+                        setSelectedMessageConfig(null);
+                    }}
+                    config={selectedMessageConfig}
+                    callbacks={{
+                        onReaction: selectedMessageConfig ? (emoji) => handleReaction(selectedMessageConfig.messageId, emoji) : undefined,
+                        onReply: selectedMessageConfig ? () => {
+                            const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                            if (msg) setReplyingTo(msg);
+                        } : undefined,
+                        onCopy: () => {},
+                        onForward: selectedMessageConfig ? () => {
+                            const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                            if (msg) setForwardingMessage(msg);
+                        } : undefined,
+                        onPin: selectedMessageConfig?.isPinned === false && isAdmin ? () => handlePinMessage(selectedMessageConfig?.messageId || "", false) : undefined,
+                        onUnpin: selectedMessageConfig?.isPinned && isAdmin ? () => handlePinMessage(selectedMessageConfig?.messageId || "", true) : undefined,
+                        onEdit: selectedMessageConfig?.canEdit ? () => setEditingMessage(selectedMessageConfig?.messageId || null) : undefined,
+                        onDelete: selectedMessageConfig?.isOwn ? () => deleteMessage(selectedMessageConfig?.messageId || "") : undefined,
+                    }}
                 />
             </motion.div>
         </AnimatePresence>
