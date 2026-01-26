@@ -11,7 +11,7 @@ import {
     useMessageReactions,
     MESSAGE_REACTION_EMOJIS,
 } from "@/hooks/useChatFeatures";
-import { QuickReactionPicker } from "./EmojiPicker";
+import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
@@ -1221,66 +1221,15 @@ export function GroupChatModal({
                                                         })()
                                                     )}
 
-                                                    {/* Reactions Display */}
-                                                    {msgReactions[msg.id]?.some(
-                                                        (r) => r.count > 0
-                                                    ) && (
-                                                        <div
-                                                            className="flex flex-wrap gap-1 mt-2"
-                                                            onClick={(e) =>
-                                                                e.stopPropagation()
-                                                            }
-                                                        >
-                                                            {msgReactions[
-                                                                msg.id
-                                                            ]
-                                                                ?.filter(
-                                                                    (r) =>
-                                                                        r.count >
-                                                                        0
-                                                                )
-                                                                .map(
-                                                                    (
-                                                                        reaction
-                                                                    ) => (
-                                                                        <button
-                                                                            key={
-                                                                                reaction.emoji
-                                                                            }
-                                                                            onClick={() => {
-                                                                                toggleMsgReaction(
-                                                                                    msg.id,
-                                                                                    reaction.emoji
-                                                                                );
-                                                                                setSelectedMessage(
-                                                                                    null
-                                                                                );
-                                                                            }}
-                                                                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                                reaction.hasReacted
-                                                                                    ? isOwn
-                                                                                        ? "bg-white/30"
-                                                                                        : "bg-orange-500/30 text-orange-300"
-                                                                                    : isOwn
-                                                                                    ? "bg-white/10 hover:bg-white/20"
-                                                                                    : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                                            }`}
-                                                                        >
-                                                                            <span>
-                                                                                {
-                                                                                    reaction.emoji
-                                                                                }
-                                                                            </span>
-                                                                            <span className="text-[10px]">
-                                                                                {
-                                                                                    reaction.count
-                                                                                }
-                                                                            </span>
-                                                                        </button>
-                                                                    )
-                                                                )}
-                                                        </div>
-                                                    )}
+                                                    {/* Reactions Display - Mobile Friendly */}
+                                                    <ReactionDisplay
+                                                        reactions={msgReactions[msg.id] || []}
+                                                        onReaction={(emoji) => {
+                                                            toggleMsgReaction(msg.id, emoji);
+                                                            setSelectedMessage(null);
+                                                        }}
+                                                        isOwnMessage={isOwn}
+                                                    />
 
                                                     <p
                                                         className={`text-xs mt-1 ${

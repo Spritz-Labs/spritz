@@ -1270,7 +1270,7 @@ export function ChatModal({
                                                             />
                                                         </div>
 
-                                                        {/* Reactions Display */}
+                                                        {/* Reactions Display - Mobile Friendly */}
                                                         {reactions[
                                                             getPixelArtUrl(
                                                                 msg.content
@@ -1278,7 +1278,7 @@ export function ChatModal({
                                                         ]?.some(
                                                             (r) => r.count > 0
                                                         ) && (
-                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                            <div className="flex flex-wrap gap-1.5 mt-2">
                                                                 {reactions[
                                                                     getPixelArtUrl(
                                                                         msg.content
@@ -1305,18 +1305,23 @@ export function ChatModal({
                                                                                         reaction.emoji
                                                                                     )
                                                                                 }
-                                                                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                                    reaction.hasReacted
+                                                                                className={`
+                                                                                    flex items-center gap-1 rounded-full transition-all duration-100
+                                                                                    min-w-[44px] min-h-[32px] px-2.5 py-1
+                                                                                    sm:min-w-[36px] sm:min-h-[28px] sm:px-2 sm:py-0.5
+                                                                                    active:scale-95
+                                                                                    ${reaction.hasReacted
                                                                                         ? "bg-[#FB8D22]/30 text-[#FFF0E0]"
-                                                                                        : "bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50"
-                                                                                }`}
+                                                                                        : "bg-zinc-700/60 text-zinc-300 hover:bg-zinc-600/60"
+                                                                                    }
+                                                                                `}
                                                                             >
-                                                                                <span>
+                                                                                <span className="text-base sm:text-sm">
                                                                                     {
                                                                                         reaction.emoji
                                                                                     }
                                                                                 </span>
-                                                                                <span className="text-[10px]">
+                                                                                <span className="text-xs font-medium">
                                                                                     {
                                                                                         reaction.count
                                                                                     }
@@ -1327,7 +1332,7 @@ export function ChatModal({
                                                             </div>
                                                         )}
 
-                                                        {/* Add Reaction Button */}
+                                                        {/* Add Reaction Button - Mobile Friendly */}
                                                         <div className="relative mt-1">
                                                             <button
                                                                 onClick={() =>
@@ -1342,13 +1347,19 @@ export function ChatModal({
                                                                               )
                                                                     )
                                                                 }
-                                                                className={`text-xs px-2 py-1 rounded-full transition-colors ${
-                                                                    isOwn
-                                                                        ? "text-[#FFF0E0] hover:bg-[#FF5500]/30"
-                                                                        : "text-zinc-400 hover:bg-zinc-700"
-                                                                }`}
+                                                                className={`
+                                                                    flex items-center gap-1 rounded-full transition-all duration-100
+                                                                    min-h-[36px] px-3 py-1.5 text-sm
+                                                                    sm:min-h-[28px] sm:px-2 sm:py-1 sm:text-xs
+                                                                    active:scale-95
+                                                                    ${isOwn
+                                                                        ? "text-[#FFF0E0] hover:bg-[#FF5500]/30 active:bg-[#FF5500]/40"
+                                                                        : "text-zinc-400 hover:bg-zinc-700 active:bg-zinc-600"
+                                                                    }
+                                                                `}
                                                             >
-                                                                + React
+                                                                <span>😊</span>
+                                                                <span className="hidden sm:inline">React</span>
                                                             </button>
 
                                                             {/* Reaction Picker */}

@@ -284,20 +284,20 @@ export function LongPressReactions({
                                         <div className="w-10 h-1 bg-zinc-600 rounded-full" />
                                     </div>
                                     
-                                    {/* Emoji Reactions */}
-                                    <div className="px-4 pb-4">
-                                        <div className="flex justify-center gap-1 flex-wrap">
-                                            {reactions.map((emoji) => (
-                                                <button
-                                                    key={emoji}
-                                                    onClick={() => handleReactionSelect(emoji)}
-                                                    className="w-14 h-14 flex items-center justify-center text-3xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 active:scale-110 rounded-2xl transition-all duration-100"
-                                                >
-                                                    {emoji}
-                                                </button>
-                                            ))}
-                                        </div>
+                                {/* Emoji Reactions - Large touch targets */}
+                                <div className="px-3 pb-4">
+                                    <div className="flex justify-center gap-2 flex-wrap">
+                                        {reactions.map((emoji) => (
+                                            <button
+                                                key={emoji}
+                                                onClick={() => handleReactionSelect(emoji)}
+                                                className="w-[52px] h-[52px] flex items-center justify-center text-[28px] bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 active:scale-110 rounded-2xl transition-all duration-100 touch-manipulation"
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
                                     </div>
+                                </div>
 
                                     {/* Action Buttons */}
                                     <div className="border-t border-zinc-800 px-4 py-3 grid grid-cols-4 gap-2">
@@ -366,18 +366,18 @@ export function LongPressReactions({
                                     willChange: "transform, opacity",
                                 }}
                             >
-                                {/* Emoji Reactions */}
-                                <div className="flex items-center gap-0.5 bg-zinc-900/95 border border-zinc-700 rounded-full px-2 py-1.5 shadow-2xl">
-                                    {reactions.map((emoji) => (
-                                        <button
-                                            key={emoji}
-                                            onClick={() => handleReactionSelect(emoji)}
-                                            className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-zinc-700 hover:scale-125 active:scale-130 rounded-full transition-transform duration-100"
-                                        >
-                                            {emoji}
-                                        </button>
-                                    ))}
-                                </div>
+                            {/* Emoji Reactions */}
+                            <div className="flex items-center gap-1 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-full px-2 py-1.5 shadow-2xl">
+                                {reactions.map((emoji) => (
+                                    <button
+                                        key={emoji}
+                                        onClick={() => handleReactionSelect(emoji)}
+                                        className="w-11 h-11 flex items-center justify-center text-[22px] hover:bg-zinc-700 hover:scale-110 active:scale-115 active:bg-zinc-600 rounded-full transition-all duration-100"
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
 
                                 {/* Action Buttons */}
                                 <div className="flex items-center gap-0.5 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-xl px-1 py-1 shadow-2xl">

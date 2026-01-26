@@ -553,25 +553,37 @@ export function InstantRoomChat({
                                             {displayContent}
                                         </p>
 
-                                        {/* Reactions Display */}
+                                        {/* Reactions Display - Mobile Friendly */}
                                         {reactions[msg.id]?.some(r => r.users.length > 0) && (
-                                            <div className="flex flex-wrap gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
                                                 {reactions[msg.id]
                                                     ?.filter(r => r.users.length > 0)
-                                                    .map(reaction => (
-                                                        <button
-                                                            key={reaction.emoji}
-                                                            onClick={() => toggleReaction(msg.id, reaction.emoji)}
-                                                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                reaction.users.includes(displayName)
-                                                                    ? msg.isMe ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
-                                                                    : msg.isMe ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                            }`}
-                                                        >
-                                                            <span>{reaction.emoji}</span>
-                                                            <span className="text-[10px]">{reaction.users.length}</span>
-                                                        </button>
-                                                    ))}
+                                                    .map(reaction => {
+                                                        const hasReacted = reaction.users.includes(displayName);
+                                                        return (
+                                                            <button
+                                                                key={reaction.emoji}
+                                                                onClick={() => toggleReaction(msg.id, reaction.emoji)}
+                                                                className={`
+                                                                    flex items-center gap-1 rounded-full transition-all duration-100
+                                                                    min-w-[44px] min-h-[32px] px-2.5 py-1
+                                                                    sm:min-w-[36px] sm:min-h-[28px] sm:px-2 sm:py-0.5
+                                                                    active:scale-95
+                                                                    ${hasReacted
+                                                                        ? msg.isMe 
+                                                                            ? "bg-white/25 text-white" 
+                                                                            : "bg-[#FF5500]/25 text-[#FF5500]"
+                                                                        : msg.isMe 
+                                                                            ? "bg-white/10 hover:bg-white/20 text-white/80" 
+                                                                            : "bg-zinc-700/60 hover:bg-zinc-600/60 text-zinc-300"
+                                                                    }
+                                                                `}
+                                                            >
+                                                                <span className="text-base sm:text-sm">{reaction.emoji}</span>
+                                                                <span className="text-xs font-medium">{reaction.users.length}</span>
+                                                            </button>
+                                                        );
+                                                    })}
                                             </div>
                                         )}
 

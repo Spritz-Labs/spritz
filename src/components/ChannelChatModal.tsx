@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useChannelMessages, CHANNEL_REACTION_EMOJIS } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
 import type { ChannelMessage } from "@/app/api/channels/[id]/messages/route";
-import { QuickReactionPicker } from "./EmojiPicker";
+import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { PixelArtEditor } from "./PixelArtEditor";
@@ -1518,27 +1518,12 @@ export function ChannelChatModal({
                                                         </p>
                                                         )}
                                                         
-                                                        {/* Reactions Display */}
-                                                        {reactions[msg.id]?.some(r => r.count > 0) && (
-                                                            <div className="flex flex-wrap gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
-                                                                {reactions[msg.id]
-                                                                    ?.filter(r => r.count > 0)
-                                                                    .map(reaction => (
-                                                                        <button
-                                                                            key={reaction.emoji}
-                                                                            onClick={() => handleReaction(msg.id, reaction.emoji)}
-                                                                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                                reaction.hasReacted
-                                                                                    ? isOwn ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
-                                                                                    : isOwn ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                                            }`}
-                                                                        >
-                                                                            <span>{reaction.emoji}</span>
-                                                                            <span className="text-[10px]">{reaction.count}</span>
-                                                                        </button>
-                                                                    ))}
-                                                            </div>
-                                                        )}
+                                                        {/* Reactions Display - Mobile Friendly */}
+                                                        <ReactionDisplay
+                                                            reactions={reactions[msg.id] || []}
+                                                            onReaction={(emoji) => handleReaction(msg.id, emoji)}
+                                                            isOwnMessage={isOwn}
+                                                        />
                                                         
                                                         {/* Message Actions - Show on tap (mobile) or hover (desktop) */}
                                                         <AnimatePresence>
