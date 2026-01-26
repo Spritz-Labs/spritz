@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenAI } from "@google/genai";
 import { scrapeUrl, fetchContent, isFirecrawlConfigured } from "@/lib/firecrawl";
+import { isGitHubUrl, parseGitHubUrl, fetchGitHubRepoContent } from "@/lib/github";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -122,7 +123,29 @@ async function fetchAndCleanContent(
 ): Promise<{ content: string; pageCount: number }> {
     const { scrapeMethod = "basic", crawlDepth = 1, excludePatterns } = options;
     
-    // Use Firecrawl if configured and requested
+    // PRIORITY 1: Use GitHub API for GitHub repositories
+    if (isGitHubUrl(url)) {
+        console.log("[Indexing] Detected GitHub URL, using GitHub API:", url);
+        
+        try {
+            const repoInfo = parseGitHubUrl(url);
+            if (repoInfo) {
+                const result = await fetchGitHubRepoContent(repoInfo);
+                console.log("[Indexing] GitHub API fetched", result.filesFetched, "file(s) from:", result.source);
+                return {
+                    content: result.content,
+                    pageCount: result.filesFetched || 1,
+                };
+            } else {
+                console.warn("[Indexing] Could not parse GitHub URL, falling back to scraping");
+            }
+        } catch (error) {
+            console.error("[Indexing] GitHub API failed, falling back to scraping:", error);
+            // Fall through to other methods
+        }
+    }
+    
+    // PRIORITY 2: Use Firecrawl if configured and requested
     if (scrapeMethod === "firecrawl" && isFirecrawlConfigured()) {
         console.log("[Indexing] Using Firecrawl for URL:", url);
         
@@ -144,7 +167,7 @@ async function fetchAndCleanContent(
         }
     }
     
-    // Basic method
+    // PRIORITY 3: Basic method
     console.log("[Indexing] Using basic scraping for URL:", url);
     const content = await fetchAndCleanContentBasic(url);
     return {
