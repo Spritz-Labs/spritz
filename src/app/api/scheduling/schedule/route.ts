@@ -161,22 +161,27 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if slot is still available (race condition protection)
+        // Use a wider window to catch all potential conflicts
         const slotStart = scheduledTime.getTime();
         const slotEnd = new Date(scheduledTime.getTime() + duration * 60 * 1000);
         const slotEndTime = slotEnd.getTime();
 
-        // Check existing scheduled calls - need to check for ANY overlap, not just calls starting in this slot
-        // Get all calls in a reasonable time window around this slot
-        const windowStart = new Date(slotStart - 24 * 60 * 60 * 1000); // 24 hours before
-        const windowEnd = new Date(slotEndTime + 24 * 60 * 60 * 1000); // 24 hours after
+        // Check existing scheduled calls - need to check for ANY overlap
+        // Query calls that could potentially overlap with our slot
+        // A call overlaps if: callStart < slotEnd AND callEnd > slotStart
+        // To catch all overlaps, query calls that start up to maxDuration before slotEnd
+        // and also check calls that start up to slotEnd
+        const maxDurationMinutes = 120; // Assume max call duration of 2 hours for query window
+        const queryStart = new Date(slotStart - maxDurationMinutes * 60 * 1000); // Query from before our slot
+        const queryEnd = new Date(slotEndTime + maxDurationMinutes * 60 * 1000); // Query to after our slot
         
         const { data: existingCalls } = await supabase
             .from("shout_scheduled_calls")
             .select("id, scheduled_at, duration_minutes")
             .eq("recipient_wallet_address", recipientAddress.toLowerCase())
             .in("status", ["pending", "confirmed"])
-            .gte("scheduled_at", windowStart.toISOString())
-            .lte("scheduled_at", windowEnd.toISOString());
+            .gte("scheduled_at", queryStart.toISOString())
+            .lte("scheduled_at", queryEnd.toISOString());
 
         // Check for any overlapping calls
         const hasConflict = existingCalls?.some((call) => {
@@ -193,33 +198,14 @@ export async function POST(request: NextRequest) {
         });
 
         if (hasConflict) {
-            const conflictingCall = existingCalls?.find((call) => {
-                const callStart = new Date(call.scheduled_at).getTime();
-                const callDuration = (call.duration_minutes || 30) * 60 * 1000;
-                const callEnd = callStart + callDuration;
-                return (
-                    (slotStart >= callStart && slotStart < callEnd) ||
-                    (slotEndTime > callStart && slotEndTime <= callEnd) ||
-                    (slotStart <= callStart && slotEndTime >= callEnd)
-                );
-            });
-            
             console.log("[Schedule] Database conflict detected:", {
                 requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
-                conflictingCall,
-                existingCalls: existingCalls?.map(c => ({
-                    id: c.id,
-                    scheduledAt: c.scheduled_at,
-                    duration: c.duration_minutes,
-                })),
+                existingCallsCount: existingCalls?.length || 0,
             });
             return NextResponse.json(
                 { 
                     error: "This time slot is no longer available", 
                     source: "database",
-                    details: conflictingCall 
-                        ? `Existing call at ${conflictingCall.scheduled_at} (${conflictingCall.duration_minutes}min)`
-                        : "Conflicting scheduled call found",
                 },
                 { status: 409 }
             );
@@ -290,114 +276,12 @@ export async function POST(request: NextRequest) {
                 }
                 
                 if (busyPeriods.length > 0) {
-                    // Try to get more details about what's blocking
-                    let eventDetails = "Calendar busy";
-                    let eventType = "unknown";
-                    try {
-                        // Query actual events to find what's blocking
-                        // Expand time range slightly to catch all-day events and events that might start earlier
-                        const queryStart = new Date(scheduledTime.getTime() - 24 * 60 * 60 * 1000); // Day before
-                        const queryEnd = new Date(slotEnd.getTime() + 60 * 60 * 1000); // Hour after
-                        
-                        const eventsResponse = await calendar.events.list({
-                            calendarId: calendarConnection.calendar_id || "primary",
-                            timeMin: queryStart.toISOString(),
-                            timeMax: queryEnd.toISOString(),
-                            singleEvents: true,
-                            orderBy: "startTime",
-                        });
-                        
-                        const events = eventsResponse.data.items || [];
-                        console.log("[Schedule] Calendar events in window:", events.map(e => ({
-                            summary: e.summary,
-                            start: e.start,
-                            end: e.end,
-                            status: e.status,
-                            transparency: e.transparency,
-                            eventType: e.eventType,
-                        })));
-                        
-                        // Find the event that's actually blocking (overlaps with our slot)
-                        const slotStartMs = scheduledTime.getTime();
-                        const slotEndMs = slotEnd.getTime();
-                        
-                        const blockingEvent = events.find(e => {
-                            // Skip events marked as "free" (transparent)
-                            if (e.transparency === "transparent") return false;
-                            
-                            // Calculate event times
-                            let eventStart: number, eventEnd: number;
-                            
-                            if (e.start?.dateTime) {
-                                eventStart = new Date(e.start.dateTime).getTime();
-                                eventEnd = e.end?.dateTime ? new Date(e.end.dateTime).getTime() : eventStart + 60 * 60 * 1000;
-                            } else if (e.start?.date) {
-                                // All-day event
-                                eventStart = new Date(e.start.date).getTime();
-                                eventEnd = e.end?.date ? new Date(e.end.date).getTime() : eventStart + 24 * 60 * 60 * 1000;
-                            } else {
-                                return false;
-                            }
-                            
-                            // Check for overlap
-                            return (
-                                (slotStartMs >= eventStart && slotStartMs < eventEnd) ||
-                                (slotEndMs > eventStart && slotEndMs <= eventEnd) ||
-                                (slotStartMs <= eventStart && slotEndMs >= eventEnd)
-                            );
-                        });
-                        
-                        if (blockingEvent) {
-                            const summary = blockingEvent.summary || "(No title)";
-                            eventType = blockingEvent.eventType || "event";
-                            
-                            // Check if it's an all-day event
-                            if (blockingEvent.start?.date && !blockingEvent.start?.dateTime) {
-                                eventDetails = `All-day event: "${summary}"`;
-                            } else if (eventType === "outOfOffice") {
-                                eventDetails = `Out of Office: "${summary}"`;
-                            } else if (eventType === "focusTime") {
-                                eventDetails = `Focus Time: "${summary}"`;
-                            } else {
-                                eventDetails = `Event: "${summary}"`;
-                            }
-                            
-                            console.log("[Schedule] Blocking event identified:", {
-                                summary,
-                                eventType,
-                                start: blockingEvent.start,
-                                end: blockingEvent.end,
-                                transparency: blockingEvent.transparency,
-                            });
-                        } else {
-                            // Freebusy says busy but we can't find the event
-                            // This can happen with private events or external calendars
-                            eventDetails = "Private/external calendar event";
-                            console.log("[Schedule] Could not identify blocking event, but freebusy reports busy");
-                        }
-                    } catch (eventsError) {
-                        console.error("[Schedule] Could not fetch event details:", eventsError);
-                        eventDetails = "Calendar event (details unavailable)";
-                    }
-                    
-                    // Format the busy period times for display
-                    const busyStart = busyPeriods[0]?.start ? new Date(busyPeriods[0].start).toLocaleTimeString('en-US', { 
-                        hour: 'numeric', 
-                        minute: '2-digit',
-                        timeZone: recipientTimezone 
-                    }) : "?";
-                    const busyEnd = busyPeriods[0]?.end ? new Date(busyPeriods[0].end).toLocaleTimeString('en-US', { 
-                        hour: 'numeric', 
-                        minute: '2-digit',
-                        timeZone: recipientTimezone 
-                    }) : "?";
-                    
+                    // Don't expose calendar event details for privacy
+                    // Just indicate there's a conflict
                     return NextResponse.json(
                         { 
-                            error: "This time slot conflicts with an existing calendar event",
+                            error: "This time slot is no longer available",
                             source: "google_calendar",
-                            details: `${eventDetails} (${busyStart} - ${busyEnd})`,
-                            eventType,
                         },
                         { status: 409 }
                     );
