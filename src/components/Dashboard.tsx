@@ -145,6 +145,7 @@ function DashboardContent({
     const [isInvitesModalOpen, setIsInvitesModalOpen] = useState(false);
     const [showWakuSuccess, setShowWakuSuccess] = useState(false);
     const [showSolanaBanner, setShowSolanaBanner] = useState(true);
+    const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
     // Live streaming state
     const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
@@ -3125,7 +3126,7 @@ function DashboardContent({
                             </div>
 
                             <button
-                                onClick={onLogout}
+                                onClick={() => setShowDisconnectConfirm(true)}
                                 className="py-2 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
                             >
                                 Disconnect
@@ -5401,6 +5402,58 @@ function DashboardContent({
             </AnimatePresence>
 
             {/* Live Stream Player removed - now using /live/[id] page */}
+
+            {/* Disconnect Confirmation Modal */}
+            <AnimatePresence>
+                {showDisconnectConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4"
+                        onClick={() => setShowDisconnectConfirm(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                                    <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-xl font-semibold text-white mb-2">
+                                    Disconnect Wallet?
+                                </h3>
+                                <p className="text-zinc-400 text-sm">
+                                    Are you sure you want to disconnect? You&apos;ll need to reconnect to access your account.
+                                </p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowDisconnectConfirm(false)}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowDisconnectConfirm(false);
+                                        onLogout();
+                                    }}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+                                >
+                                    Disconnect
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </>
     );
 }
