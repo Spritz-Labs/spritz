@@ -45,6 +45,7 @@ export type Agent = {
     mcp_enabled: boolean;
     api_enabled: boolean;
     scheduling_enabled?: boolean;
+    events_access?: boolean;
     message_count: number;
     created_at: string;
     updated_at: string;

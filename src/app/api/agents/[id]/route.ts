@@ -88,6 +88,7 @@ export async function PATCH(
             mcpEnabled,
             apiEnabled,
             schedulingEnabled,
+            eventsAccess,
             // Public access for Official agents
             publicAccessEnabled,
             // Tags for searchability
@@ -174,6 +175,7 @@ export async function PATCH(
         if (mcpEnabled !== undefined) updates.mcp_enabled = mcpEnabled;
         if (apiEnabled !== undefined) updates.api_enabled = apiEnabled;
         if (schedulingEnabled !== undefined) updates.scheduling_enabled = schedulingEnabled;
+        if (eventsAccess !== undefined) updates.events_access = eventsAccess;
         if (publicAccessEnabled !== undefined) updates.public_access_enabled = publicAccessEnabled;
         
         // Tags (max 5, each max 20 chars)

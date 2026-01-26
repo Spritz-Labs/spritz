@@ -17,6 +17,7 @@ interface AdminLayoutProps {
 const NAV_ITEMS = [
     { href: "/admin", label: "Invites", icon: "🎟️", mobileLabel: "Invites" },
     { href: "/admin/users", label: "Users", icon: "👥", mobileLabel: "Users" },
+    { href: "/admin/events", label: "Events", icon: "📅", mobileLabel: "Events" },
     { href: "/admin/analytics", label: "Analytics", icon: "📊", mobileLabel: "Stats" },
     { href: "/admin/bug-reports", label: "Bug Reports", icon: "🐛", mobileLabel: "Bugs" },
 ];

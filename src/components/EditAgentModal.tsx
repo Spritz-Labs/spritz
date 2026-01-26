@@ -45,6 +45,7 @@ interface EditAgentModalProps {
         mcpEnabled?: boolean;
         apiEnabled?: boolean;
         schedulingEnabled?: boolean;
+        eventsAccess?: boolean;
         publicAccessEnabled?: boolean;
         x402Enabled?: boolean;
         x402PriceCents?: number;
@@ -158,6 +159,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [mcpEnabled, setMcpEnabled] = useState(true);
     const [apiEnabled, setApiEnabled] = useState(true);
     const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+    const [eventsAccess, setEventsAccess] = useState(false); // Global events database access
     const [publicAccessEnabled, setPublicAccessEnabled] = useState(true); // For Official agents
     const [x402Enabled, setX402Enabled] = useState(false);
     const [x402PriceCents, setX402PriceCents] = useState(1);
@@ -220,6 +222,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         mcpEnabled: boolean;
         apiEnabled: boolean;
         schedulingEnabled: boolean;
+        eventsAccess: boolean;
         x402Enabled: boolean;
         x402PriceCents: number;
         x402Network: "base" | "base-sepolia";
@@ -244,6 +247,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             const agentMcp = agent.mcp_enabled !== false;
             const agentApi = agent.api_enabled !== false;
             const agentScheduling = agent.scheduling_enabled || false;
+            const agentEventsAccess = agent.events_access || false;
             const agentPublicAccess = agent.public_access_enabled !== false; // Defaults to true
             const agentX402 = agent.x402_enabled || false;
             const agentX402Price = agent.x402_price_cents || 1;
@@ -275,6 +279,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setMcpEnabled(agentMcp);
             setApiEnabled(agentApi);
             setSchedulingEnabled(agentScheduling);
+            setEventsAccess(agentEventsAccess);
             setPublicAccessEnabled(agentPublicAccess);
             setX402Enabled(agentX402);
             setX402PriceCents(agentX402Price);
@@ -301,6 +306,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 mcpEnabled: agentMcp,
                 apiEnabled: agentApi,
                 schedulingEnabled: agentScheduling,
+                eventsAccess: agentEventsAccess,
                 x402Enabled: agentX402,
                 x402PriceCents: agentX402Price,
                 x402Network: agentX402Network,
@@ -590,6 +596,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 mcpEnabled,
                 apiEnabled,
                 schedulingEnabled,
+                eventsAccess,
                 publicAccessEnabled: visibility === "official" ? publicAccessEnabled : undefined,
                 x402Enabled,
                 x402PriceCents,
@@ -620,6 +627,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         mcpEnabled !== originalValues.mcpEnabled ||
         apiEnabled !== originalValues.apiEnabled ||
         schedulingEnabled !== originalValues.schedulingEnabled ||
+        eventsAccess !== originalValues.eventsAccess ||
         x402Enabled !== originalValues.x402Enabled ||
         x402PriceCents !== originalValues.x402PriceCents ||
         x402Network !== originalValues.x402Network ||
@@ -1058,6 +1066,16 @@ When users ask about X, prioritize results from source Y...`}
                                             enabled={schedulingEnabled}
                                             onChange={setSchedulingEnabled}
                                             color="cyan"
+                                        />
+                                        
+                                        {/* Events Database Access */}
+                                        <CapabilityToggle
+                                            icon="🎪"
+                                            title="Events Database Access"
+                                            description="Access global Web3 events database"
+                                            enabled={eventsAccess}
+                                            onChange={setEventsAccess}
+                                            color="emerald"
                                         />
                                         
                                         {/* Public Access Toggle - Only for Official agents */}

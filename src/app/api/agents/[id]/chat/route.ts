@@ -925,6 +925,81 @@ You can help users schedule meetings with your creator. When users ask about sch
             }
         }
 
+        // Handle events database access (if enabled)
+        const eventsAccessEnabled = agent.events_access === true;
+        if (eventsAccessEnabled) {
+            const messageLower = message.toLowerCase();
+            const isEventsQuery = 
+                messageLower.includes("event") ||
+                messageLower.includes("conference") ||
+                messageLower.includes("hackathon") ||
+                messageLower.includes("meetup") ||
+                messageLower.includes("summit") ||
+                messageLower.includes("workshop") ||
+                messageLower.includes("happening") ||
+                messageLower.includes("schedule") ||
+                messageLower.includes("register") ||
+                messageLower.includes("rsvp");
+            
+            if (isEventsQuery) {
+                console.log("[Chat] Events query detected, fetching from global events database");
+                
+                try {
+                    // Get upcoming events from global database
+                    const today = new Date().toISOString().split("T")[0];
+                    const { data: events, error: eventsError } = await supabase
+                        .from("shout_events")
+                        .select("id, name, description, event_type, event_date, start_time, end_time, venue, city, country, is_virtual, organizer, event_url, rsvp_url, registration_enabled, is_featured")
+                        .eq("status", "published")
+                        .gte("event_date", today)
+                        .order("is_featured", { ascending: false })
+                        .order("event_date", { ascending: true })
+                        .limit(15);
+                    
+                    if (eventsError) {
+                        console.error("[Chat] Error fetching events:", eventsError);
+                    } else if (events && events.length > 0) {
+                        systemInstructions += `\n\n## Global Events Database (${events.length} upcoming events):
+                        
+You have access to a curated events database. Here are upcoming Web3 events:
+
+${events.map(e => `- **${e.name}** (${e.event_type})
+  📅 ${e.event_date}${e.start_time ? ` @ ${e.start_time}` : ""}
+  📍 ${e.is_virtual ? "Virtual" : `${e.venue || ""} ${e.city || ""} ${e.country || ""}`.trim()}
+  ${e.organizer ? `🏢 ${e.organizer}` : ""}
+  ${e.event_url ? `🔗 Event: ${e.event_url}` : ""}
+  ${e.rsvp_url ? `🎫 Register: ${e.rsvp_url}` : ""}
+  ${e.registration_enabled ? "✅ Spritz Registration Available" : ""}
+  ${e.is_featured ? "⭐ Featured Event" : ""}`).join("\n\n")}
+
+When users ask to register for an event:
+1. If the event has "Spritz Registration Available", tell them you can register them directly
+2. If there's an RSVP URL, provide the link and offer to help
+3. If they want to register via Spritz, collect their email and confirm the registration
+
+Full events directory: https://app.spritz.chat/events
+`;
+                        console.log("[Chat] Added events context with", events.length, "events");
+                    } else {
+                        systemInstructions += `\n\n## Events Database
+                        
+You have access to a global events database, but there are currently no upcoming events listed.
+Users can browse events at: https://app.spritz.chat/events
+`;
+                    }
+                } catch (err) {
+                    console.error("[Chat] Error fetching events:", err);
+                }
+            }
+            
+            // Always add events capability info
+            systemInstructions += `\n\n## Events Capability
+You can help users discover and register for Web3 events (conferences, hackathons, meetups, etc.).
+When users ask about events, query the database and present relevant options.
+Full events directory: https://app.spritz.chat/events
+`;
+        }
+
         // Add API tool information and potentially call them (if API is enabled)
         const apiEnabled = agent.api_enabled !== false; // Default true
         if (apiEnabled && agent.api_tools && agent.api_tools.length > 0) {
