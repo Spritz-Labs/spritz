@@ -79,9 +79,17 @@ export function AgentChatModal({ isOpen, onClose, agent, userAddress }: AgentCha
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-zinc-800">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl">
-                                    {agent.avatar_emoji}
-                                </div>
+                                {agent.avatar_url ? (
+                                    <img
+                                        src={agent.avatar_url}
+                                        alt={agent.name}
+                                        className="w-10 h-10 rounded-xl object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl">
+                                        {agent.avatar_emoji}
+                                    </div>
+                                )}
                                 <div>
                                     <h3 className="font-semibold text-white">{agent.name}</h3>
                                     <p className="text-xs text-zinc-400">
@@ -133,9 +141,17 @@ export function AgentChatModal({ isOpen, onClose, agent, userAddress }: AgentCha
                                 </div>
                             ) : messages.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-full text-center">
-                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-3xl mb-4">
-                                        {agent.avatar_emoji}
-                                    </div>
+                                    {agent.avatar_url ? (
+                                        <img
+                                            src={agent.avatar_url}
+                                            alt={agent.name}
+                                            className="w-16 h-16 rounded-2xl object-cover mb-4"
+                                        />
+                                    ) : (
+                                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-3xl mb-4">
+                                            {agent.avatar_emoji}
+                                        </div>
+                                    )}
                                     <h4 className="text-lg font-semibold text-white mb-1">
                                         Chat with {agent.name}
                                     </h4>
@@ -159,7 +175,11 @@ export function AgentChatModal({ isOpen, onClose, agent, userAddress }: AgentCha
                                             >
                                                 {msg.role === "assistant" && (
                                                     <div className="flex items-center gap-2 mb-2">
-                                                        <span className="text-sm">{agent.avatar_emoji}</span>
+                                                        {agent.avatar_url ? (
+                                                            <img src={agent.avatar_url} alt="" className="w-5 h-5 rounded-md object-cover" />
+                                                        ) : (
+                                                            <span className="text-sm">{agent.avatar_emoji}</span>
+                                                        )}
                                                         <span className="text-xs font-medium text-zinc-400">{agent.name}</span>
                                                     </div>
                                                 )}
@@ -194,7 +214,11 @@ export function AgentChatModal({ isOpen, onClose, agent, userAddress }: AgentCha
                                         <div className="flex justify-start">
                                             <div className="bg-zinc-800 rounded-2xl px-4 py-3">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-sm">{agent.avatar_emoji}</span>
+                                                    {agent.avatar_url ? (
+                                                        <img src={agent.avatar_url} alt="" className="w-5 h-5 rounded-md object-cover" />
+                                                    ) : (
+                                                        <span className="text-sm">{agent.avatar_emoji}</span>
+                                                    )}
                                                     <div className="flex gap-1">
                                                         <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                                                         <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
