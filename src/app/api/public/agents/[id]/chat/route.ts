@@ -53,7 +53,33 @@ IMPORTANT: You can use full markdown formatting in your responses:
 - Only display images if you have a proper URL starting with http:// or https://`
         : "";
     
-    return baseInstruction + dateContext + markdownGuidance;
+    // Add event registration guidance for official agents
+    const eventRegistrationGuidance = agent.visibility === "official"
+        ? `
+
+## Event Registration Help
+
+When users ask about registering for events (especially Luma events), you can help them register! Here's how:
+
+1. **If the event has a registration URL (rsvp_url or Luma event_url)**, you can help users register by:
+   - Telling them you can help them register
+   - Providing the registration link: [Event Registration Link](event_url_here)
+   - Explaining that clicking the link will open the registration form with their saved information pre-filled
+   - If they haven't set up their registration preferences, guide them to Settings → Event Registration
+
+2. **For Luma events specifically** (URLs containing "lu.ma"):
+   - Always offer to help with registration
+   - Use the event's rsvp_url if available, otherwise use the event_url
+   - Format your response like: "I can help you register for [Event Name]! Click here to register: [link]"
+
+3. **Registration Link Format**:
+   - For Luma events: Use the full Luma URL (e.g., https://lu.ma/event-slug)
+   - Always provide clickable links in markdown format: [Register Now](url)
+
+IMPORTANT: When users ask to register for an event, be proactive and helpful. Don't say you "cannot" register them - instead, offer to help them register by providing the registration link and explaining the process.`
+        : "";
+    
+    return baseInstruction + dateContext + markdownGuidance + eventRegistrationGuidance;
 }
 
 // Clean base64 data from content to prevent it from polluting AI context/responses
@@ -97,7 +123,8 @@ function isEventQuery(message: string): boolean {
         'meetup', 'summit', 'conference', 'hackathon', 'workshop',
         'side event', 'what\'s on', 'whats on', 'what is on',
         'feb', 'february', '17th', '18th', '19th', '20th', '21st',
-        '8th', '16th', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+        '8th', '16th', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+        'register', 'registration', 'rsvp', 'sign up', 'signup', 'ticket', 'tickets'
     ];
     const lowerMessage = message.toLowerCase();
     return eventKeywords.some(keyword => lowerMessage.includes(keyword));
@@ -160,7 +187,7 @@ async function getEventContext(agentId: string, message: string): Promise<string
         // Now get events, prioritizing featured ones
         let query = supabase
             .from("shout_agent_events")
-            .select("name, description, event_type, event_date, start_time, end_time, venue, organizer, event_url, source, is_featured")
+            .select("name, description, event_type, event_date, start_time, end_time, venue, organizer, event_url, rsvp_url, source, is_featured")
             .eq("agent_id", agentId)
             .order("is_featured", { ascending: false }) // Featured first!
             .order("event_date", { ascending: true })
@@ -205,11 +232,16 @@ async function getEventContext(agentId: string, message: string): Promise<string
                 : "Time TBA";
             const featured = event.is_featured ? "⭐ FEATURED" : "";
             
+            // Determine registration URL (prioritize rsvp_url, fallback to event_url if Luma)
+            const registrationUrl = event.rsvp_url || (event.event_url && event.event_url.includes("lu.ma") ? event.event_url : null);
+            const isLuma = registrationUrl && registrationUrl.includes("lu.ma");
+            
             return `- ${featured} ${event.name}
   📅 ${event.event_date} @ ${timeStr}
   ${event.venue ? `📍 ${event.venue}` : ""}
   ${event.organizer ? `🏢 ${event.organizer}` : ""}
-  ${event.event_url ? `🔗 ${event.event_url}` : ""}`.trim();
+  ${event.event_url ? `🔗 Event page: ${event.event_url}` : ""}
+  ${registrationUrl ? `🎫 Registration: ${registrationUrl}${isLuma ? " (Luma - I can help register!)" : ""}` : ""}`.trim();
         });
         
         const eventsPageUrl = `https://app.spritz.chat/agent/${agentId}/events`;
@@ -218,6 +250,13 @@ async function getEventContext(agentId: string, message: string): Promise<string
         const contextHeader = `\n\n=== EVENT DATA (${events.length} of ${totalCount || events.length} total for ${dateStr}) ===
 IMPORTANT: Show only 3-4 TOP events. Featured (⭐) events first!
 Full events page: ${eventsPageUrl}
+
+REGISTRATION HELP: When users ask to register for an event, especially Luma events (lu.ma URLs):
+- ALWAYS offer to help them register
+- Provide the registration link from the event data above
+- Use markdown format: [Register for [Event Name]](registration_url_here)
+- Say: "I can help you register! Click here: [Register Now](url)"
+- If it's a Luma event, mention that their saved information will be pre-filled
 
 `;
         
