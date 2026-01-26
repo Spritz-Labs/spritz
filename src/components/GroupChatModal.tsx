@@ -25,6 +25,10 @@ import { AvatarWithStatus } from "./OnlineStatus";
 import { DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
+import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
+import { ChatSkeleton } from "./ChatSkeleton";
+import { useDraftMessages } from "@/hooks/useDraftMessages";
+import { SwipeableMessage } from "./SwipeableMessage";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -190,6 +194,19 @@ export function GroupChatModal({
 
     // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
     const messagesContainerRef = useRef<HTMLDivElement>(null);
+    
+    // Draft messages persistence
+    const { draft, saveDraft, clearDraft } = useDraftMessages("group", group?.id || "", userAddress);
+    
+    // Scroll to bottom with unread badge
+    const { 
+        newMessageCount, 
+        isAtBottom, 
+        onNewMessage, 
+        resetUnreadCount,
+        scrollToBottom: scrollToBottomFn 
+    } = useScrollToBottom(messagesContainerRef);
+    
     useEffect(() => {
         if (messages.length > 0) {
             const container = messagesContainerRef.current;

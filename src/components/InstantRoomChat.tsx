@@ -4,6 +4,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import protobuf from "protobufjs";
 import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
+import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
+import { ChatSkeleton } from "./ChatSkeleton";
+import { useDraftMessages } from "@/hooks/useDraftMessages";
+import { SwipeableMessage } from "./SwipeableMessage";
+import { DateDivider } from "./UnreadDivider";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -118,8 +123,21 @@ export function InstantRoomChat({
     const encoderRef = useRef<any>(null);
     const symmetricKeyRef = useRef<Uint8Array | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const seenMessageIds = useRef<Set<string>>(new Set());
     const wasOpenRef = useRef(isOpen);
+
+    // Draft messages persistence
+    const { draft, saveDraft, clearDraft } = useDraftMessages("room", roomCode, displayName);
+    
+    // Scroll to bottom with unread badge
+    const { 
+        newMessageCount, 
+        isAtBottom, 
+        onNewMessage, 
+        resetUnreadCount,
+        scrollToBottom: scrollToBottomFn 
+    } = useScrollToBottom(messagesContainerRef);
 
     const contentTopic = `/spritz/1/instant-room/${roomCode.toUpperCase()}/proto`;
 

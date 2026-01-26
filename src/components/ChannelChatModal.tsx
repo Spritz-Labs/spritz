@@ -29,6 +29,10 @@ import { fetchOnlineStatuses, isUserOnline } from "@/hooks/usePresence";
 import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
 import { useStarredMessages } from "@/hooks/useStarredMessages";
 import { ForwardMessageModal } from "./ForwardMessageModal";
+import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
+import { ChatSkeleton } from "./ChatSkeleton";
+import { useDraftMessages } from "@/hooks/useDraftMessages";
+import { SwipeableMessage } from "./SwipeableMessage";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -295,6 +299,19 @@ export function ChannelChatModal({
     // Starred messages hook
     const { isStarred, toggleStar } = useStarredMessages(userAddress);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
+    
+    // Draft messages persistence
+    const { draft, saveDraft, clearDraft } = useDraftMessages("channel", channel.id, userAddress);
+    
+    // Scroll to bottom with unread badge
+    const { 
+        newMessageCount, 
+        isAtBottom, 
+        onNewMessage, 
+        resetUnreadCount,
+        scrollToBottom: scrollToBottomFn 
+    } = useScrollToBottom(messagesContainerRef);
+    
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const previousScrollHeightRef = useRef<number>(0);

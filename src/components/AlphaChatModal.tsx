@@ -24,6 +24,10 @@ import { AvatarWithStatus } from "./OnlineStatus";
 import { DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
+import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
+import { ChatSkeleton } from "./ChatSkeleton";
+import { useDraftMessages } from "@/hooks/useDraftMessages";
+import { SwipeableMessage } from "./SwipeableMessage";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -247,6 +251,19 @@ export function AlphaChatModal({
         }
     };
     const messagesContainerRef = useRef<HTMLDivElement>(null);
+    
+    // Draft messages persistence
+    const { draft, saveDraft, clearDraft } = useDraftMessages("alpha", "global", userAddress);
+    
+    // Scroll to bottom with unread badge
+    const { 
+        newMessageCount, 
+        isAtBottom, 
+        onNewMessage, 
+        resetUnreadCount,
+        scrollToBottom: scrollToBottomFn 
+    } = useScrollToBottom(messagesContainerRef);
+    
     const userPopupRef = useRef<HTMLDivElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
     const inputRef = useRef<HTMLTextAreaElement>(null);
