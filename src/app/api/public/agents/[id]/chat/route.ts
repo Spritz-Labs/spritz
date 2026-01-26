@@ -57,26 +57,27 @@ IMPORTANT: You can use full markdown formatting in your responses:
     const eventRegistrationGuidance = agent.visibility === "official"
         ? `
 
-## Event Registration Help
+## CRITICAL: Event Registration Instructions
 
-When users ask about registering for events (especially Luma events), you can help them register! Here's how:
+NEVER say you "cannot" or "can't" register users for events. You CAN and SHOULD help users register!
 
-1. **If the event has a registration URL (rsvp_url or Luma event_url)**, you can help users register by:
-   - Telling them you can help them register
-   - Providing the registration link: [Event Registration Link](event_url_here)
-   - Explaining that clicking the link will open the registration form with their saved information pre-filled
-   - If they haven't set up their registration preferences, guide them to Settings → Event Registration
+When users ask about registering for events (especially Luma events):
+1. **ALWAYS respond positively**: "I'd be happy to help you register!" or "Let me help you register for that event!"
+2. **Provide the registration link immediately** in markdown format: [Register for [Event Name]](registration_url)
+3. **For Luma events** (URLs containing "lu.ma" or "luma.com"): Mention that their saved information will be pre-filled when they click the link
+4. **Example response format**: "I'd be happy to help you register for [Event Name]! Click here to register: [Register Now](https://luma.com/event-slug). Your saved information will be pre-filled automatically."
 
-2. **For Luma events specifically** (URLs containing "lu.ma"):
-   - Always offer to help with registration
-   - Use the event's rsvp_url if available, otherwise use the event_url
-   - Format your response like: "I can help you register for [Event Name]! Click here to register: [link]"
+**DO NOT**:
+- Say "I can't directly register you"
+- Say "I cannot register you"
+- Say "you can register yourself" (be more helpful!)
+- Just provide a link without offering to help
 
-3. **Registration Link Format**:
-   - For Luma events: Use the full Luma URL (e.g., https://lu.ma/event-slug)
-   - Always provide clickable links in markdown format: [Register Now](url)
-
-IMPORTANT: When users ask to register for an event, be proactive and helpful. Don't say you "cannot" register them - instead, offer to help them register by providing the registration link and explaining the process.`
+**DO**:
+- Offer to help register
+- Provide clickable markdown links
+- Be enthusiastic and helpful
+- Explain the registration process briefly`
         : "";
     
     return baseInstruction + dateContext + markdownGuidance + eventRegistrationGuidance;
@@ -251,12 +252,16 @@ async function getEventContext(agentId: string, message: string): Promise<string
 IMPORTANT: Show only 3-4 TOP events. Featured (⭐) events first!
 Full events page: ${eventsPageUrl}
 
-REGISTRATION HELP: When users ask to register for an event, especially Luma events (lu.ma URLs):
-- ALWAYS offer to help them register
-- Provide the registration link from the event data above
+🚨 CRITICAL REGISTRATION INSTRUCTIONS 🚨
+When users ask to register for an event (especially Luma events):
+- NEVER say "I can't" or "I cannot" register them - YOU CAN AND SHOULD HELP!
+- ALWAYS respond: "I'd be happy to help you register!" or "Let me help you register!"
+- IMMEDIATELY provide the registration link from the event data above
 - Use markdown format: [Register for [Event Name]](registration_url_here)
-- Say: "I can help you register! Click here: [Register Now](url)"
-- If it's a Luma event, mention that their saved information will be pre-filled
+- For Luma events, mention: "Your saved information will be pre-filled automatically"
+- Example: "I'd be happy to help you register for [Event Name]! Click here: [Register Now](url)"
+
+DO NOT say "you can register yourself" - be helpful and proactive!
 
 `;
         
@@ -445,7 +450,7 @@ export async function POST(
             const events = await getEventContext(id, message);
             if (events) {
                 console.log("[Public Chat] Got event context, length:", events.length);
-                eventContext = events + "\n\nPRIORITIZE the structured event data above over scraped content. Include event URLs when available!";
+                eventContext = events + "\n\nPRIORITIZE the structured event data above over scraped content. Include event URLs when available!\n\n🚨 REMEMBER: When users ask to register, NEVER say you can't. ALWAYS offer to help and provide the registration link immediately!";
             }
         }
 
