@@ -71,6 +71,9 @@ export async function POST(request: NextRequest) {
         const responses: { agentId: string; agentName: string; response: string; messageId?: string }[] = [];
 
         for (const mention of mentions) {
+            console.log(`[AgentResponse] Processing mention: ${mention.agentName} (${mention.agentId})`);
+            console.log(`[AgentResponse] Channel: ${channelType}, ChannelId: ${channelId}`);
+            
             // Verify agent is in this channel
             let membershipQuery = supabase
                 .from("shout_agent_channel_memberships")
@@ -84,23 +87,43 @@ export async function POST(request: NextRequest) {
                 membershipQuery = membershipQuery.eq("channel_id", channelId);
             }
 
-            const { data: membership } = await membershipQuery.single();
+            const { data: membership, error: membershipError } = await membershipQuery.maybeSingle();
+
+            if (membershipError) {
+                console.error(`[AgentResponse] Error checking membership:`, membershipError);
+                continue;
+            }
 
             if (!membership) {
-                console.log(`[AgentResponse] Agent ${mention.agentId} not in channel`);
+                console.log(`[AgentResponse] Agent ${mention.agentId} not in channel ${channelType}${channelId ? ` (${channelId})` : ''}`);
+                // Log all memberships for this agent for debugging
+                const { data: allMemberships } = await supabase
+                    .from("shout_agent_channel_memberships")
+                    .select("channel_type, channel_id")
+                    .eq("agent_id", mention.agentId);
+                console.log(`[AgentResponse] Agent ${mention.agentId} is in:`, allMemberships);
                 continue;
             }
 
             // Fetch agent details
             const { data: agent, error: agentError } = await supabase
                 .from("shout_agents")
-                .select("id, name, personality, system_instructions, avatar_emoji, avatar_url, use_knowledge_base")
+                .select("id, name, personality, system_instructions, avatar_emoji, avatar_url, use_knowledge_base, visibility")
                 .eq("id", mention.agentId)
-                .eq("visibility", "official")
-                .single();
+                .maybeSingle();
 
-            if (agentError || !agent) {
-                console.log(`[AgentResponse] Agent ${mention.agentId} not found or not official`);
+            if (agentError) {
+                console.error(`[AgentResponse] Error fetching agent:`, agentError);
+                continue;
+            }
+
+            if (!agent) {
+                console.log(`[AgentResponse] Agent ${mention.agentId} not found`);
+                continue;
+            }
+
+            if (agent.visibility !== "official") {
+                console.log(`[AgentResponse] Agent ${mention.agentId} (${agent.name}) visibility is "${agent.visibility}", must be "official"`);
                 continue;
             }
 
@@ -211,23 +234,53 @@ You can use markdown formatting:
                             insertedMessage = msg;
                         }
                     } else if (channelId) {
-                        // Insert into channel messages
-                        const { data: msg, error: insertError } = await supabase
-                            .from("shout_channel_messages")
-                            .insert({
-                                channel_id: channelId,
-                                sender_address: `agent:${agent.id}`,
-                                content: responseText,
-                                message_type: "text",
-                                reply_to_id: originalMessageId || null,
-                            })
-                            .select()
+                        // Check if this is a Waku channel
+                        const { data: channel, error: channelError } = await supabase
+                            .from("shout_public_channels")
+                            .select("messaging_type, waku_content_topic")
+                            .eq("id", channelId)
                             .single();
 
-                        if (insertError) {
-                            console.error("[AgentResponse] Error inserting channel message:", insertError);
+                        if (channelError || !channel) {
+                            console.error("[AgentResponse] Error fetching channel:", channelError);
+                        } else if (channel.messaging_type === "waku") {
+                            // Insert into Waku channel messages
+                            const { data: msg, error: insertError } = await supabase
+                                .from("shout_waku_channel_messages")
+                                .insert({
+                                    channel_id: channelId,
+                                    content_topic: channel.waku_content_topic || "",
+                                    sender_address: `agent:${agent.id}`,
+                                    content: responseText,
+                                    message_type: "text",
+                                })
+                                .select()
+                                .single();
+
+                            if (insertError) {
+                                console.error("[AgentResponse] Error inserting Waku channel message:", insertError);
+                            } else {
+                                insertedMessage = msg;
+                            }
                         } else {
-                            insertedMessage = msg;
+                            // Insert into standard channel messages
+                            const { data: msg, error: insertError } = await supabase
+                                .from("shout_channel_messages")
+                                .insert({
+                                    channel_id: channelId,
+                                    sender_address: `agent:${agent.id}`,
+                                    content: responseText,
+                                    message_type: "text",
+                                    reply_to_id: originalMessageId || null,
+                                })
+                                .select()
+                                .single();
+
+                            if (insertError) {
+                                console.error("[AgentResponse] Error inserting channel message:", insertError);
+                            } else {
+                                insertedMessage = msg;
+                            }
                         }
                     }
 

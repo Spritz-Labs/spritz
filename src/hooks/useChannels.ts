@@ -473,7 +473,19 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                             channelId: channelId,
                             originalMessageId: data.message?.id,
                         }),
-                    }).catch(err => console.error("[useChannelMessages] Agent response error:", err));
+                    })
+                    .then(async (res) => {
+                        const result = await res.json();
+                        if (!res.ok) {
+                            console.error("[useChannelMessages] Agent response error:", result.error);
+                        } else {
+                            console.log("[useChannelMessages] Agent response:", result);
+                            if (result.processed && result.responsesGenerated === 0 && result.mentionsFound > 0) {
+                                console.warn("[useChannelMessages] Agent mentioned but no response generated. Check server logs for details.");
+                            }
+                        }
+                    })
+                    .catch(err => console.error("[useChannelMessages] Agent response error:", err));
                 }
 
                 return data.message as ChannelMessage;
@@ -627,7 +639,47 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         fetchPinnedMessages();
     }, [fetchMessages, fetchPinnedMessages]);
 
-    // Poll for new messages every 5 seconds
+    // Subscribe to real-time updates for this channel
+    useEffect(() => {
+        if (!channelId || !supabase) return;
+
+        const client = supabase;
+        console.log("[useChannelMessages] Setting up realtime subscription for channel:", channelId);
+
+        const subscription = client
+            .channel(`channel-messages-${channelId}`)
+            .on(
+                "postgres_changes",
+                {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "shout_channel_messages",
+                    filter: `channel_id=eq.${channelId}`,
+                },
+                (payload) => {
+                    const newMessage = payload.new as ChannelMessage;
+                    console.log("[useChannelMessages] Realtime message received:", newMessage.id);
+                    
+                    setMessages((prev) => {
+                        // Check if message already exists
+                        const exists = prev.some(m => m.id === newMessage.id);
+                        if (exists) {
+                            return prev;
+                        }
+                        // Add new message to the end
+                        return [...prev, newMessage];
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            console.log("[useChannelMessages] Cleaning up realtime subscription");
+            subscription.unsubscribe();
+        };
+    }, [channelId, supabase]);
+
+    // Poll for new messages every 5 seconds (fallback)
     useEffect(() => {
         if (!channelId) return;
 

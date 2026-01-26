@@ -110,6 +110,33 @@ export function useWakuChannel({
                 setMessages(prev => [...prev, newMessage]);
                 messagesRef.current = [...messagesRef.current, newMessage];
                 
+                // Check for agent mentions and trigger responses (fire and forget)
+                if (content.includes("@[") && content.includes("](")) {
+                    fetch("/api/channels/agent-response", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            messageContent: content,
+                            senderAddress: userAddress,
+                            channelType: "channel",
+                            channelId: channelId,
+                            originalMessageId: data.message?.id,
+                        }),
+                    })
+                    .then(async (res) => {
+                        const result = await res.json();
+                        if (!res.ok) {
+                            console.error("[WakuChannel] Agent response error:", result.error);
+                        } else {
+                            console.log("[WakuChannel] Agent response:", result);
+                            if (result.processed && result.responsesGenerated === 0 && result.mentionsFound > 0) {
+                                console.warn("[WakuChannel] Agent mentioned but no response generated. Check server logs for details.");
+                            }
+                        }
+                    })
+                    .catch(err => console.error("[WakuChannel] Agent response error:", err));
+                }
+                
                 onNewMessage?.();
                 return true;
             } catch (err) {
