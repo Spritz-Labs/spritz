@@ -63,9 +63,13 @@ NEVER say you "cannot" or "can't" register users for events. You CAN and SHOULD 
 
 When users ask about registering for events (especially Luma events):
 1. **ALWAYS respond positively**: "I'd be happy to help you register!" or "Let me help you register for that event!"
-2. **Provide the registration link immediately** in markdown format: [Register for [Event Name]](registration_url)
-3. **For Luma events** (URLs containing "lu.ma" or "luma.com"): Mention that their saved information will be pre-filled when they click the link
-4. **Example response format**: "I'd be happy to help you register for [Event Name]! Click here to register: [Register Now](https://luma.com/event-slug). Your saved information will be pre-filled automatically."
+2. **Find the registration URL from the event context** - look for "🎫 REGISTRATION URL:" in the event data provided
+3. **Use that EXACT URL** to create a markdown link: [Register for [Event Name]](EXACT_URL_FROM_EVENT_DATA)
+4. **For Luma events** (URLs containing "lu.ma" or "luma.com"): Mention that their saved information will be pre-filled when they click the link
+5. **Example**: If event shows "🎫 REGISTRATION URL: https://luma.com/ualsao7v", respond with:
+   "I'd be happy to help you register for Logos Circle Barcelona #5! Click here: [Register Now](https://luma.com/ualsao7v). Your saved information will be pre-filled automatically."
+
+CRITICAL: Always use the EXACT URL from the "🎫 REGISTRATION URL:" field - never make up URLs or use event page URLs!
 
 **DO NOT**:
 - Say "I can't directly register you"
@@ -234,15 +238,20 @@ async function getEventContext(agentId: string, message: string): Promise<string
             const featured = event.is_featured ? "⭐ FEATURED" : "";
             
             // Determine registration URL (prioritize rsvp_url, fallback to event_url if Luma)
-            const registrationUrl = event.rsvp_url || (event.event_url && event.event_url.includes("lu.ma") ? event.event_url : null);
-            const isLuma = registrationUrl && registrationUrl.includes("lu.ma");
+            const registrationUrl = event.rsvp_url || (event.event_url && (event.event_url.includes("lu.ma") || event.event_url.includes("luma.com")) ? event.event_url : null);
+            const isLuma = registrationUrl && (registrationUrl.includes("lu.ma") || registrationUrl.includes("luma.com"));
+            
+            // Format registration info prominently
+            let regInfo = "";
+            if (registrationUrl) {
+                regInfo = `\n  🎫 REGISTRATION URL: ${registrationUrl}${isLuma ? " (Luma event - use this URL for registration!)" : ""}`;
+            }
             
             return `- ${featured} ${event.name}
   📅 ${event.event_date} @ ${timeStr}
   ${event.venue ? `📍 ${event.venue}` : ""}
   ${event.organizer ? `🏢 ${event.organizer}` : ""}
-  ${event.event_url ? `🔗 Event page: ${event.event_url}` : ""}
-  ${registrationUrl ? `🎫 Registration: ${registrationUrl}${isLuma ? " (Luma - I can help register!)" : ""}` : ""}`.trim();
+  ${event.event_url ? `🔗 Event page: ${event.event_url}` : ""}${regInfo}`.trim();
         });
         
         const eventsPageUrl = `https://app.spritz.chat/agent/${agentId}/events`;
@@ -256,10 +265,13 @@ Full events page: ${eventsPageUrl}
 When users ask to register for an event (especially Luma events):
 - NEVER say "I can't" or "I cannot" register them - YOU CAN AND SHOULD HELP!
 - ALWAYS respond: "I'd be happy to help you register!" or "Let me help you register!"
-- IMMEDIATELY provide the registration link from the event data above
-- Use markdown format: [Register for [Event Name]](registration_url_here)
+- Find the "🎫 REGISTRATION URL:" from the event data above and USE THAT EXACT URL
+- Create a markdown link using this format: [Register for [Event Name]](EXACT_REGISTRATION_URL_FROM_EVENT_DATA)
 - For Luma events, mention: "Your saved information will be pre-filled automatically"
-- Example: "I'd be happy to help you register for [Event Name]! Click here: [Register Now](url)"
+- EXAMPLE: If the event shows "🎫 REGISTRATION URL: https://luma.com/ualsao7v", respond with:
+  "I'd be happy to help you register for [Event Name]! Click here: [Register Now](https://luma.com/ualsao7v). Your saved information will be pre-filled automatically."
+
+IMPORTANT: Copy the EXACT URL from the "🎫 REGISTRATION URL:" field - do not make up URLs or use event page URLs unless there's no registration URL!
 
 DO NOT say "you can register yourself" - be helpful and proactive!
 
