@@ -29,6 +29,7 @@ import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
+import { ChatMembersList } from "./ChatMembersList";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -148,6 +149,7 @@ export function AlphaChatModal({
     const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
+    const [showMembersList, setShowMembersList] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     
     // Fetch online statuses for message senders
@@ -769,9 +771,15 @@ export function AlphaChatModal({
                                     <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                         Global Chat
                                     </h2>
-                                    <p className="text-zinc-500 text-xs truncate">
+                                    <button
+                                        onClick={() => setShowMembersList(true)}
+                                        className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                        </svg>
                                         {memberCountDisplay}
-                                    </p>
+                                    </button>
                                 </div>
 
                                 {/* Action buttons - essential only visible, rest in menu */}
@@ -1631,6 +1639,20 @@ export function AlphaChatModal({
                             onDelete: selectedMessageConfig?.isOwn ? () => handleDeleteMessage(selectedMessageConfig?.messageId || "") : undefined,
                         }}
                         reactions={ALPHA_REACTION_EMOJIS}
+                    />
+
+                    {/* Members List Panel */}
+                    <ChatMembersList
+                        channelId="global"
+                        isGlobal={true}
+                        isOpen={showMembersList}
+                        onClose={() => setShowMembersList(false)}
+                        onUserClick={(address) => {
+                            setSelectedUser(address);
+                            setShowMembersList(false);
+                        }}
+                        getUserInfo={getUserInfo}
+                        currentUserAddress={userAddress}
                     />
                 </>
             )}

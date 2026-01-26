@@ -34,6 +34,7 @@ import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
+import { ChatMembersList } from "./ChatMembersList";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -174,6 +175,9 @@ export function ChannelChatModal({
     
     // Online statuses for channel members
     const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
+    
+    // Members list panel
+    const [showMembersList, setShowMembersList] = useState(false);
     
     // Channel icon management
     const [canEditIcon, setCanEditIcon] = useState(false);
@@ -943,9 +947,15 @@ export function ChannelChatModal({
                                         </span>
                                     )}
                                 </div>
-                            <p className="text-zinc-500 text-xs truncate">
+                                <button
+                                    onClick={() => setShowMembersList(true)}
+                                    className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                    </svg>
                                     {channel.member_count} members{isWakuChannel && " • Decentralized"}
-                                </p>
+                                </button>
                             </div>
 
                         {/* Action buttons */}
@@ -1558,8 +1568,8 @@ export function ChannelChatModal({
                                                             reactions={reactions[msg.id] || []}
                                                             onReaction={(emoji) => handleReaction(msg.id, emoji)}
                                                             isOwnMessage={isOwn}
-                                                        />
-                                                    </div>
+                                                                />
+                                                            </div>
                                                     </div>
                                                 )}
                                                 <p className="text-[10px] text-zinc-600 mt-1 px-1">
@@ -1874,6 +1884,19 @@ export function ChannelChatModal({
                         onEdit: selectedMessageConfig?.canEdit ? () => setEditingMessage(selectedMessageConfig?.messageId || null) : undefined,
                         onDelete: selectedMessageConfig?.isOwn ? () => deleteMessage(selectedMessageConfig?.messageId || "") : undefined,
                     }}
+                />
+
+                {/* Members List Panel */}
+                <ChatMembersList
+                    channelId={channel.id}
+                    isOpen={showMembersList}
+                    onClose={() => setShowMembersList(false)}
+                    onUserClick={(address) => {
+                        setSelectedUser(address);
+                        setShowMembersList(false);
+                    }}
+                    getUserInfo={getUserInfo}
+                    currentUserAddress={userAddress}
                 />
             </motion.div>
         </AnimatePresence>
