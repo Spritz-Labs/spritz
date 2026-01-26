@@ -1412,12 +1412,13 @@ export function ChannelChatModal({
                                                 ) : (
                                                     <MessageMenuTrigger
                                                         config={{
-                                                            messageContent: msg.content,
+                                                            messageContent: (msg.message_type === "pixel_art" || msg.message_type === "image") ? undefined : msg.content,
                                                             isOwn,
                                                             isPinned: msg.is_pinned,
                                                             isStarred: isStarred(msg.id),
                                                             canEdit: isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text",
                                                             hasMedia: msg.message_type === "pixel_art" || msg.message_type === "image",
+                                                            mediaUrl: (msg.message_type === "pixel_art" || msg.message_type === "image") ? msg.content : isGif ? msg.content.replace("[GIF]", "") : undefined,
                                                         }}
                                                         callbacks={{
                                                             onReaction: (emoji) => handleReaction(msg.id, emoji),

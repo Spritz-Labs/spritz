@@ -1289,6 +1289,7 @@ export function ChatModal({
                                                             isPinned: false,
                                                             canEdit: isOwn && canEditMessage(msg.sentAt),
                                                             hasMedia: isPixelArt || isGif,
+                                                            mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
                                                         }}
                                                         callbacks={{
                                                             onReaction: (emoji) => toggleMsgReaction(msg.id, emoji),
@@ -1297,10 +1298,6 @@ export function ChatModal({
                                                             onDelete: isOwn ? () => {
                                                                 // Mark as deleted (optimistic)
                                                                 setMessages(prev => prev.filter(m => m.id !== msg.id));
-                                                            } : undefined,
-                                                            onDownload: (isPixelArt || isGif) ? () => {
-                                                                const url = isPixelArt ? getPixelArtUrl(msg.content) : getGifUrl(msg.content);
-                                                                window.open(url, '_blank');
                                                             } : undefined,
                                                         }}
                                                     >
