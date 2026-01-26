@@ -45,17 +45,20 @@ export function ChatMembersList({
         setIsLoading(true);
         try {
             const res = await fetch(
-                `/api/channels/${channelId}/members?limit=50&offset=${offset}`
+                `/api/channels/${channelId}/members?limit=100&offset=${offset}`
             );
             if (res.ok) {
                 const data = await res.json();
                 if (offset === 0) {
-                    setMembers(data.members);
+                    setMembers(data.members || []);
                 } else {
-                    setMembers(prev => [...prev, ...data.members]);
+                    setMembers(prev => [...prev, ...(data.members || [])]);
                 }
-                setTotal(data.total);
-                setHasMore(data.hasMore);
+                setTotal(data.total || 0);
+                setHasMore(data.hasMore || false);
+            } else {
+                const errorData = await res.json().catch(() => ({}));
+                console.error("[MembersList] Error fetching members:", errorData.error || res.statusText);
             }
         } catch (err) {
             console.error("[MembersList] Error fetching members:", err);
