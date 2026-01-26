@@ -8,6 +8,7 @@ import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { PixelArtShare } from "./PixelArtShare";
 import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
+import { MessageActionsSheet, ActionIcons, type MessageAction } from "./MessageActionsSheet";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
@@ -1299,92 +1300,52 @@ export function AlphaChatModal({
                                                                 </span>
                                                             </div>
 
-                                                            {/* Message Actions - Show on tap (mobile) or click */}
-                                                            <AnimatePresence>
-                                                                {selectedMessage === msg.id && (
-                                                                    <motion.div
-                                                                        data-message-actions
-                                                                        initial={{ opacity: 0, scale: 0.9 }}
-                                                                        animate={{ opacity: 1, scale: 1 }}
-                                                                        exit={{ opacity: 0, scale: 0.9 }}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className={`absolute ${isOwn ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 flex items-center gap-1 z-10`}
-                                                                    >
-                                                                        <button
-                                                                            onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                                                            className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
-                                                                            title="React"
-                                                                        >
-                                                                            😊
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setReplyingTo(msg);
-                                                                                setSelectedMessage(null);
-                                                                            }}
-                                                                            className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
-                                                                            title="Reply"
-                                                                        >
-                                                                            <svg className="w-4 h-4 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                            </svg>
-                                                                        </button>
-                                                                        {/* Pin Button - Admin/Moderator with pin permission */}
-                                                                        {(isAdmin || moderation.permissions.canPin) && (
-                                                                            <button
-                                                                                onClick={() => handlePinMessage(msg.id, msg.is_pinned || false)}
-                                                                                disabled={pinningMessage === msg.id}
-                                                                                className={`w-8 h-8 rounded-full ${
-                                                                                    msg.is_pinned
-                                                                                        ? "bg-amber-500/20 text-amber-400"
-                                                                                        : "bg-zinc-700 hover:bg-zinc-600 text-zinc-300"
-                                                                                } flex items-center justify-center shadow-lg border border-zinc-600`}
-                                                                                title={msg.is_pinned ? "Unpin message" : "Pin message"}
-                                                                            >
-                                                                                {pinningMessage === msg.id ? (
-                                                                                    <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
-                                                                                ) : (
-                                                                                    <svg className="w-4 h-4" fill={msg.is_pinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={msg.is_pinned ? 0 : 2}>
-                                                                                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                                                                                    </svg>
-                                                                                )}
-                                                                            </button>
-                                                                        )}
-                                                                        {/* Delete Button - Admin/Moderator with delete permission */}
-                                                                        {(isAdmin || moderation.permissions.canDelete) && !isOwn && (
-                                                                            <button
-                                                                                onClick={() => handleDeleteMessage(msg.id)}
-                                                                                disabled={deletingMessage === msg.id}
-                                                                                className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-red-500/20 text-zinc-300 hover:text-red-400 flex items-center justify-center shadow-lg border border-zinc-600 transition-colors"
-                                                                                title="Delete message"
-                                                                            >
-                                                                                {deletingMessage === msg.id ? (
-                                                                                    <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
-                                                                                ) : (
-                                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                                    </svg>
-                                                                                )}
-                                                                            </button>
-                                                                        )}
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
-
-                                                            {/* Reaction Picker */}
-                                                            {showReactionPicker === msg.id && (
-                                                                <div 
-                                                                    className={`absolute ${isOwn ? "right-0" : "left-0"} -top-12 z-20`}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                >
-                                                                    <QuickReactionPicker
-                                                                        isOpen={true}
-                                                                        onClose={() => setShowReactionPicker(null)}
-                                                                        onSelect={(emoji) => handleReaction(msg.id, emoji)}
-                                                                        emojis={ALPHA_REACTION_EMOJIS}
-                                                                    />
-                                                                </div>
-                                                            )}
+                                                            {/* Message Actions Sheet - Mobile Friendly */}
+                                                            <MessageActionsSheet
+                                                                isOpen={selectedMessage === msg.id}
+                                                                onClose={() => setSelectedMessage(null)}
+                                                                reactions={ALPHA_REACTION_EMOJIS}
+                                                                onReaction={(emoji) => {
+                                                                    handleReaction(msg.id, emoji);
+                                                                    setSelectedMessage(null);
+                                                                }}
+                                                                messagePreview={msg.content.slice(0, 50) + (msg.content.length > 50 ? "..." : "")}
+                                                                actions={[
+                                                                    {
+                                                                        id: "reply",
+                                                                        label: "Reply",
+                                                                        icon: ActionIcons.reply,
+                                                                        onClick: () => {
+                                                                            setReplyingTo(msg);
+                                                                            setSelectedMessage(null);
+                                                                        },
+                                                                    },
+                                                                    {
+                                                                        id: "copy",
+                                                                        label: "Copy Text",
+                                                                        icon: ActionIcons.copy,
+                                                                        onClick: () => {
+                                                                            navigator.clipboard.writeText(msg.content);
+                                                                            setSelectedMessage(null);
+                                                                        },
+                                                                    },
+                                                                    ...((isAdmin || moderation.permissions.canPin) ? [{
+                                                                        id: "pin",
+                                                                        label: msg.is_pinned ? "Unpin Message" : "Pin Message",
+                                                                        icon: msg.is_pinned ? ActionIcons.pinFilled : ActionIcons.pin,
+                                                                        onClick: () => handlePinMessage(msg.id, msg.is_pinned || false),
+                                                                        loading: pinningMessage === msg.id,
+                                                                    }] : []),
+                                                                    ...((isAdmin || moderation.permissions.canDelete) && !isOwn ? [{
+                                                                        id: "delete",
+                                                                        label: "Delete Message",
+                                                                        icon: ActionIcons.delete,
+                                                                        onClick: () => handleDeleteMessage(msg.id),
+                                                                        variant: "danger" as const,
+                                                                        loading: deletingMessage === msg.id,
+                                                                    }] : []),
+                                                                ]}
+                                                            />
                                                         </div>
                                                     </motion.div>
                                                     </div>

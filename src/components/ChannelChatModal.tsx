@@ -6,6 +6,7 @@ import { useChannelMessages, CHANNEL_REACTION_EMOJIS } from "@/hooks/useChannels
 import type { PublicChannel } from "@/app/api/channels/route";
 import type { ChannelMessage } from "@/app/api/channels/[id]/messages/route";
 import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
+import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { PixelArtEditor } from "./PixelArtEditor";
@@ -1525,143 +1526,85 @@ export function ChannelChatModal({
                                                             isOwnMessage={isOwn}
                                                         />
                                                         
-                                                        {/* Message Actions - Show on tap (mobile) or hover (desktop) */}
-                                                        <AnimatePresence>
-                                                            {selectedMessage === msg.id && (
-                                                                <motion.div
-                                                                    data-message-actions
-                                                                    initial={{ opacity: 0, scale: 0.9 }}
-                                                                    animate={{ opacity: 1, scale: 1 }}
-                                                                    exit={{ opacity: 0, scale: 0.9 }}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className={`absolute ${isOwn ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 flex items-center gap-1 z-10`}
-                                                                >
-                                                                    <button
-                                                                        onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
-                                                                        title="React"
-                                                                    >
-                                                                        😊
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setReplyingTo(msg);
-                                                                            setSelectedMessage(null);
-                                                                        }}
-                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
-                                                                        title="Reply"
-                                                                    >
-                                                                        <svg className="w-4 h-4 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                        </svg>
-                                                                    </button>
-                                                                    {/* Pin Button - Admin Only */}
-                                                                    {isAdmin && (
-                                                                        <button
-                                                                            onClick={() => handlePinMessage(msg.id, msg.is_pinned || false)}
-                                                                            disabled={pinningMessage === msg.id}
-                                                                            className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border transition-colors ${
-                                                                                msg.is_pinned
-                                                                                    ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
-                                                                                    : "bg-zinc-700 hover:bg-zinc-600 border-zinc-600 text-zinc-300"
-                                                                            }`}
-                                                                            title={msg.is_pinned ? "Unpin message" : "Pin message"}
-                                                                        >
-                                                                            {pinningMessage === msg.id ? (
-                                                                                <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
-                                                                            ) : (
-                                                                                <svg className="w-4 h-4" fill={msg.is_pinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={msg.is_pinned ? 0 : 2}>
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                                                                                </svg>
-                                                                            )}
-                                                                        </button>
-                                                                    )}
-                                                                    {/* Edit Button - Own messages within 15 min */}
-                                                                    {isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text" && (
-                                                                        <button
-                                                                            onClick={() => handleStartEdit(msg)}
-                                                                            className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600 text-zinc-300"
-                                                                            title="Edit message"
-                                                                        >
-                                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                                            </svg>
-                                                                        </button>
-                                                                    )}
-                                                                    {/* Star Button */}
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            toggleStar({
-                                                                                messageId: msg.id,
-                                                                                messageType: "channel",
-                                                                                content: msg.content,
-                                                                                senderAddress: msg.sender_address,
-                                                                                senderName: formatSender(msg.sender_address),
-                                                                                channelId: channel.id,
-                                                                                channelName: channel.name,
-                                                                                originalCreatedAt: msg.created_at,
-                                                                            });
-                                                                            setSelectedMessage(null);
-                                                                        }}
-                                                                        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg border transition-colors ${
-                                                                            isStarred(msg.id)
-                                                                                ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
-                                                                                : "bg-zinc-700 hover:bg-zinc-600 border-zinc-600 text-zinc-300"
-                                                                        }`}
-                                                                        title={isStarred(msg.id) ? "Unstar" : "Star message"}
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill={isStarred(msg.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={isStarred(msg.id) ? 0 : 2}>
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                                                        </svg>
-                                                                    </button>
-                                                                    {/* Forward Button */}
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setForwardingMessage(msg);
-                                                                            setSelectedMessage(null);
-                                                                        }}
-                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600 text-zinc-300"
-                                                                        title="Forward message"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                                                        </svg>
-                                                                    </button>
-                                                                    {/* Delete Button - Own messages or admin */}
-                                                                    {(isOwn || isAdmin) && !msg.is_deleted && (
-                                                                        <button
-                                                                            onClick={() => handleDeleteMessage(msg.id)}
-                                                                            disabled={isDeleting === msg.id}
-                                                                            className="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/30 flex items-center justify-center shadow-lg border border-red-500/30 text-red-400"
-                                                                            title="Delete message"
-                                                                        >
-                                                                            {isDeleting === msg.id ? (
-                                                                                <div className="w-4 h-4 border-2 border-red-500/50 border-t-red-400 rounded-full animate-spin" />
-                                                                            ) : (
-                                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                                </svg>
-                                                                            )}
-                                                                        </button>
-                                                                    )}
-                                                                </motion.div>
-                                                            )}
-                                                        </AnimatePresence>
-                                                        
-                                                        {/* Reaction Picker */}
-                                                        {showReactionPicker === msg.id && (
-                                                            <div 
-                                                                className={`absolute ${isOwn ? "right-0" : "left-0"} -top-12 z-20`}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            >
-                                                                <QuickReactionPicker
-                                                                    isOpen={true}
-                                                                    onClose={() => setShowReactionPicker(null)}
-                                                                    onSelect={(emoji) => handleReaction(msg.id, emoji)}
-                                                                    emojis={CHANNEL_REACTION_EMOJIS}
-                                                                />
-                                                            </div>
-                                                        )}
+                                                        {/* Message Actions Sheet - Mobile Friendly */}
+                                                        <MessageActionsSheet
+                                                            isOpen={selectedMessage === msg.id}
+                                                            onClose={() => setSelectedMessage(null)}
+                                                            reactions={CHANNEL_REACTION_EMOJIS}
+                                                            onReaction={(emoji) => {
+                                                                handleReaction(msg.id, emoji);
+                                                                setSelectedMessage(null);
+                                                            }}
+                                                            messagePreview={msg.content.slice(0, 50) + (msg.content.length > 50 ? "..." : "")}
+                                                            actions={[
+                                                                {
+                                                                    id: "reply",
+                                                                    label: "Reply",
+                                                                    icon: ActionIcons.reply,
+                                                                    onClick: () => {
+                                                                        setReplyingTo(msg);
+                                                                        setSelectedMessage(null);
+                                                                    },
+                                                                },
+                                                                {
+                                                                    id: "copy",
+                                                                    label: "Copy Text",
+                                                                    icon: ActionIcons.copy,
+                                                                    onClick: () => {
+                                                                        navigator.clipboard.writeText(msg.content);
+                                                                        setSelectedMessage(null);
+                                                                    },
+                                                                },
+                                                                ...(isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text" ? [{
+                                                                    id: "edit",
+                                                                    label: "Edit Message",
+                                                                    icon: ActionIcons.edit,
+                                                                    onClick: () => handleStartEdit(msg),
+                                                                }] : []),
+                                                                {
+                                                                    id: "star",
+                                                                    label: isStarred(msg.id) ? "Unstar Message" : "Star Message",
+                                                                    icon: ActionIcons.star,
+                                                                    onClick: () => {
+                                                                        toggleStar({
+                                                                            messageId: msg.id,
+                                                                            messageType: "channel",
+                                                                            content: msg.content,
+                                                                            senderAddress: msg.sender_address,
+                                                                            senderName: formatSender(msg.sender_address),
+                                                                            channelId: channel.id,
+                                                                            channelName: channel.name,
+                                                                            originalCreatedAt: msg.created_at,
+                                                                        });
+                                                                        setSelectedMessage(null);
+                                                                    },
+                                                                },
+                                                                {
+                                                                    id: "forward",
+                                                                    label: "Forward Message",
+                                                                    icon: ActionIcons.forward,
+                                                                    onClick: () => {
+                                                                        setForwardingMessage(msg);
+                                                                        setSelectedMessage(null);
+                                                                    },
+                                                                },
+                                                                ...(isAdmin ? [{
+                                                                    id: "pin",
+                                                                    label: msg.is_pinned ? "Unpin Message" : "Pin Message",
+                                                                    icon: msg.is_pinned ? ActionIcons.pinFilled : ActionIcons.pin,
+                                                                    onClick: () => handlePinMessage(msg.id, msg.is_pinned || false),
+                                                                    loading: pinningMessage === msg.id,
+                                                                }] : []),
+                                                                ...((isOwn || isAdmin) && !msg.is_deleted ? [{
+                                                                    id: "delete",
+                                                                    label: "Delete Message",
+                                                                    icon: ActionIcons.delete,
+                                                                    onClick: () => handleDeleteMessage(msg.id),
+                                                                    variant: "danger" as const,
+                                                                    loading: isDeleting === msg.id,
+                                                                }] : []),
+                                                            ]}
+                                                        />
                                                     </div>
                                                 )}
                                                 <p className="text-[10px] text-zinc-600 mt-1 px-1">

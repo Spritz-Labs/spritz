@@ -12,6 +12,7 @@ import {
     MESSAGE_REACTION_EMOJIS,
 } from "@/hooks/useChatFeatures";
 import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
+import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
@@ -1247,119 +1248,37 @@ export function GroupChatModal({
                                                         )}
                                                     </p>
 
-                                                    {/* Message Actions - Show on tap (mobile) or click */}
-                                                    <AnimatePresence>
-                                                        {selectedMessage ===
-                                                            msg.id && (
-                                                            <motion.div
-                                                                data-message-actions
-                                                                initial={{
-                                                                    opacity: 0,
-                                                                    scale: 0.9,
-                                                                }}
-                                                                animate={{
-                                                                    opacity: 1,
-                                                                    scale: 1,
-                                                                }}
-                                                                exit={{
-                                                                    opacity: 0,
-                                                                    scale: 0.9,
-                                                                }}
-                                                                onClick={(e) =>
-                                                                    e.stopPropagation()
-                                                                }
-                                                                className={`absolute ${
-                                                                    isOwn
-                                                                        ? "left-0 -translate-x-full pr-2"
-                                                                        : "right-0 translate-x-full pl-2"
-                                                                } top-0 flex items-center gap-1 z-10`}
-                                                            >
-                                                                <button
-                                                                    onClick={() =>
-                                                                        setShowReactionPicker(
-                                                                            showReactionPicker ===
-                                                                                msg.id
-                                                                                ? null
-                                                                                : msg.id
-                                                                        )
-                                                                    }
-                                                                    className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
-                                                                    title="React"
-                                                                >
-                                                                    😊
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setReplyingTo(
-                                                                            msg
-                                                                        );
-                                                                        setSelectedMessage(
-                                                                            null
-                                                                        );
-                                                                    }}
-                                                                    className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
-                                                                    title="Reply"
-                                                                >
-                                                                    <svg
-                                                                        className="w-4 h-4 text-zinc-300"
-                                                                        fill="none"
-                                                                        viewBox="0 0 24 24"
-                                                                        stroke="currentColor"
-                                                                    >
-                                                                        <path
-                                                                            strokeLinecap="round"
-                                                                            strokeLinejoin="round"
-                                                                            strokeWidth={
-                                                                                2
-                                                                            }
-                                                                            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-                                                                        />
-                                                                    </svg>
-                                                                </button>
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
-
-                                                    {/* Reaction Picker */}
-                                                    {showReactionPicker ===
-                                                        msg.id && (
-                                                        <div
-                                                            className={`absolute ${
-                                                                isOwn
-                                                                    ? "right-0"
-                                                                    : "left-0"
-                                                            } -top-12 z-20`}
-                                                            onClick={(e) =>
-                                                                e.stopPropagation()
-                                                            }
-                                                        >
-                                                            <QuickReactionPicker
-                                                                isOpen={true}
-                                                                onClose={() =>
-                                                                    setShowReactionPicker(
-                                                                        null
-                                                                    )
-                                                                }
-                                                                onSelect={async (
-                                                                    emoji
-                                                                ) => {
-                                                                    await toggleMsgReaction(
-                                                                        msg.id,
-                                                                        emoji
-                                                                    );
-                                                                    setShowReactionPicker(
-                                                                        null
-                                                                    );
-                                                                    setSelectedMessage(
-                                                                        null
-                                                                    );
-                                                                }}
-                                                                emojis={
-                                                                    MESSAGE_REACTION_EMOJIS
-                                                                }
-                                                            />
-                                                        </div>
-                                                    )}
+                                                    {/* Message Actions Sheet - Mobile Friendly */}
+                                                    <MessageActionsSheet
+                                                        isOpen={selectedMessage === msg.id}
+                                                        onClose={() => setSelectedMessage(null)}
+                                                        reactions={MESSAGE_REACTION_EMOJIS}
+                                                        onReaction={async (emoji) => {
+                                                            await toggleMsgReaction(msg.id, emoji);
+                                                            setSelectedMessage(null);
+                                                        }}
+                                                        messagePreview={msg.content.slice(0, 50) + (msg.content.length > 50 ? "..." : "")}
+                                                        actions={[
+                                                            {
+                                                                id: "reply",
+                                                                label: "Reply",
+                                                                icon: ActionIcons.reply,
+                                                                onClick: () => {
+                                                                    setReplyingTo(msg);
+                                                                    setSelectedMessage(null);
+                                                                },
+                                                            },
+                                                            {
+                                                                id: "copy",
+                                                                label: "Copy Text",
+                                                                icon: ActionIcons.copy,
+                                                                onClick: () => {
+                                                                    navigator.clipboard.writeText(msg.content);
+                                                                    setSelectedMessage(null);
+                                                                },
+                                                            },
+                                                        ]}
+                                                    />
                                                     </div>
                                             </motion.div>
                                             </div>
