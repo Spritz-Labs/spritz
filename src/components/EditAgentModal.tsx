@@ -1072,7 +1072,7 @@ When users ask about X, prioritize results from source Y...`}
                                         <CapabilityToggle
                                             icon="🎪"
                                             title="Events Database Access"
-                                            description="Access global Web3 events database"
+                                            description="Access global events database"
                                             enabled={eventsAccess}
                                             onChange={setEventsAccess}
                                             color="emerald"

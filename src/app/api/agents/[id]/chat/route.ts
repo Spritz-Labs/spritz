@@ -961,7 +961,7 @@ You can help users schedule meetings with your creator. When users ask about sch
                     } else if (events && events.length > 0) {
                         systemInstructions += `\n\n## Global Events Database (${events.length} upcoming events):
                         
-You have access to a curated events database. Here are upcoming Web3 events:
+You have access to a curated events database. Here are upcoming events:
 
 ${events.map(e => `- **${e.name}** (${e.event_type})
   📅 ${e.event_date}${e.start_time ? ` @ ${e.start_time}` : ""}
@@ -994,7 +994,7 @@ Users can browse events at: https://app.spritz.chat/events
             
             // Always add events capability info
             systemInstructions += `\n\n## Events Capability
-You can help users discover and register for Web3 events (conferences, hackathons, meetups, etc.).
+You can help users discover and register for events (conferences, hackathons, meetups, etc.).
 When users ask about events, query the database and present relevant options.
 Full events directory: https://app.spritz.chat/events
 `;

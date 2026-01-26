@@ -261,10 +261,10 @@ export default function EventsPage() {
                     </Link>
                     
                     <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-purple-400 via-pink-500 to-orange-400 bg-clip-text text-transparent mb-4">
-                        Web3 Events
+                        Events
                     </h1>
                     <p className="text-xl text-zinc-400 max-w-2xl">
-                        Discover conferences, hackathons, meetups, and more in the blockchain ecosystem.
+                        Discover conferences, hackathons, meetups, and more.
                     </p>
                 </div>
             </div>

@@ -2578,7 +2578,7 @@ function DashboardContent({
                                                         "min(calc(100dvh - 140px), 700px)",
                                                 }}
                                             >
-                                                {/* 1. My QR Code */}
+                                                {/* 1. Invite Friends */}
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
@@ -2601,16 +2601,16 @@ function DashboardContent({
                                                                 strokeLinecap="round"
                                                                 strokeLinejoin="round"
                                                                 strokeWidth={2}
-                                                                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                                                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
                                                             />
                                                         </svg>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-white text-sm font-medium">
-                                                            My QR Code
+                                                            Invite Friends
                                                         </p>
                                                         <p className="text-zinc-500 text-xs">
-                                                            Share to add friends
+                                                            Share your QR code
                                                         </p>
                                                     </div>
                                                 </button>
