@@ -4771,14 +4771,20 @@ function DashboardContent({
                 onSkip={() => {}}
             />
 
-            {/* QR Code Modal */}
+            {/* QR Code Modal / Invite Friends */}
             <QRCodeModal
                 isOpen={isQRCodeModalOpen}
-                onClose={() => setIsQRCodeModalOpen(false)}
+                onClose={() => {
+                    setIsQRCodeModalOpen(false);
+                    clearFriendsError();
+                }}
                 address={userAddress as `0x${string}`}
                 ensName={userENS.ensName}
                 reachUsername={reachUsername || null}
                 avatar={effectiveAvatar}
+                onAddFriend={handleSendFriendRequest}
+                isAddingFriend={isFriendsLoading}
+                addFriendError={friendsError}
             />
 
             {/* New Scheduled Call Modal */}
