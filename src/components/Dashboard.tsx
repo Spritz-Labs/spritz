@@ -694,11 +694,12 @@ function DashboardContent({
                 .then((res) => res.json())
                 .then((data) => {
                     if (data.user) {
-                        const name = data.user.username
+                        // Display name priority: ENS > username > display_name
+                        const name = data.user.ens_name
+                            ? data.user.ens_name
+                            : data.user.username
                             ? `@${data.user.username}`
-                            : data.user.display_name ||
-                              data.user.ens_name ||
-                              null;
+                            : data.user.display_name || null;
                         const userInfo = {
                             name,
                             avatar: data.user.avatar_url || null,
@@ -1271,19 +1272,23 @@ function DashboardContent({
     };
 
     // Get user info for Alpha chat - checks cache first for effective avatar, then friends list
+    // Display name priority: ENS > Spritz username > address
     const getAlphaUserInfo = useCallback(
         (address: string) => {
             const normalizedAddress = address.toLowerCase();
 
             // Check if it's the current user
+            // Priority: ENS > username
             if (normalizedAddress === userAddress.toLowerCase()) {
                 return {
-                    name: reachUsername || userENS?.ensName || null,
+                    name: userENS?.ensName || (reachUsername ? `@${reachUsername}` : null),
                     avatar: effectiveAvatar || null,
                 };
             }
 
             // Check cache first - has effective avatar from public API
+            // Cache stores: { name: string | null; avatar: string | null }
+            // where name is already formatted with priority (ENS > @username)
             const cached = userInfoCache.get(normalizedAddress);
             
             // Check friends list for name info
@@ -1291,11 +1296,23 @@ function DashboardContent({
                 (f) => f.friend_address.toLowerCase() === normalizedAddress
             );
 
-            // If we have cached info (with effective avatar), use it but prefer friend's nickname for name
+            // Build display name with priority: local nickname > ENS > username
+            const getDisplayNameForFriend = () => {
+                // Local nickname takes highest priority (personal override)
+                if (friend?.nickname) return friend.nickname;
+                // ENS is second priority
+                if (friend?.ensName) return friend.ensName;
+                // Spritz username is third priority
+                if (friend?.reachUsername) return `@${friend.reachUsername}`;
+                // Fallback to cached name if available (already formatted correctly)
+                if (cached?.name) return cached.name;
+                return null;
+            };
+
+            // If we have cached info (with effective avatar), use it
             if (cached) {
-                const friendName = friend?.nickname || friend?.reachUsername || friend?.ensName;
                 return {
-                    name: friendName || cached.name,
+                    name: getDisplayNameForFriend(),
                     avatar: cached.avatar, // Use cached effective avatar
                 };
             }
@@ -1303,11 +1320,7 @@ function DashboardContent({
             // Fallback to friend data if no cache (avatar may not be effective)
             if (friend) {
                 return {
-                    name:
-                        friend.nickname ||
-                        friend.reachUsername ||
-                        friend.ensName ||
-                        null,
+                    name: getDisplayNameForFriend(),
                     avatar: friend.avatar || null,
                 };
             }

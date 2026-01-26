@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { getDisplayName, formatAddress } from "@/utils/address";
 
 export type ChatMember = {
     user_address: string;
@@ -75,20 +76,23 @@ export function ChatMembersList({
         }
     };
 
-    const formatAddress = (addr: string) => 
-        `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-
     const getMemberDisplayName = (member: ChatMember) => {
-        // Check if we have more info from getUserInfo
+        // Check if we have more info from getUserInfo (which may have resolved ENS)
         const info = getUserInfo?.(member.user_address);
         
         if (member.isAgent) {
             return member.agentName || "AI Agent";
         }
+        
+        // If getUserInfo returned a name, use it (already prioritized correctly)
         if (info?.name) return info.name;
-        if (member.username) return `@${member.username}`;
-        if (member.ens_name) return member.ens_name;
-        return formatAddress(member.user_address);
+        
+        // Otherwise use our utility with priority: ENS > username > address
+        return getDisplayName({
+            address: member.user_address,
+            ensName: member.ens_name,
+            username: member.username,
+        });
     };
 
     const getMemberAvatar = (member: ChatMember) => {
