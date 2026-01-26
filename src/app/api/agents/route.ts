@@ -126,25 +126,25 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Check if user is an admin
+        const { data: adminData } = await supabase
+            .from("shout_admins")
+            .select("wallet_address")
+            .eq("wallet_address", normalizedAddress)
+            .single();
+        const isAdmin = !!adminData;
+
         // If visibility is "official", check that user is an admin
-        if (visibility === "official") {
-            const { data: adminData } = await supabase
-                .from("shout_admins")
-                .select("wallet_address")
-                .eq("wallet_address", normalizedAddress)
-                .single();
-            
-            if (!adminData) {
-                return NextResponse.json(
-                    { error: "Only admins can create official agents" },
-                    { status: 403 }
-                );
-            }
+        if (visibility === "official" && !isAdmin) {
+            return NextResponse.json(
+                { error: "Only admins can create official agents" },
+                { status: 403 }
+            );
         }
 
         // Check agent limit (max 5 agents per user for now)
-        // Skip limit for official agents
-        if (visibility !== "official") {
+        // Skip limit for official agents AND admins
+        if (visibility !== "official" && !isAdmin) {
             const { count } = await supabase
                 .from("shout_agents")
                 .select("*", { count: "exact", head: true })
