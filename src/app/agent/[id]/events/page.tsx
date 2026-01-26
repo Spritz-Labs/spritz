@@ -2,6 +2,8 @@ import { Metadata } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { hasRegistration } from "@/lib/eventUtils";
+import { EventRegistrationButton } from "@/components/EventRegistrationButton";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -20,6 +22,7 @@ interface Agent {
 
 interface AgentEvent {
     id: string;
+    agent_id?: string;
     name: string;
     description: string | null;
     event_type: string | null;
@@ -29,6 +32,7 @@ interface AgentEvent {
     venue: string | null;
     organizer: string | null;
     event_url: string | null;
+    rsvp_url: string | null;
     source: string | null;
     is_featured: boolean;
 }
@@ -227,7 +231,7 @@ export default async function AgentEventsPage({ params }: { params: Promise<{ id
                                 {/* Events for this date */}
                                 <div className="space-y-4">
                                     {eventsByDate[date].map(event => (
-                                        <EventCard key={event.id} event={event} />
+                                        <EventCard key={event.id} event={event} agentId={id} />
                                     ))}
                                 </div>
                             </div>
@@ -248,7 +252,7 @@ export default async function AgentEventsPage({ params }: { params: Promise<{ id
     );
 }
 
-function EventCard({ event }: { event: AgentEvent }) {
+function EventCard({ event, agentId }: { event: AgentEvent; agentId: string }) {
     const emoji = eventTypeEmoji[event.event_type || "other"] || "📅";
     const timeRange = event.start_time 
         ? event.end_time 
@@ -316,16 +320,25 @@ function EventCard({ event }: { event: AgentEvent }) {
                         )}
                     </div>
 
-                    {event.event_url && (
-                        <a
-                            href={event.event_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 mt-3 text-sm text-purple-400 hover:text-purple-300 transition-colors"
-                        >
-                            View Event →
-                        </a>
-                    )}
+                    <div className="flex flex-wrap items-center gap-3 mt-3">
+                        {hasRegistration(event) && (
+                            <EventRegistrationButton
+                                eventUrl={event.rsvp_url || event.event_url || ""}
+                                eventId={event.id}
+                                agentId={agentId}
+                            />
+                        )}
+                        {event.event_url && (
+                            <a
+                                href={event.event_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                            >
+                                View Event →
+                            </a>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

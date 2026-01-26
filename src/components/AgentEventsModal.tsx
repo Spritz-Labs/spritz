@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { hasRegistration } from "@/lib/eventUtils";
+import { EventRegistrationButton } from "./EventRegistrationButton";
 
 interface AgentEvent {
     id: string;
@@ -14,6 +16,7 @@ interface AgentEvent {
     venue: string | null;
     organizer: string | null;
     event_url: string | null;
+    rsvp_url: string | null;
     source: string | null;
     is_featured: boolean;
 }
@@ -74,6 +77,7 @@ export default function AgentEventsModal({
         venue: "",
         organizer: "",
         event_url: "",
+        rsvp_url: "",
         source: "community",
         is_featured: false,
     });
@@ -190,6 +194,7 @@ export default function AgentEventsModal({
                 venue: event.venue || "",
                 organizer: event.organizer || "",
                 event_url: event.event_url || "",
+                rsvp_url: event.rsvp_url || "",
                 source: event.source || "community",
                 is_featured: event.is_featured,
             });
@@ -205,6 +210,7 @@ export default function AgentEventsModal({
                 venue: "",
                 organizer: "",
                 event_url: "",
+                rsvp_url: "",
                 source: "community",
                 is_featured: false,
             });
@@ -435,16 +441,26 @@ export default function AgentEventsModal({
                                                     {event.organizer && <span>🏢 {event.organizer}</span>}
                                                 </div>
                                                 
-                                                {event.event_url && (
-                                                    <a
-                                                        href={event.event_url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-block mt-2 text-xs text-purple-400 hover:text-purple-300 truncate max-w-full"
-                                                    >
-                                                        🔗 {event.event_url}
-                                                    </a>
-                                                )}
+                                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                    {hasRegistration(event) && (
+                                                        <EventRegistrationButton
+                                                            eventUrl={event.rsvp_url || event.event_url || ""}
+                                                            eventId={event.id}
+                                                            agentId={agentId}
+                                                            className="text-xs"
+                                                        />
+                                                    )}
+                                                    {event.event_url && (
+                                                        <a
+                                                            href={event.event_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-xs text-purple-400 hover:text-purple-300 truncate max-w-full"
+                                                        >
+                                                            🔗 {event.event_url}
+                                                        </a>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             {/* Actions */}
@@ -627,6 +643,24 @@ export default function AgentEventsModal({
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                                             placeholder="https://..."
                                         />
+                                    </div>
+
+                                    {/* RSVP/Registration URL */}
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Registration URL (RSVP)
+                                            <span className="text-zinc-500 text-xs ml-1">(e.g., Luma registration link)</span>
+                                        </label>
+                                        <input
+                                            type="url"
+                                            value={formData.rsvp_url}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, rsvp_url: e.target.value }))}
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                            placeholder="https://lu.ma/event-slug or registration URL"
+                                        />
+                                        <p className="text-xs text-zinc-500 mt-1">
+                                            If left empty and Event URL is a Luma link, it will be used for registration
+                                        </p>
                                     </div>
 
                                     {/* Description */}

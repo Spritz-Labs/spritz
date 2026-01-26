@@ -38,6 +38,7 @@ import { supabase, isSupabaseConfigured } from "@/config/supabase";
 import { StatusModal } from "./StatusModal";
 import { SettingsModal } from "./SettingsModal";
 import { BugReportModal } from "./BugReportModal";
+import { RegistrationPreferencesModal } from "./RegistrationPreferencesModal";
 import { GlobalSearchModal } from "./GlobalSearchModal";
 import { QRCodeModal } from "./QRCodeModal";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -143,6 +144,7 @@ function DashboardContent({
     const [isSocialsModalOpen, setIsSocialsModalOpen] = useState(false);
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
     const [isInvitesModalOpen, setIsInvitesModalOpen] = useState(false);
+    const [isRegistrationPrefsOpen, setIsRegistrationPrefsOpen] = useState(false);
     const [showWakuSuccess, setShowWakuSuccess] = useState(false);
     const [showSolanaBanner, setShowSolanaBanner] = useState(true);
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
@@ -4759,6 +4761,13 @@ function DashboardContent({
                 ensAvatar={userENS.avatar}
                 onToggleUseCustomAvatar={toggleUseCustomAvatar}
                 onSetCustomAvatar={setCustomAvatar}
+            />
+
+            {/* Registration Preferences Modal */}
+            <RegistrationPreferencesModal
+                isOpen={isRegistrationPrefsOpen}
+                onClose={() => setIsRegistrationPrefsOpen(false)}
+                userAddress={userAddress}
             />
 
             {/* First-time Push Notification Prompt */}

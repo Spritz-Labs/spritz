@@ -45,7 +45,7 @@ export async function PATCH(
         const allowedFields = [
             "name", "description", "event_type", "event_date", 
             "start_time", "end_time", "venue", "organizer",
-            "event_url", "source", "is_featured", "is_verified", "tags"
+            "event_url", "rsvp_url", "source", "is_featured", "is_verified", "tags"
         ];
 
         for (const field of allowedFields) {
