@@ -302,17 +302,17 @@ export default function AdminEventsPage() {
     return (
         <AdminAuthWrapper>
             <AdminLayout title="Events">
-                <div className="space-y-6">
+                <div className="space-y-6 max-w-7xl mx-auto">
                     {/* Header */}
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div>
                             <h1 className="text-2xl font-bold text-white">Events Management</h1>
-                            <p className="text-zinc-400">Manage global events database</p>
+                            <p className="text-zinc-400">Manage global events database • {total} event{total !== 1 ? "s" : ""}</p>
                         </div>
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setShowScrapeModal(true)}
-                                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors flex items-center gap-2 text-sm font-medium"
                             >
                                 🔍 Scrape Events
                             </button>
@@ -322,122 +322,170 @@ export default function AdminEventsPage() {
                                     setEditingEvent(null);
                                     setShowAddModal(true);
                                 }}
-                                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                                className="px-4 py-2.5 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:shadow-lg hover:shadow-[#FF5500]/20 text-white rounded-xl transition-all flex items-center gap-2 text-sm font-medium"
                             >
                                 ➕ Add Event
                             </button>
                         </div>
                     </div>
 
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                            <p className="text-zinc-500 text-xs mb-1">Total Events</p>
+                            <p className="text-2xl font-bold text-white">{total}</p>
+                        </div>
+                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                            <p className="text-zinc-500 text-xs mb-1">Published</p>
+                            <p className="text-2xl font-bold text-green-400">{events.filter(e => e.status === "published").length}</p>
+                        </div>
+                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                            <p className="text-zinc-500 text-xs mb-1">Draft</p>
+                            <p className="text-2xl font-bold text-yellow-400">{events.filter(e => e.status === "draft").length}</p>
+                        </div>
+                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                            <p className="text-zinc-500 text-xs mb-1">Featured</p>
+                            <p className="text-2xl font-bold text-[#FF5500]">{events.filter(e => e.is_featured).length}</p>
+                        </div>
+                    </div>
+
                     {/* Filters */}
-                    <div className="bg-zinc-900/50 rounded-xl p-4 flex flex-wrap gap-4">
-                        <input
-                            type="text"
-                            placeholder="Search events..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="flex-1 min-w-[200px] px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                        />
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
-                        >
-                            <option value="">All Statuses</option>
-                            {EVENT_STATUSES.map((status) => (
-                                <option key={status} value={status}>{status}</option>
-                            ))}
-                        </select>
-                        <select
-                            value={typeFilter}
-                            onChange={(e) => setTypeFilter(e.target.value)}
-                            className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
-                        >
-                            <option value="">All Types</option>
-                            {EVENT_TYPES.map((type) => (
-                                <option key={type} value={type}>{EVENT_TYPE_ICONS[type]} {type}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="text-zinc-400">
-                        {total} event{total !== 1 ? "s" : ""} total
-                    </div>
-
-                    {/* Events Table */}
-                    <div className="bg-zinc-900/50 rounded-xl overflow-hidden">
-                        {isLoading ? (
-                            <div className="p-8 text-center text-zinc-400">Loading...</div>
-                        ) : events.length === 0 ? (
-                            <div className="p-8 text-center text-zinc-400">
-                                No events found. Add some events or scrape from a URL.
+                    <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                        <div className="flex flex-wrap gap-3">
+                            <div className="flex-1 min-w-[200px]">
+                                <div className="relative">
+                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    <input
+                                        type="text"
+                                        placeholder="Search events..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2.5 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]/50"
+                                    />
+                                </div>
                             </div>
-                        ) : (
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-zinc-800">
-                                        <th className="text-left p-4 text-zinc-400 font-medium">Event</th>
-                                        <th className="text-left p-4 text-zinc-400 font-medium">Date</th>
-                                        <th className="text-left p-4 text-zinc-400 font-medium">Location</th>
-                                        <th className="text-left p-4 text-zinc-400 font-medium">Status</th>
-                                        <th className="text-left p-4 text-zinc-400 font-medium">Source</th>
-                                        <th className="text-right p-4 text-zinc-400 font-medium">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {events.map((event) => (
-                                        <tr key={event.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                                            <td className="p-4">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-2xl">{EVENT_TYPE_ICONS[event.event_type]}</span>
-                                                    <div>
-                                                        <div className="font-medium text-white flex items-center gap-2">
-                                                            {event.name}
-                                                            {event.is_featured && <span className="text-yellow-500">⭐</span>}
-                                                        </div>
-                                                        <div className="text-sm text-zinc-500">{event.event_type}</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-zinc-300">{formatDate(event.event_date)}</td>
-                                            <td className="p-4 text-zinc-300">
-                                                {event.city || event.is_virtual ? (event.is_virtual ? "🌐 Virtual" : event.city) : "-"}
-                                            </td>
-                                            <td className="p-4">
-                                                <select
-                                                    value={event.status}
-                                                    onChange={(e) => toggleStatus(event, e.target.value)}
-                                                    className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer`}
-                                                >
-                                                    {EVENT_STATUSES.map((status) => (
-                                                        <option key={status} value={status}>{status}</option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td className="p-4 text-zinc-400 text-sm">{event.source}</td>
-                                            <td className="p-4 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <button
-                                                        onClick={() => openEditModal(event)}
-                                                        className="px-3 py-1 text-sm bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(event.id)}
-                                                        className="px-3 py-1 text-sm bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded transition-colors"
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="px-4 py-2.5 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                            >
+                                <option value="">All Statuses</option>
+                                {EVENT_STATUSES.map((status) => (
+                                    <option key={status} value={status}>{status}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={typeFilter}
+                                onChange={(e) => setTypeFilter(e.target.value)}
+                                className="px-4 py-2.5 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                            >
+                                <option value="">All Types</option>
+                                {EVENT_TYPES.map((type) => (
+                                    <option key={type} value={type}>{EVENT_TYPE_ICONS[type]} {type}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
+
+                    {/* Events Grid */}
+                    {isLoading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {[...Array(6)].map((_, i) => (
+                                <div key={i} className="bg-zinc-900/50 rounded-xl h-48 animate-pulse border border-zinc-800" />
+                            ))}
+                        </div>
+                    ) : events.length === 0 ? (
+                        <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-12 text-center">
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center">
+                                <span className="text-3xl">📅</span>
+                            </div>
+                            <p className="text-zinc-400 mb-4">No events found. Add some events or scrape from a URL.</p>
+                            <div className="flex justify-center gap-3">
+                                <button
+                                    onClick={() => setShowScrapeModal(true)}
+                                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+                                >
+                                    🔍 Scrape Events
+                                </button>
+                                <button
+                                    onClick={() => { resetForm(); setEditingEvent(null); setShowAddModal(true); }}
+                                    className="px-4 py-2 bg-[#FF5500] hover:bg-[#e04d00] text-white rounded-lg transition-colors"
+                                >
+                                    ➕ Add Event
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {events.map((event) => (
+                                <div 
+                                    key={event.id} 
+                                    className={`bg-zinc-900/50 rounded-xl border overflow-hidden hover:border-[#FF5500]/30 transition-all ${event.is_featured ? "border-[#FF5500]/40" : "border-zinc-800"}`}
+                                >
+                                    {/* Card Header */}
+                                    <div className="p-4 border-b border-zinc-800">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-xl shrink-0">
+                                                    {EVENT_TYPE_ICONS[event.event_type]}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h3 className="font-semibold text-white truncate flex items-center gap-2">
+                                                        {event.name}
+                                                        {event.is_featured && <span className="text-yellow-500 shrink-0">⭐</span>}
+                                                    </h3>
+                                                    <p className="text-xs text-zinc-500">{event.event_type}</p>
+                                                </div>
+                                            </div>
+                                            <select
+                                                value={event.status}
+                                                onChange={(e) => toggleStatus(event, e.target.value)}
+                                                className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer shrink-0`}
+                                            >
+                                                {EVENT_STATUSES.map((status) => (
+                                                    <option key={status} value={status}>{status}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Card Body */}
+                                    <div className="p-4 space-y-2">
+                                        <div className="flex items-center gap-2 text-sm text-zinc-400">
+                                            <span className="text-[#FF5500]">📅</span>
+                                            <span>{formatDate(event.event_date)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-zinc-400">
+                                            <span className="text-[#FF5500]">📍</span>
+                                            <span>{event.city || event.is_virtual ? (event.is_virtual ? "Virtual" : event.city) : "TBA"}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                            <span>🔗</span>
+                                            <span>Source: {event.source}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Card Actions */}
+                                    <div className="p-4 pt-0 flex gap-2">
+                                        <button
+                                            onClick={() => openEditModal(event)}
+                                            className="flex-1 px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+                                        >
+                                            ✏️ Edit
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(event.id)}
+                                            className="px-3 py-2 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Add/Edit Event Modal */}
