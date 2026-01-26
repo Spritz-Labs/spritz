@@ -657,9 +657,14 @@ export function ChannelChatModal({
     };
 
     const handleReaction = async (messageId: string, emoji: string) => {
-        await toggleReaction(messageId, emoji);
-        setShowReactionPicker(null);
-        setSelectedMessage(null);
+        try {
+            await toggleReaction(messageId, emoji);
+        } catch (error) {
+            console.error("[ChannelChatModal] Reaction error:", error);
+        } finally {
+            setShowReactionPicker(null);
+            setSelectedMessage(null);
+        }
     };
 
     const handlePinMessage = async (messageId: string, currentlyPinned: boolean) => {
@@ -895,14 +900,19 @@ export function ChannelChatModal({
 
     return (
         <AnimatePresence>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? "" : "p-4"}`}
-                style={isFullscreen ? {} : { paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 100px, 120px)' }}
-                onClick={onClose}
-            >
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? "" : "p-4"}`}
+                    style={isFullscreen ? {} : { paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 100px, 120px)' }}
+                    onClick={(e) => {
+                        // Only close if clicking directly on the backdrop, not on child elements
+                        if (e.target === e.currentTarget) {
+                            onClose();
+                        }
+                    }}
+                >
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1566,7 +1576,9 @@ export function ChannelChatModal({
                                                         {/* Reactions Display - Mobile Friendly */}
                                                         <ReactionDisplay
                                                             reactions={reactions[msg.id] || []}
-                                                            onReaction={(emoji) => handleReaction(msg.id, emoji)}
+                                                            onReaction={(emoji) => {
+                                                                handleReaction(msg.id, emoji);
+                                                            }}
                                                             isOwnMessage={isOwn}
                                                                 />
                                                             </div>

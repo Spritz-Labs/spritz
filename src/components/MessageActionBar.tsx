@@ -94,11 +94,17 @@ export function MessageActionBar({
     }, [isOpen]);
 
     // Handle reaction
-    const handleReaction = useCallback((emoji: string) => {
+    const handleReaction = useCallback(async (emoji: string) => {
         setSelectedEmoji(emoji);
         if (navigator.vibrate) navigator.vibrate(15);
+        // Wait for reaction callback to complete before closing
+        try {
+            await callbacks.onReaction?.(emoji);
+        } catch (error) {
+            console.error("[MessageActionBar] Reaction error:", error);
+        }
+        // Small delay for visual feedback
         setTimeout(() => {
-            callbacks.onReaction?.(emoji);
             onClose();
             setSelectedEmoji(null);
         }, 100);
@@ -324,7 +330,10 @@ export function MessageActionBar({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[9998]"
-                        onClick={onClose}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onClose();
+                        }}
                     />
 
                     {/* Action Bar */}
@@ -349,7 +358,10 @@ export function MessageActionBar({
                                 {reactions.map((emoji) => (
                                     <button
                                         key={emoji}
-                                        onClick={() => handleReaction(emoji)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleReaction(emoji);
+                                        }}
                                         className={`w-11 h-11 flex items-center justify-center text-2xl rounded-full transition-all touch-manipulation active:scale-90 ${
                                             selectedEmoji === emoji
                                                 ? "bg-[#FF5500]/30 scale-110"

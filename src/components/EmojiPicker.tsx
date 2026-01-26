@@ -641,7 +641,10 @@ export function ReactionDisplay({
                 .map(reaction => (
                     <button
                         key={reaction.emoji}
-                        onClick={() => onReaction(reaction.emoji)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onReaction(reaction.emoji);
+                        }}
                         className={`
                             flex items-center gap-1 rounded-full transition-all duration-100
                             min-w-[44px] min-h-[32px] px-2.5 py-1
