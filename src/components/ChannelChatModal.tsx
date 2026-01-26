@@ -1418,6 +1418,7 @@ export function ChannelChatModal({
                                                             isStarred: isStarred(msg.id),
                                                             canEdit: isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text",
                                                             hasMedia: msg.message_type === "pixel_art" || msg.message_type === "image",
+                                                            isPixelArt: msg.message_type === "pixel_art",
                                                             mediaUrl: (msg.message_type === "pixel_art" || msg.message_type === "image") ? msg.content : isGif ? msg.content.replace("[GIF]", "") : undefined,
                                                         }}
                                                         callbacks={{

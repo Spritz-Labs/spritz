@@ -1091,6 +1091,7 @@ export function GroupChatModal({
                                                         isPinned: false,
                                                         canEdit: false, // XMTP group messages can't be edited
                                                         hasMedia: isPixelArt || isGif,
+                                                        isPixelArt,
                                                         mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
                                                     }}
                                                     callbacks={{

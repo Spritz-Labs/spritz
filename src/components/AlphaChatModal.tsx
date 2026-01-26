@@ -1153,6 +1153,7 @@ export function AlphaChatModal({
                                                                 isPinned: msg.is_pinned,
                                                                 canEdit: false, // Alpha messages can't be edited
                                                                 hasMedia: isPixelArt,
+                                                                isPixelArt,
                                                                 mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : undefined,
                                                             }}
                                                             callbacks={{

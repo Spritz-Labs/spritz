@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion";
+import { upscalePixelArt, downloadPixelArt } from "./PixelArtImage";
 
 // ============= Types =============
 
@@ -18,6 +19,7 @@ export type MessageMenuAction =
     | "unstar"
     | "report"
     | "download"
+    | "downloadHD"
     | "share";
 
 export type MessageMenuConfig = {
@@ -33,6 +35,8 @@ export type MessageMenuConfig = {
     canEdit?: boolean;
     /** Has media that can be downloaded/shared */
     hasMedia?: boolean;
+    /** Is this a pixel art message (enables HD download) */
+    isPixelArt?: boolean;
     /** Media URL for download/share */
     mediaUrl?: string;
     /** Available actions - if not provided, shows all applicable */
@@ -131,6 +135,12 @@ const ACTION_ICONS: Record<MessageMenuAction, React.ReactNode> = {
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
     ),
+    downloadHD: (
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <text x="12" y="8" fontSize="6" fontWeight="bold" fill="currentColor" textAnchor="middle">HD</text>
+        </svg>
+    ),
     share: (
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -151,6 +161,7 @@ const ACTION_LABELS: Record<MessageMenuAction, string> = {
     unstar: "Unstar",
     report: "Report",
     download: "Save",
+    downloadHD: "Save HD ✨",
     share: "Share",
 };
 
@@ -343,6 +354,42 @@ export function UnifiedMessageMenu({
         onClose();
     }, [config.mediaUrl, callbacks, onClose]);
 
+    // Download HD (upscaled 16x for pixel art)
+    const [isDownloadingHD, setIsDownloadingHD] = useState(false);
+    const handleDownloadHD = useCallback(async () => {
+        if (!config.mediaUrl) {
+            onClose();
+            return;
+        }
+
+        setIsDownloadingHD(true);
+        try {
+            // Load the image
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error("Failed to load image"));
+                img.src = config.mediaUrl!;
+            });
+
+            // Upscale the image 16x
+            const upscaledDataUrl = upscalePixelArt(img, 16);
+            
+            // Download it
+            const filename = `pixel-art-hd-${Date.now()}.png`;
+            downloadPixelArt(upscaledDataUrl, filename);
+            
+            showToast("HD image downloaded! ✨");
+        } catch {
+            showToast("Failed to download HD", "error");
+        } finally {
+            setIsDownloadingHD(false);
+            onClose();
+        }
+    }, [config.mediaUrl, onClose]);
+
     // Swipe to dismiss handler
     const handleDragEnd = useCallback((_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         if (info.velocity.y > 500 || info.offset.y > 150) {
@@ -428,21 +475,26 @@ export function UnifiedMessageMenu({
                                                     if (action === "copy") handleCopy();
                                                     else if (action === "share") handleShare();
                                                     else if (action === "download") handleDownload();
+                                                    else if (action === "downloadHD") handleDownloadHD();
                                                     else handleAction(action, callback);
                                                 }}
-                                                disabled={action === "share" && isSharing}
+                                                disabled={(action === "share" && isSharing) || (action === "downloadHD" && isDownloadingHD)}
                                                 className={`flex flex-col items-center gap-2 py-4 rounded-2xl transition-all touch-manipulation active:scale-95 ${
-                                                    isDanger
-                                                        ? "text-red-400 bg-red-500/10 active:bg-red-500/20"
-                                                        : "text-zinc-300 bg-zinc-800/60 active:bg-zinc-700"
+                                                    action === "downloadHD"
+                                                        ? "text-emerald-400 bg-emerald-500/10 active:bg-emerald-500/20"
+                                                        : isDanger
+                                                            ? "text-red-400 bg-red-500/10 active:bg-red-500/20"
+                                                            : "text-zinc-300 bg-zinc-800/60 active:bg-zinc-700"
                                                 }`}
                                             >
-                                                {action === "share" && isSharing ? (
+                                                {(action === "share" && isSharing) || (action === "downloadHD" && isDownloadingHD) ? (
                                                     <div className="w-6 h-6 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
                                                 ) : (
                                                     ACTION_ICONS[action]
                                                 )}
-                                                <span className="text-xs font-medium">{ACTION_LABELS[action]}</span>
+                                                <span className="text-xs font-medium">
+                                                    {action === "downloadHD" && isDownloadingHD ? "Upscaling..." : ACTION_LABELS[action]}
+                                                </span>
                                             </button>
                                         ))}
                                     </div>
@@ -503,23 +555,28 @@ export function UnifiedMessageMenu({
                                             if (action === "copy") handleCopy();
                                             else if (action === "share") handleShare();
                                             else if (action === "download") handleDownload();
+                                            else if (action === "downloadHD") handleDownloadHD();
                                             else handleAction(action, callback);
                                         }}
-                                        disabled={action === "share" && isSharing}
+                                        disabled={(action === "share" && isSharing) || (action === "downloadHD" && isDownloadingHD)}
                                         className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
-                                            isDanger
-                                                ? "text-red-400 hover:bg-red-500/10"
-                                                : "text-zinc-300 hover:bg-zinc-800"
+                                            action === "downloadHD"
+                                                ? "text-emerald-400 hover:bg-emerald-500/10"
+                                                : isDanger
+                                                    ? "text-red-400 hover:bg-red-500/10"
+                                                    : "text-zinc-300 hover:bg-zinc-800"
                                         } ${index > 0 ? "border-t border-zinc-800/50" : ""}`}
                                     >
-                                        <span className={`${isDanger ? "text-red-400" : "text-zinc-500"} [&>svg]:w-5 [&>svg]:h-5`}>
-                                            {action === "share" && isSharing ? (
+                                        <span className={`${action === "downloadHD" ? "text-emerald-400" : isDanger ? "text-red-400" : "text-zinc-500"} [&>svg]:w-5 [&>svg]:h-5`}>
+                                            {(action === "share" && isSharing) || (action === "downloadHD" && isDownloadingHD) ? (
                                                 <div className="w-5 h-5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
                                             ) : (
                                                 ACTION_ICONS[action]
                                             )}
                                         </span>
-                                        <span className="text-sm font-medium">{ACTION_LABELS[action]}</span>
+                                        <span className="text-sm font-medium">
+                                            {action === "downloadHD" && isDownloadingHD ? "Upscaling..." : ACTION_LABELS[action]}
+                                        </span>
                                     </button>
                                 ))}
                             </div>
@@ -558,6 +615,11 @@ function buildActionsList(
     // Download (for media)
     if (config.hasMedia && (!available || available.includes("download"))) {
         actions.push({ action: "download", callback: callbacks.onDownload, isDanger: false });
+    }
+
+    // Download HD (for pixel art only)
+    if (config.isPixelArt && config.mediaUrl && (!available || available.includes("downloadHD"))) {
+        actions.push({ action: "downloadHD", callback: undefined, isDanger: false });
     }
 
     // Forward

@@ -1289,6 +1289,7 @@ export function ChatModal({
                                                             isPinned: false,
                                                             canEdit: isOwn && canEditMessage(msg.sentAt),
                                                             hasMedia: isPixelArt || isGif,
+                                                            isPixelArt,
                                                             mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
                                                         }}
                                                         callbacks={{
