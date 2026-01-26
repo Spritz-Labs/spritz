@@ -33,6 +33,7 @@ import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
+import { MessageMenuTrigger } from "./UnifiedMessageMenu";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -1409,9 +1410,38 @@ export function ChannelChatModal({
                                                         className="max-w-[280px]"
                                                     />
                                                 ) : (
+                                                    <MessageMenuTrigger
+                                                        config={{
+                                                            messageContent: msg.content,
+                                                            isOwn,
+                                                            isPinned: msg.is_pinned,
+                                                            isStarred: isStarred(msg.id),
+                                                            canEdit: isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text",
+                                                            hasMedia: msg.message_type === "pixel_art" || msg.message_type === "image",
+                                                        }}
+                                                        callbacks={{
+                                                            onReaction: (emoji) => handleReaction(msg.id, emoji),
+                                                            onReply: () => setReplyingTo(msg),
+                                                            onCopy: () => navigator.clipboard.writeText(msg.content),
+                                                            onForward: () => setForwardingMessage(msg),
+                                                            onPin: isAdmin ? () => handlePinMessage(msg.id, false) : undefined,
+                                                            onUnpin: isAdmin && msg.is_pinned ? () => handlePinMessage(msg.id, true) : undefined,
+                                                            onStar: () => toggleStar({
+                                                                messageId: msg.id,
+                                                                messageType: "channel",
+                                                                content: msg.content,
+                                                                senderAddress: msg.sender_address,
+                                                                senderName: formatSender(msg.sender_address),
+                                                                channelId: channel.id,
+                                                                channelName: channel.name,
+                                                                originalCreatedAt: msg.created_at,
+                                                            }),
+                                                            onEdit: (isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text") ? () => handleStartEdit(msg) : undefined,
+                                                            onDelete: (isOwn || isAdmin) && !msg.is_deleted ? () => handleDeleteMessage(msg.id) : undefined,
+                                                        }}
+                                                    >
                                                     <div
                                                         data-message-bubble
-                                                        onClick={() => handleMessageTap(msg.id)}
                                                         className={`px-4 py-2.5 rounded-2xl relative cursor-pointer ${
                                                             isOwn
                                                                 ? "bg-[#FF5500] text-white rounded-br-md"
@@ -1542,87 +1572,8 @@ export function ChannelChatModal({
                                                             onReaction={(emoji) => handleReaction(msg.id, emoji)}
                                                             isOwnMessage={isOwn}
                                                         />
-                                                        
-                                                        {/* Message Actions Sheet - Mobile Friendly */}
-                                                        <MessageActionsSheet
-                                                            isOpen={selectedMessage === msg.id}
-                                                            onClose={() => setSelectedMessage(null)}
-                                                            reactions={CHANNEL_REACTION_EMOJIS}
-                                                            onReaction={(emoji) => {
-                                                                handleReaction(msg.id, emoji);
-                                                                setSelectedMessage(null);
-                                                            }}
-                                                            messagePreview={msg.content.slice(0, 50) + (msg.content.length > 50 ? "..." : "")}
-                                                            actions={[
-                                                                {
-                                                                    id: "reply",
-                                                                    label: "Reply",
-                                                                    icon: ActionIcons.reply,
-                                                                    onClick: () => {
-                                                                        setReplyingTo(msg);
-                                                                        setSelectedMessage(null);
-                                                                    },
-                                                                },
-                                                                {
-                                                                    id: "copy",
-                                                                    label: "Copy Text",
-                                                                    icon: ActionIcons.copy,
-                                                                    onClick: () => {
-                                                                        navigator.clipboard.writeText(msg.content);
-                                                                        setSelectedMessage(null);
-                                                                    },
-                                                                },
-                                                                ...(isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text" ? [{
-                                                                    id: "edit",
-                                                                    label: "Edit Message",
-                                                                    icon: ActionIcons.edit,
-                                                                    onClick: () => handleStartEdit(msg),
-                                                                }] : []),
-                                                                {
-                                                                    id: "star",
-                                                                    label: isStarred(msg.id) ? "Unstar Message" : "Star Message",
-                                                                    icon: ActionIcons.star,
-                                                                    onClick: () => {
-                                                                        toggleStar({
-                                                                            messageId: msg.id,
-                                                                            messageType: "channel",
-                                                                            content: msg.content,
-                                                                            senderAddress: msg.sender_address,
-                                                                            senderName: formatSender(msg.sender_address),
-                                                                            channelId: channel.id,
-                                                                            channelName: channel.name,
-                                                                            originalCreatedAt: msg.created_at,
-                                                                        });
-                                                                        setSelectedMessage(null);
-                                                                    },
-                                                                },
-                                                                {
-                                                                    id: "forward",
-                                                                    label: "Forward Message",
-                                                                    icon: ActionIcons.forward,
-                                                                    onClick: () => {
-                                                                        setForwardingMessage(msg);
-                                                                        setSelectedMessage(null);
-                                                                    },
-                                                                },
-                                                                ...(isAdmin ? [{
-                                                                    id: "pin",
-                                                                    label: msg.is_pinned ? "Unpin Message" : "Pin Message",
-                                                                    icon: msg.is_pinned ? ActionIcons.pinFilled : ActionIcons.pin,
-                                                                    onClick: () => handlePinMessage(msg.id, msg.is_pinned || false),
-                                                                    loading: pinningMessage === msg.id,
-                                                                }] : []),
-                                                                ...((isOwn || isAdmin) && !msg.is_deleted ? [{
-                                                                    id: "delete",
-                                                                    label: "Delete Message",
-                                                                    icon: ActionIcons.delete,
-                                                                    onClick: () => handleDeleteMessage(msg.id),
-                                                                    variant: "danger" as const,
-                                                                    loading: isDeleting === msg.id,
-                                                                }] : []),
-                                                            ]}
-                                                        />
                                                     </div>
+                                                    </MessageMenuTrigger>
                                                 )}
                                                 <p className="text-[10px] text-zinc-600 mt-1 px-1">
                                                     {formatTime(msg.created_at)}

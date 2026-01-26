@@ -40,6 +40,7 @@ import { ImageGallery, useImageGallery, extractImagesFromMessages } from "./Imag
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { useMessageEdit, EditIndicator, EditControls } from "@/hooks/useMessageEdit";
 import { SwipeableMessage } from "./SwipeableMessage";
+import { MessageMenuTrigger } from "./UnifiedMessageMenu";
 
 const log = createLogger("Chat");
 
@@ -1271,10 +1272,9 @@ export function ChatModal({
                                                     <DateDivider date={msg.sentAt} className="my-4" />
                                                 )}
                                                 
-                                                {/* Swipeable Message Wrapper for mobile */}
+                                                {/* Swipeable + Unified Menu Wrapper */}
                                                 <SwipeableMessage
                                                     onSwipeRight={() => setReplyingTo(msg)}
-                                                    onSwipeLeft={isOwn ? undefined : undefined}
                                                     disabled={typeof window !== 'undefined' && window.innerWidth > 768}
                                                     leftAction={
                                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1282,6 +1282,28 @@ export function ChatModal({
                                                         </svg>
                                                     }
                                                 >
+                                                    <MessageMenuTrigger
+                                                        config={{
+                                                            messageContent: isPixelArt || isGif || isLocation ? undefined : msg.content,
+                                                            isOwn,
+                                                            isPinned: false,
+                                                            canEdit: isOwn && canEditMessage(msg.sentAt),
+                                                            hasMedia: isPixelArt || isGif,
+                                                        }}
+                                                        callbacks={{
+                                                            onReaction: (emoji) => toggleMsgReaction(msg.id, emoji),
+                                                            onReply: () => setReplyingTo(msg),
+                                                            onCopy: () => navigator.clipboard.writeText(msg.content),
+                                                            onDelete: isOwn ? () => {
+                                                                // Mark as deleted (optimistic)
+                                                                setMessages(prev => prev.filter(m => m.id !== msg.id));
+                                                            } : undefined,
+                                                            onDownload: (isPixelArt || isGif) ? () => {
+                                                                const url = isPixelArt ? getPixelArtUrl(msg.content) : getGifUrl(msg.content);
+                                                                window.open(url, '_blank');
+                                                            } : undefined,
+                                                        }}
+                                                    >
                                                     <motion.div
                                                         initial={{ opacity: 0, y: 10 }}
                                                         animate={{ opacity: 1, y: 0 }}
@@ -1772,6 +1794,7 @@ export function ChatModal({
                                                 )}
                                             </div>
                                         </motion.div>
+                                                    </MessageMenuTrigger>
                                                 </SwipeableMessage>
                                             </div>
                                         );

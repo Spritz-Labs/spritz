@@ -28,6 +28,7 @@ import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
+import { MessageMenuTrigger } from "./UnifiedMessageMenu";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -1145,9 +1146,25 @@ export function AlphaChatModal({
                                                             </div>
                                                         )}
 
+                                                        <MessageMenuTrigger
+                                                            config={{
+                                                                messageContent: isPixelArt ? undefined : msg.content,
+                                                                isOwn,
+                                                                isPinned: msg.is_pinned,
+                                                                canEdit: false, // Alpha messages can't be edited
+                                                                hasMedia: isPixelArt,
+                                                            }}
+                                                            callbacks={{
+                                                                onReaction: (emoji) => alphaChat.toggleReaction(msg.id, emoji),
+                                                                onReply: () => alphaChat.setReplyingTo(msg),
+                                                                onCopy: () => navigator.clipboard.writeText(msg.content),
+                                                                onPin: (isAdmin || moderation.permissions.canPin) && !msg.is_pinned ? () => handlePinMessage(msg.id, false) : undefined,
+                                                                onUnpin: (isAdmin || moderation.permissions.canPin) && msg.is_pinned ? () => handlePinMessage(msg.id, true) : undefined,
+                                                                onDelete: ((isOwn || isAdmin || moderation.permissions.canDelete) && !msg.is_deleted) ? () => handleDeleteMessage(msg.id) : undefined,
+                                                            }}
+                                                        >
                                                         <div
                                                             data-message-bubble
-                                                            onClick={() => handleMessageTap(msg.id)}
                                                             className={`${isFullscreen ? "max-w-[90%]" : "max-w-[75%]"} rounded-2xl px-4 py-2.5 relative cursor-pointer ${
                                                                 isOwn
                                                                     ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-br-md"
@@ -1317,53 +1334,8 @@ export function AlphaChatModal({
                                                                 </span>
                                                             </div>
 
-                                                            {/* Message Actions Sheet - Mobile Friendly */}
-                                                            <MessageActionsSheet
-                                                                isOpen={selectedMessage === msg.id}
-                                                                onClose={() => setSelectedMessage(null)}
-                                                                reactions={ALPHA_REACTION_EMOJIS}
-                                                                onReaction={(emoji) => {
-                                                                    handleReaction(msg.id, emoji);
-                                                                    setSelectedMessage(null);
-                                                                }}
-                                                                messagePreview={msg.content.slice(0, 50) + (msg.content.length > 50 ? "..." : "")}
-                                                                actions={[
-                                                                    {
-                                                                        id: "reply",
-                                                                        label: "Reply",
-                                                                        icon: ActionIcons.reply,
-                                                                        onClick: () => {
-                                                                            setReplyingTo(msg);
-                                                                            setSelectedMessage(null);
-                                                                        },
-                                                                    },
-                                                                    {
-                                                                        id: "copy",
-                                                                        label: "Copy Text",
-                                                                        icon: ActionIcons.copy,
-                                                                        onClick: () => {
-                                                                            navigator.clipboard.writeText(msg.content);
-                                                                            setSelectedMessage(null);
-                                                                        },
-                                                                    },
-                                                                    ...((isAdmin || moderation.permissions.canPin) ? [{
-                                                                        id: "pin",
-                                                                        label: msg.is_pinned ? "Unpin Message" : "Pin Message",
-                                                                        icon: msg.is_pinned ? ActionIcons.pinFilled : ActionIcons.pin,
-                                                                        onClick: () => handlePinMessage(msg.id, msg.is_pinned || false),
-                                                                        loading: pinningMessage === msg.id,
-                                                                    }] : []),
-                                                                    ...((isAdmin || moderation.permissions.canDelete) && !isOwn ? [{
-                                                                        id: "delete",
-                                                                        label: "Delete Message",
-                                                                        icon: ActionIcons.delete,
-                                                                        onClick: () => handleDeleteMessage(msg.id),
-                                                                        variant: "danger" as const,
-                                                                        loading: deletingMessage === msg.id,
-                                                                    }] : []),
-                                                                ]}
-                                                            />
                                                         </div>
+                                                        </MessageMenuTrigger>
                                                     </motion.div>
                                                     </div>
                                                 );

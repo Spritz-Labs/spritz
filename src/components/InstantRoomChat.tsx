@@ -9,6 +9,7 @@ import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { DateDivider } from "./UnreadDivider";
+import { MessageMenuTrigger } from "./UnifiedMessageMenu";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -530,9 +531,22 @@ export function InstantRoomChat({
                                         msg.isMe ? "items-end" : "items-start"
                                     }`}
                                 >
+                                    <MessageMenuTrigger
+                                        config={{
+                                            messageContent: msg.content,
+                                            isOwn: msg.isMe,
+                                            isPinned: false,
+                                            canEdit: false, // Instant room messages can't be edited
+                                            hasMedia: false,
+                                        }}
+                                        callbacks={{
+                                            onReaction: (emoji) => toggleReaction(msg.id, emoji),
+                                            onReply: () => setReplyingTo(msg),
+                                            onCopy: () => navigator.clipboard.writeText(msg.content),
+                                        }}
+                                    >
                                     <div
                                         data-message-bubble
-                                        onClick={() => handleMessageTap(msg.id)}
                                         className={`max-w-[85%] rounded-2xl px-3 py-2 relative cursor-pointer ${
                                             msg.isMe
                                                 ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
@@ -606,38 +620,8 @@ export function InstantRoomChat({
                                             </div>
                                         )}
 
-                                        {/* Message Actions Sheet - Mobile Friendly */}
-                                        <MessageActionsSheet
-                                            isOpen={selectedMessage === msg.id}
-                                            onClose={() => setSelectedMessage(null)}
-                                            reactions={REACTION_EMOJIS}
-                                            onReaction={(emoji) => {
-                                                toggleReaction(msg.id, emoji);
-                                                setSelectedMessage(null);
-                                            }}
-                                            messagePreview={msg.content.slice(0, 50) + (msg.content.length > 50 ? "..." : "")}
-                                            actions={[
-                                                {
-                                                    id: "reply",
-                                                    label: "Reply",
-                                                    icon: ActionIcons.reply,
-                                                    onClick: () => {
-                                                        setReplyingTo(msg);
-                                                        setSelectedMessage(null);
-                                                    },
-                                                },
-                                                {
-                                                    id: "copy",
-                                                    label: "Copy Text",
-                                                    icon: ActionIcons.copy,
-                                                    onClick: () => {
-                                                        navigator.clipboard.writeText(msg.content);
-                                                        setSelectedMessage(null);
-                                                    },
-                                                },
-                                            ]}
-                                        />
                                     </div>
+                                    </MessageMenuTrigger>
                                     <span className="text-xs text-zinc-500 mt-1 px-1">
                                         {formatTime(msg.timestamp)}
                                     </span>

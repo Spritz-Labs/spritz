@@ -29,6 +29,7 @@ import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
+import { MessageMenuTrigger } from "./UnifiedMessageMenu";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
@@ -1083,11 +1084,26 @@ export function GroupChatModal({
                                                         )}
                                                     </div>
                                                 )}
+                                                <MessageMenuTrigger
+                                                    config={{
+                                                        messageContent: isPixelArt || isGif || isLocation ? undefined : msg.content,
+                                                        isOwn,
+                                                        isPinned: false,
+                                                        canEdit: false, // XMTP group messages can't be edited
+                                                        hasMedia: isPixelArt || isGif,
+                                                    }}
+                                                    callbacks={{
+                                                        onReaction: (emoji) => toggleMsgReaction(msg.id, emoji),
+                                                        onReply: () => setReplyingTo(msg),
+                                                        onCopy: () => navigator.clipboard.writeText(msg.content),
+                                                        onDelete: isOwn ? () => {
+                                                            // Remove from local state
+                                                            setMessages(prev => prev.filter(m => m.id !== msg.id));
+                                                        } : undefined,
+                                                    }}
+                                                >
                                                 <div
                                                     data-message-bubble
-                                                    onClick={() =>
-                                                        handleMessageTap(msg.id)
-                                                    }
                                                     className={`max-w-[70%] rounded-2xl px-4 py-2 relative cursor-pointer ${
                                                         isOwn
                                                             ? "bg-[#FF5500] text-white rounded-br-md"
@@ -1265,38 +1281,8 @@ export function GroupChatModal({
                                                         )}
                                                     </p>
 
-                                                    {/* Message Actions Sheet - Mobile Friendly */}
-                                                    <MessageActionsSheet
-                                                        isOpen={selectedMessage === msg.id}
-                                                        onClose={() => setSelectedMessage(null)}
-                                                        reactions={MESSAGE_REACTION_EMOJIS}
-                                                        onReaction={async (emoji) => {
-                                                            await toggleMsgReaction(msg.id, emoji);
-                                                            setSelectedMessage(null);
-                                                        }}
-                                                        messagePreview={msg.content.slice(0, 50) + (msg.content.length > 50 ? "..." : "")}
-                                                        actions={[
-                                                            {
-                                                                id: "reply",
-                                                                label: "Reply",
-                                                                icon: ActionIcons.reply,
-                                                                onClick: () => {
-                                                                    setReplyingTo(msg);
-                                                                    setSelectedMessage(null);
-                                                                },
-                                                            },
-                                                            {
-                                                                id: "copy",
-                                                                label: "Copy Text",
-                                                                icon: ActionIcons.copy,
-                                                                onClick: () => {
-                                                                    navigator.clipboard.writeText(msg.content);
-                                                                    setSelectedMessage(null);
-                                                                },
-                                                            },
-                                                        ]}
-                                                    />
                                                     </div>
+                                                </MessageMenuTrigger>
                                             </motion.div>
                                             </div>
                                         );
