@@ -33,6 +33,13 @@ import { fetchOnlineStatuses } from "@/hooks/usePresence";
 import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
 import { useMutedConversations, useBlockedUsers, useReportUser } from "@/hooks/useMuteBlockReport";
 import { MuteOptionsModal, BlockUserModal, ReportUserModal, ConversationActionsMenu } from "./MuteBlockReportModals";
+import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
+import { ChatSkeleton } from "./ChatSkeleton";
+import { DateDivider } from "./UnreadDivider";
+import { ImageGallery, useImageGallery, extractImagesFromMessages } from "./ImageGallery";
+import { useDraftMessages } from "@/hooks/useDraftMessages";
+import { useMessageEdit, EditIndicator, EditControls } from "@/hooks/useMessageEdit";
+import { SwipeableMessage } from "./SwipeableMessage";
 
 const log = createLogger("Chat");
 
@@ -151,9 +158,39 @@ export function ChatModal({
     const muteInfo = getMuteInfo("dm", peerAddress);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const isInitialLoadRef = useRef(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef = useRef<any>(null);
+    
+    // Draft messages persistence
+    const { draft, saveDraft, clearDraft } = useDraftMessages("dm", peerAddress, userAddress);
+    
+    // Image gallery for viewing multiple images
+    const { isOpen: galleryOpen, images: galleryImages, initialIndex: galleryIndex, openGallery, closeGallery } = useImageGallery();
+    
+    // Message edit functionality
+    const { 
+        editingMessage, 
+        editText, 
+        setEditText, 
+        canEditMessage, 
+        formatEditTimeRemaining,
+        startEditing, 
+        cancelEditing, 
+        getEditedContent,
+        hasChanges: hasEditChanges,
+        isEditing 
+    } = useMessageEdit();
+    
+    // Scroll to bottom with unread badge
+    const { 
+        newMessageCount, 
+        isAtBottom, 
+        onNewMessage, 
+        resetUnreadCount,
+        scrollToBottom: scrollToBottomFn 
+    } = useScrollToBottom(messagesContainerRef);
 
     const {
         isInitialized,
@@ -208,6 +245,34 @@ export function ChatModal({
     };
 
     const displayName = peerName || formatAddress(peerAddress);
+
+    // Initialize message from draft when opening
+    useEffect(() => {
+        if (isOpen && draft?.text && !newMessage) {
+            setNewMessage(draft.text);
+            if (draft.replyToId) {
+                // Find the reply target message
+                const replyTarget = messages.find(m => m.id === draft.replyToId);
+                if (replyTarget) {
+                    setReplyingTo(replyTarget);
+                }
+            }
+        }
+    }, [isOpen, draft]);
+
+    // Save draft when message changes (debounced in hook)
+    useEffect(() => {
+        if (isOpen) {
+            saveDraft(newMessage, replyingTo?.id, replyingTo?.content?.slice(0, 50));
+        }
+    }, [newMessage, replyingTo, isOpen, saveDraft]);
+
+    // Track new messages for unread badge when not at bottom
+    useEffect(() => {
+        if (messages.length > 0 && !isAtBottom) {
+            onNewMessage();
+        }
+    }, [messages.length]);
 
     // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
     useEffect(() => {
@@ -668,6 +733,7 @@ export function ChatModal({
         setNewMessage("");
         setReplyingTo(null); // Clear reply state
         setChatError(null);
+        clearDraft(); // Clear saved draft
         
         // Stop typing indicator
         stopTyping();
@@ -730,6 +796,7 @@ export function ChatModal({
         stopTyping,
         replyingTo,
         peerName,
+        clearDraft,
     ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -1099,37 +1166,22 @@ export function ChatModal({
                             </div>
 
                             {/* Messages - flex-col-reverse so newest at bottom */}
-                            <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse" data-chat-messages>
+                            <div 
+                                ref={messagesContainerRef}
+                                className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse" 
+                                data-chat-messages
+                            >
                                 {isInitializing && (
-                                    <div className="flex items-center justify-center h-full">
-                                        <div className="text-center">
-                                            <svg
-                                                className="animate-spin h-8 w-8 text-[#FF5500] mx-auto mb-3"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                            >
-                                                <circle
-                                                    className="opacity-25"
-                                                    cx="12"
-                                                    cy="12"
-                                                    r="10"
-                                                    stroke="currentColor"
-                                                    strokeWidth="4"
-                                                />
-                                                <path
-                                                    className="opacity-75"
-                                                    fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                />
-                                            </svg>
-                                            <p className="text-zinc-400">
-                                                Initializing Waku...
+                                    <div className="flex flex-col h-full">
+                                        <div className="text-center py-4">
+                                            <p className="text-zinc-400 text-sm">
+                                                Initializing secure connection...
                                             </p>
-                                            <p className="text-zinc-500 text-sm mt-1">
-                                                Please sign the message in your
-                                                wallet
+                                            <p className="text-zinc-500 text-xs mt-1">
+                                                Please sign the message in your wallet
                                             </p>
                                         </div>
+                                        <ChatSkeleton messageCount={6} />
                                     </div>
                                 )}
 
@@ -1186,36 +1238,59 @@ export function ChatModal({
                                 {/* Messages container - flows bottom to top with column-reverse */}
                                 <div className="space-y-3">
                                 {/* Deduplicate messages by ID and filter out decryption failures */}
-                                {Array.from(
-                                    new Map(
-                                        messages
-                                            .filter((m) => m.content !== DECRYPTION_FAILED_MARKER)
-                                            .map((m) => [m.id, m])
-                                    ).values()
-                                ).map((msg) => {
-                                    // Compare addresses case-insensitively
-                                    const isOwn = userAddress
-                                        ? msg.senderAddress?.toLowerCase() ===
-                                          userAddress.toLowerCase()
-                                        : false;
-                                    const isPixelArt = isPixelArtMessage(
-                                        msg.content
+                                {(() => {
+                                    const deduped = Array.from(
+                                        new Map(
+                                            messages
+                                                .filter((m) => m.content !== DECRYPTION_FAILED_MARKER)
+                                                .map((m) => [m.id, m])
+                                        ).values()
                                     );
-                                    const isGif = isGifMessage(msg.content);
-                                    const isLocation = isLocationMessage(msg.content);
-                                    const locationData = isLocation ? parseLocationMessage(msg.content) : null;
+                                    let lastDate: string | null = null;
+                                    
+                                    return deduped.map((msg, index) => {
+                                        // Compare addresses case-insensitively
+                                        const isOwn = userAddress
+                                            ? msg.senderAddress?.toLowerCase() ===
+                                              userAddress.toLowerCase()
+                                            : false;
+                                        const isPixelArt = isPixelArtMessage(msg.content);
+                                        const isGif = isGifMessage(msg.content);
+                                        const isLocation = isLocationMessage(msg.content);
+                                        const locationData = isLocation ? parseLocationMessage(msg.content) : null;
+                                        
+                                        // Check if we need a date divider
+                                        const msgDate = msg.sentAt.toDateString();
+                                        const showDateDivider = msgDate !== lastDate;
+                                        lastDate = msgDate;
 
-                                    return (
-                                        <motion.div
-                                            key={msg.id}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className={`flex items-end gap-2 ${
-                                                isOwn
-                                                    ? "justify-end"
-                                                    : "justify-start"
-                                            }`}
-                                        >
+                                        return (
+                                            <div key={msg.id}>
+                                                {/* Date Divider */}
+                                                {showDateDivider && (
+                                                    <DateDivider date={msg.sentAt} className="my-4" />
+                                                )}
+                                                
+                                                {/* Swipeable Message Wrapper for mobile */}
+                                                <SwipeableMessage
+                                                    onSwipeRight={() => setReplyingTo(msg)}
+                                                    onSwipeLeft={isOwn ? undefined : undefined}
+                                                    disabled={typeof window !== 'undefined' && window.innerWidth > 768}
+                                                    leftAction={
+                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                        </svg>
+                                                    }
+                                                >
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className={`flex items-end gap-2 ${
+                                                            isOwn
+                                                                ? "justify-end"
+                                                                : "justify-start"
+                                                        }`}
+                                                    >
                                             {/* Peer avatar for incoming messages */}
                                             {!isOwn && (
                                                 <div className="flex-shrink-0 mb-1">
@@ -1697,8 +1772,11 @@ export function ChatModal({
                                                 )}
                                             </div>
                                         </motion.div>
-                                    );
-                                })}
+                                                </SwipeableMessage>
+                                            </div>
+                                        );
+                                    });
+                                })()}
                                 </div>
                             </div>
 
@@ -1882,7 +1960,7 @@ export function ChatModal({
                         isSending={isUploadingPixelArt}
                     />
 
-                    {/* Image Lightbox */}
+                    {/* Image Lightbox with Share & Download */}
                     <AnimatePresence>
                         {viewingImage && (
                             <motion.div
@@ -1920,20 +1998,43 @@ export function ChatModal({
                                         </svg>
                                     </button>
 
-                                    {/* Full-size pixel art image */}
+                                    {/* Full-size image */}
                                     <PixelArtImage
                                         src={viewingImage}
                                         size="lg"
                                         className="!w-auto !h-auto max-w-[90vw] max-h-[80vh] min-w-[256px] min-h-[256px] shadow-2xl"
                                     />
 
-                                    {/* Action buttons */}
+                                    {/* Action buttons - Share & Download */}
                                     <div className="mt-4 flex justify-center gap-3">
+                                        <a
+                                            href={viewingImage}
+                                            download
+                                            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                strokeWidth={2}
+                                                stroke="currentColor"
+                                                className="w-4 h-4"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                                />
+                                            </svg>
+                                            Download
+                                        </a>
                                         <a
                                             href={viewingImage}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                                            onClick={(e) => e.stopPropagation()}
                                         >
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
@@ -1957,6 +2058,13 @@ export function ChatModal({
                             </motion.div>
                         )}
                     </AnimatePresence>
+                    
+                    {/* Scroll to Bottom Button */}
+                    <ScrollToBottom
+                        containerRef={messagesContainerRef}
+                        unreadCount={newMessageCount}
+                        onScrollToBottom={resetUnreadCount}
+                    />
 
                     {/* Message Search Overlay */}
                     <MessageSearch
