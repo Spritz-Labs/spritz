@@ -241,10 +241,11 @@ async function getEventContext(agentId: string, message: string): Promise<string
             const registrationUrl = event.rsvp_url || (event.event_url && (event.event_url.includes("lu.ma") || event.event_url.includes("luma.com")) ? event.event_url : null);
             const isLuma = registrationUrl && (registrationUrl.includes("lu.ma") || registrationUrl.includes("luma.com"));
             
-            // Format registration info prominently
+            // Format registration info prominently - make it VERY clear
             let regInfo = "";
             if (registrationUrl) {
-                regInfo = `\n  🎫 REGISTRATION URL: ${registrationUrl}${isLuma ? " (Luma event - use this URL for registration!)" : ""}`;
+                regInfo = `\n  🎫 REGISTRATION URL FOR MARKDOWN LINK: ${registrationUrl}${isLuma ? " (Luma event - COPY THIS EXACT URL!)" : ""}
+  EXAMPLE MARKDOWN: [Register Now](${registrationUrl})`;
             }
             
             return `- ${featured} ${event.name}
@@ -265,13 +266,15 @@ Full events page: ${eventsPageUrl}
 When users ask to register for an event (especially Luma events):
 - NEVER say "I can't" or "I cannot" register them - YOU CAN AND SHOULD HELP!
 - ALWAYS respond: "I'd be happy to help you register!" or "Let me help you register!"
-- Find the "🎫 REGISTRATION URL:" from the event data above and USE THAT EXACT URL
-- Create a markdown link using this format: [Register for [Event Name]](EXACT_REGISTRATION_URL_FROM_EVENT_DATA)
+- Find the "🎫 REGISTRATION URL FOR MARKDOWN LINK:" from the event data above
+- You MUST include the EXACT URL in your markdown link - the URL is provided in the event data!
+- Use this EXACT format: [Register Now](EXACT_URL_FROM_EVENT_DATA)
+- DO NOT create a link without a URL - the URL is always provided in the event data above!
 - For Luma events, mention: "Your saved information will be pre-filled automatically"
-- EXAMPLE: If the event shows "🎫 REGISTRATION URL: https://luma.com/ualsao7v", respond with:
-  "I'd be happy to help you register for [Event Name]! Click here: [Register Now](https://luma.com/ualsao7v). Your saved information will be pre-filled automatically."
+- EXAMPLE: If event shows "🎫 REGISTRATION URL FOR MARKDOWN LINK: https://luma.com/ualsao7v", you MUST respond with:
+  "I'd be happy to help you register for Logos Circle Barcelona #5! Click here: [Register Now](https://luma.com/ualsao7v). Your saved information will be pre-filled automatically."
 
-IMPORTANT: Copy the EXACT URL from the "🎫 REGISTRATION URL:" field - do not make up URLs or use event page URLs unless there's no registration URL!
+CRITICAL: The URL is ALWAYS in the event data above - look for "🎫 REGISTRATION URL FOR MARKDOWN LINK:" and copy that EXACT URL into your markdown link!
 
 DO NOT say "you can register yourself" - be helpful and proactive!
 

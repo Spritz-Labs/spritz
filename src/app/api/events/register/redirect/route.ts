@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Validate it's a Luma URL
-    if (!eventUrl.includes("lu.ma")) {
+    if (!eventUrl.includes("lu.ma") && !eventUrl.includes("luma.com")) {
         return NextResponse.json({ error: "Only Luma events are supported" }, { status: 400 });
     }
 
@@ -31,20 +31,105 @@ export async function GET(request: NextRequest) {
     
     const registrationData = dataParam ? JSON.parse(decodeURIComponent(dataParam)) : null;
 
+    // Inject the auto-fill script into the HTML
+    const autoFillScript = `
+        // Luma Auto-Fill Script
+        (function() {
+            const isLumaPage = window.location.hostname.includes('lu.ma') || window.location.hostname.includes('luma.com');
+            if (!isLumaPage) return;
+
+            function getRegistrationData() {
+                try {
+                    const dataStr = sessionStorage.getItem('luma_registration_data');
+                    return dataStr ? JSON.parse(dataStr) : null;
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            async function autoFillForm() {
+                const data = getRegistrationData();
+                if (!data) return false;
+
+                // Wait for form elements
+                function waitForElement(selector, timeout = 10000) {
+                    return new Promise((resolve) => {
+                        const element = document.querySelector(selector);
+                        if (element) {
+                            resolve(element);
+                            return;
+                        }
+                        const observer = new MutationObserver(() => {
+                            const el = document.querySelector(selector);
+                            if (el) {
+                                observer.disconnect();
+                                resolve(el);
+                            }
+                        });
+                        observer.observe(document.body, { childList: true, subtree: true });
+                        setTimeout(() => observer.disconnect(), timeout);
+                    });
+                }
+
+                try {
+                    await waitForElement('input[type="email"], input[name="email"]', 5000);
+
+                    // Fill fields
+                    const fillField = (selector, value) => {
+                        const field = document.querySelector(selector);
+                        if (field && value) {
+                            field.value = value;
+                            field.dispatchEvent(new Event('input', { bubbles: true }));
+                            field.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    };
+
+                    fillField('input[name="name"], input[name="full_name"]', data.name);
+                    fillField('input[type="email"], input[name="email"]', data.email);
+                    fillField('input[type="tel"], input[name="phone"]', data.phone);
+                    fillField('input[name="company"]', data.company);
+                    fillField('input[name="job_title"], input[name="title"]', data.jobTitle);
+
+                    // Click register button after a delay
+                    setTimeout(() => {
+                        const btn = document.querySelector('button[type="submit"], button:contains("Register"), button:contains("RSVP")') ||
+                                   Array.from(document.querySelectorAll('button')).find(b => 
+                                       /register|rsvp|sign up/i.test(b.textContent || '')
+                                   );
+                        if (btn) btn.click();
+                    }, 1000);
+
+                    return true;
+                } catch (e) {
+                    console.error('[Auto-Fill] Error:', e);
+                    return false;
+                }
+            }
+
+            // Run auto-fill
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => setTimeout(autoFillForm, 500));
+            } else {
+                setTimeout(autoFillForm, 500);
+            }
+            setTimeout(autoFillForm, 2000);
+            setTimeout(autoFillForm, 5000);
+        })();
+    `;
+
     const html = `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Redirecting to Event Registration...</title>
-    <meta http-equiv="refresh" content="0;url=${eventUrl}">
     <script>
-        // Store registration data in sessionStorage for auto-fill
+        // Store registration data in sessionStorage
         ${registrationData ? `
         try {
             sessionStorage.setItem('luma_registration_data', JSON.stringify(${JSON.stringify(registrationData.userInfo)}));
             sessionStorage.setItem('luma_registration_timestamp', '${registrationData.timestamp}');
-            console.log('[Event Registration] Stored registration data for auto-fill');
+            console.log('[Event Registration] Stored registration data');
         } catch (e) {
             console.error('[Event Registration] Failed to store data:', e);
         }
@@ -53,11 +138,15 @@ export async function GET(request: NextRequest) {
         // Redirect to event page
         window.location.href = ${JSON.stringify(eventUrl)};
     </script>
+    <script>
+        ${autoFillScript}
+    </script>
 </head>
 <body>
     <div style="font-family: system-ui; text-align: center; padding: 50px;">
         <p>Redirecting to event registration...</p>
         <p style="color: #666; font-size: 14px;">If you're not redirected, <a href="${eventUrl}">click here</a>.</p>
+        <p style="color: #999; font-size: 12px; margin-top: 20px;">Your information will be auto-filled when the page loads.</p>
     </div>
 </body>
 </html>
