@@ -117,6 +117,8 @@ export async function POST(
             autoSync,
             syncIntervalHours,
             excludePatterns,
+            infiniteScroll,
+            scrollCount,
         } = body;
 
         if (!userAddress || !url) {
@@ -194,6 +196,12 @@ export async function POST(
             }
             if (excludePatterns && Array.isArray(excludePatterns)) {
                 insertData.exclude_patterns = excludePatterns.slice(0, 20); // Max 20 patterns
+            }
+            if (infiniteScroll !== undefined) {
+                insertData.infinite_scroll = infiniteScroll;
+            }
+            if (scrollCount && scrollCount > 0) {
+                insertData.scroll_count = Math.min(scrollCount, 30); // Max 30 scroll iterations
             }
         }
 

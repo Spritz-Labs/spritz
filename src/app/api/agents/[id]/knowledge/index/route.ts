@@ -119,9 +119,11 @@ async function fetchAndCleanContent(
         scrapeMethod?: "basic" | "firecrawl";
         crawlDepth?: number;
         excludePatterns?: string[];
+        infiniteScroll?: boolean;
+        scrollCount?: number;
     } = {}
 ): Promise<{ content: string; pageCount: number }> {
-    const { scrapeMethod = "basic", crawlDepth = 1, excludePatterns } = options;
+    const { scrapeMethod = "basic", crawlDepth = 1, excludePatterns, infiniteScroll = false, scrollCount = 5 } = options;
     
     // PRIORITY 1: Use GitHub API for GitHub repositories
     if (isGitHubUrl(url)) {
@@ -147,13 +149,15 @@ async function fetchAndCleanContent(
     
     // PRIORITY 2: Use Firecrawl if configured and requested
     if (scrapeMethod === "firecrawl" && isFirecrawlConfigured()) {
-        console.log("[Indexing] Using Firecrawl for URL:", url);
+        console.log("[Indexing] Using Firecrawl for URL:", url, "infiniteScroll:", infiniteScroll);
         
         try {
             const result = await fetchContent(url, {
                 crawlDepth,
                 excludePatterns,
                 maxPages: 50,
+                infiniteScroll,
+                scrollCount,
             });
             
             console.log("[Indexing] Firecrawl returned", result.pageCount, "pages");
@@ -251,11 +255,13 @@ export async function POST(
 
         try {
             // Fetch content using configured method
-            console.log("[Indexing] Fetching content from:", knowledge.url, "method:", knowledge.scrape_method || "basic");
+            console.log("[Indexing] Fetching content from:", knowledge.url, "method:", knowledge.scrape_method || "basic", "infiniteScroll:", knowledge.infinite_scroll || false);
             const { content, pageCount } = await fetchAndCleanContent(knowledge.url, {
                 scrapeMethod: knowledge.scrape_method || "basic",
                 crawlDepth: knowledge.crawl_depth || 1,
                 excludePatterns: knowledge.exclude_patterns || undefined,
+                infiniteScroll: knowledge.infinite_scroll || false,
+                scrollCount: knowledge.scroll_count || 5,
             });
             
             if (!content || content.length < 100) {

@@ -39,6 +39,8 @@ type FirecrawlOptions = {
     autoSync: boolean;
     syncIntervalHours: number;
     excludePatterns: string;
+    infiniteScroll: boolean;
+    scrollCount: number;
 };
 
 const STATUS_CONFIG = {
@@ -89,6 +91,8 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
         autoSync: false,
         syncIntervalHours: 24,
         excludePatterns: "",
+        infiniteScroll: false,
+        scrollCount: 5,
     });
     
     // Check if this is an official agent
@@ -153,6 +157,8 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                 requestBody.crawlDepth = firecrawlOptions.crawlDepth;
                 requestBody.autoSync = firecrawlOptions.autoSync;
                 requestBody.syncIntervalHours = firecrawlOptions.syncIntervalHours;
+                requestBody.infiniteScroll = firecrawlOptions.infiniteScroll;
+                requestBody.scrollCount = firecrawlOptions.scrollCount;
                 
                 // Parse exclude patterns
                 const patterns = firecrawlOptions.excludePatterns
@@ -186,6 +192,8 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                 autoSync: false,
                 syncIntervalHours: 24,
                 excludePatterns: "",
+                infiniteScroll: false,
+                scrollCount: 5,
             });
             setShowAdvanced(false);
         } catch (err) {
@@ -502,6 +510,68 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                                         <span>5 (deep crawl)</span>
                                                                     </div>
                                                                 </div>
+
+                                                                {/* Infinite Scroll */}
+                                                                <div className="flex items-center justify-between">
+                                                                    <div>
+                                                                        <label className="text-xs font-medium text-zinc-300 block">
+                                                                            Infinite Scroll
+                                                                        </label>
+                                                                        <p className="text-[10px] text-zinc-500">
+                                                                            For pages that lazy-load content on scroll
+                                                                        </p>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => setFirecrawlOptions(prev => ({ 
+                                                                            ...prev, 
+                                                                            infiniteScroll: !prev.infiniteScroll 
+                                                                        }))}
+                                                                        className={`w-12 h-6 rounded-full transition-colors relative ${
+                                                                            firecrawlOptions.infiniteScroll 
+                                                                                ? "bg-orange-500" 
+                                                                                : "bg-zinc-700"
+                                                                        }`}
+                                                                    >
+                                                                        <span 
+                                                                            className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                                                firecrawlOptions.infiniteScroll 
+                                                                                    ? "translate-x-7" 
+                                                                                    : "translate-x-1"
+                                                                            }`}
+                                                                        />
+                                                                    </button>
+                                                                </div>
+
+                                                                {/* Scroll Count (only if infinite scroll enabled) */}
+                                                                {firecrawlOptions.infiniteScroll && (
+                                                                    <div>
+                                                                        <label className="text-xs font-medium text-zinc-300 mb-2 block">
+                                                                            Scroll Iterations: {firecrawlOptions.scrollCount}x
+                                                                        </label>
+                                                                        <div className="flex gap-1">
+                                                                            {[3, 5, 10, 15, 20].map((count) => (
+                                                                                <button
+                                                                                    key={count}
+                                                                                    type="button"
+                                                                                    onClick={() => setFirecrawlOptions(prev => ({ 
+                                                                                        ...prev, 
+                                                                                        scrollCount: count 
+                                                                                    }))}
+                                                                                    className={`flex-1 py-1.5 text-xs rounded transition-colors ${
+                                                                                        firecrawlOptions.scrollCount === count
+                                                                                            ? "bg-orange-500 text-white"
+                                                                                            : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"
+                                                                                    }`}
+                                                                                >
+                                                                                    {count}x
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                        <p className="text-[10px] text-zinc-500 mt-1">
+                                                                            More scrolls = more content but slower scraping
+                                                                        </p>
+                                                                    </div>
+                                                                )}
                                                                 
                                                                 {/* Auto Sync */}
                                                                 <div className="flex items-center justify-between">
