@@ -23,6 +23,8 @@ type KnowledgeItem = {
     sync_interval_hours?: number;
     last_synced_at?: string | null;
     exclude_patterns?: string[];
+    infinite_scroll?: boolean;
+    scroll_count?: number;
 };
 
 interface AgentKnowledgeModalProps {
@@ -295,6 +297,8 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
             autoSync: item.auto_sync || false,
             syncIntervalHours: item.sync_interval_hours || 24,
             excludePatterns: (item.exclude_patterns || []).join("\n"),
+            infiniteScroll: item.infinite_scroll || false,
+            scrollCount: item.scroll_count || 5,
         });
     };
 
