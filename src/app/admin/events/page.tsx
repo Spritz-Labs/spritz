@@ -376,6 +376,19 @@ export default function AdminEventsPage() {
             });
 
             setScrapeStatus("extracting");
+            
+            // Check if response is ok
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+                console.error("[Scrape] API Error:", errorData);
+                const errorMsg = errorData.details 
+                    ? `${errorData.error}: ${errorData.details}`
+                    : errorData.error || `HTTP ${res.status}: ${res.statusText}`;
+                alert(errorMsg);
+                setScrapeStatus("idle");
+                return;
+            }
+
             const data = await res.json();
 
             if (data.success) {
@@ -413,12 +426,17 @@ export default function AdminEventsPage() {
                     }, 1500); // Show result for 1.5 seconds then close
                 }
             } else {
-                alert(data.error || "Failed to scrape events");
+                console.error("[Scrape] API returned error:", data);
+                const errorMsg = data.details 
+                    ? `${data.error}: ${data.details}`
+                    : data.error || "Failed to scrape events";
+                alert(errorMsg);
                 setScrapeStatus("idle");
             }
         } catch (error) {
-            console.error("Failed to scrape:", error);
-            alert("Failed to scrape events");
+            console.error("[Scrape] Request failed:", error);
+            const errorMsg = error instanceof Error ? error.message : "Failed to scrape events";
+            alert(`Error: ${errorMsg}`);
             setScrapeStatus("idle");
         } finally {
             if (scrapeStatus !== "preview") {
@@ -1984,7 +2002,7 @@ export default function AdminEventsPage() {
                                                         </>
                                             )}
                                         </button>
-                                            </div>
+                                    </div>
                                         )}
                                     </div>
                                 </div>

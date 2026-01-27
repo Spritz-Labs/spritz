@@ -678,13 +678,33 @@ ${contentToAnalyze}`;
         console.error("[Event Scrape] Error type:", error?.constructor?.name);
         console.error("[Event Scrape] Error message:", error instanceof Error ? error.message : String(error));
         console.error("[Event Scrape] Error stack:", error instanceof Error ? error.stack : "No stack trace");
-        console.error("[Event Scrape] Full error object:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        
+        // Try to stringify error for more details
+        let errorDetails: any = {};
+        try {
+            if (error instanceof Error) {
+                errorDetails = {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack?.split('\n').slice(0, 10), // First 10 lines of stack
+                };
+            } else {
+                errorDetails = { raw: String(error) };
+            }
+        } catch {
+            errorDetails = { message: String(error) };
+        }
+        
+        console.error("[Event Scrape] Error details:", JSON.stringify(errorDetails, null, 2));
         console.error("[Event Scrape] ==================================");
         
+        // Return detailed error for debugging
         return NextResponse.json({ 
             error: "Failed to scrape events",
             details: error instanceof Error ? error.message : "Unknown error",
             type: error?.constructor?.name || "Unknown",
+            errorInfo: errorDetails,
+            timestamp: new Date().toISOString(),
         }, { status: 500 });
     }
 }
