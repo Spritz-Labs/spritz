@@ -158,8 +158,8 @@ export async function POST(request: NextRequest) {
             scroll_count = 5,
             preview_only = false,
             events_to_save,
-            skip_past_events = true, // NEW: Skip events with past dates
-            skip_if_unchanged = true, // NEW: Skip scrape if content unchanged
+            skip_past_events = false, // Default to false - let user decide
+            skip_if_unchanged = false, // Default to false - always extract to catch new events
         } = body;
 
         if (!url) {
@@ -227,43 +227,54 @@ export async function POST(request: NextRequest) {
             }
 
             // Use AI to extract events from the content
-            const prompt = `Extract all blockchain/crypto events from the following content. 
-For each event, provide:
-- name (required)
-- description (brief)
-- event_type (one of: conference, hackathon, meetup, workshop, summit, party, networking, other)
-- event_date (YYYY-MM-DD format, required)
-- start_time (HH:MM 24h format)
-- end_time (HH:MM 24h format)
-- venue (name of venue)
-- city
-- country
-- organizer
-- event_url (link to event page)
-- rsvp_url (link to register)
-- image_url (URL to event banner/thumbnail image if visible)
-- tags (array of relevant tags)
-- blockchain_focus (array of blockchain names like 'ethereum', 'solana', 'bitcoin', etc.)
+            // Use more content (up to 100k chars) and increase token limit for more events
+            const contentToAnalyze = result.content.length > 100000 
+                ? result.content.substring(0, 100000) + "\n\n[Content truncated for length...]"
+                : result.content;
+            
+            console.log("[Event Scrape] Analyzing content length:", contentToAnalyze.length, "chars");
+            
+            const prompt = `Extract ALL blockchain/crypto/Web3 events from the following content. Be thorough and extract every event you can find.
 
-${event_types?.length ? `Only include events of these types: ${event_types.join(", ")}` : ""}
+For each event, provide:
+- name (required) - the full event name
+- description (brief) - what the event is about
+- event_type (one of: conference, hackathon, meetup, workshop, summit, party, networking, other)
+- event_date (YYYY-MM-DD format, required) - if only month/year is given, use the first day of that month
+- start_time (HH:MM 24h format, optional)
+- end_time (HH:MM 24h format, optional)
+- venue (name of venue, optional)
+- city (optional)
+- country (optional)
+- organizer (optional)
+- event_url (link to event page, optional)
+- rsvp_url (link to register, optional)
+- image_url (URL to event banner/thumbnail image if visible, optional)
+- tags (array of relevant tags, optional)
+- blockchain_focus (array of blockchain names like 'ethereum', 'solana', 'bitcoin', etc., optional)
+
+${event_types?.length ? `Only include events of these types: ${event_types.join(", ")}` : "Include ALL event types found."}
 ${blockchain_focus?.length ? `Only include events focused on: ${blockchain_focus.join(", ")}` : ""}
+
+IMPORTANT: Extract as many events as possible. Don't skip any events. If you see a list of events, extract all of them.
 
 Return ONLY a valid JSON array of events, no other text. Example:
 [{"name": "ETHDenver", "event_type": "hackathon", "event_date": "2026-02-23", "image_url": "https://...", ...}]
 
 Content to analyze:
-${result.content.substring(0, 50000)}`;
+${contentToAnalyze}`;
 
             let responseText = "";
             try {
                 const response = await ai.models.generateContent({
                     model: "gemini-2.0-flash",
                     contents: [{ role: "user", parts: [{ text: prompt }] }],
-                    config: { maxOutputTokens: 8192 },
+                    config: { maxOutputTokens: 16384 }, // Increased for more events
                 });
 
                 responseText = response.text || "";
                 console.log("[Event Scrape] AI response length:", responseText.length);
+                console.log("[Event Scrape] AI response preview:", responseText.substring(0, 500));
             } catch (aiError) {
                 console.error("[Event Scrape] AI API error:", aiError);
                 throw new Error(`AI extraction failed: ${aiError instanceof Error ? aiError.message : "Unknown error"}`);
@@ -287,17 +298,27 @@ ${result.content.substring(0, 50000)}`;
                 }, { status: 400 });
             }
 
-            console.log("[Event Scrape] Extracted", extractedEvents.length, "events");
+            console.log("[Event Scrape] Extracted", extractedEvents.length, "events before filtering");
+            console.log("[Event Scrape] Sample events:", extractedEvents.slice(0, 3).map(e => ({ name: e.name, date: e.event_date, type: e.event_type })));
 
             // Filter out past events if option enabled
             if (skip_past_events) {
                 const originalCount = extractedEvents.length;
-                extractedEvents = extractedEvents.filter(e => !isEventPast(e.event_date));
+                const beforeFilter = [...extractedEvents];
+                extractedEvents = extractedEvents.filter(e => {
+                    const isPast = isEventPast(e.event_date);
+                    if (isPast) {
+                        console.log("[Event Scrape] Skipping past event:", e.name, e.event_date);
+                    }
+                    return !isPast;
+                });
                 skippedPast = originalCount - extractedEvents.length;
                 if (skippedPast > 0) {
-                    console.log("[Event Scrape] Skipped", skippedPast, "past events");
+                    console.log("[Event Scrape] Skipped", skippedPast, "past events (out of", originalCount, "total)");
                 }
             }
+            
+            console.log("[Event Scrape] After filtering:", extractedEvents.length, "events remaining");
 
             // If preview only, return events with duplicate status
             if (preview_only) {
@@ -369,8 +390,11 @@ ${result.content.substring(0, 50000)}`;
             .filter(Boolean);
         const geocodeResults = await batchGeocodeLocations(locations);
 
+        console.log("[Event Scrape] Checking", extractedEvents.length, "events against", existingFingerprints.size, "existing fingerprints");
+        
         for (const event of extractedEvents) {
             if (!event.name || !event.event_date || !event.event_type) {
+                console.log("[Event Scrape] Skipping invalid event (missing required fields):", { name: event.name, date: event.event_date, type: event.event_type });
                 skipped++;
                 continue;
             }
@@ -383,11 +407,13 @@ ${result.content.substring(0, 50000)}`;
             });
             
             if (existingFingerprints.has(fingerprint)) {
-                console.log("[Event Scrape] Duplicate detected:", event.name, event.event_date);
+                console.log("[Event Scrape] Duplicate detected:", event.name, event.event_date, "fingerprint:", fingerprint);
                 duplicates++;
                 skipped++;
                 continue;
             }
+            
+            console.log("[Event Scrape] Processing new event:", event.name, event.event_date, "fingerprint:", fingerprint);
 
             // Generate a unique source_id using normalized name
             const normalizedName = normalizeEventName(event.name);
@@ -489,6 +515,15 @@ ${result.content.substring(0, 50000)}`;
                 // Don't fail the whole request if source save fails
             }
         }
+
+        console.log("[Event Scrape] Final results:", {
+            extracted: extractedEvents.length,
+            inserted,
+            skipped,
+            duplicates,
+            skipped_past: skippedPast,
+            pages_scraped: pageCount
+        });
 
         return NextResponse.json({
             success: true,
