@@ -61,7 +61,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function AdminEventsPage() {
-    const { isAdmin, isReady, getAuthHeaders } = useAdmin();
+    const { isAdmin, isReady, getAuthHeaders, address, signOut } = useAdmin();
     const [events, setEvents] = useState<GlobalEvent[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [total, setTotal] = useState(0);
@@ -299,10 +299,28 @@ export default function AdminEventsPage() {
         }
     };
 
+    // Show loading state while checking auth
+    if (!isReady) {
+        return <AdminLoading />;
+    }
+
+    // Show auth wrapper if not admin
+    if (!isAdmin) {
+        return (
+            <AdminAuthWrapper title="Admin Access">
+                <p className="text-zinc-400">You must be an admin to access this page.</p>
+            </AdminAuthWrapper>
+        );
+    }
+
     return (
-        <AdminAuthWrapper>
-            <AdminLayout title="Events">
-                <div className="space-y-6">
+        <AdminLayout 
+            title="Events" 
+            subtitle="Manage global events database"
+            address={address}
+            onSignOut={signOut}
+        >
+            <div className="space-y-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div>
@@ -814,7 +832,6 @@ export default function AdminEventsPage() {
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </AdminLayout>
-        </AdminAuthWrapper>
+        </AdminLayout>
     );
 }
