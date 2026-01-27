@@ -126,25 +126,36 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; ad
 
 // POST: Scrape events from a URL using Firecrawl + AI extraction
 export async function POST(request: NextRequest) {
+    console.log("[Event Scrape] ========== SCRAPE REQUEST STARTED ==========");
+    console.log("[Event Scrape] Timestamp:", new Date().toISOString());
+    
     if (!supabase) {
+        console.error("[Event Scrape] ERROR: Database not configured");
         return NextResponse.json({ error: "Database not configured" }, { status: 500 });
     }
 
     if (!ai) {
+        console.error("[Event Scrape] ERROR: AI not configured");
         return NextResponse.json({ error: "AI not configured" }, { status: 500 });
     }
 
     if (!isFirecrawlConfigured()) {
+        console.error("[Event Scrape] ERROR: Firecrawl not configured");
         return NextResponse.json({ error: "Firecrawl not configured" }, { status: 500 });
     }
 
+    console.log("[Event Scrape] All services configured, verifying admin...");
     const { isAdmin, address } = await verifyAdmin(request);
     if (!isAdmin || !address) {
+        console.error("[Event Scrape] ERROR: Unauthorized - isAdmin:", isAdmin, "address:", address);
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.log("[Event Scrape] Admin verified:", address);
 
     try {
+        console.log("[Event Scrape] Parsing request body...");
         const body = await request.json();
+        console.log("[Event Scrape] Request body keys:", Object.keys(body));
         const { 
             url, 
             event_types, 
@@ -163,8 +174,20 @@ export async function POST(request: NextRequest) {
         } = body;
 
         if (!url) {
+            console.error("[Event Scrape] ERROR: URL is required");
             return NextResponse.json({ error: "URL is required" }, { status: 400 });
         }
+        
+        console.log("[Event Scrape] Scraping URL:", url);
+        console.log("[Event Scrape] Options:", {
+            crawl_depth: crawl_depth,
+            max_pages: max_pages,
+            infinite_scroll: infinite_scroll,
+            scroll_count: scroll_count,
+            skip_past_events: skip_past_events,
+            skip_if_unchanged: skip_if_unchanged,
+            preview_only: preview_only,
+        });
 
         // If events_to_save is provided, skip scraping and just save
         let extractedEvents: ExtractedEvent[];
@@ -175,27 +198,43 @@ export async function POST(request: NextRequest) {
 
         if (events_to_save && Array.isArray(events_to_save)) {
             // Direct save from preview selection
+            console.log("[Event Scrape] Mode: Saving pre-selected events");
+            console.log("[Event Scrape] Events to save count:", events_to_save.length);
             extractedEvents = events_to_save.map((e: ExtractedEvent & { type?: string; start_date?: string }) => ({
                 ...e,
                 event_type: e.event_type || e.type || "other",
                 event_date: e.event_date || e.start_date || new Date().toISOString().split("T")[0],
             }));
-            console.log("[Event Scrape] Saving", extractedEvents.length, "pre-selected events");
+            console.log("[Event Scrape] Mapped", extractedEvents.length, "events for saving");
             
             // For preview saves, try to get URL from first event's metadata or use a default
             if (!sourceUrl && extractedEvents.length > 0) {
                 sourceUrl = extractedEvents[0].event_url || "preview";
             }
         } else {
-            console.log("[Event Scrape] Scraping URL:", url, "depth:", crawl_depth, "max pages:", max_pages, "infinite scroll:", infinite_scroll);
-
-            // Scrape the URL using Firecrawl
-            const result = await fetchContent(url, {
+            console.log("[Event Scrape] Mode: Full scrape from URL");
+            console.log("[Event Scrape] Calling fetchContent with:", {
+                url,
                 crawlDepth: crawl_depth,
                 maxPages: max_pages,
                 infiniteScroll: infinite_scroll,
                 scrollCount: scroll_count,
             });
+
+            // Scrape the URL using Firecrawl
+            let result;
+            try {
+                result = await fetchContent(url, {
+                    crawlDepth: crawl_depth,
+                    maxPages: max_pages,
+                    infiniteScroll: infinite_scroll,
+                    scrollCount: scroll_count,
+                });
+                console.log("[Event Scrape] fetchContent completed successfully");
+            } catch (fetchError) {
+                console.error("[Event Scrape] fetchContent ERROR:", fetchError);
+                throw new Error(`Failed to fetch content: ${fetchError instanceof Error ? fetchError.message : "Unknown error"}`);
+            }
 
             if (!result.content || result.content.length < 100) {
                 return NextResponse.json({ error: "Not enough content found" }, { status: 400 });
@@ -536,10 +575,17 @@ ${contentToAnalyze}`;
             events: insertedEvents,
         });
     } catch (error) {
-        console.error("[Event Scrape] Error:", error);
+        console.error("[Event Scrape] ========== FATAL ERROR ==========");
+        console.error("[Event Scrape] Error type:", error?.constructor?.name);
+        console.error("[Event Scrape] Error message:", error instanceof Error ? error.message : String(error));
+        console.error("[Event Scrape] Error stack:", error instanceof Error ? error.stack : "No stack trace");
+        console.error("[Event Scrape] Full error object:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        console.error("[Event Scrape] ==================================");
+        
         return NextResponse.json({ 
             error: "Failed to scrape events",
-            details: error instanceof Error ? error.message : "Unknown error"
+            details: error instanceof Error ? error.message : "Unknown error",
+            type: error?.constructor?.name || "Unknown",
         }, { status: 500 });
     }
 }
