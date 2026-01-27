@@ -245,8 +245,23 @@ export async function POST(request: NextRequest) {
                 }, { status: 500 });
             }
 
+            if (!result) {
+                console.error("[Event Scrape] fetchContent returned null/undefined");
+                return NextResponse.json({ 
+                    error: "Failed to fetch content",
+                    details: "fetchContent returned no result"
+                }, { status: 500 });
+            }
+            
             if (!result.content || result.content.length < 100) {
-                return NextResponse.json({ error: "Not enough content found" }, { status: 400 });
+                console.error("[Event Scrape] Insufficient content:", {
+                    hasContent: !!result.content,
+                    contentLength: result.content?.length || 0
+                });
+                return NextResponse.json({ 
+                    error: "Not enough content found",
+                    details: `Content length: ${result.content?.length || 0} (minimum 100 required)`
+                }, { status: 400 });
             }
 
             pageCount = result.pageCount;
