@@ -319,21 +319,79 @@ ${contentToAnalyze}`;
                 throw new Error(`AI extraction failed: ${aiError instanceof Error ? aiError.message : "Unknown error"}`);
             }
 
-            // Parse the JSON response
-            const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-            if (!jsonMatch) {
+            // Parse the JSON response - handle markdown code blocks and clean up
+            console.log("[Event Scrape] Raw AI response (first 1000 chars):", responseText.substring(0, 1000));
+            
+            // Try to extract JSON from markdown code blocks first
+            let jsonText = responseText;
+            
+            // Remove markdown code blocks if present
+            const codeBlockMatch = responseText.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+            if (codeBlockMatch) {
+                jsonText = codeBlockMatch[1];
+                console.log("[Event Scrape] Found JSON in code block");
+            } else {
+                // Try to find JSON array in the text
+                const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    jsonText = jsonMatch[0];
+                    console.log("[Event Scrape] Found JSON array in text");
+                }
+            }
+            
+            // Clean up common JSON issues
+            jsonText = jsonText
+                .replace(/^[^\[]*/, '') // Remove anything before first [
+                .replace(/[^\]]*$/, '') // Remove anything after last ]
+                .replace(/,\s*}/g, '}') // Remove trailing commas in objects
+                .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
+                .trim();
+            
+            if (!jsonText.startsWith('[') || !jsonText.endsWith(']')) {
+                console.error("[Event Scrape] No valid JSON array found in response");
+                console.error("[Event Scrape] Cleaned text (first 500 chars):", jsonText.substring(0, 500));
                 return NextResponse.json({ 
                     error: "Could not extract events from content",
-                    rawResponse: responseText.substring(0, 500)
+                    details: "AI response did not contain a valid JSON array",
+                    rawResponse: responseText.substring(0, 1000)
                 }, { status: 400 });
             }
 
             try {
-                extractedEvents = JSON.parse(jsonMatch[0]);
-            } catch {
+                extractedEvents = JSON.parse(jsonText);
+                console.log("[Event Scrape] Successfully parsed JSON, got", extractedEvents.length, "events");
+            } catch (parseError) {
+                console.error("[Event Scrape] JSON parse error:", parseError);
+                console.error("[Event Scrape] Attempted to parse (first 1000 chars):", jsonText.substring(0, 1000));
+                
+                // Try to fix common JSON issues and parse again
+                try {
+                    // Try fixing escaped quotes and other common issues
+                    const fixedJson = jsonText
+                        .replace(/\\'/g, "'")
+                        .replace(/\\"/g, '"')
+                        .replace(/'/g, '"'); // Replace single quotes with double quotes
+                    
+                    extractedEvents = JSON.parse(fixedJson);
+                    console.log("[Event Scrape] Successfully parsed after fixing quotes");
+                } catch (retryError) {
+                    console.error("[Event Scrape] Retry parse also failed:", retryError);
+                    return NextResponse.json({ 
+                        error: "Failed to parse extracted events",
+                        details: parseError instanceof Error ? parseError.message : "Invalid JSON format",
+                        rawResponse: jsonText.substring(0, 1000),
+                        fullResponse: responseText.substring(0, 2000)
+                    }, { status: 400 });
+                }
+            }
+            
+            // Validate that we got an array
+            if (!Array.isArray(extractedEvents)) {
+                console.error("[Event Scrape] Parsed result is not an array:", typeof extractedEvents);
                 return NextResponse.json({ 
-                    error: "Failed to parse extracted events",
-                    rawResponse: jsonMatch[0].substring(0, 500)
+                    error: "Invalid response format",
+                    details: "Expected an array of events, got: " + typeof extractedEvents,
+                    rawResponse: jsonText.substring(0, 500)
                 }, { status: 400 });
             }
 
