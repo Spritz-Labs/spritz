@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
         let pageCount = 1;
         let contentHash = "";
         let skippedPast = 0;
+        let sourceUrl = url; // Store URL for later use
 
         if (events_to_save && Array.isArray(events_to_save)) {
             // Direct save from preview selection
@@ -180,6 +181,11 @@ export async function POST(request: NextRequest) {
                 event_date: e.event_date || e.start_date || new Date().toISOString().split("T")[0],
             }));
             console.log("[Event Scrape] Saving", extractedEvents.length, "pre-selected events");
+            
+            // For preview saves, try to get URL from first event's metadata or use a default
+            if (!sourceUrl && extractedEvents.length > 0) {
+                sourceUrl = extractedEvents[0].event_url || "preview";
+            }
         } else {
             console.log("[Event Scrape] Scraping URL:", url, "depth:", crawl_depth, "max pages:", max_pages, "infinite scroll:", infinite_scroll);
 
@@ -248,14 +254,20 @@ Return ONLY a valid JSON array of events, no other text. Example:
 Content to analyze:
 ${result.content.substring(0, 50000)}`;
 
-            const response = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                config: { maxOutputTokens: 8192 },
-            });
+            let responseText = "";
+            try {
+                const response = await ai.models.generateContent({
+                    model: "gemini-2.0-flash",
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    config: { maxOutputTokens: 8192 },
+                });
 
-            const responseText = response.text || "";
-            console.log("[Event Scrape] AI response length:", responseText.length);
+                responseText = response.text || "";
+                console.log("[Event Scrape] AI response length:", responseText.length);
+            } catch (aiError) {
+                console.error("[Event Scrape] AI API error:", aiError);
+                throw new Error(`AI extraction failed: ${aiError instanceof Error ? aiError.message : "Unknown error"}`);
+            }
 
             // Parse the JSON response
             const jsonMatch = responseText.match(/\[[\s\S]*\]/);
@@ -379,7 +391,19 @@ ${result.content.substring(0, 50000)}`;
 
             // Generate a unique source_id using normalized name
             const normalizedName = normalizeEventName(event.name);
-            const sourceId = `${new URL(url).hostname}-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
+            let sourceId: string;
+            try {
+                if (sourceUrl && sourceUrl !== "preview") {
+                    const urlObj = new URL(sourceUrl);
+                    sourceId = `${urlObj.hostname}-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
+                } else {
+                    // Fallback for preview saves or missing URL
+                    sourceId = `preview-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
+                }
+            } catch {
+                // If URL parsing fails, use fallback
+                sourceId = `preview-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
+            }
 
             // Get geocoded location from batch results
             const locationStr = [event.city, event.country].filter(Boolean).join(", ");
@@ -409,7 +433,7 @@ ${result.content.substring(0, 50000)}`;
                         tags: event.tags || [],
                         blockchain_focus: event.blockchain_focus || null,
                         source: "firecrawl",
-                        source_url: url,
+                        source_url: sourceUrl || event.event_url || null,
                         source_id: sourceId,
                         status: "draft", // Scraped events start as draft for review
                         created_by: address,
@@ -438,26 +462,32 @@ ${result.content.substring(0, 50000)}`;
         }
 
         // Optionally save the source for recurring scrapes
-        if (save_source) {
-            const nextScrapeAt = new Date();
-            nextScrapeAt.setHours(nextScrapeAt.getHours() + scrape_interval_hours);
+        if (save_source && sourceUrl && sourceUrl !== "preview") {
+            try {
+                const nextScrapeAt = new Date();
+                nextScrapeAt.setHours(nextScrapeAt.getHours() + scrape_interval_hours);
+                const urlObj = new URL(sourceUrl);
 
-            await supabase
-                .from("shout_event_sources")
-                .upsert({
-                    name: new URL(url).hostname,
-                    url,
-                    source_type: source_type,
-                    scrape_interval_hours: scrape_interval_hours,
-                    event_types: event_types || [],
-                    blockchain_focus: blockchain_focus || [],
-                    last_scraped_at: new Date().toISOString(),
-                    next_scrape_at: nextScrapeAt.toISOString(),
-                    events_found: extractedEvents.length,
-                    content_hash: contentHash || null, // Store content hash for change detection
-                    is_active: true,
-                    created_by: address,
-                }, { onConflict: "url" });
+                await supabase
+                    .from("shout_event_sources")
+                    .upsert({
+                        name: urlObj.hostname,
+                        url: sourceUrl,
+                        source_type: source_type,
+                        scrape_interval_hours: scrape_interval_hours,
+                        event_types: event_types || [],
+                        blockchain_focus: blockchain_focus || [],
+                        last_scraped_at: new Date().toISOString(),
+                        next_scrape_at: nextScrapeAt.toISOString(),
+                        events_found: extractedEvents.length,
+                        content_hash: contentHash || null, // Store content hash for change detection
+                        is_active: true,
+                        created_by: address,
+                    }, { onConflict: "url" });
+            } catch (err) {
+                console.error("[Event Scrape] Error saving source:", err);
+                // Don't fail the whole request if source save fails
+            }
         }
 
         return NextResponse.json({
