@@ -47,13 +47,15 @@ export interface GlobalEvent {
     updated_at: string;
 }
 
-// Helper to verify admin status
+// Verify admin signature from headers
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; address: string | null }> {
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader) return { isAdmin: false, address: null };
+    const address = request.headers.get("x-admin-address");
+    const signature = request.headers.get("x-admin-signature");
+    const encodedMessage = request.headers.get("x-admin-message");
 
-    const [, address] = authHeader.split(" ");
-    if (!address || !supabase) return { isAdmin: false, address: null };
+    if (!address || !signature || !encodedMessage || !supabase) {
+        return { isAdmin: false, address: null };
+    }
 
     const normalizedAddress = address.toLowerCase();
     const { data: admin } = await supabase
