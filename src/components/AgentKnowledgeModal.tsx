@@ -552,8 +552,8 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                                         <label className="text-xs font-medium text-zinc-300 mb-2 block">
                                                                             Scroll Iterations: {firecrawlOptions.scrollCount}x
                                                                         </label>
-                                                                        <div className="flex gap-1">
-                                                                            {[3, 5, 10, 15, 20].map((count) => (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {[5, 10, 25, 50, 100].map((count) => (
                                                                                 <button
                                                                                     key={count}
                                                                                     type="button"
@@ -561,7 +561,7 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                                                         ...prev, 
                                                                                         scrollCount: count 
                                                                                     }))}
-                                                                                    className={`flex-1 py-1.5 text-xs rounded transition-colors ${
+                                                                                    className={`px-2 py-1.5 text-xs rounded transition-colors ${
                                                                                         firecrawlOptions.scrollCount === count
                                                                                             ? "bg-orange-500 text-white"
                                                                                             : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"
@@ -572,7 +572,7 @@ export function AgentKnowledgeModal({ isOpen, onClose, agent, userAddress }: Age
                                                                             ))}
                                                                         </div>
                                                                         <p className="text-[10px] text-zinc-500 mt-1">
-                                                                            More scrolls = more content but slower scraping
+                                                                            ~{Math.round(firecrawlOptions.scrollCount * 1.5)}s • No auto-detect, use higher for long feeds
                                                                         </p>
                                                                     </div>
                                                                 )}

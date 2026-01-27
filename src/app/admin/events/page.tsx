@@ -89,10 +89,11 @@ const CRAWL_DEPTHS = [
 ];
 
 const MAX_PAGES_OPTIONS = [
-    { value: 10, label: "10 pages" },
-    { value: 20, label: "20 pages" },
-    { value: 50, label: "50 pages" },
-    { value: 100, label: "100 pages" },
+    { value: 10, label: "10" },
+    { value: 20, label: "20" },
+    { value: 50, label: "50" },
+    { value: 100, label: "100" },
+    { value: 0, label: "∞" },
 ];
 
 const PAGE_SIZES = [25, 50, 100, 200];
@@ -1460,13 +1461,13 @@ export default function AdminEventsPage() {
                                                 >
                                                     <div className="pt-3 border-t border-zinc-700/50">
                                                         <label className="text-xs text-zinc-400 mb-2 block">Scroll iterations</label>
-                                                        <div className="flex gap-2">
-                                                            {[3, 5, 10, 15, 20].map((count) => (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {[5, 10, 25, 50, 100].map((count) => (
                                                                 <button
                                                                     key={count}
                                                                     type="button"
                                                                     onClick={() => setScrollCount(count)}
-                                                                    className={`flex-1 px-2 py-2 rounded-lg text-sm transition-all ${
+                                                                    className={`px-3 py-2 rounded-lg text-sm transition-all ${
                                                                         scrollCount === count
                                                                             ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
                                                                             : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
@@ -1477,7 +1478,7 @@ export default function AdminEventsPage() {
                                                             ))}
                                                         </div>
                                                         <p className="text-xs text-zinc-500 mt-2">
-                                                            📜 Will scroll down {scrollCount} times before scraping. More scrolls = more content but slower.
+                                                            📜 Will scroll {scrollCount}x (~{Math.round(scrollCount * 1.5)}s). No auto-detect - use higher values for long feeds.
                                                         </p>
                                                     </div>
                                                 </motion.div>
