@@ -120,6 +120,8 @@ type ExtractedEvent = {
     image_url?: string;
     latitude?: number;
     longitude?: number;
+    is_duplicate?: boolean;
+    is_past?: boolean;
 };
 
 function formatDate(dateStr: string): string {
@@ -189,10 +191,11 @@ export default function AdminEventsPage() {
     const [maxPages, setMaxPages] = useState(20); // Default 20 pages
     const [infiniteScroll, setInfiniteScroll] = useState(false); // For lazy-load pages
     const [scrollCount, setScrollCount] = useState(5); // Number of scroll actions
+    const [skipPastEvents, setSkipPastEvents] = useState(true); // Skip events with past dates
     const [isScraping, setIsScraping] = useState(false);
     const [scrapeStatus, setScrapeStatus] = useState<"idle" | "connecting" | "scrolling" | "extracting" | "preview" | "saving">("idle");
-    const [scrapeResult, setScrapeResult] = useState<{ extracted: number; inserted: number; skipped: number; pagesScraped?: number } | null>(null);
-    const [previewEvents, setPreviewEvents] = useState<ExtractedEvent[]>([]);
+    const [scrapeResult, setScrapeResult] = useState<{ extracted: number; inserted: number; skipped: number; duplicates?: number; pagesScraped?: number } | null>(null);
+    const [previewEvents, setPreviewEvents] = useState<(ExtractedEvent & { is_duplicate?: boolean; is_past?: boolean })[]>([]);
     const [selectedPreviewEvents, setSelectedPreviewEvents] = useState<Set<number>>(new Set());
     
     // Event sources state
@@ -367,6 +370,7 @@ export default function AdminEventsPage() {
                     max_pages: maxPages,
                     infinite_scroll: infiniteScroll,
                     scroll_count: scrollCount,
+                    skip_past_events: skipPastEvents,
                     preview_only: previewOnly,
                 }),
             });
@@ -375,16 +379,26 @@ export default function AdminEventsPage() {
             const data = await res.json();
 
             if (data.success) {
-                if (previewOnly && data.events) {
-                    // Show preview
+                if (data.unchanged) {
+                    // Content unchanged
+                    alert("Page content has not changed since last scrape - no new events to extract.");
+                    setScrapeStatus("idle");
+                } else if (previewOnly && data.events) {
+                    // Show preview - auto-select only non-duplicates
                     setPreviewEvents(data.events);
-                    setSelectedPreviewEvents(new Set(data.events.map((_: ExtractedEvent, i: number) => i)));
+                    const nonDuplicateIndices = new Set<number>(
+                        (data.events as ExtractedEvent[])
+                            .map((e: ExtractedEvent, i: number) => (!e.is_duplicate ? i : -1))
+                            .filter((i: number) => i !== -1)
+                    );
+                    setSelectedPreviewEvents(nonDuplicateIndices);
                     setScrapeStatus("preview");
                 } else {
                 setScrapeResult({
                     extracted: data.extracted,
                     inserted: data.inserted,
                     skipped: data.skipped,
+                        duplicates: data.duplicates,
                         pagesScraped: data.pages_scraped,
                 });
                 fetchEvents();
@@ -1649,6 +1663,28 @@ export default function AdminEventsPage() {
                                         </AnimatePresence>
                                     </div>
 
+                                    {/* Efficiency Options */}
+                                    <div className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-lg">🚫</span>
+                                            <div>
+                                                <span className="text-sm font-medium text-zinc-200">Skip Past Events</span>
+                                                <p className="text-xs text-zinc-500">Ignore events with dates before today</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSkipPastEvents(!skipPastEvents)}
+                                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                                                skipPastEvents ? "bg-[#FF5500]" : "bg-zinc-700"
+                                            }`}
+                                        >
+                                            <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                skipPastEvents ? "translate-x-6" : "translate-x-1"
+                                            }`} />
+                                        </button>
+                                    </div>
+
                                     {/* Recurring Scrapes Section */}
                                     <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
                                         <div className="flex items-center justify-between mb-3">
@@ -1754,29 +1790,52 @@ export default function AdminEventsPage() {
                                             animate={{ opacity: 1, y: 0 }}
                                             className="border border-zinc-700 rounded-xl overflow-hidden"
                                         >
-                                            <div className="p-3 bg-zinc-800/50 border-b border-zinc-700 flex items-center justify-between">
-                                                <span className="text-sm font-medium text-zinc-300">
-                                                    📋 Preview: {previewEvents.length} events found
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (selectedPreviewEvents.size === previewEvents.length) {
-                                                            setSelectedPreviewEvents(new Set());
-                                                        } else {
-                                                            setSelectedPreviewEvents(new Set(previewEvents.map((_, i) => i)));
-                                                        }
-                                                    }}
-                                                    className="text-xs text-[#FF5500] hover:text-[#FF5500]/80"
-                                                >
-                                                    {selectedPreviewEvents.size === previewEvents.length ? "Deselect All" : "Select All"}
-                                                </button>
+                                            <div className="p-3 bg-zinc-800/50 border-b border-zinc-700">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-sm font-medium text-zinc-300">
+                                                        📋 Preview: {previewEvents.length} events
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            // Only select non-duplicates
+                                                            const nonDuplicates = previewEvents
+                                                                .map((e, i) => (!e.is_duplicate ? i : -1))
+                                                                .filter(i => i !== -1);
+                                                            if (selectedPreviewEvents.size === nonDuplicates.length) {
+                                                                setSelectedPreviewEvents(new Set());
+                                                            } else {
+                                                                setSelectedPreviewEvents(new Set(nonDuplicates));
+                                                            }
+                                                        }}
+                                                        className="text-xs text-[#FF5500] hover:text-[#FF5500]/80"
+                                                    >
+                                                        {selectedPreviewEvents.size > 0 ? "Deselect All" : "Select New"}
+                                                    </button>
+                                                </div>
+                                                <div className="flex gap-3 text-xs">
+                                                    <span className="text-green-400">
+                                                        ✓ {previewEvents.filter(e => !e.is_duplicate).length} new
+                                                    </span>
+                                                    {previewEvents.filter(e => e.is_duplicate).length > 0 && (
+                                                        <span className="text-yellow-400">
+                                                            ⚠ {previewEvents.filter(e => e.is_duplicate).length} duplicates
+                                                        </span>
+                                                    )}
+                                                    <span className="text-zinc-500">
+                                                        {selectedPreviewEvents.size} selected
+                                                    </span>
+                                                </div>
                                             </div>
                                             <div className="max-h-64 overflow-y-auto divide-y divide-zinc-800">
                                                 {previewEvents.map((event, i) => (
                                                     <label 
                                                         key={i}
-                                                        className="flex items-start gap-3 p-3 hover:bg-zinc-800/30 cursor-pointer"
+                                                        className={`flex items-start gap-3 p-3 cursor-pointer transition-colors ${
+                                                            event.is_duplicate 
+                                                                ? "bg-yellow-500/5 hover:bg-yellow-500/10" 
+                                                                : "hover:bg-zinc-800/30"
+                                                        }`}
                                                     >
                                         <input
                                             type="checkbox"
@@ -1790,7 +1849,19 @@ export default function AdminEventsPage() {
                                                             className="mt-1 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]/50"
                                                         />
                                                         <div className="flex-1 min-w-0">
-                                                            <p className="text-sm text-white truncate">{event.name}</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-sm text-white truncate">{event.name}</p>
+                                                                {event.is_duplicate && (
+                                                                    <span className="px-1.5 py-0.5 text-[10px] rounded bg-yellow-500/20 text-yellow-400 shrink-0">
+                                                                        DUPLICATE
+                                                                    </span>
+                                                                )}
+                                                                {event.is_past && (
+                                                                    <span className="px-1.5 py-0.5 text-[10px] rounded bg-zinc-700 text-zinc-400 shrink-0">
+                                                                        PAST
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             <p className="text-xs text-zinc-400">
                                                                 {EVENT_TYPE_ICONS[event.type] || "📅"} {event.type} • {event.start_date} • {event.location || event.city || "TBA"}
                                                             </p>
@@ -1821,7 +1892,9 @@ export default function AdminEventsPage() {
                                                     <p className="text-green-400 font-medium">Scrape Complete!</p>
                                                     <p className="text-green-400/70 text-sm">
                                                         {scrapeResult.pagesScraped && `Crawled ${scrapeResult.pagesScraped} pages • `}
-                                                        Found {scrapeResult.extracted} events • Added {scrapeResult.inserted} • Skipped {scrapeResult.skipped}
+                                                        Found {scrapeResult.extracted} • Added {scrapeResult.inserted} new
+                                                        {scrapeResult.duplicates ? ` • ${scrapeResult.duplicates} duplicates` : ""}
+                                                        {scrapeResult.skipped > (scrapeResult.duplicates || 0) ? ` • ${scrapeResult.skipped - (scrapeResult.duplicates || 0)} skipped` : ""}
                                             </p>
                                         </div>
                                             </div>
