@@ -305,17 +305,37 @@ ${contentToAnalyze}`;
 
             let responseText = "";
             try {
+                console.log("[Event Scrape] Calling AI with prompt length:", prompt.length);
                 const response = await ai.models.generateContent({
                     model: "gemini-2.0-flash",
                     contents: [{ role: "user", parts: [{ text: prompt }] }],
                     config: { maxOutputTokens: 16384 }, // Increased for more events
                 });
 
-                responseText = response.text || "";
+                console.log("[Event Scrape] AI response object keys:", Object.keys(response || {}));
+                
+                // Try multiple ways to get the text
+                if (typeof response.text === "string") {
+                    responseText = response.text;
+                } else if (typeof response.text === "function") {
+                    responseText = await response.text();
+                } else if (response.response?.text) {
+                    responseText = typeof response.response.text === "function" 
+                        ? await response.response.text()
+                        : response.response.text;
+                } else {
+                    // Try to stringify and extract
+                    const responseStr = JSON.stringify(response);
+                    console.error("[Event Scrape] Unexpected response format:", responseStr.substring(0, 500));
+                    throw new Error("AI response format unexpected - no text property found");
+                }
+                
                 console.log("[Event Scrape] AI response length:", responseText.length);
                 console.log("[Event Scrape] AI response preview:", responseText.substring(0, 500));
             } catch (aiError) {
                 console.error("[Event Scrape] AI API error:", aiError);
+                console.error("[Event Scrape] AI error type:", aiError?.constructor?.name);
+                console.error("[Event Scrape] AI error stack:", aiError instanceof Error ? aiError.stack : "No stack");
                 throw new Error(`AI extraction failed: ${aiError instanceof Error ? aiError.message : "Unknown error"}`);
             }
 
