@@ -743,6 +743,16 @@ export default function AdminEventsPage() {
                         {/* Action Buttons */}
                         <div className="flex gap-2">
                             <button
+                                onClick={() => {
+                                    fetchEventSources();
+                                    setShowSourcesPanel(true);
+                                }}
+                                className="px-3 py-1.5 sm:px-4 sm:py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-medium"
+                                title="Manage scheduled scrapes"
+                            >
+                                ⏰ <span className="hidden sm:inline">Crons</span>
+                            </button>
+                            <button
                                 onClick={() => setShowScrapeModal(true)}
                                 className="px-3 py-1.5 sm:px-4 sm:py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-medium"
                             >
