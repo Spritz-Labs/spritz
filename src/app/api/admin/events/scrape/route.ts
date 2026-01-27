@@ -26,8 +26,26 @@ interface ExtractedEvent {
     organizer?: string;
     event_url?: string;
     rsvp_url?: string;
+    image_url?: string;
     tags?: string[];
     blockchain_focus?: string[];
+}
+
+// Simple geocoding using Nominatim (free, no API key required)
+async function geocodeLocation(location: string): Promise<{ lat: number; lon: number } | null> {
+    try {
+        const query = encodeURIComponent(location);
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`, {
+            headers: { "User-Agent": "Spritz-Events/1.0" }
+        });
+        const data = await res.json();
+        if (data && data[0]) {
+            return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        }
+    } catch (error) {
+        console.error("[Geocode] Error:", error);
+    }
+    return null;
 }
 
 // Verify admin signature from headers
@@ -82,30 +100,46 @@ export async function POST(request: NextRequest) {
             max_pages = 20,
             infinite_scroll = false,
             scroll_count = 5,
+            preview_only = false,
+            events_to_save,
         } = body;
 
         if (!url) {
             return NextResponse.json({ error: "URL is required" }, { status: 400 });
         }
 
-        console.log("[Event Scrape] Scraping URL:", url, "depth:", crawl_depth, "max pages:", max_pages, "infinite scroll:", infinite_scroll);
+        // If events_to_save is provided, skip scraping and just save
+        let extractedEvents: ExtractedEvent[];
+        let pageCount = 1;
 
-        // Scrape the URL using Firecrawl
-        const result = await fetchContent(url, {
-            crawlDepth: crawl_depth,
-            maxPages: max_pages,
-            infiniteScroll: infinite_scroll,
-            scrollCount: scroll_count,
-        });
+        if (events_to_save && Array.isArray(events_to_save)) {
+            // Direct save from preview selection
+            extractedEvents = events_to_save.map((e: ExtractedEvent & { type?: string; start_date?: string }) => ({
+                ...e,
+                event_type: e.event_type || e.type || "other",
+                event_date: e.event_date || e.start_date || new Date().toISOString().split("T")[0],
+            }));
+            console.log("[Event Scrape] Saving", extractedEvents.length, "pre-selected events");
+        } else {
+            console.log("[Event Scrape] Scraping URL:", url, "depth:", crawl_depth, "max pages:", max_pages, "infinite scroll:", infinite_scroll);
 
-        if (!result.content || result.content.length < 100) {
-            return NextResponse.json({ error: "Not enough content found" }, { status: 400 });
-        }
+            // Scrape the URL using Firecrawl
+            const result = await fetchContent(url, {
+                crawlDepth: crawl_depth,
+                maxPages: max_pages,
+                infiniteScroll: infinite_scroll,
+                scrollCount: scroll_count,
+            });
 
-        console.log("[Event Scrape] Fetched content, length:", result.content.length);
+            if (!result.content || result.content.length < 100) {
+                return NextResponse.json({ error: "Not enough content found" }, { status: 400 });
+            }
 
-        // Use AI to extract events from the content
-        const prompt = `Extract all blockchain/crypto events from the following content. 
+            pageCount = result.pageCount;
+            console.log("[Event Scrape] Fetched content, length:", result.content.length);
+
+            // Use AI to extract events from the content
+            const prompt = `Extract all blockchain/crypto events from the following content. 
 For each event, provide:
 - name (required)
 - description (brief)
@@ -119,6 +153,7 @@ For each event, provide:
 - organizer
 - event_url (link to event page)
 - rsvp_url (link to register)
+- image_url (URL to event banner/thumbnail image if visible)
 - tags (array of relevant tags)
 - blockchain_focus (array of blockchain names like 'ethereum', 'solana', 'bitcoin', etc.)
 
@@ -126,40 +161,64 @@ ${event_types?.length ? `Only include events of these types: ${event_types.join(
 ${blockchain_focus?.length ? `Only include events focused on: ${blockchain_focus.join(", ")}` : ""}
 
 Return ONLY a valid JSON array of events, no other text. Example:
-[{"name": "ETHDenver", "event_type": "hackathon", "event_date": "2026-02-23", ...}]
+[{"name": "ETHDenver", "event_type": "hackathon", "event_date": "2026-02-23", "image_url": "https://...", ...}]
 
 Content to analyze:
 ${result.content.substring(0, 50000)}`;
 
-        const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            config: { maxOutputTokens: 8192 },
-        });
+            const response = await ai.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                config: { maxOutputTokens: 8192 },
+            });
 
-        const responseText = response.text || "";
-        console.log("[Event Scrape] AI response length:", responseText.length);
+            const responseText = response.text || "";
+            console.log("[Event Scrape] AI response length:", responseText.length);
 
-        // Parse the JSON response
-        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) {
-            return NextResponse.json({ 
-                error: "Could not extract events from content",
-                rawResponse: responseText.substring(0, 500)
-            }, { status: 400 });
+            // Parse the JSON response
+            const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+                return NextResponse.json({ 
+                    error: "Could not extract events from content",
+                    rawResponse: responseText.substring(0, 500)
+                }, { status: 400 });
+            }
+
+            try {
+                extractedEvents = JSON.parse(jsonMatch[0]);
+            } catch {
+                return NextResponse.json({ 
+                    error: "Failed to parse extracted events",
+                    rawResponse: jsonMatch[0].substring(0, 500)
+                }, { status: 400 });
+            }
+
+            console.log("[Event Scrape] Extracted", extractedEvents.length, "events");
+
+            // If preview only, return events without saving
+            if (preview_only) {
+                const previewData = extractedEvents.map(e => ({
+                    name: e.name,
+                    type: e.event_type,
+                    start_date: e.event_date,
+                    end_date: e.event_date,
+                    location: e.venue,
+                    city: e.city,
+                    country: e.country,
+                    description: e.description,
+                    url: e.event_url,
+                    image_url: e.image_url,
+                }));
+
+                return NextResponse.json({
+                    success: true,
+                    preview: true,
+                    extracted: extractedEvents.length,
+                    pages_scraped: pageCount,
+                    events: previewData,
+                });
+            }
         }
-
-        let extractedEvents: ExtractedEvent[];
-        try {
-            extractedEvents = JSON.parse(jsonMatch[0]);
-        } catch {
-            return NextResponse.json({ 
-                error: "Failed to parse extracted events",
-                rawResponse: jsonMatch[0].substring(0, 500)
-            }, { status: 400 });
-        }
-
-        console.log("[Event Scrape] Extracted", extractedEvents.length, "events");
 
         // Insert events into database
         let inserted = 0;
@@ -175,6 +234,18 @@ ${result.content.substring(0, 50000)}`;
             // Generate a unique source_id
             const sourceId = `${url}-${event.name}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-");
 
+            // Try to geocode the location
+            let latitude = null;
+            let longitude = null;
+            const locationStr = [event.city, event.country].filter(Boolean).join(", ");
+            if (locationStr) {
+                const coords = await geocodeLocation(locationStr);
+                if (coords) {
+                    latitude = coords.lat;
+                    longitude = coords.lon;
+                }
+            }
+
             try {
                 const { data: newEvent, error: insertError } = await supabase
                     .from("shout_events")
@@ -188,9 +259,12 @@ ${result.content.substring(0, 50000)}`;
                         venue: event.venue || null,
                         city: event.city || null,
                         country: event.country || null,
+                        latitude,
+                        longitude,
                         organizer: event.organizer || null,
                         event_url: event.event_url || null,
                         rsvp_url: event.rsvp_url || null,
+                        banner_image_url: event.image_url || null,
                         tags: event.tags || [],
                         blockchain_focus: event.blockchain_focus || null,
                         source: "firecrawl",
@@ -246,7 +320,7 @@ ${result.content.substring(0, 50000)}`;
             extracted: extractedEvents.length,
             inserted,
             skipped,
-            pages_scraped: result.pageCount,
+            pages_scraped: pageCount,
             events: insertedEvents,
         });
     } catch (error) {

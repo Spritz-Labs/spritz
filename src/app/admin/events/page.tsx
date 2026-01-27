@@ -98,6 +98,30 @@ const MAX_PAGES_OPTIONS = [
 
 const PAGE_SIZES = [25, 50, 100, 200];
 
+// Known infinite scroll sites - auto-suggest settings
+const INFINITE_SCROLL_SITES = [
+    { pattern: "cryptonomads.org", scrollCount: 50 },
+    { pattern: "lu.ma", scrollCount: 25 },
+    { pattern: "meetup.com", scrollCount: 30 },
+    { pattern: "eventbrite.com", scrollCount: 20 },
+];
+
+// Type for extracted event preview
+type ExtractedEvent = {
+    name: string;
+    type: string;
+    start_date: string;
+    end_date?: string;
+    location?: string;
+    city?: string;
+    country?: string;
+    description?: string;
+    url?: string;
+    image_url?: string;
+    latitude?: number;
+    longitude?: number;
+};
+
 function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString("en-US", {
         month: "short",
@@ -166,7 +190,10 @@ export default function AdminEventsPage() {
     const [infiniteScroll, setInfiniteScroll] = useState(false); // For lazy-load pages
     const [scrollCount, setScrollCount] = useState(5); // Number of scroll actions
     const [isScraping, setIsScraping] = useState(false);
+    const [scrapeStatus, setScrapeStatus] = useState<"idle" | "connecting" | "scrolling" | "extracting" | "preview" | "saving">("idle");
     const [scrapeResult, setScrapeResult] = useState<{ extracted: number; inserted: number; skipped: number; pagesScraped?: number } | null>(null);
+    const [previewEvents, setPreviewEvents] = useState<ExtractedEvent[]>([]);
+    const [selectedPreviewEvents, setSelectedPreviewEvents] = useState<Set<number>>(new Set());
     
     // Event sources state
     const [eventSources, setEventSources] = useState<EventSource[]>([]);
@@ -291,14 +318,39 @@ export default function AdminEventsPage() {
         }
     };
 
-    const handleScrape = async (e: React.FormEvent) => {
+    // Auto-detect infinite scroll sites and suggest settings
+    const checkInfiniteScrollSite = useCallback((url: string) => {
+        const site = INFINITE_SCROLL_SITES.find(s => url.includes(s.pattern));
+        if (site && !infiniteScroll) {
+            setInfiniteScroll(true);
+            setScrollCount(site.scrollCount);
+            setCrawlDepth(1); // Single page for infinite scroll
+        }
+    }, [infiniteScroll]);
+
+    // Update URL and check for known sites
+    const handleScrapeUrlChange = (url: string) => {
+        setScrapeUrl(url);
+        checkInfiniteScrollSite(url);
+    };
+
+    const handleScrape = async (e: React.FormEvent, previewOnly: boolean = false) => {
         e.preventDefault();
         if (!scrapeUrl) return;
 
         setIsScraping(true);
         setScrapeResult(null);
+        setPreviewEvents([]);
+        setScrapeStatus("connecting");
 
         try {
+            // Show scrolling status if infinite scroll enabled
+            if (infiniteScroll) {
+                setTimeout(() => {
+                    if (scrapeStatus === "connecting") setScrapeStatus("scrolling");
+                }, 2000);
+            }
+
             const res = await fetch("/api/admin/events/scrape", {
                 method: "POST",
                 headers: {
@@ -308,37 +360,130 @@ export default function AdminEventsPage() {
                 body: JSON.stringify({
                     url: scrapeUrl,
                     event_types: scrapeEventTypes.length === EVENT_TYPES.length ? undefined : scrapeEventTypes,
-                    save_source: saveSource,
+                    save_source: saveSource && !previewOnly,
                     scrape_interval_hours: scrapeInterval,
                     source_type: sourceType,
                     crawl_depth: crawlDepth,
                     max_pages: maxPages,
                     infinite_scroll: infiniteScroll,
                     scroll_count: scrollCount,
+                    preview_only: previewOnly,
                 }),
             });
 
+            setScrapeStatus("extracting");
             const data = await res.json();
 
             if (data.success) {
+                if (previewOnly && data.events) {
+                    // Show preview
+                    setPreviewEvents(data.events);
+                    setSelectedPreviewEvents(new Set(data.events.map((_: ExtractedEvent, i: number) => i)));
+                    setScrapeStatus("preview");
+                } else {
                 setScrapeResult({
                     extracted: data.extracted,
                     inserted: data.inserted,
                     skipped: data.skipped,
-                    pagesScraped: data.pages_scraped,
+                        pagesScraped: data.pages_scraped,
                 });
                 fetchEvents();
-                if (saveSource) {
-                    fetchEventSources();
+                    if (saveSource) {
+                        fetchEventSources();
+                    }
+                    setScrapeStatus("idle");
                 }
             } else {
                 alert(data.error || "Failed to scrape events");
+                setScrapeStatus("idle");
             }
         } catch (error) {
             console.error("Failed to scrape:", error);
             alert("Failed to scrape events");
+            setScrapeStatus("idle");
         } finally {
+            if (scrapeStatus !== "preview") {
             setIsScraping(false);
+            }
+        }
+    };
+
+    // Save selected preview events
+    const handleSavePreviewEvents = async () => {
+        if (selectedPreviewEvents.size === 0) return;
+        
+        setScrapeStatus("saving");
+        const eventsToSave = previewEvents.filter((_, i) => selectedPreviewEvents.has(i));
+        
+        try {
+            const res = await fetch("/api/admin/events/scrape", {
+                method: "POST",
+                headers: {
+                    ...(getAuthHeaders() || {}),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    url: scrapeUrl,
+                    save_source: saveSource,
+                    scrape_interval_hours: scrapeInterval,
+                    source_type: sourceType,
+                    events_to_save: eventsToSave,
+                }),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setScrapeResult({
+                    extracted: eventsToSave.length,
+                    inserted: data.inserted,
+                    skipped: data.skipped,
+                });
+                fetchEvents();
+                if (saveSource) fetchEventSources();
+            }
+        } catch (error) {
+            console.error("Failed to save events:", error);
+            alert("Failed to save events");
+        } finally {
+            setPreviewEvents([]);
+            setSelectedPreviewEvents(new Set());
+            setScrapeStatus("idle");
+            setIsScraping(false);
+        }
+    };
+
+    // Export events to CSV/JSON
+    const handleExport = (format: "csv" | "json") => {
+        const dataToExport = selectedEvents.size > 0 
+            ? events.filter(e => selectedEvents.has(e.id))
+            : events;
+        
+        if (format === "json") {
+            const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `events-${new Date().toISOString().split("T")[0]}.json`;
+            a.click();
+        } else {
+            // CSV export
+            const headers = ["name", "type", "status", "start_date", "end_date", "location", "city", "country", "url"];
+            const csvContent = [
+                headers.join(","),
+                ...dataToExport.map(e => 
+                    headers.map(h => {
+                        const val = e[h as keyof typeof e];
+                        return typeof val === "string" && val.includes(",") ? `"${val}"` : val || "";
+                    }).join(",")
+                )
+            ].join("\n");
+            
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `events-${new Date().toISOString().split("T")[0]}.csv`;
+            a.click();
         }
     };
 
@@ -674,7 +819,25 @@ export default function AdminEventsPage() {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                     </svg>
                                 </button>
-                            </div>
+                        </div>
+
+                            {/* Export Buttons */}
+                            <div className="flex items-center gap-1 bg-zinc-800 rounded-lg p-1">
+                                <button
+                                    onClick={() => handleExport("csv")}
+                                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                    title={selectedEvents.size > 0 ? `Export ${selectedEvents.size} selected as CSV` : "Export all as CSV"}
+                                >
+                                    CSV
+                                </button>
+                                <button
+                                    onClick={() => handleExport("json")}
+                                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                    title={selectedEvents.size > 0 ? `Export ${selectedEvents.size} selected as JSON` : "Export all as JSON"}
+                                >
+                                    JSON
+                                </button>
+                    </div>
 
                             {/* Page Size */}
                             <select
@@ -686,7 +849,7 @@ export default function AdminEventsPage() {
                                     <option key={size} value={size}>{size} per page</option>
                                 ))}
                             </select>
-                        </div>
+                    </div>
 
                         {/* Bulk Actions Bar */}
                         <AnimatePresence>
@@ -1287,11 +1450,11 @@ export default function AdminEventsPage() {
                                             </svg>
                                         </div>
                                         <div>
-                                            <h2 className="text-xl font-bold text-white">Scrape Events</h2>
+                                    <h2 className="text-xl font-bold text-white">Scrape Events</h2>
                                             <p className="text-sm text-zinc-400">
                                                 AI-powered event extraction with Firecrawl
-                                            </p>
-                                        </div>
+                                    </p>
+                                </div>
                                     </div>
                                 </div>
 
@@ -1307,15 +1470,15 @@ export default function AdminEventsPage() {
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                                 </svg>
                                             </div>
-                                            <input
-                                                type="url"
-                                                required
-                                                value={scrapeUrl}
-                                                onChange={(e) => setScrapeUrl(e.target.value)}
+                                        <input
+                                            type="url"
+                                            required
+                                            value={scrapeUrl}
+                                            onChange={(e) => handleScrapeUrlChange(e.target.value)}
                                                 placeholder="https://cryptonomads.org/events"
                                                 className="w-full pl-10 pr-4 py-3 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]/50 transition-all"
-                                            />
-                                        </div>
+                                        />
+                                    </div>
                                     </div>
 
                                     {/* Event Types - All selected by default */}
@@ -1395,9 +1558,9 @@ export default function AdminEventsPage() {
                                                             <div className="text-sm font-medium text-white">{depth.label}</div>
                                                             <div className="text-xs text-zinc-500">{depth.description}</div>
                                                         </button>
-                                                    ))}
-                                                </div>
-                                            </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                             <div>
                                                 <label className="text-xs text-zinc-400 mb-1 block">Max pages to scrape</label>
                                                 <div className="flex gap-2">
@@ -1557,6 +1720,90 @@ export default function AdminEventsPage() {
                                         </AnimatePresence>
                                     </div>
 
+                                    {/* Progress Status */}
+                                    {isScraping && scrapeStatus !== "idle" && scrapeStatus !== "preview" && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="p-4 bg-[#FF5500]/10 border border-[#FF5500]/30 rounded-xl"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-[#FF5500]/20 flex items-center justify-center">
+                                                    <div className="w-4 h-4 border-2 border-[#FF5500]/30 border-t-[#FF5500] rounded-full animate-spin" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[#FF5500] font-medium">
+                                                        {scrapeStatus === "connecting" && "Connecting to page..."}
+                                                        {scrapeStatus === "scrolling" && `Scrolling page (${scrollCount}x)...`}
+                                                        {scrapeStatus === "extracting" && "Extracting events with AI..."}
+                                                        {scrapeStatus === "saving" && "Saving events to database..."}
+                                                    </p>
+                                                    <p className="text-[#FF5500]/70 text-sm">
+                                                        {scrapeStatus === "scrolling" && `Loading ${scrollCount * 2000}px of content`}
+                                                        {scrapeStatus === "extracting" && "Analyzing content for event data"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Preview Events */}
+                                    {scrapeStatus === "preview" && previewEvents.length > 0 && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="border border-zinc-700 rounded-xl overflow-hidden"
+                                        >
+                                            <div className="p-3 bg-zinc-800/50 border-b border-zinc-700 flex items-center justify-between">
+                                                <span className="text-sm font-medium text-zinc-300">
+                                                    📋 Preview: {previewEvents.length} events found
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (selectedPreviewEvents.size === previewEvents.length) {
+                                                            setSelectedPreviewEvents(new Set());
+                                                        } else {
+                                                            setSelectedPreviewEvents(new Set(previewEvents.map((_, i) => i)));
+                                                        }
+                                                    }}
+                                                    className="text-xs text-[#FF5500] hover:text-[#FF5500]/80"
+                                                >
+                                                    {selectedPreviewEvents.size === previewEvents.length ? "Deselect All" : "Select All"}
+                                                </button>
+                                            </div>
+                                            <div className="max-h-64 overflow-y-auto divide-y divide-zinc-800">
+                                                {previewEvents.map((event, i) => (
+                                                    <label 
+                                                        key={i}
+                                                        className="flex items-start gap-3 p-3 hover:bg-zinc-800/30 cursor-pointer"
+                                                    >
+                                        <input
+                                            type="checkbox"
+                                                            checked={selectedPreviewEvents.has(i)}
+                                                            onChange={() => {
+                                                                const newSet = new Set(selectedPreviewEvents);
+                                                                if (newSet.has(i)) newSet.delete(i);
+                                                                else newSet.add(i);
+                                                                setSelectedPreviewEvents(newSet);
+                                                            }}
+                                                            className="mt-1 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]/50"
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm text-white truncate">{event.name}</p>
+                                                            <p className="text-xs text-zinc-400">
+                                                                {EVENT_TYPE_ICONS[event.type] || "📅"} {event.type} • {event.start_date} • {event.location || event.city || "TBA"}
+                                                            </p>
+                                                        </div>
+                                                        {event.image_url && (
+                                                            <img src={event.image_url} alt="" className="w-12 h-12 rounded object-cover" />
+                                                        )}
+                                    </label>
+                                                ))}
+                                            </div>
+                                        </motion.div>
+                                    )}
+
                                     {/* Result */}
                                     {scrapeResult && (
                                         <motion.div
@@ -1575,8 +1822,8 @@ export default function AdminEventsPage() {
                                                     <p className="text-green-400/70 text-sm">
                                                         {scrapeResult.pagesScraped && `Crawled ${scrapeResult.pagesScraped} pages • `}
                                                         Found {scrapeResult.extracted} events • Added {scrapeResult.inserted} • Skipped {scrapeResult.skipped}
-                                                    </p>
-                                                </div>
+                                            </p>
+                                        </div>
                                             </div>
                                         </motion.div>
                                     )}
@@ -1593,34 +1840,74 @@ export default function AdminEventsPage() {
                                             </svg>
                                             View {eventSources.length} Saved Source{eventSources.length !== 1 ? "s" : ""}
                                         </button>
-                                        <div className="flex gap-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowScrapeModal(false)}
-                                                className="px-4 py-2.5 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                type="submit"
-                                                disabled={isScraping}
-                                                className="px-6 py-2.5 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:from-[#FF6600] hover:to-[#FF5500] text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-[#FF5500]/20"
-                                            >
-                                                {isScraping ? (
-                                                    <>
-                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                        Scraping...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                                        </svg>
-                                                        Scrape Events
-                                                    </>
-                                                )}
-                                            </button>
-                                        </div>
+                                        
+                                        {scrapeStatus === "preview" ? (
+                                            <div className="flex gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setPreviewEvents([]);
+                                                        setScrapeStatus("idle");
+                                                        setIsScraping(false);
+                                                    }}
+                                                    className="px-4 py-2.5 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSavePreviewEvents}
+                                                    disabled={selectedPreviewEvents.size === 0}
+                                                    className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    Save {selectedPreviewEvents.size} Events
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowScrapeModal(false)}
+                                                    className="px-4 py-2.5 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                                        >
+                                            Cancel
+                                        </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => handleScrape(e, true)}
+                                                    disabled={isScraping || !scrapeUrl}
+                                                    className="px-4 py-2.5 border border-[#FF5500]/50 text-[#FF5500] hover:bg-[#FF5500]/10 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                    Preview
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={isScraping}
+                                                    className="px-6 py-2.5 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:from-[#FF6600] hover:to-[#FF5500] text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-[#FF5500]/20"
+                                        >
+                                            {isScraping ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    Scraping...
+                                                </>
+                                            ) : (
+                                                        <>
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                            </svg>
+                                                            Scrape & Save
+                                                        </>
+                                            )}
+                                        </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </form>
                             </motion.div>
@@ -1724,10 +2011,26 @@ export default function AdminEventsPage() {
                                                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                                     </svg>
-                                                                    {source.events_found} events found
+                                                                    {source.events_found} events
                                                                 </span>
                                                                 {source.last_scraped_at && (
-                                                                    <span>Last: {new Date(source.last_scraped_at).toLocaleDateString()}</span>
+                                                                    <span title={new Date(source.last_scraped_at).toLocaleString()}>
+                                                                        Last: {new Date(source.last_scraped_at).toLocaleDateString()}
+                                                                    </span>
+                                                                )}
+                                                                {source.is_active && source.next_scrape_at && (
+                                                                    <span className={`flex items-center gap-1 ${
+                                                                        new Date(source.next_scrape_at) <= new Date() 
+                                                                            ? "text-[#FF5500]" 
+                                                                            : "text-zinc-400"
+                                                                    }`} title={new Date(source.next_scrape_at).toLocaleString()}>
+                                                                        ⏰ Next: {
+                                                                            new Date(source.next_scrape_at) <= new Date() 
+                                                                                ? "Pending..."
+                                                                                : new Date(source.next_scrape_at).toLocaleDateString() + " " + 
+                                                                                  new Date(source.next_scrape_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                                        }
+                                                                    </span>
                                                                 )}
                                                             </div>
                                                             {source.last_error && (
@@ -1781,11 +2084,22 @@ export default function AdminEventsPage() {
                                     )}
                                 </div>
 
-                                {/* Footer */}
+                                {/* Footer - Cron Status */}
                                 <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 shrink-0">
-                                    <p className="text-xs text-zinc-500 text-center">
-                                        🔄 Sources are automatically scraped via cron job • Runs every 6 hours
-                                    </p>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-4 text-zinc-400">
+                                            <span className="flex items-center gap-1">
+                                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                                {eventSources.filter(s => s.is_active).length} active
+                                            </span>
+                                            <span>
+                                                {eventSources.filter(s => s.is_active && s.next_scrape_at && new Date(s.next_scrape_at) <= new Date()).length} pending
+                                            </span>
+                                        </div>
+                                        <p className="text-zinc-500">
+                                            🔄 Cron runs every 6 hours
+                                        </p>
+                                    </div>
                                 </div>
                             </motion.div>
                         </motion.div>
