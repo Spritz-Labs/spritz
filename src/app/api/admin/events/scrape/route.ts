@@ -224,6 +224,7 @@ export async function POST(request: NextRequest) {
             // Scrape the URL using Firecrawl
             let result;
             try {
+                console.log("[Event Scrape] Calling fetchContent...");
                 result = await fetchContent(url, {
                     crawlDepth: crawl_depth,
                     maxPages: max_pages,
@@ -231,9 +232,17 @@ export async function POST(request: NextRequest) {
                     scrollCount: scroll_count,
                 });
                 console.log("[Event Scrape] fetchContent completed successfully");
+                console.log("[Event Scrape] Result keys:", Object.keys(result || {}));
+                console.log("[Event Scrape] Content length:", result?.content?.length || 0);
             } catch (fetchError) {
                 console.error("[Event Scrape] fetchContent ERROR:", fetchError);
-                throw new Error(`Failed to fetch content: ${fetchError instanceof Error ? fetchError.message : "Unknown error"}`);
+                console.error("[Event Scrape] fetchContent error type:", fetchError?.constructor?.name);
+                console.error("[Event Scrape] fetchContent error stack:", fetchError instanceof Error ? fetchError.stack : "No stack");
+                return NextResponse.json({ 
+                    error: "Failed to fetch content",
+                    details: fetchError instanceof Error ? fetchError.message : "Unknown error",
+                    type: fetchError?.constructor?.name || "Unknown"
+                }, { status: 500 });
             }
 
             if (!result.content || result.content.length < 100) {
