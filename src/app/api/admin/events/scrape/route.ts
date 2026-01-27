@@ -312,22 +312,21 @@ ${contentToAnalyze}`;
                     config: { maxOutputTokens: 16384 }, // Increased for more events
                 });
 
-                console.log("[Event Scrape] AI response object keys:", Object.keys(response || {}));
+                // Get text from response - should be a direct property
+                responseText = response.text || "";
                 
-                // Try multiple ways to get the text
-                if (typeof response.text === "string") {
-                    responseText = response.text;
-                } else if (typeof response.text === "function") {
-                    responseText = await response.text();
-                } else if (response.response?.text) {
-                    responseText = typeof response.response.text === "function" 
-                        ? await response.response.text()
-                        : response.response.text;
-                } else {
-                    // Try to stringify and extract
-                    const responseStr = JSON.stringify(response);
-                    console.error("[Event Scrape] Unexpected response format:", responseStr.substring(0, 500));
-                    throw new Error("AI response format unexpected - no text property found");
+                if (!responseText) {
+                    console.error("[Event Scrape] Empty response.text, checking response structure:");
+                    console.error("[Event Scrape] Response keys:", Object.keys(response || {}));
+                    console.error("[Event Scrape] Response type:", typeof response);
+                    if (response) {
+                        try {
+                            console.error("[Event Scrape] Response stringified (first 500):", JSON.stringify(response).substring(0, 500));
+                        } catch {
+                            console.error("[Event Scrape] Could not stringify response");
+                        }
+                    }
+                    throw new Error("AI returned empty response");
                 }
                 
                 console.log("[Event Scrape] AI response length:", responseText.length);
@@ -335,6 +334,7 @@ ${contentToAnalyze}`;
             } catch (aiError) {
                 console.error("[Event Scrape] AI API error:", aiError);
                 console.error("[Event Scrape] AI error type:", aiError?.constructor?.name);
+                console.error("[Event Scrape] AI error message:", aiError instanceof Error ? aiError.message : String(aiError));
                 console.error("[Event Scrape] AI error stack:", aiError instanceof Error ? aiError.stack : "No stack");
                 throw new Error(`AI extraction failed: ${aiError instanceof Error ? aiError.message : "Unknown error"}`);
             }
