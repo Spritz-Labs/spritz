@@ -39,7 +39,7 @@ export function AdminLayout({
         <div className="h-[100dvh] bg-zinc-950 text-white flex flex-col overflow-hidden">
             {/* Top Header - fixed height with safe area */}
             <header className="border-b border-zinc-800 bg-zinc-900/95 backdrop-blur-lg shrink-0 pt-[env(safe-area-inset-top)]">
-                <div className="max-w-[1800px] mx-auto px-3 sm:px-4 py-2 sm:py-3">
+                <div className="w-full px-3 sm:px-4 lg:px-6 xl:px-8 py-2 sm:py-3">
                     <div className="flex items-center justify-between">
                         {/* Left: Back + Title */}
                         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -119,7 +119,7 @@ export function AdminLayout({
 
             {/* Main Content - fills remaining space */}
             <main className="flex-1 overflow-hidden">
-                <div className="h-full max-w-[1800px] mx-auto">
+                <div className="h-full w-full">
                     {children}
                 </div>
             </main>

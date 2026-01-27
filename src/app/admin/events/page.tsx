@@ -705,7 +705,7 @@ export default function AdminEventsPage() {
             address={address}
             onSignOut={signOut}
         >
-            <div className="h-full flex flex-col overflow-hidden px-3 sm:px-4 py-2 sm:py-3">
+            <div className="h-full flex flex-col overflow-hidden px-3 sm:px-4 lg:px-6 xl:px-8 py-2 sm:py-3">
                     {/* Compact Header + Stats Row */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 shrink-0 mb-2 sm:mb-3">
                         {/* Stats - inline on desktop */}
@@ -965,9 +965,9 @@ export default function AdminEventsPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-zinc-800/50">
-                                        {events.map((event) => (
+                            {events.map((event) => (
                                             <tr 
-                                                key={event.id} 
+                                    key={event.id} 
                                                 className={`hover:bg-zinc-800/30 transition-colors ${selectedEvents.has(event.id) ? "bg-[#FF5500]/5" : ""}`}
                                             >
                                                 <td className="p-2">
@@ -982,10 +982,10 @@ export default function AdminEventsPage() {
                                                     <div className="flex items-center gap-1.5">
                                                         <span className="text-sm shrink-0">{EVENT_TYPE_ICONS[event.event_type]}</span>
                                                         <span className="font-medium text-white text-xs truncate">
-                                                            {event.name}
+                                                        {event.name}
                                                             {event.is_featured && <span className="text-yellow-500 ml-1">⭐</span>}
                                                         </span>
-                                                    </div>
+                                                </div>
                                                 </td>
                                                 <td className="p-2 hidden md:table-cell">
                                                     <span className="text-xs text-zinc-400 capitalize">{event.event_type}</span>
@@ -999,15 +999,15 @@ export default function AdminEventsPage() {
                                                     </span>
                                                 </td>
                                                 <td className="p-2">
-                                                    <select
-                                                        value={event.status}
-                                                        onChange={(e) => toggleStatus(event, e.target.value)}
+                                            <select
+                                                value={event.status}
+                                                onChange={(e) => toggleStatus(event, e.target.value)}
                                                         className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer`}
-                                                    >
-                                                        {EVENT_STATUSES.map((status) => (
-                                                            <option key={status} value={status}>{status}</option>
-                                                        ))}
-                                                    </select>
+                                            >
+                                                {EVENT_STATUSES.map((status) => (
+                                                    <option key={status} value={status}>{status}</option>
+                                                ))}
+                                            </select>
                                                 </td>
                                                 <td className="p-2">
                                                     <div className="flex justify-end gap-0.5">
@@ -1029,17 +1029,17 @@ export default function AdminEventsPage() {
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                             </svg>
                                                         </button>
-                                                    </div>
+                                        </div>
                                                 </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
-                        </div>
+                                    </div>
+                                        </div>
                     ) : (
-                        /* Compact Grid View - More cards on screen */
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3">
+                        /* Compact Grid View - More cards on screen - scales with screen width */
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-2 sm:gap-3 lg:gap-4">
                             {events.map((event) => (
                                 <div 
                                     key={event.id} 
@@ -1200,7 +1200,7 @@ export default function AdminEventsPage() {
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0.95, opacity: 0 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                                className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
                             >
                                 <div className="p-6 border-b border-zinc-800">
                                     <h2 className="text-xl font-bold text-white">
@@ -1424,7 +1424,7 @@ export default function AdminEventsPage() {
                                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
                                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-2xl border border-zinc-800 w-full max-w-xl shadow-2xl shadow-black/50 overflow-hidden"
+                                className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-2xl border border-zinc-800 w-full max-w-3xl shadow-2xl shadow-black/50 overflow-hidden"
                             >
                                 {/* Header with Spritz accent */}
                                 <div className="relative p-6 border-b border-zinc-800 bg-gradient-to-r from-[#FF5500]/10 to-transparent">
@@ -1976,7 +1976,7 @@ export default function AdminEventsPage() {
                                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
                                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-2xl border border-zinc-800 w-full max-w-2xl max-h-[80vh] shadow-2xl shadow-black/50 overflow-hidden flex flex-col"
+                                className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-2xl border border-zinc-800 w-full max-w-5xl max-h-[80vh] shadow-2xl shadow-black/50 overflow-hidden flex flex-col"
                             >
                                 {/* Header */}
                                 <div className="relative p-6 border-b border-zinc-800 bg-gradient-to-r from-[#FF5500]/10 to-transparent shrink-0">
