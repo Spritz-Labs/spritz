@@ -302,7 +302,7 @@ export default function AdminEventsPage() {
     return (
         <AdminAuthWrapper>
             <AdminLayout title="Events">
-                <div className="space-y-6 max-w-7xl mx-auto">
+                <div className="space-y-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div>
@@ -330,7 +330,7 @@ export default function AdminEventsPage() {
                     </div>
 
                     {/* Stats Cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4">
                         <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
                             <p className="text-zinc-500 text-xs mb-1">Total Events</p>
                             <p className="text-2xl font-bold text-white">{total}</p>
@@ -391,8 +391,8 @@ export default function AdminEventsPage() {
 
                     {/* Events Grid */}
                     {isLoading ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                            {[...Array(6)].map((_, i) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                            {[...Array(10)].map((_, i) => (
                                 <div key={i} className="bg-zinc-900/50 rounded-xl h-48 animate-pulse border border-zinc-800" />
                             ))}
                         </div>
@@ -418,7 +418,7 @@ export default function AdminEventsPage() {
                             </div>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                             {events.map((event) => (
                                 <div 
                                     key={event.id} 

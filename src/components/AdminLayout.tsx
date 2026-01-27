@@ -118,8 +118,10 @@ export function AdminLayout({
             </header>
 
             {/* Main Content */}
-            <main className="pb-20 sm:pb-6">
-                {children}
+            <main className="px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-8">
+                <div className="max-w-[1600px] mx-auto">
+                    {children}
+                </div>
             </main>
 
             {/* Mobile Bottom Navigation */}
