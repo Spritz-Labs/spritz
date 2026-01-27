@@ -701,23 +701,40 @@ export default function AdminEventsPage() {
     return (
         <AdminLayout 
             title="Events" 
-            subtitle="Manage global events database"
+            subtitle={`${total} event${total !== 1 ? "s" : ""}`}
             address={address}
             onSignOut={signOut}
         >
-            <div className="space-y-6">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div>
-                            <h1 className="text-2xl font-bold text-white">Events Management</h1>
-                            <p className="text-zinc-400">Manage global events database • {total} event{total !== 1 ? "s" : ""}</p>
+            <div className="h-full flex flex-col overflow-hidden px-3 sm:px-4 py-2 sm:py-3">
+                    {/* Compact Header + Stats Row */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 shrink-0 mb-2 sm:mb-3">
+                        {/* Stats - inline on desktop */}
+                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                                <span className="text-zinc-500 text-xs">Total</span>
+                                <span className="text-sm font-bold text-white">{total}</span>
                         </div>
-                        <div className="flex gap-3">
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                                <span className="text-zinc-500 text-xs">Published</span>
+                                <span className="text-sm font-bold text-green-400">{events.filter(e => e.status === "published").length}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                                <span className="text-zinc-500 text-xs">Draft</span>
+                                <span className="text-sm font-bold text-yellow-400">{events.filter(e => e.status === "draft").length}</span>
+                            </div>
+                            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                                <span className="text-zinc-500 text-xs">Featured</span>
+                                <span className="text-sm font-bold text-[#FF5500]">{events.filter(e => e.is_featured).length}</span>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
                             <button
                                 onClick={() => setShowScrapeModal(true)}
-                                className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors flex items-center gap-2 text-sm font-medium"
+                                className="px-3 py-1.5 sm:px-4 sm:py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-medium"
                             >
-                                🔍 Scrape Events
+                                🔍 <span className="hidden sm:inline">Scrape</span>
                             </button>
                             <button
                                 onClick={() => {
@@ -725,48 +742,28 @@ export default function AdminEventsPage() {
                                     setEditingEvent(null);
                                     setShowAddModal(true);
                                 }}
-                                className="px-4 py-2.5 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:shadow-lg hover:shadow-[#FF5500]/20 text-white rounded-xl transition-all flex items-center gap-2 text-sm font-medium"
+                                className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:shadow-lg hover:shadow-[#FF5500]/20 text-white rounded-lg transition-all flex items-center gap-1.5 text-xs sm:text-sm font-medium"
                             >
-                                ➕ Add Event
+                                ➕ <span className="hidden sm:inline">Add Event</span>
                             </button>
                         </div>
                     </div>
 
-                    {/* Stats Cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4">
-                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                            <p className="text-zinc-500 text-xs mb-1">Total Events</p>
-                            <p className="text-2xl font-bold text-white">{total}</p>
-                        </div>
-                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                            <p className="text-zinc-500 text-xs mb-1">Published</p>
-                            <p className="text-2xl font-bold text-green-400">{events.filter(e => e.status === "published").length}</p>
-                        </div>
-                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                            <p className="text-zinc-500 text-xs mb-1">Draft</p>
-                            <p className="text-2xl font-bold text-yellow-400">{events.filter(e => e.status === "draft").length}</p>
-                        </div>
-                        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                            <p className="text-zinc-500 text-xs mb-1">Featured</p>
-                            <p className="text-2xl font-bold text-[#FF5500]">{events.filter(e => e.is_featured).length}</p>
-                        </div>
-                    </div>
-
-                    {/* Filters & Controls */}
-                    <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                        <div className="flex flex-wrap gap-3 items-center">
+                    {/* Compact Filters & Controls */}
+                    <div className="bg-zinc-900/50 rounded-lg p-2 sm:p-3 border border-zinc-800 shrink-0 mb-2 sm:mb-3">
+                        <div className="flex flex-wrap gap-2 items-center">
                             {/* Search */}
-                            <div className="flex-1 min-w-[200px]">
+                            <div className="flex-1 min-w-[140px] sm:min-w-[200px]">
                                 <div className="relative">
-                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
                                     <input
                                         type="text"
-                                        placeholder="Search events..."
+                                        placeholder="Search..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]/50"
+                                        className="w-full pl-8 pr-3 py-1.5 text-sm bg-zinc-800/50 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]/50"
                                     />
                                 </div>
                             </div>
@@ -775,9 +772,9 @@ export default function AdminEventsPage() {
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="px-4 py-2.5 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                                className="px-2.5 py-1.5 text-sm bg-zinc-800/50 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
                             >
-                                <option value="">All Statuses</option>
+                                <option value="">Status</option>
                                 {EVENT_STATUSES.map((status) => (
                                     <option key={status} value={status}>{status}</option>
                                 ))}
@@ -785,9 +782,9 @@ export default function AdminEventsPage() {
                             <select
                                 value={typeFilter}
                                 onChange={(e) => setTypeFilter(e.target.value)}
-                                className="px-4 py-2.5 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                                className="px-2.5 py-1.5 text-sm bg-zinc-800/50 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
                             >
-                                <option value="">All Types</option>
+                                <option value="">Type</option>
                                 {EVENT_TYPES.map((type) => (
                                     <option key={type} value={type}>{EVENT_TYPE_ICONS[type]} {type}</option>
                                 ))}
@@ -797,7 +794,7 @@ export default function AdminEventsPage() {
                             {events.length > 0 && (
                                 <button
                                     onClick={toggleSelectAll}
-                                    className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                                    className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                                         selectedEvents.size === events.length
                                             ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
                                             : "bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700"
@@ -807,46 +804,46 @@ export default function AdminEventsPage() {
                                         type="checkbox"
                                         checked={selectedEvents.size === events.length && events.length > 0}
                                         onChange={toggleSelectAll}
-                                        className="rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                        className="w-3 h-3 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
                                     />
-                                    {selectedEvents.size === events.length ? "Deselect All" : "Select All"}
+                                    <span className="hidden sm:inline">{selectedEvents.size === events.length ? "Deselect" : "Select All"}</span>
                                 </button>
                             )}
 
                             {/* View Mode Toggle */}
-                            <div className="flex bg-zinc-800 rounded-lg p-1">
+                            <div className="flex bg-zinc-800 rounded-lg p-0.5">
                                 <button
                                     onClick={() => setViewMode("grid")}
-                                    className={`p-2 rounded-md transition-colors ${viewMode === "grid" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"}`}
+                                    className={`p-1.5 rounded transition-colors ${viewMode === "grid" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"}`}
                                     title="Grid View"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                                     </svg>
                                 </button>
                                 <button
                                     onClick={() => setViewMode("table")}
-                                    className={`p-2 rounded-md transition-colors ${viewMode === "table" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"}`}
+                                    className={`p-1.5 rounded transition-colors ${viewMode === "table" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"}`}
                                     title="Table View"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                     </svg>
                                 </button>
                         </div>
 
                             {/* Export Buttons */}
-                            <div className="flex items-center gap-1 bg-zinc-800 rounded-lg p-1">
+                            <div className="hidden sm:flex items-center gap-0.5 bg-zinc-800 rounded-lg p-0.5">
                                 <button
                                     onClick={() => handleExport("csv")}
-                                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                    className="px-2 py-1 text-[10px] text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
                                     title={selectedEvents.size > 0 ? `Export ${selectedEvents.size} selected as CSV` : "Export all as CSV"}
                                 >
                                     CSV
                                 </button>
                                 <button
                                     onClick={() => handleExport("json")}
-                                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                    className="px-2 py-1 text-[10px] text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
                                     title={selectedEvents.size > 0 ? `Export ${selectedEvents.size} selected as JSON` : "Export all as JSON"}
                                 >
                                     JSON
@@ -857,15 +854,15 @@ export default function AdminEventsPage() {
                             <select
                                 value={pageSize}
                                 onChange={(e) => setPageSize(Number(e.target.value))}
-                                className="px-3 py-2.5 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white text-sm focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                                className="px-2 py-1.5 text-xs bg-zinc-800/50 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
                             >
                                 {PAGE_SIZES.map((size) => (
-                                    <option key={size} value={size}>{size} per page</option>
+                                    <option key={size} value={size}>{size}/pg</option>
                                 ))}
                             </select>
                     </div>
 
-                        {/* Bulk Actions Bar */}
+                        {/* Bulk Actions Bar - Inline */}
                         <AnimatePresence>
                             {selectedEvents.size > 0 && (
                                 <motion.div
@@ -874,39 +871,39 @@ export default function AdminEventsPage() {
                                     exit={{ height: 0, opacity: 0 }}
                                     className="overflow-hidden"
                                 >
-                                    <div className="flex items-center justify-between gap-4 mt-4 pt-4 border-t border-zinc-700">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-sm text-[#FF5500] font-medium">
-                                                {selectedEvents.size} event{selectedEvents.size !== 1 ? "s" : ""} selected
+                                    <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-zinc-700/50">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-[#FF5500] font-medium">
+                                                {selectedEvents.size} selected
                                             </span>
                                             <button
                                                 onClick={() => setSelectedEvents(new Set())}
-                                                className="text-xs text-zinc-400 hover:text-white transition-colors"
+                                                className="text-[10px] text-zinc-500 hover:text-white transition-colors"
                                             >
-                                                Clear selection
+                                                Clear
                                             </button>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-1">
                                             <button
                                                 onClick={() => handleBulkAction("publish")}
                                                 disabled={isBulkProcessing}
-                                                className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                                className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] font-medium hover:bg-green-500/30 transition-colors disabled:opacity-50"
                                             >
-                                                ✓ Publish All
+                                                ✓ Publish
                                             </button>
                                             <button
                                                 onClick={() => handleBulkAction("draft")}
                                                 disabled={isBulkProcessing}
-                                                className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm font-medium hover:bg-yellow-500/30 transition-colors disabled:opacity-50"
+                                                className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-[10px] font-medium hover:bg-yellow-500/30 transition-colors disabled:opacity-50"
                                             >
-                                                📝 Set Draft
+                                                📝 Draft
                                             </button>
                                             <button
                                                 onClick={() => handleBulkAction("delete")}
                                                 disabled={isBulkProcessing}
-                                                className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                                                className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50"
                                             >
-                                                🗑️ Delete
+                                                🗑️
                                             </button>
                                         </div>
                                     </div>
@@ -915,20 +912,21 @@ export default function AdminEventsPage() {
                         </AnimatePresence>
                     </div>
 
-                    {/* Events Display */}
+                    {/* Scrollable Events Display */}
+                    <div className="flex-1 overflow-y-auto min-h-0">
                     {isLoading ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                             {[...Array(10)].map((_, i) => (
-                                <div key={i} className="bg-zinc-900/50 rounded-xl h-48 animate-pulse border border-zinc-800" />
+                                <div key={i} className="bg-zinc-900/50 rounded-lg h-40 animate-pulse border border-zinc-800" />
                             ))}
                         </div>
                     ) : events.length === 0 ? (
-                        <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-12 text-center">
-                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center">
-                                <span className="text-3xl">📅</span>
+                        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-8 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800 flex items-center justify-center">
+                                <span className="text-2xl">📅</span>
                             </div>
-                            <p className="text-zinc-400 mb-4">No events found. Add some events or scrape from a URL.</p>
-                            <div className="flex justify-center gap-3">
+                            <p className="text-zinc-400 text-sm mb-3">No events found. Add some or scrape from URL.</p>
+                            <div className="flex justify-center gap-2">
                                 <button
                                     onClick={() => setShowScrapeModal(true)}
                                     className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
@@ -944,99 +942,90 @@ export default function AdminEventsPage() {
                             </div>
                         </div>
                     ) : viewMode === "table" ? (
-                        /* Table View */
-                        <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden">
+                        /* Compact Table View */
+                        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 overflow-hidden">
                             <div className="overflow-x-auto">
-                                <table className="w-full">
+                                <table className="w-full text-sm">
                                     <thead>
                                         <tr className="border-b border-zinc-800 bg-zinc-800/50">
-                                            <th className="p-3 text-left">
+                                            <th className="p-2 text-left w-8">
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedEvents.size === events.length && events.length > 0}
                                                     onChange={toggleSelectAll}
-                                                    className="rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                                    className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
                                                 />
                                             </th>
-                                            <th className="p-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Event</th>
-                                            <th className="p-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Type</th>
-                                            <th className="p-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Date</th>
-                                            <th className="p-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
-                                            <th className="p-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Status</th>
-                                            <th className="p-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Source</th>
-                                            <th className="p-3 text-right text-xs font-medium text-zinc-400 uppercase tracking-wider">Actions</th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase">Event</th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase hidden md:table-cell">Type</th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase">Date</th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase hidden lg:table-cell">Location</th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase">Status</th>
+                                            <th className="p-2 text-right text-[10px] font-medium text-zinc-400 uppercase w-16">Act</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-zinc-800">
+                                    <tbody className="divide-y divide-zinc-800/50">
                                         {events.map((event) => (
                                             <tr 
                                                 key={event.id} 
                                                 className={`hover:bg-zinc-800/30 transition-colors ${selectedEvents.has(event.id) ? "bg-[#FF5500]/5" : ""}`}
                                             >
-                                                <td className="p-3">
+                                                <td className="p-2">
                                                     <input
                                                         type="checkbox"
                                                         checked={selectedEvents.has(event.id)}
                                                         onChange={() => toggleSelectEvent(event.id)}
-                                                        className="rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                                        className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
                                                     />
                                                 </td>
-                                                <td className="p-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-lg">{EVENT_TYPE_ICONS[event.event_type]}</span>
-                                                        <div>
-                                                            <p className="font-medium text-white flex items-center gap-1">
-                                                                {event.name}
-                                                                {event.is_featured && <span className="text-yellow-500 text-xs">⭐</span>}
-                                                            </p>
-                                                            {event.organizer && (
-                                                                <p className="text-xs text-zinc-500">{event.organizer}</p>
-                                                            )}
-                                                        </div>
+                                                <td className="p-2 max-w-[200px] lg:max-w-none">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-sm shrink-0">{EVENT_TYPE_ICONS[event.event_type]}</span>
+                                                        <span className="font-medium text-white text-xs truncate">
+                                                            {event.name}
+                                                            {event.is_featured && <span className="text-yellow-500 ml-1">⭐</span>}
+                                                        </span>
                                                     </div>
                                                 </td>
-                                                <td className="p-3">
-                                                    <span className="text-sm text-zinc-400 capitalize">{event.event_type}</span>
+                                                <td className="p-2 hidden md:table-cell">
+                                                    <span className="text-xs text-zinc-400 capitalize">{event.event_type}</span>
                                                 </td>
-                                                <td className="p-3">
-                                                    <span className="text-sm text-zinc-300">{formatDate(event.event_date)}</span>
+                                                <td className="p-2">
+                                                    <span className="text-xs text-zinc-300 whitespace-nowrap">{formatDate(event.event_date)}</span>
                                                 </td>
-                                                <td className="p-3">
-                                                    <span className="text-sm text-zinc-400">
-                                                        {event.is_virtual ? "🌐 Virtual" : event.city || "TBA"}
+                                                <td className="p-2 hidden lg:table-cell">
+                                                    <span className="text-xs text-zinc-400">
+                                                        {event.is_virtual ? "🌐" : event.city || "TBA"}
                                                     </span>
                                                 </td>
-                                                <td className="p-3">
+                                                <td className="p-2">
                                                     <select
                                                         value={event.status}
                                                         onChange={(e) => toggleStatus(event, e.target.value)}
-                                                        className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer`}
+                                                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer`}
                                                     >
                                                         {EVENT_STATUSES.map((status) => (
                                                             <option key={status} value={status}>{status}</option>
                                                         ))}
                                                     </select>
                                                 </td>
-                                                <td className="p-3">
-                                                    <span className="text-xs text-zinc-500">{event.source}</span>
-                                                </td>
-                                                <td className="p-3">
-                                                    <div className="flex justify-end gap-1">
+                                                <td className="p-2">
+                                                    <div className="flex justify-end gap-0.5">
                                                         <button
                                                             onClick={() => openEditModal(event)}
-                                                            className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                                            className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
                                                             title="Edit"
                                                         >
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                             </svg>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDelete(event.id)}
-                                                            className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                                            className="p-1 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                                                             title="Delete"
                                                         >
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                             </svg>
                                                         </button>
@@ -1049,117 +1038,99 @@ export default function AdminEventsPage() {
                             </div>
                         </div>
                     ) : (
-                        /* Grid View */
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                        /* Compact Grid View - More cards on screen */
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3">
                             {events.map((event) => (
                                 <div 
                                     key={event.id} 
-                                    className={`bg-zinc-900/50 rounded-xl border overflow-hidden hover:border-[#FF5500]/30 transition-all relative ${
+                                    className={`bg-zinc-900/50 rounded-lg border overflow-hidden hover:border-[#FF5500]/30 transition-all relative ${
                                         event.is_featured ? "border-[#FF5500]/40" : "border-zinc-800"
                                     } ${selectedEvents.has(event.id) ? "ring-2 ring-[#FF5500]" : ""}`}
                                 >
-                                    {/* Selection Checkbox */}
-                                    <div className="absolute top-3 left-3 z-10">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedEvents.has(event.id)}
-                                            onChange={() => toggleSelectEvent(event.id)}
-                                            className="rounded border-zinc-600 bg-zinc-800/80 text-[#FF5500] focus:ring-[#FF5500]"
-                                        />
-                                    </div>
-
-                                    {/* Card Header */}
-                                    <div className="p-4 border-b border-zinc-800 pl-10">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-xl shrink-0">
-                                                    {EVENT_TYPE_ICONS[event.event_type]}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <h3 className="font-semibold text-white truncate flex items-center gap-2">
-                                                        {event.name}
-                                                        {event.is_featured && <span className="text-yellow-500 shrink-0">⭐</span>}
-                                                    </h3>
-                                                    <p className="text-xs text-zinc-500">{event.event_type}</p>
-                                                </div>
-                                            </div>
+                                    {/* Compact Card */}
+                                    <div className="p-2.5 sm:p-3">
+                                        {/* Top Row: Checkbox + Icon + Status */}
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedEvents.has(event.id)}
+                                                onChange={() => toggleSelectEvent(event.id)}
+                                                className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800/80 text-[#FF5500] focus:ring-[#FF5500]"
+                                            />
+                                            <span className="text-base">{EVENT_TYPE_ICONS[event.event_type]}</span>
                                             <select
                                                 value={event.status}
                                                 onChange={(e) => toggleStatus(event, e.target.value)}
-                                                className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer shrink-0`}
+                                                className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer`}
                                             >
                                                 {EVENT_STATUSES.map((status) => (
                                                     <option key={status} value={status}>{status}</option>
                                                 ))}
                                             </select>
                                         </div>
+
+                                        {/* Title */}
+                                        <h3 className="font-medium text-sm text-white truncate flex items-center gap-1 mb-1.5">
+                                            {event.name}
+                                            {event.is_featured && <span className="text-yellow-500 text-xs shrink-0">⭐</span>}
+                                        </h3>
+                                        
+                                        {/* Meta */}
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-400 mb-2">
+                                            <span>📅 {formatDate(event.event_date)}</span>
+                                            <span>📍 {event.city || (event.is_virtual ? "Virtual" : "TBA")}</span>
                                     </div>
                                     
-                                    {/* Card Body */}
-                                    <div className="p-4 space-y-2">
-                                        <div className="flex items-center gap-2 text-sm text-zinc-400">
-                                            <span className="text-[#FF5500]">📅</span>
-                                            <span>{formatDate(event.event_date)}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm text-zinc-400">
-                                            <span className="text-[#FF5500]">📍</span>
-                                            <span>{event.city || event.is_virtual ? (event.is_virtual ? "Virtual" : event.city) : "TBA"}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm text-zinc-500">
-                                            <span>🔗</span>
-                                            <span>Source: {event.source}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Card Actions */}
-                                    <div className="p-4 pt-0 flex gap-2">
+                                        {/* Actions */}
+                                        <div className="flex gap-1.5">
                                         <button
                                             onClick={() => openEditModal(event)}
-                                            className="flex-1 px-3 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+                                                className="flex-1 px-2 py-1 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors"
                                         >
                                             ✏️ Edit
                                         </button>
                                         <button
                                             onClick={() => handleDelete(event.id)}
-                                            className="px-3 py-2 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                                                className="px-2 py-1 text-[11px] bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded transition-colors"
                                         >
                                             🗑️
                                         </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     )}
 
-                    {/* Pagination */}
+                    {/* Compact Pagination - Inside scroll container */}
                     {totalPages > 1 && (
-                        <div className="flex items-center justify-between bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                            <div className="text-sm text-zinc-400">
-                                Showing {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} of {total} events
+                        <div className="flex items-center justify-between bg-zinc-900/50 rounded-lg p-2 sm:p-3 border border-zinc-800 mt-3 sticky bottom-0">
+                            <div className="text-xs text-zinc-500 hidden sm:block">
+                                {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, total)} of {total}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 sm:gap-1.5 mx-auto sm:mx-0">
                                 <button
                                     onClick={() => setPage(1)}
                                     disabled={page === 1}
-                                    className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    title="First page"
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="First"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                                     </svg>
                                 </button>
                                 <button
                                     onClick={() => setPage(p => Math.max(1, p - 1))}
                                     disabled={page === 1}
-                                    className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    title="Previous page"
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Previous"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                     </svg>
                                 </button>
                                 
-                                <div className="flex items-center gap-1 px-2">
+                                <div className="flex items-center gap-0.5 px-1">
                                     {[...Array(Math.min(5, totalPages))].map((_, i) => {
                                         let pageNum: number;
                                         if (totalPages <= 5) {
@@ -1176,7 +1147,7 @@ export default function AdminEventsPage() {
                                             <button
                                                 key={pageNum}
                                                 onClick={() => setPage(pageNum)}
-                                                className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                                                className={`w-6 h-6 rounded text-xs font-medium transition-colors ${
                                                     page === pageNum
                                                         ? "bg-[#FF5500] text-white"
                                                         : "bg-zinc-800 text-zinc-400 hover:text-white"
@@ -1191,26 +1162,27 @@ export default function AdminEventsPage() {
                                 <button
                                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                                     disabled={page === totalPages}
-                                    className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    title="Next page"
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Next"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                     </svg>
                                 </button>
                                 <button
                                     onClick={() => setPage(totalPages)}
                                     disabled={page === totalPages}
-                                    className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    title="Last page"
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Last"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                                     </svg>
                                 </button>
                             </div>
                         </div>
                     )}
+                    </div>{/* End scrollable container */}
                 </div>
 
                 {/* Add/Edit Event Modal */}
