@@ -293,15 +293,15 @@ export async function waitForCrawl(
  * Generate scroll actions for infinite scroll pages
  * Scrolls down multiple times with waits to trigger lazy loading
  */
-export function generateScrollActions(scrollCount: number = 5, waitMs: number = 2000): ScrapeAction[] {
+export function generateScrollActions(scrollCount: number = 5, waitMs: number = 1500): ScrapeAction[] {
     const actions: ScrapeAction[] = [];
     
     for (let i = 0; i < scrollCount; i++) {
-        // Scroll down
+        // Scroll down - use larger scroll for efficiency
         actions.push({
             type: "scroll",
             direction: "down",
-            amount: 1500, // Scroll 1500px each time
+            amount: 2000, // Scroll 2000px each time (about 1-2 viewport heights)
         });
         // Wait for content to load
         actions.push({
@@ -310,7 +310,7 @@ export function generateScrollActions(scrollCount: number = 5, waitMs: number = 
         });
     }
     
-    // Final scroll to top to ensure we get everything
+    // Scroll back to top to ensure DOM contains all loaded content
     actions.push({
         type: "scroll",
         direction: "up",
@@ -318,7 +318,7 @@ export function generateScrollActions(scrollCount: number = 5, waitMs: number = 
     });
     actions.push({
         type: "wait",
-        milliseconds: 1000,
+        milliseconds: 500,
     });
     
     return actions;
@@ -350,9 +350,13 @@ export async function fetchContent(
         
         // Add scroll actions for infinite scroll pages
         if (options.infiniteScroll) {
-            scrapeOptions.actions = generateScrollActions(options.scrollCount || 5);
-            scrapeOptions.timeout = 60000; // Increase timeout for scroll actions
-            console.log("[Firecrawl] Infinite scroll enabled with", options.scrollCount || 5, "scrolls");
+            const scrollCount = options.scrollCount || 5;
+            scrapeOptions.actions = generateScrollActions(scrollCount);
+            // Each scroll needs ~2.5 seconds (1500px scroll + 2000ms wait), plus buffer
+            // Add 30 seconds base + 3 seconds per scroll to be safe
+            const timeoutMs = 30000 + (scrollCount * 3000);
+            scrapeOptions.timeout = timeoutMs;
+            console.log("[Firecrawl] Infinite scroll enabled:", scrollCount, "scrolls, timeout:", Math.round(timeoutMs / 1000), "s");
         }
         
         const result = await scrapeUrl(url, scrapeOptions);
