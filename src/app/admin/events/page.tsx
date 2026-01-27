@@ -406,6 +406,11 @@ export default function AdminEventsPage() {
                         fetchEventSources();
                     }
                     setScrapeStatus("idle");
+                    // Close modal after successful scrape
+                    setTimeout(() => {
+                        setShowScrapeModal(false);
+                        setScrapeResult(null);
+                    }, 1500); // Show result for 1.5 seconds then close
                 }
             } else {
                 alert(data.error || "Failed to scrape events");
@@ -454,6 +459,13 @@ export default function AdminEventsPage() {
                 });
                 fetchEvents();
                 if (saveSource) fetchEventSources();
+                // Close modal after successful save
+                setTimeout(() => {
+                    setShowScrapeModal(false);
+                    setScrapeResult(null);
+                    setPreviewEvents([]);
+                    setSelectedPreviewEvents(new Set());
+                }, 1500); // Show result for 1.5 seconds then close
             }
         } catch (error) {
             console.error("Failed to save events:", error);
@@ -1424,7 +1436,7 @@ export default function AdminEventsPage() {
                                 exit={{ scale: 0.95, opacity: 0, y: 20 }}
                                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-2xl border border-zinc-800 w-full max-w-3xl shadow-2xl shadow-black/50 overflow-hidden"
+                                className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-2xl border border-zinc-800 w-full max-w-6xl shadow-2xl shadow-black/50 overflow-hidden"
                             >
                                 {/* Header with Spritz accent */}
                                 <div className="relative p-6 border-b border-zinc-800 bg-gradient-to-r from-[#FF5500]/10 to-transparent">
