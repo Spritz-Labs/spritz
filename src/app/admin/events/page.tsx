@@ -162,6 +162,8 @@ export default function AdminEventsPage() {
     const [sourceType, setSourceType] = useState("event_calendar");
     const [crawlDepth, setCrawlDepth] = useState(2); // Default shallow crawl
     const [maxPages, setMaxPages] = useState(20); // Default 20 pages
+    const [infiniteScroll, setInfiniteScroll] = useState(false); // For lazy-load pages
+    const [scrollCount, setScrollCount] = useState(5); // Number of scroll actions
     const [isScraping, setIsScraping] = useState(false);
     const [scrapeResult, setScrapeResult] = useState<{ extracted: number; inserted: number; skipped: number; pagesScraped?: number } | null>(null);
     
@@ -310,6 +312,8 @@ export default function AdminEventsPage() {
                     source_type: sourceType,
                     crawl_depth: crawlDepth,
                     max_pages: maxPages,
+                    infinite_scroll: infiniteScroll,
+                    scroll_count: scrollCount,
                 }),
             });
 
@@ -1416,6 +1420,69 @@ export default function AdminEventsPage() {
                                                 🔥 Deeper crawls find more events but take longer. Use &quot;Medium&quot; or &quot;Deep&quot; for event calendar sites.
                                             </p>
                                         </div>
+                                    </div>
+
+                                    {/* Infinite Scroll Option */}
+                                    <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-lg bg-[#FF5500]/20 flex items-center justify-center">
+                                                    <svg className="w-3.5 h-3.5 text-[#FF5500]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm font-medium text-zinc-200">Infinite Scroll Mode</span>
+                                                    <p className="text-xs text-zinc-500">For pages that load more content as you scroll</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setInfiniteScroll(!infiniteScroll)}
+                                                className={`relative w-11 h-6 rounded-full transition-colors ${
+                                                    infiniteScroll ? "bg-[#FF5500]" : "bg-zinc-700"
+                                                }`}
+                                            >
+                                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                    infiniteScroll ? "translate-x-6" : "translate-x-1"
+                                                }`} />
+                                            </button>
+                                        </div>
+
+                                        <AnimatePresence>
+                                            {infiniteScroll && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: "auto", opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.2 }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="pt-3 border-t border-zinc-700/50">
+                                                        <label className="text-xs text-zinc-400 mb-2 block">Scroll iterations</label>
+                                                        <div className="flex gap-2">
+                                                            {[3, 5, 10, 15, 20].map((count) => (
+                                                                <button
+                                                                    key={count}
+                                                                    type="button"
+                                                                    onClick={() => setScrollCount(count)}
+                                                                    className={`flex-1 px-2 py-2 rounded-lg text-sm transition-all ${
+                                                                        scrollCount === count
+                                                                            ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
+                                                                            : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                                                                    }`}
+                                                                >
+                                                                    {count}x
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        <p className="text-xs text-zinc-500 mt-2">
+                                                            📜 Will scroll down {scrollCount} times before scraping. More scrolls = more content but slower.
+                                                        </p>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
 
                                     {/* Recurring Scrapes Section */}

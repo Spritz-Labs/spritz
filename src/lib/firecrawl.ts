@@ -41,6 +41,21 @@ export interface CrawlResult {
     next?: string; // Pagination URL for large crawls
 }
 
+export interface ScrapeAction {
+    /** Action type */
+    type: "wait" | "click" | "scroll" | "screenshot" | "write";
+    /** Milliseconds to wait (for 'wait' type) */
+    milliseconds?: number;
+    /** CSS selector (for 'click', 'write' types) */
+    selector?: string;
+    /** Text to write (for 'write' type) */
+    text?: string;
+    /** Scroll direction: 'up' or 'down' (for 'scroll' type) */
+    direction?: "up" | "down";
+    /** Scroll amount in pixels (for 'scroll' type) */
+    amount?: number;
+}
+
 export interface ScrapeOptions {
     /** Include only main content (recommended for RAG) */
     onlyMainContent?: boolean;
@@ -50,6 +65,8 @@ export interface ScrapeOptions {
     removeTags?: string[];
     /** Timeout in milliseconds */
     timeout?: number;
+    /** Actions to perform before scraping (scroll, click, wait, etc.) */
+    actions?: ScrapeAction[];
 }
 
 export interface CrawlOptions {
@@ -85,20 +102,27 @@ export async function scrapeUrl(
 
     console.log("[Firecrawl] Scraping URL:", url);
 
+    const requestBody: Record<string, unknown> = {
+        url,
+        formats: ["markdown"],
+        onlyMainContent: options.onlyMainContent ?? true,
+        timeout: options.timeout || 30000,
+    };
+
+    // Add optional parameters only if provided
+    if (options.waitFor) requestBody.waitFor = options.waitFor;
+    if (options.removeTags) requestBody.removeTags = options.removeTags;
+    if (options.actions && options.actions.length > 0) {
+        requestBody.actions = options.actions;
+    }
+
     const response = await fetch(`${FIRECRAWL_BASE_URL}/scrape`, {
         method: "POST",
         headers: {
             "Authorization": `Bearer ${FIRECRAWL_API_KEY}`,
             "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-            url,
-            formats: ["markdown"],
-            onlyMainContent: options.onlyMainContent ?? true,
-            waitFor: options.waitFor,
-            removeTags: options.removeTags,
-            timeout: options.timeout || 30000,
-        }),
+        body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -266,6 +290,41 @@ export async function waitForCrawl(
 }
 
 /**
+ * Generate scroll actions for infinite scroll pages
+ * Scrolls down multiple times with waits to trigger lazy loading
+ */
+export function generateScrollActions(scrollCount: number = 5, waitMs: number = 2000): ScrapeAction[] {
+    const actions: ScrapeAction[] = [];
+    
+    for (let i = 0; i < scrollCount; i++) {
+        // Scroll down
+        actions.push({
+            type: "scroll",
+            direction: "down",
+            amount: 1500, // Scroll 1500px each time
+        });
+        // Wait for content to load
+        actions.push({
+            type: "wait",
+            milliseconds: waitMs,
+        });
+    }
+    
+    // Final scroll to top to ensure we get everything
+    actions.push({
+        type: "scroll",
+        direction: "up",
+        amount: 99999,
+    });
+    actions.push({
+        type: "wait",
+        milliseconds: 1000,
+    });
+    
+    return actions;
+}
+
+/**
  * Scrape and crawl convenience function
  * - For single pages: scrapes immediately
  * - For multi-page (depth > 1): starts crawl and waits for completion
@@ -277,13 +336,26 @@ export async function fetchContent(
         excludePatterns?: string[];
         maxPages?: number;
         onProgress?: (completed: number, total: number) => void;
+        /** Enable infinite scroll handling - scrolls page multiple times before scraping */
+        infiniteScroll?: boolean;
+        /** Number of times to scroll (default 5) */
+        scrollCount?: number;
     } = {}
 ): Promise<{ content: string; pageCount: number; urls: string[] }> {
     const crawlDepth = options.crawlDepth || 1;
 
     if (crawlDepth <= 1) {
         // Single page scrape
-        const result = await scrapeUrl(url);
+        const scrapeOptions: ScrapeOptions = {};
+        
+        // Add scroll actions for infinite scroll pages
+        if (options.infiniteScroll) {
+            scrapeOptions.actions = generateScrollActions(options.scrollCount || 5);
+            scrapeOptions.timeout = 60000; // Increase timeout for scroll actions
+            console.log("[Firecrawl] Infinite scroll enabled with", options.scrollCount || 5, "scrolls");
+        }
+        
+        const result = await scrapeUrl(url, scrapeOptions);
         return {
             content: result.markdown,
             pageCount: 1,

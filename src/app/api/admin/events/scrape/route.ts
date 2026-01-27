@@ -80,18 +80,22 @@ export async function POST(request: NextRequest) {
             source_type = "event_calendar",
             crawl_depth = 2,
             max_pages = 20,
+            infinite_scroll = false,
+            scroll_count = 5,
         } = body;
 
         if (!url) {
             return NextResponse.json({ error: "URL is required" }, { status: 400 });
         }
 
-        console.log("[Event Scrape] Scraping URL:", url, "depth:", crawl_depth, "max pages:", max_pages);
+        console.log("[Event Scrape] Scraping URL:", url, "depth:", crawl_depth, "max pages:", max_pages, "infinite scroll:", infinite_scroll);
 
         // Scrape the URL using Firecrawl
         const result = await fetchContent(url, {
             crawlDepth: crawl_depth,
             maxPages: max_pages,
+            infiniteScroll: infinite_scroll,
+            scrollCount: scroll_count,
         });
 
         if (!result.content || result.content.length < 100) {
