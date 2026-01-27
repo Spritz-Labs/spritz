@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
         });
 
         // If events_to_save is provided, skip scraping and just save
-        let extractedEvents: ExtractedEvent[];
+        let extractedEvents: ExtractedEvent[] = [];
         let pageCount = 1;
         let contentHash = "";
         let skippedPast = 0;
@@ -322,21 +322,45 @@ ${contentToAnalyze}`;
             // Parse the JSON response - handle markdown code blocks and clean up
             console.log("[Event Scrape] Raw AI response (first 1000 chars):", responseText.substring(0, 1000));
             
+            if (!responseText || responseText.trim().length === 0) {
+                console.error("[Event Scrape] Empty AI response");
+                return NextResponse.json({ 
+                    error: "Empty response from AI",
+                    details: "AI returned an empty response"
+                }, { status: 400 });
+            }
+            
             // Try to extract JSON from markdown code blocks first
             let jsonText = responseText;
             
             // Remove markdown code blocks if present
             const codeBlockMatch = responseText.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
-            if (codeBlockMatch) {
+            if (codeBlockMatch && codeBlockMatch[1]) {
                 jsonText = codeBlockMatch[1];
                 console.log("[Event Scrape] Found JSON in code block");
             } else {
                 // Try to find JSON array in the text
                 const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-                if (jsonMatch) {
+                if (jsonMatch && jsonMatch[0]) {
                     jsonText = jsonMatch[0];
                     console.log("[Event Scrape] Found JSON array in text");
+                } else {
+                    console.error("[Event Scrape] No JSON array pattern found in response");
+                    return NextResponse.json({ 
+                        error: "Could not extract events from content",
+                        details: "AI response did not contain a JSON array",
+                        rawResponse: responseText.substring(0, 1000)
+                    }, { status: 400 });
                 }
+            }
+            
+            if (!jsonText || jsonText.trim().length === 0) {
+                console.error("[Event Scrape] Extracted JSON text is empty");
+                return NextResponse.json({ 
+                    error: "Could not extract events from content",
+                    details: "Extracted JSON text is empty",
+                    rawResponse: responseText.substring(0, 1000)
+                }, { status: 400 });
             }
             
             // Clean up common JSON issues
@@ -347,9 +371,9 @@ ${contentToAnalyze}`;
                 .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
                 .trim();
             
-            if (!jsonText.startsWith('[') || !jsonText.endsWith(']')) {
+            if (!jsonText || !jsonText.startsWith('[') || !jsonText.endsWith(']')) {
                 console.error("[Event Scrape] No valid JSON array found in response");
-                console.error("[Event Scrape] Cleaned text (first 500 chars):", jsonText.substring(0, 500));
+                console.error("[Event Scrape] Cleaned text (first 500 chars):", jsonText?.substring(0, 500) || "null/undefined");
                 return NextResponse.json({ 
                     error: "Could not extract events from content",
                     details: "AI response did not contain a valid JSON array",
@@ -466,6 +490,15 @@ ${contentToAnalyze}`;
             }
         }
 
+        // Validate extractedEvents before processing
+        if (!extractedEvents || !Array.isArray(extractedEvents)) {
+            console.error("[Event Scrape] extractedEvents is not a valid array:", typeof extractedEvents);
+            return NextResponse.json({ 
+                error: "Invalid events data",
+                details: "Extracted events is not a valid array"
+            }, { status: 500 });
+        }
+        
         // Insert events into database
         let inserted = 0;
         let skipped = 0;
@@ -473,9 +506,17 @@ ${contentToAnalyze}`;
         const insertedEvents = [];
 
         // Fetch existing event fingerprints for duplicate detection
-        const { data: existingEvents } = await supabase
+        const { data: existingEvents, error: fetchError } = await supabase
             .from("shout_events")
             .select("name, event_date, city");
+        
+        if (fetchError) {
+            console.error("[Event Scrape] Error fetching existing events:", fetchError);
+            return NextResponse.json({ 
+                error: "Database error",
+                details: "Failed to fetch existing events for duplicate detection"
+            }, { status: 500 });
+        }
         
         const existingFingerprints = new Set(
             (existingEvents || []).map(e => generateEventFingerprint(e))
