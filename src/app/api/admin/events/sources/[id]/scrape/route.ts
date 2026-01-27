@@ -50,8 +50,11 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; ad
     return { isAdmin: !!admin, address: normalizedAddress };
 }
 
-// POST: Scrape events from a URL using Firecrawl + AI extraction
-export async function POST(request: NextRequest) {
+// POST: Manually trigger scrape for a specific source
+export async function POST(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
     if (!supabase) {
         return NextResponse.json({ error: "Database not configured" }, { status: 500 });
     }
@@ -69,38 +72,47 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    try {
-        const body = await request.json();
-        const { 
-            url, 
-            event_types, 
-            blockchain_focus, 
-            save_source,
-            scrape_interval_hours = 24,
-            source_type = "event_calendar",
-            crawl_depth = 2,
-            max_pages = 20,
-        } = body;
+    const { id } = await params;
 
-        if (!url) {
-            return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    try {
+        // Get the source
+        const { data: source, error: sourceError } = await supabase
+            .from("shout_event_sources")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+        if (sourceError || !source) {
+            return NextResponse.json({ error: "Source not found" }, { status: 404 });
         }
 
-        console.log("[Event Scrape] Scraping URL:", url, "depth:", crawl_depth, "max pages:", max_pages);
+        console.log("[Event Scrape] Manual scrape triggered for:", source.url);
 
         // Scrape the URL using Firecrawl
-        const result = await fetchContent(url, {
-            crawlDepth: crawl_depth,
-            maxPages: max_pages,
+        const result = await fetchContent(source.url, {
+            crawlDepth: 2,
+            maxPages: 20,
         });
 
         if (!result.content || result.content.length < 100) {
+            await supabase
+                .from("shout_event_sources")
+                .update({
+                    last_error: "Not enough content found",
+                    last_scraped_at: new Date().toISOString(),
+                })
+                .eq("id", id);
             return NextResponse.json({ error: "Not enough content found" }, { status: 400 });
         }
 
-        console.log("[Event Scrape] Fetched content, length:", result.content.length);
-
         // Use AI to extract events from the content
+        const eventTypesFilter = source.event_types?.length > 0 
+            ? `Only include events of these types: ${source.event_types.join(", ")}` 
+            : "";
+        const blockchainFilter = source.blockchain_focus?.length > 0 
+            ? `Only include events focused on: ${source.blockchain_focus.join(", ")}` 
+            : "";
+
         const prompt = `Extract all blockchain/crypto events from the following content. 
 For each event, provide:
 - name (required)
@@ -118,8 +130,8 @@ For each event, provide:
 - tags (array of relevant tags)
 - blockchain_focus (array of blockchain names like 'ethereum', 'solana', 'bitcoin', etc.)
 
-${event_types?.length ? `Only include events of these types: ${event_types.join(", ")}` : ""}
-${blockchain_focus?.length ? `Only include events focused on: ${blockchain_focus.join(", ")}` : ""}
+${eventTypesFilter}
+${blockchainFilter}
 
 Return ONLY a valid JSON array of events, no other text. Example:
 [{"name": "ETHDenver", "event_type": "hackathon", "event_date": "2026-02-23", ...}]
@@ -134,33 +146,37 @@ ${result.content.substring(0, 50000)}`;
         });
 
         const responseText = response.text || "";
-        console.log("[Event Scrape] AI response length:", responseText.length);
 
         // Parse the JSON response
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
-            return NextResponse.json({ 
-                error: "Could not extract events from content",
-                rawResponse: responseText.substring(0, 500)
-            }, { status: 400 });
+            await supabase
+                .from("shout_event_sources")
+                .update({
+                    last_error: "Could not extract events from content",
+                    last_scraped_at: new Date().toISOString(),
+                })
+                .eq("id", id);
+            return NextResponse.json({ error: "Could not extract events from content" }, { status: 400 });
         }
 
         let extractedEvents: ExtractedEvent[];
         try {
             extractedEvents = JSON.parse(jsonMatch[0]);
         } catch {
-            return NextResponse.json({ 
-                error: "Failed to parse extracted events",
-                rawResponse: jsonMatch[0].substring(0, 500)
-            }, { status: 400 });
+            await supabase
+                .from("shout_event_sources")
+                .update({
+                    last_error: "Failed to parse extracted events",
+                    last_scraped_at: new Date().toISOString(),
+                })
+                .eq("id", id);
+            return NextResponse.json({ error: "Failed to parse extracted events" }, { status: 400 });
         }
-
-        console.log("[Event Scrape] Extracted", extractedEvents.length, "events");
 
         // Insert events into database
         let inserted = 0;
         let skipped = 0;
-        const insertedEvents = [];
 
         for (const event of extractedEvents) {
             if (!event.name || !event.event_date || !event.event_type) {
@@ -168,11 +184,10 @@ ${result.content.substring(0, 50000)}`;
                 continue;
             }
 
-            // Generate a unique source_id
-            const sourceId = `${url}-${event.name}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-");
+            const sourceId = `${source.url}-${event.name}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-");
 
             try {
-                const { data: newEvent, error: insertError } = await supabase
+                const { error: insertError } = await supabase
                     .from("shout_events")
                     .insert({
                         name: event.name,
@@ -190,13 +205,11 @@ ${result.content.substring(0, 50000)}`;
                         tags: event.tags || [],
                         blockchain_focus: event.blockchain_focus || null,
                         source: "firecrawl",
-                        source_url: url,
+                        source_url: source.url,
                         source_id: sourceId,
-                        status: "draft", // Scraped events start as draft for review
+                        status: "draft",
                         created_by: address,
-                    })
-                    .select()
-                    .single();
+                    });
 
                 if (insertError) {
                     if (insertError.code === "23505") {
@@ -207,7 +220,6 @@ ${result.content.substring(0, 50000)}`;
                     }
                 } else {
                     inserted++;
-                    insertedEvents.push(newEvent);
                 }
             } catch (err) {
                 console.error("[Event Scrape] Error inserting event:", err);
@@ -215,38 +227,37 @@ ${result.content.substring(0, 50000)}`;
             }
         }
 
-        // Optionally save the source for recurring scrapes
-        if (save_source) {
-            const nextScrapeAt = new Date();
-            nextScrapeAt.setHours(nextScrapeAt.getHours() + scrape_interval_hours);
+        // Update source with results
+        const nextScrapeAt = new Date();
+        nextScrapeAt.setHours(nextScrapeAt.getHours() + (source.scrape_interval_hours || 24));
 
-            await supabase
-                .from("shout_event_sources")
-                .upsert({
-                    name: new URL(url).hostname,
-                    url,
-                    source_type: source_type,
-                    scrape_interval_hours: scrape_interval_hours,
-                    event_types: event_types || [],
-                    blockchain_focus: blockchain_focus || [],
-                    last_scraped_at: new Date().toISOString(),
-                    next_scrape_at: nextScrapeAt.toISOString(),
-                    events_found: extractedEvents.length,
-                    is_active: true,
-                    created_by: address,
-                }, { onConflict: "url" });
-        }
+        await supabase
+            .from("shout_event_sources")
+            .update({
+                last_scraped_at: new Date().toISOString(),
+                next_scrape_at: nextScrapeAt.toISOString(),
+                events_found: (source.events_found || 0) + inserted,
+                last_error: null,
+            })
+            .eq("id", id);
 
         return NextResponse.json({
             success: true,
             extracted: extractedEvents.length,
             inserted,
             skipped,
-            pages_scraped: result.pageCount,
-            events: insertedEvents,
         });
     } catch (error) {
         console.error("[Event Scrape] Error:", error);
+        
+        await supabase
+            .from("shout_event_sources")
+            .update({
+                last_error: error instanceof Error ? error.message : "Unknown error",
+                last_scraped_at: new Date().toISOString(),
+            })
+            .eq("id", id);
+
         return NextResponse.json({ 
             error: "Failed to scrape events",
             details: error instanceof Error ? error.message : "Unknown error"
