@@ -324,12 +324,13 @@ export default function AdminEventsPage() {
     // Auto-detect infinite scroll sites and suggest settings
     const checkInfiniteScrollSite = useCallback((url: string) => {
         const site = INFINITE_SCROLL_SITES.find(s => url.includes(s.pattern));
-        if (site && !infiniteScroll) {
+        if (site) {
+            console.log(`[Admin Events] Auto-detected infinite scroll site: ${site.pattern}, setting scrollCount to ${site.scrollCount}`);
             setInfiniteScroll(true);
             setScrollCount(site.scrollCount);
             setCrawlDepth(1); // Single page for infinite scroll
         }
-    }, [infiniteScroll]);
+    }, []);
 
     // Update URL and check for known sites
     const handleScrapeUrlChange = (url: string) => {

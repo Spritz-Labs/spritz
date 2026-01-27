@@ -56,40 +56,60 @@ function hashContent(content: string): string {
 }
 
 // Batch geocoding with caching and rate limiting
+// Cache persists across requests (in-memory, cleared on server restart)
 const geocodeCache = new Map<string, { lat: number; lon: number } | null>();
 
 async function batchGeocodeLocations(locations: string[]): Promise<Map<string, { lat: number; lon: number } | null>> {
     const results = new Map<string, { lat: number; lon: number } | null>();
     const uniqueLocations = [...new Set(locations.filter(Boolean))];
     
+    // Separate cached and uncached locations
+    const uncachedLocations: string[] = [];
     for (const location of uniqueLocations) {
-        // Check cache first
         if (geocodeCache.has(location)) {
             results.set(location, geocodeCache.get(location)!);
-            continue;
+        } else {
+            uncachedLocations.push(location);
         }
+    }
+    
+    console.log("[Geocode] Cached:", uniqueLocations.length - uncachedLocations.length, "Uncached:", uncachedLocations.length);
+    
+    // Process uncached locations in parallel batches (respecting rate limits)
+    const BATCH_SIZE = 5; // Process 5 at a time
+    for (let i = 0; i < uncachedLocations.length; i += BATCH_SIZE) {
+        const batch = uncachedLocations.slice(i, i + BATCH_SIZE);
         
-        try {
-            const query = encodeURIComponent(location);
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`, {
-                headers: { "User-Agent": "Spritz-Events/1.0" }
-            });
-            const data = await res.json();
+        // Process batch in parallel (but still rate limited)
+        await Promise.all(batch.map(async (location, index) => {
+            // Stagger requests slightly to respect rate limits
+            await new Promise(resolve => setTimeout(resolve, index * 250)); // 250ms between requests
             
-            if (data && data[0]) {
-                const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-                geocodeCache.set(location, coords);
-                results.set(location, coords);
-            } else {
+            try {
+                const query = encodeURIComponent(location);
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`, {
+                    headers: { "User-Agent": "Spritz-Events/1.0" }
+                });
+                const data = await res.json();
+                
+                if (data && data[0]) {
+                    const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+                    geocodeCache.set(location, coords);
+                    results.set(location, coords);
+                } else {
+                    geocodeCache.set(location, null);
+                    results.set(location, null);
+                }
+            } catch (error) {
+                console.error("[Geocode] Error for", location, error);
                 geocodeCache.set(location, null);
                 results.set(location, null);
             }
-            
-            // Rate limit: 1 request per second for Nominatim
+        }));
+        
+        // Rate limit between batches: 1 second
+        if (i + BATCH_SIZE < uncachedLocations.length) {
             await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-            console.error("[Geocode] Error for", location, error);
-            results.set(location, null);
         }
     }
     
@@ -187,6 +207,8 @@ export async function POST(request: NextRequest) {
             skip_past_events: skip_past_events,
             skip_if_unchanged: skip_if_unchanged,
             preview_only: preview_only,
+            save_source: save_source,
+            events_to_save_provided: !!events_to_save,
         });
 
         // If events_to_save is provided, skip scraping and just save
@@ -290,14 +312,33 @@ export async function POST(request: NextRequest) {
             }
 
             // Use AI to extract events from the content
-            // Use more content (up to 100k chars) and increase token limit for more events
-            const contentToAnalyze = result.content.length > 100000 
-                ? result.content.substring(0, 100000) + "\n\n[Content truncated for length...]"
+            // Use more content (up to 200k chars) for sites with many events
+            const maxContentLength = 200000; // Increased for sites with many events
+            const contentToAnalyze = result.content.length > maxContentLength 
+                ? result.content.substring(0, maxContentLength) + "\n\n[Content truncated for length...]"
                 : result.content;
             
             console.log("[Event Scrape] Analyzing content length:", contentToAnalyze.length, "chars");
+            console.log("[Event Scrape] Full content length:", result.content.length, "chars");
+            console.log("[Event Scrape] Content preview (first 2000 chars):", result.content.substring(0, 2000));
             
-            const prompt = `Extract ALL blockchain/crypto/Web3 events from the following content. Be thorough and extract every event you can find.
+            // Count potential event mentions in content
+            const eventKeywords = ['event', 'conference', 'hackathon', 'meetup', 'workshop', 'summit', 'party', 'networking'];
+            const keywordCount = eventKeywords.reduce((count, keyword) => {
+                const matches = result.content.toLowerCase().match(new RegExp(keyword, 'g'));
+                return count + (matches ? matches.length : 0);
+            }, 0);
+            console.log("[Event Scrape] Event keyword mentions in content:", keywordCount);
+            
+            const prompt = `Extract ALL blockchain/crypto/Web3 events from the following content. Be extremely thorough and extract EVERY single event you can find, no matter how small or brief.
+
+CRITICAL INSTRUCTIONS:
+- Extract EVERY event mentioned, listed, or referenced in the content
+- If you see a list, table, or grid of events, extract ALL of them
+- If events are in cards, tiles, or sections, extract ALL of them
+- Don't skip any events - be exhaustive
+- If there are 50 events, extract all 50. If there are 100, extract all 100.
+- Look for event names, dates, locations in ANY format
 
 For each event, provide:
 - name (required) - the full event name
@@ -319,7 +360,7 @@ For each event, provide:
 ${event_types?.length ? `Only include events of these types: ${event_types.join(", ")}` : "Include ALL event types found."}
 ${blockchain_focus?.length ? `Only include events focused on: ${blockchain_focus.join(", ")}` : ""}
 
-IMPORTANT: Extract as many events as possible. Don't skip any events. If you see a list of events, extract all of them.
+REMEMBER: Your goal is to extract the MAXIMUM number of events possible. Count how many events you see and make sure your JSON array contains that many or more.
 
 Return ONLY a valid JSON array of events, no other text. Example:
 [{"name": "ETHDenver", "event_type": "hackathon", "event_date": "2026-02-23", "image_url": "https://...", ...}]
@@ -333,7 +374,10 @@ ${contentToAnalyze}`;
                 const response = await ai.models.generateContent({
                     model: "gemini-2.0-flash",
                     contents: [{ role: "user", parts: [{ text: prompt }] }],
-                    config: { maxOutputTokens: 16384 }, // Increased for more events
+                    config: { 
+                        maxOutputTokens: 32768, // Increased to 32k for many events
+                        temperature: 0.3, // Lower temperature for more consistent extraction
+                    },
                 });
 
                 // Get text from response - should be a direct property
@@ -428,6 +472,53 @@ ${contentToAnalyze}`;
             try {
                 extractedEvents = JSON.parse(jsonText);
                 console.log("[Event Scrape] Successfully parsed JSON, got", extractedEvents.length, "events");
+                
+                // If very few events found and content is large, try a second extraction pass with different approach
+                if (extractedEvents.length < 5 && result.content.length > 50000 && !preview_only) {
+                    console.log("[Event Scrape] Few events found (" + extractedEvents.length + "), attempting second extraction pass...");
+                    
+                    // Try a more aggressive prompt focused on finding ALL events
+                    const retryPrompt = `You are extracting events from a webpage. The previous extraction found only ${extractedEvents.length} events, but the page likely contains many more.
+
+Look VERY carefully through the content. Events might be in:
+- Lists or tables
+- Cards or tiles
+- Calendar views
+- Event listings
+- Any structured format
+
+Extract EVERY single event you can find, even if information is minimal. If you see event names, dates, or locations mentioned anywhere, extract them.
+
+Return a JSON array with ALL events found. Be exhaustive - extract 50+ events if they exist.
+
+Content:
+${contentToAnalyze.substring(0, 150000)}`;
+
+                    try {
+                        const retryResponse = await ai.models.generateContent({
+                            model: "gemini-2.0-flash",
+                            contents: [{ role: "user", parts: [{ text: retryPrompt }] }],
+                            config: { 
+                                maxOutputTokens: 32768,
+                                temperature: 0.2, // Even lower for retry
+                            },
+                        });
+
+                        const retryText = retryResponse.text || "";
+                        if (retryText) {
+                            const retryJsonMatch = retryText.match(/\[[\s\S]*\]/);
+                            if (retryJsonMatch) {
+                                const retryEvents = JSON.parse(retryJsonMatch[0]);
+                                if (Array.isArray(retryEvents) && retryEvents.length > extractedEvents.length) {
+                                    console.log("[Event Scrape] Retry found", retryEvents.length, "events (vs", extractedEvents.length, "before)");
+                                    extractedEvents = retryEvents; // Use the better result
+                                }
+                            }
+                        }
+                    } catch (retryError) {
+                        console.warn("[Event Scrape] Retry extraction failed, using original result:", retryError);
+                    }
+                }
             } catch (parseError) {
                 console.error("[Event Scrape] JSON parse error:", parseError);
                 console.error("[Event Scrape] Attempted to parse (first 1000 chars):", jsonText.substring(0, 1000));
@@ -484,9 +575,11 @@ ${contentToAnalyze}`;
             }
             
             console.log("[Event Scrape] After filtering:", extractedEvents.length, "events remaining");
+            console.log("[Event Scrape] preview_only flag:", preview_only);
 
             // If preview only, return events with duplicate status
             if (preview_only) {
+                console.log("[Event Scrape] Preview mode - returning preview data without saving");
                 // Fetch existing events to check for duplicates
                 const { data: existingEvents } = await supabase
                     .from("shout_events")
@@ -531,10 +624,16 @@ ${contentToAnalyze}`;
                     pages_scraped: pageCount,
                     events: previewData,
                 });
+            } else {
+                console.log("[Event Scrape] Not preview mode - will save events to database");
             }
         }
 
         // Validate extractedEvents before processing
+        console.log("[Event Scrape] About to validate and save events. extractedEvents length:", extractedEvents?.length || 0);
+        console.log("[Event Scrape] preview_only at save point:", preview_only);
+        console.log("[Event Scrape] events_to_save provided:", !!events_to_save);
+        
         if (!extractedEvents || !Array.isArray(extractedEvents)) {
             console.error("[Event Scrape] extractedEvents is not a valid array:", typeof extractedEvents);
             return NextResponse.json({ 
@@ -543,28 +642,71 @@ ${contentToAnalyze}`;
             }, { status: 500 });
         }
         
+        if (extractedEvents.length === 0) {
+            console.warn("[Event Scrape] No events to save - extractedEvents array is empty");
+            return NextResponse.json({
+                success: true,
+                extracted: 0,
+                inserted: 0,
+                skipped: 0,
+                duplicates: 0,
+                skipped_past: skippedPast,
+                pages_scraped: pageCount,
+                message: "No events found to save",
+            });
+        }
+        
         // Insert events into database
+        console.log("[Event Scrape] Starting to insert", extractedEvents.length, "events into database");
         let inserted = 0;
         let skipped = 0;
         let duplicates = 0;
         const insertedEvents = [];
 
         // Fetch existing event fingerprints for duplicate detection
-        const { data: existingEvents, error: fetchError } = await supabase
-            .from("shout_events")
-            .select("name, event_date, city");
+        // Optimize: Only fetch events from the same source or recent events (last 90 days)
+        // This reduces the query size significantly for large databases
+        let existingFingerprints: Set<string>;
         
-        if (fetchError) {
-            console.error("[Event Scrape] Error fetching existing events:", fetchError);
-            return NextResponse.json({ 
-                error: "Database error",
-                details: "Failed to fetch existing events for duplicate detection"
-            }, { status: 500 });
+        try {
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+            const dateStr = ninetyDaysAgo.toISOString().split('T')[0];
+            
+            // Try optimized query: same source OR recent events
+            const { data: existingEvents, error: fetchError } = await supabase
+                .from("shout_events")
+                .select("name, event_date, city")
+                .or(`source_url.eq.${sourceUrl},event_date.gte.${dateStr}`);
+            
+            if (fetchError || !existingEvents) {
+                throw fetchError || new Error("No data returned");
+            }
+            
+            existingFingerprints = new Set(
+                existingEvents.map(e => generateEventFingerprint(e))
+            );
+            console.log("[Event Scrape] Fetched", existingFingerprints.size, "existing fingerprints (optimized query)");
+        } catch (error) {
+            console.warn("[Event Scrape] Optimized query failed, falling back to full query:", error);
+            // Fallback to fetching all if optimized query fails
+            const { data: allEvents, error: fetchError } = await supabase
+                .from("shout_events")
+                .select("name, event_date, city");
+            
+            if (fetchError) {
+                console.error("[Event Scrape] Error fetching existing events:", fetchError);
+                return NextResponse.json({ 
+                    error: "Database error",
+                    details: "Failed to fetch existing events for duplicate detection"
+                }, { status: 500 });
+            }
+            
+            existingFingerprints = new Set(
+                (allEvents || []).map(e => generateEventFingerprint(e))
+            );
+            console.log("[Event Scrape] Using fallback: fetched", existingFingerprints.size, "existing fingerprints");
         }
-        
-        const existingFingerprints = new Set(
-            (existingEvents || []).map(e => generateEventFingerprint(e))
-        );
 
         // Batch geocode all unique locations first
         const locations = extractedEvents
@@ -574,6 +716,11 @@ ${contentToAnalyze}`;
 
         console.log("[Event Scrape] Checking", extractedEvents.length, "events against", existingFingerprints.size, "existing fingerprints");
         
+        // Prepare events for batch insert (filter out duplicates and invalid events first)
+        const eventsToInsert: any[] = [];
+        const eventFingerprints: string[] = [];
+        
+        console.log("[Event Scrape] Pre-processing events for batch insert...");
         for (const event of extractedEvents) {
             if (!event.name || !event.event_date || !event.event_type) {
                 console.log("[Event Scrape] Skipping invalid event (missing required fields):", { name: event.name, date: event.event_date, type: event.event_type });
@@ -589,13 +736,11 @@ ${contentToAnalyze}`;
             });
             
             if (existingFingerprints.has(fingerprint)) {
-                console.log("[Event Scrape] Duplicate detected:", event.name, event.event_date, "fingerprint:", fingerprint);
+                console.log("[Event Scrape] Duplicate detected:", event.name, event.event_date);
                 duplicates++;
                 skipped++;
                 continue;
             }
-            
-            console.log("[Event Scrape] Processing new event:", event.name, event.event_date, "fingerprint:", fingerprint);
 
             // Generate a unique source_id using normalized name
             const normalizedName = normalizeEventName(event.name);
@@ -605,11 +750,9 @@ ${contentToAnalyze}`;
                     const urlObj = new URL(sourceUrl);
                     sourceId = `${urlObj.hostname}-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
                 } else {
-                    // Fallback for preview saves or missing URL
                     sourceId = `preview-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
                 }
             } catch {
-                // If URL parsing fails, use fallback
                 sourceId = `preview-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
             }
 
@@ -619,53 +762,89 @@ ${contentToAnalyze}`;
             const latitude = coords?.lat || null;
             const longitude = coords?.lon || null;
 
-            try {
-                const { data: newEvent, error: insertError } = await supabase
-                    .from("shout_events")
-                    .insert({
-                        name: event.name,
-                        description: event.description || null,
-                        event_type: event.event_type,
-                        event_date: event.event_date,
-                        start_time: event.start_time || null,
-                        end_time: event.end_time || null,
-                        venue: event.venue || null,
-                        city: event.city || null,
-                        country: event.country || null,
-                        latitude,
-                        longitude,
-                        organizer: event.organizer || null,
-                        event_url: event.event_url || null,
-                        rsvp_url: event.rsvp_url || null,
-                        banner_image_url: event.image_url || null,
-                        tags: event.tags || [],
-                        blockchain_focus: event.blockchain_focus || null,
-                        source: "firecrawl",
-                        source_url: sourceUrl || event.event_url || null,
-                        source_id: sourceId,
-                        status: "draft", // Scraped events start as draft for review
-                        created_by: address,
-                    })
-                    .select()
-                    .single();
+            // Prepare event for batch insert
+            eventsToInsert.push({
+                name: event.name,
+                description: event.description || null,
+                event_type: event.event_type,
+                event_date: event.event_date,
+                start_time: event.start_time || null,
+                end_time: event.end_time || null,
+                venue: event.venue || null,
+                city: event.city || null,
+                country: event.country || null,
+                latitude,
+                longitude,
+                organizer: event.organizer || null,
+                event_url: event.event_url || null,
+                rsvp_url: event.rsvp_url || null,
+                banner_image_url: event.image_url || null,
+                tags: event.tags || [],
+                blockchain_focus: event.blockchain_focus || null,
+                source: "firecrawl",
+                source_url: sourceUrl || event.event_url || null,
+                source_id: sourceId,
+                status: "draft",
+                created_by: address,
+            });
+            
+            eventFingerprints.push(fingerprint);
+        }
 
-                if (insertError) {
-                    if (insertError.code === "23505") {
-                        duplicates++;
-                        skipped++;
-                    } else {
-                        console.error("[Event Scrape] Insert error:", insertError);
-                        skipped++;
+        // Batch insert events (Supabase supports up to 1000 rows per insert)
+        console.log("[Event Scrape] Batch inserting", eventsToInsert.length, "events...");
+        const BATCH_SIZE = 100; // Insert in batches of 100 for better performance
+        
+        for (let i = 0; i < eventsToInsert.length; i += BATCH_SIZE) {
+            const batch = eventsToInsert.slice(i, i + BATCH_SIZE);
+            const batchFingerprints = eventFingerprints.slice(i, i + BATCH_SIZE);
+            
+            try {
+                const { data: newEvents, error: batchError } = await supabase
+                    .from("shout_events")
+                    .insert(batch)
+                    .select();
+
+                if (batchError) {
+                    // If batch fails, try inserting individually to identify problematic events
+                    console.error("[Event Scrape] Batch insert error, falling back to individual inserts:", batchError);
+                    for (let j = 0; j < batch.length; j++) {
+                        try {
+                            const { data: newEvent, error: insertError } = await supabase
+                                .from("shout_events")
+                                .insert(batch[j])
+                                .select()
+                                .single();
+
+                            if (insertError) {
+                                if (insertError.code === "23505") {
+                                    duplicates++;
+                                    skipped++;
+                                } else {
+                                    console.error("[Event Scrape] Insert error for", batch[j].name, ":", insertError);
+                                    skipped++;
+                                }
+                            } else {
+                                inserted++;
+                                insertedEvents.push(newEvent);
+                                existingFingerprints.add(batchFingerprints[j]);
+                            }
+                        } catch (err) {
+                            console.error("[Event Scrape] Error inserting event:", err);
+                            skipped++;
+                        }
                     }
                 } else {
-                    inserted++;
-                    insertedEvents.push(newEvent);
-                    // Add to existing fingerprints to prevent duplicates within same batch
-                    existingFingerprints.add(fingerprint);
+                    // Batch insert succeeded
+                    inserted += newEvents?.length || 0;
+                    insertedEvents.push(...(newEvents || []));
+                    // Add fingerprints to prevent duplicates
+                    batchFingerprints.forEach(fp => existingFingerprints.add(fp));
+                    console.log("[Event Scrape] Successfully batch inserted", newEvents?.length || 0, "events");
                 }
             } catch (err) {
-                console.error("[Event Scrape] Error inserting event:", err);
-                skipped++;
+                console.error("[Event Scrape] Error in batch insert:", err);
+                skipped += batch.length;
             }
         }
 
