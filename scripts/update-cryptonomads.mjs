@@ -304,9 +304,10 @@ ${content}`;
     return parseEventsJson(text);
 }
 
-// Chunk size for side-event pages so each AI call returns a smaller array (avoids output truncation).
-const SIDE_PAGE_CHUNK_CHARS = 90000;
-const SIDE_PAGE_CHUNK_OVERLAP = 5000;
+// Chunk size for side-event pages: smaller = fewer events per AI call = complete JSON (avoids output truncation).
+// With ~45k chars per chunk, we get ~25–40 events per chunk; 90k was yielding 50+ and truncated responses.
+const SIDE_PAGE_CHUNK_CHARS = 45000;
+const SIDE_PAGE_CHUNK_OVERLAP = 8000;
 
 function chunkMarkdown(markdown, chunkSize, overlap) {
     const chunks = [];
@@ -337,7 +338,7 @@ Rules:
 - One output object per event card. Use the EXACT title of that card as "name". Do not use the page title as the event name.
 - Include: name (required), event_type (meetup, party, workshop, networking, conference, other), event_date (YYYY-MM-DD), start_time, end_time, venue, city, country, organizer, event_url, rsvp_url, description, image_url, tags, blockchain_focus.
 - Extract EVERY card in this section. Do not summarize. Skip only: navigation, footers, "Member Discount" promos.
-- Return ONLY a JSON array. No markdown fences, no explanation.
+- Return ONLY a JSON array. No markdown fences, no explanation. Include every event in this section (we process the page in multiple sections).
 
 Content:
 ${chunk}`;
