@@ -177,6 +177,9 @@ export default function AdminEventsPage() {
     const [events, setEvents] = useState<GlobalEvent[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [total, setTotal] = useState(0);
+    const [eventsFetchError, setEventsFetchError] = useState<string | null>(
+        null,
+    );
 
     // Pagination
     const [page, setPage] = useState(1);
@@ -266,6 +269,7 @@ export default function AdminEventsPage() {
     const fetchEvents = useCallback(async () => {
         if (!isReady) return;
         setIsLoading(true);
+        setEventsFetchError(null);
 
         try {
             const params = new URLSearchParams();
@@ -276,19 +280,32 @@ export default function AdminEventsPage() {
             params.set("offset", ((page - 1) * pageSize).toString());
 
             const headers = getAuthHeaders();
-            if (!headers) return;
+            if (!headers) {
+                setEventsFetchError(
+                    "Connect your wallet and sign in as admin to view events.",
+                );
+                setIsLoading(false);
+                return;
+            }
 
             const res = await fetch(`/api/admin/events?${params.toString()}`, {
                 headers,
             });
             const data = await res.json();
 
-            if (data.events) {
+            if (res.status === 401) {
+                setEventsFetchError(
+                    "Not authorized. Connect with an admin wallet and sign the message.",
+                );
+                setEvents([]);
+                setTotal(0);
+            } else if (data.events) {
                 setEvents(data.events);
-                setTotal(data.total);
+                setTotal(data.total ?? 0);
             }
         } catch (error) {
             console.error("Failed to fetch events:", error);
+            setEventsFetchError("Failed to load events. Check the console.");
         } finally {
             setIsLoading(false);
         }
@@ -1238,20 +1255,41 @@ export default function AdminEventsPage() {
                                 />
                             ))}
                         </div>
+                    ) : eventsFetchError ? (
+                        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-8 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <span className="text-2xl">⚠️</span>
+                            </div>
+                            <p className="text-amber-200/90 text-sm mb-3">
+                                {eventsFetchError}
+                            </p>
+                            <p className="text-zinc-500 text-xs">
+                                Make sure your wallet is in shout_admins and
+                                you’ve signed the admin message.
+                            </p>
+                        </div>
                     ) : events.length === 0 ? (
                         <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-8 text-center">
                             <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800 flex items-center justify-center">
                                 <span className="text-2xl">📅</span>
                             </div>
                             <p className="text-zinc-400 text-sm mb-3">
-                                No events found. Add some or scrape from URL.
+                                No events yet. Bulk-import from Cryptonomads +
+                                Coinpedia by running locally:
                             </p>
-                            <div className="flex justify-center gap-2">
+                            <code className="block mb-4 px-3 py-2 rounded bg-zinc-800 text-amber-100 font-mono text-xs text-left max-w-md mx-auto">
+                                npm run update-cryptonomads
+                            </code>
+                            <p className="text-zinc-500 text-xs mb-4">
+                                Or scrape a single URL below, or add events
+                                manually.
+                            </p>
+                            <div className="flex justify-center gap-2 flex-wrap">
                                 <button
                                     onClick={() => setShowScrapeModal(true)}
                                     className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
                                 >
-                                    🔍 Scrape Events
+                                    🔍 Scrape URL
                                 </button>
                                 <button
                                     onClick={() => {
