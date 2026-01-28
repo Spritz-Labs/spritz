@@ -513,13 +513,15 @@ export async function POST(request: NextRequest) {
 
             const prompt = `Extract ALL blockchain/crypto/Web3 events from the following content. Be extremely thorough and extract EVERY single event you can find.
 
-CRITICAL INSTRUCTIONS FOR EVENT NAMES:
-- Extract the ACTUAL EVENT NAME, not promotional text, discounts, or member benefits
-- Skip things like "CNC Member Discount", "CNC Member tix", "Member Discount" - these are NOT event names
-- The event name should be the actual conference/event title (e.g., "ETHDenver", "Consensus HK", "Satoshi Roundtable")
-- If you see "Side Events" or "Events" after a name, include it (e.g., "ETHDenver Side Events")
-- Look for the main event title/heading, not secondary text
-- If this is a side events page (URL contains "SideEvents" or page title mentions "Side Events"), these are typically meetups, parties, workshops, or networking events - categorize them appropriately
+CRITICAL INSTRUCTIONS FOR EVENT NAMES (accuracy is essential):
+- Use the EXACT event name as displayed on the page. Copy it verbatim; do not paraphrase, shorten, or rewrite.
+- Use the primary title/heading of each event card (the main event name), not a tagline, subtitle, or description.
+- Preserve capitalization and spelling as shown (e.g. "ETHDenver 2026", "Consensus HK", "Satoshi Roundtable").
+- Do NOT invent or combine names. If the card shows "ETHDenver 2026", use exactly that.
+- Skip entries that are NOT event names: "CNC Member Discount", "CNC Member tix", "Member Discount", standalone promos.
+- If you see "Side Events" or "Events" as the card label for a link to a sub-page, use that exact label for that entry (e.g. "ETHDenver Side Events").
+- On side-events listing pages: each card has its own specific event name—use that card’s exact title, not the page title.
+- If this is a side events page, most events will be meetups, parties, workshops, or networking—categorize by type.
 
 CRITICAL INSTRUCTIONS FOR RSVP/REGISTRATION (MUST EXTRACT):
 - For EVERY event, look for a direct registration/RSVP link. This is essential for users to sign up.
@@ -539,7 +541,7 @@ EXTRACTION RULES:
 - Look for event names, dates, locations in ANY format
 
 For each event, provide:
-- name (required) - the ACTUAL event name/title, not promotional text or discounts
+- name (required) - the EXACT event name as shown on the page (copy verbatim; do not paraphrase or shorten)
 - description (brief) - what the event is about
 - event_type (one of: conference, hackathon, meetup, workshop, summit, party, networking, other)
   * If this is a side events page, most events will be: meetup, party, workshop, or networking
@@ -1686,7 +1688,7 @@ ${contentToAnalyze.substring(0, 150000)}`;
                 source: "firecrawl",
                 source_url: sourceUrl || eventUrl || null,
                 source_id: sourceId,
-                status: "draft",
+                status: "published",
                 created_by: address,
             });
 

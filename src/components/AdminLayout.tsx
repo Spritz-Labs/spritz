@@ -178,9 +178,12 @@ export function AdminAuthWrapper({
 export function AdminLoading() {
     return (
         <div className="min-h-screen bg-zinc-950 flex items-center justify-center pt-[env(safe-area-inset-top)]">
-            <div className="text-center">
+            <div className="text-center max-w-sm px-4">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#FF5500] mx-auto mb-4" />
                 <p className="text-zinc-500 text-sm">Checking credentials...</p>
+                <p className="text-zinc-600 text-xs mt-2">
+                    Connect your wallet and sign in as admin if prompted.
+                </p>
             </div>
         </div>
     );

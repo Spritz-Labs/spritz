@@ -388,7 +388,7 @@ function eventToRow(event, sourceUrl, sourceIdPrefix) {
         source: "firecrawl",
         source_url: sourceUrl,
         source_id: sourceId,
-        status: "draft",
+        status: "published",
         created_by: adminAddress,
     };
 }
