@@ -42,12 +42,62 @@ function normalizeEventName(name: string): string {
         .trim();
 }
 
-// Generate a fingerprint for duplicate detection
-function generateEventFingerprint(event: { name: string; event_date: string; city?: string }): string {
+// Generate multiple fingerprints for duplicate detection
+// Returns an array of fingerprint strings to check against
+function generateEventFingerprints(event: { 
+    name: string; 
+    event_date: string; 
+    city?: string;
+    venue?: string;
+    event_url?: string;
+    rsvp_url?: string;
+}): string[] {
     const normalized = normalizeEventName(event.name);
     const date = event.event_date;
-    const city = event.city?.toLowerCase().trim() || "";
-    return `${normalized}|${date}|${city}`;
+    const city = (event.city?.toLowerCase().trim() || "").replace(/[^\w]/g, "");
+    const venue = (event.venue?.toLowerCase().trim() || "").replace(/[^\w]/g, "");
+    
+    const fingerprints: string[] = [];
+    
+    // Primary fingerprint: name + date + city
+    fingerprints.push(`${normalized}|${date}|${city}`);
+    
+    // Alternative: name + date + venue (if city is missing)
+    if (!city && venue) {
+        fingerprints.push(`${normalized}|${date}|venue:${venue}`);
+    }
+    
+    // URL-based fingerprints (most reliable)
+    if (event.event_url) {
+        try {
+            const url = new URL(event.event_url);
+            // Normalize URL: remove query params, trailing slashes, www
+            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+            fingerprints.push(`url:${normalizedUrl.toLowerCase()}`);
+        } catch {
+            // Invalid URL, use as-is but normalized
+            const normalizedUrl = event.event_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+            fingerprints.push(`url:${normalizedUrl}`);
+        }
+    }
+    
+    if (event.rsvp_url) {
+        try {
+            const url = new URL(event.rsvp_url);
+            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+            fingerprints.push(`rsvp:${normalizedUrl.toLowerCase()}`);
+        } catch {
+            const normalizedUrl = event.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+            fingerprints.push(`rsvp:${normalizedUrl}`);
+        }
+    }
+    
+    return fingerprints;
+}
+
+// Legacy function for backward compatibility
+function generateEventFingerprint(event: { name: string; event_date: string; city?: string }): string {
+    return generateEventFingerprints(event)[0];
 }
 
 // Calculate content hash for change detection
@@ -183,10 +233,10 @@ export async function POST(request: NextRequest) {
             save_source,
             scrape_interval_hours = 24,
             source_type = "event_calendar",
-            crawl_depth = 2,
-            max_pages = 20,
-            infinite_scroll = false,
-            scroll_count = 5,
+            crawl_depth = 1, // Default 1 for infinite scroll pages (optimal for cryptonomads)
+            max_pages = 1, // Default 1 page with infinite scroll (optimal for cryptonomads)
+            infinite_scroll = true, // Default enabled for event listing pages
+            scroll_count = 20, // Default 20 scrolls (optimal, respects Firecrawl limits)
             preview_only = false,
             events_to_save,
             skip_past_events = false, // Default to false - let user decide
@@ -330,18 +380,32 @@ export async function POST(request: NextRequest) {
             }, 0);
             console.log("[Event Scrape] Event keyword mentions in content:", keywordCount);
             
-            const prompt = `Extract ALL blockchain/crypto/Web3 events from the following content. Be extremely thorough and extract EVERY single event you can find, no matter how small or brief.
+            const prompt = `Extract ALL blockchain/crypto/Web3 events from the following content. Be extremely thorough and extract EVERY single event you can find.
 
-CRITICAL INSTRUCTIONS:
+CRITICAL INSTRUCTIONS FOR EVENT NAMES:
+- Extract the ACTUAL EVENT NAME, not promotional text, discounts, or member benefits
+- Skip things like "CNC Member Discount", "CNC Member tix", "Member Discount" - these are NOT event names
+- The event name should be the actual conference/event title (e.g., "ETHDenver", "Consensus HK", "Satoshi Roundtable")
+- If you see "Side Events" or "Events" after a name, include it (e.g., "ETHDenver Side Events")
+- Look for the main event title/heading, not secondary text
+
+CRITICAL INSTRUCTIONS FOR RSVP/REGISTRATION:
+- ALWAYS look for registration/RSVP links - these are often separate from the main event URL
+- Common patterns: "Register", "RSVP", "Get Tickets", "Sign Up", "Book Now", buttons with registration links
+- Look for Luma links (lu.ma), Eventbrite, or other registration platforms
+- If there's a registration button/link, extract it as rsvp_url
+- event_url should be the main event page/info page
+- rsvp_url should be the direct registration/RSVP link (if different from event_url)
+
+EXTRACTION RULES:
 - Extract EVERY event mentioned, listed, or referenced in the content
 - If you see a list, table, or grid of events, extract ALL of them
 - If events are in cards, tiles, or sections, extract ALL of them
 - Don't skip any events - be exhaustive
-- If there are 50 events, extract all 50. If there are 100, extract all 100.
 - Look for event names, dates, locations in ANY format
 
 For each event, provide:
-- name (required) - the full event name
+- name (required) - the ACTUAL event name/title, not promotional text or discounts
 - description (brief) - what the event is about
 - event_type (one of: conference, hackathon, meetup, workshop, summit, party, networking, other)
 - event_date (YYYY-MM-DD format, required) - if only month/year is given, use the first day of that month
@@ -351,8 +415,8 @@ For each event, provide:
 - city (optional)
 - country (optional)
 - organizer (optional)
-- event_url (link to event page, optional)
-- rsvp_url (link to register, optional)
+- event_url (link to main event page/info, optional)
+- rsvp_url (link to register/RSVP - IMPORTANT: extract registration links here, optional)
 - image_url (URL to event banner/thumbnail image if visible, optional)
 - tags (array of relevant tags, optional)
 - blockchain_focus (array of blockchain names like 'ethereum', 'solana', 'bitcoin', etc., optional)
@@ -360,10 +424,13 @@ For each event, provide:
 ${event_types?.length ? `Only include events of these types: ${event_types.join(", ")}` : "Include ALL event types found."}
 ${blockchain_focus?.length ? `Only include events focused on: ${blockchain_focus.join(", ")}` : ""}
 
-REMEMBER: Your goal is to extract the MAXIMUM number of events possible. Count how many events you see and make sure your JSON array contains that many or more.
+REMEMBER: 
+- Extract the MAXIMUM number of events possible
+- Use ACTUAL event names, not promotional text
+- ALWAYS look for and extract rsvp_url if a registration link exists
 
 Return ONLY a valid JSON array of events, no other text. Example:
-[{"name": "ETHDenver", "event_type": "hackathon", "event_date": "2026-02-23", "image_url": "https://...", ...}]
+[{"name": "ETHDenver", "event_type": "hackathon", "event_date": "2026-02-23", "event_url": "https://...", "rsvp_url": "https://lu.ma/ethdenver", ...}]
 
 Content to analyze:
 ${contentToAnalyze}`;
@@ -472,9 +539,56 @@ ${contentToAnalyze}`;
             try {
                 extractedEvents = JSON.parse(jsonText);
                 console.log("[Event Scrape] Successfully parsed JSON, got", extractedEvents.length, "events");
-                
-                // If very few events found and content is large, try a second extraction pass with different approach
-                if (extractedEvents.length < 5 && result.content.length > 50000 && !preview_only) {
+            } catch (parseError) {
+                console.warn("[Event Scrape] JSON parse error, attempting to extract valid portion...");
+                // Try to extract valid portion if JSON was truncated (like in working script)
+                try {
+                    let lastValidIndex = jsonText.lastIndexOf('}');
+                    if (lastValidIndex > 0) {
+                        // Find matching opening brace
+                        let depth = 1;
+                        let startIndex = lastValidIndex;
+                        while (startIndex > 0 && depth > 0) {
+                            startIndex--;
+                            if (jsonText[startIndex] === '}') depth++;
+                            if (jsonText[startIndex] === '{') depth--;
+                        }
+                        
+                        // Extract up to last complete object
+                        const validJson = jsonText.substring(0, lastValidIndex + 1) + ']';
+                        extractedEvents = JSON.parse(validJson);
+                        console.log("[Event Scrape] Extracted", extractedEvents.length, "events from truncated JSON");
+                    } else {
+                        throw parseError; // Re-throw if we can't fix it
+                    }
+                } catch (retryError) {
+                    // Fall back to original error handling
+                    console.error("[Event Scrape] JSON parse error:", parseError);
+                    console.error("[Event Scrape] Attempted to parse (first 1000 chars):", jsonText.substring(0, 1000));
+                    
+                    // Try fixing common JSON issues and parse again
+                    try {
+                        const fixedJson = jsonText
+                            .replace(/\\'/g, "'")
+                            .replace(/\\"/g, '"')
+                            .replace(/'/g, '"'); // Replace single quotes with double quotes
+                        
+                        extractedEvents = JSON.parse(fixedJson);
+                        console.log("[Event Scrape] Successfully parsed after fixing quotes");
+                    } catch (retryError2) {
+                        console.error("[Event Scrape] Retry parse also failed:", retryError2);
+                        return NextResponse.json({ 
+                            error: "Failed to parse extracted events",
+                            details: parseError instanceof Error ? parseError.message : "Invalid JSON format",
+                            rawResponse: jsonText.substring(0, 1000),
+                            fullResponse: responseText.substring(0, 2000)
+                        }, { status: 400 });
+                    }
+                }
+            }
+            
+            // If very few events found and content is large, try a second extraction pass with different approach
+            if (extractedEvents.length < 5 && result.content.length > 50000 && !preview_only) {
                     console.log("[Event Scrape] Few events found (" + extractedEvents.length + "), attempting second extraction pass...");
                     
                     // Try a more aggressive prompt focused on finding ALL events
@@ -518,30 +632,6 @@ ${contentToAnalyze.substring(0, 150000)}`;
                     } catch (retryError) {
                         console.warn("[Event Scrape] Retry extraction failed, using original result:", retryError);
                     }
-                }
-            } catch (parseError) {
-                console.error("[Event Scrape] JSON parse error:", parseError);
-                console.error("[Event Scrape] Attempted to parse (first 1000 chars):", jsonText.substring(0, 1000));
-                
-                // Try to fix common JSON issues and parse again
-                try {
-                    // Try fixing escaped quotes and other common issues
-                    const fixedJson = jsonText
-                        .replace(/\\'/g, "'")
-                        .replace(/\\"/g, '"')
-                        .replace(/'/g, '"'); // Replace single quotes with double quotes
-                    
-                    extractedEvents = JSON.parse(fixedJson);
-                    console.log("[Event Scrape] Successfully parsed after fixing quotes");
-                } catch (retryError) {
-                    console.error("[Event Scrape] Retry parse also failed:", retryError);
-                    return NextResponse.json({ 
-                        error: "Failed to parse extracted events",
-                        details: parseError instanceof Error ? parseError.message : "Invalid JSON format",
-                        rawResponse: jsonText.substring(0, 1000),
-                        fullResponse: responseText.substring(0, 2000)
-                    }, { status: 400 });
-                }
             }
             
             // Validate that we got an array
@@ -555,7 +645,49 @@ ${contentToAnalyze.substring(0, 150000)}`;
             }
 
             console.log("[Event Scrape] Extracted", extractedEvents.length, "events before filtering");
-            console.log("[Event Scrape] Sample events:", extractedEvents.slice(0, 3).map(e => ({ name: e.name, date: e.event_date, type: e.event_type })));
+            
+            // Filter out invalid event names (promotional text, discounts, etc.) - early filtering
+            const invalidNamePatterns = [
+                /^CNC Member/i,
+                /^Member Discount/i,
+                /^Member tix/i,
+                /^Member ticket/i,
+                /^Discount$/i,
+                /^tix$/i,
+                /^ticket$/i,
+                /^RSVP$/i,
+                /^Register$/i,
+                /^Sign up$/i,
+                /^Get tickets$/i,
+            ];
+            
+            const originalCount = extractedEvents.length;
+            extractedEvents = extractedEvents.filter(event => {
+                if (!event.name) return false;
+                const name = event.name.trim();
+                // Filter out very short names that are likely not event names
+                if (name.length < 3) return false;
+                // Filter out promotional text
+                if (invalidNamePatterns.some(pattern => pattern.test(name))) {
+                    console.log("[Event Scrape] Filtered out invalid event name:", name);
+                    return false;
+                }
+                return true;
+            });
+            
+            const filteredCount = originalCount - extractedEvents.length;
+            if (filteredCount > 0) {
+                console.log("[Event Scrape] Filtered out", filteredCount, "invalid event names");
+            }
+            
+            console.log("[Event Scrape] After filtering:", extractedEvents.length, "events remaining");
+            console.log("[Event Scrape] Sample events:", extractedEvents.slice(0, 3).map(e => ({ 
+                name: e.name, 
+                date: e.event_date, 
+                type: e.event_type, 
+                rsvp: !!e.rsvp_url,
+                event_url: e.event_url ? 'yes' : 'no'
+            })));
 
             // Filter out past events if option enabled
             if (skip_past_events) {
@@ -580,22 +712,94 @@ ${contentToAnalyze.substring(0, 150000)}`;
             // If preview only, return events with duplicate status
             if (preview_only) {
                 console.log("[Event Scrape] Preview mode - returning preview data without saving");
-                // Fetch existing events to check for duplicates
+                // Fetch existing events to check for duplicates (include URLs for better detection)
                 const { data: existingEvents } = await supabase
                     .from("shout_events")
-                    .select("name, event_date, city");
+                    .select("name, event_date, city, venue, event_url, rsvp_url")
+                    .limit(1000);
                 
-                const existingFingerprints = new Set(
-                    (existingEvents || []).map(e => generateEventFingerprint(e))
-                );
+                // Build sets for duplicate detection with URLs
+                const existingFingerprints = new Set<string>();
+                const existingUrls = new Set<string>();
+                
+                for (const e of (existingEvents || [])) {
+                    const fps = generateEventFingerprints({
+                        name: e.name,
+                        event_date: e.event_date,
+                        city: e.city,
+                        venue: e.venue,
+                        event_url: e.event_url,
+                        rsvp_url: e.rsvp_url
+                    });
+                    fps.forEach(fp => existingFingerprints.add(fp));
+                    
+                    // Track URLs
+                    if (e.event_url) {
+                        try {
+                            const url = new URL(e.event_url);
+                            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                            existingUrls.add(normalizedUrl.toLowerCase());
+                        } catch {
+                            existingUrls.add(e.event_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                        }
+                    }
+                    if (e.rsvp_url) {
+                        try {
+                            const url = new URL(e.rsvp_url);
+                            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                            existingUrls.add(normalizedUrl.toLowerCase());
+                        } catch {
+                            existingUrls.add(e.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                        }
+                    }
+                }
 
                 const previewData = extractedEvents.map(e => {
-                    const fingerprint = generateEventFingerprint({ 
-                        name: e.name, 
-                        event_date: e.event_date, 
-                        city: e.city 
+                    const eventFingerprints = generateEventFingerprints({
+                        name: e.name,
+                        event_date: e.event_date,
+                        city: e.city,
+                        venue: e.venue,
+                        event_url: e.event_url,
+                        rsvp_url: e.rsvp_url
                     });
-                    const isDuplicate = existingFingerprints.has(fingerprint);
+                    
+                    // Check URL-based duplicates first (most reliable)
+                    let isDuplicate = false;
+                    if (e.event_url) {
+                        try {
+                            const url = new URL(e.event_url);
+                            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                            if (existingUrls.has(normalizedUrl.toLowerCase())) {
+                                isDuplicate = true;
+                            }
+                        } catch {
+                            const normalizedUrl = e.event_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+                            if (existingUrls.has(normalizedUrl)) {
+                                isDuplicate = true;
+                            }
+                        }
+                    }
+                    
+                    if (!isDuplicate && e.rsvp_url) {
+                        try {
+                            const url = new URL(e.rsvp_url);
+                            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                            if (existingUrls.has(normalizedUrl.toLowerCase())) {
+                                isDuplicate = true;
+                            }
+                        } catch {
+                            const normalizedUrl = e.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+                            if (existingUrls.has(normalizedUrl)) {
+                                isDuplicate = true;
+                            }
+                        }
+                    }
+                    
+                    // Check fingerprint-based duplicates
+                    if (!isDuplicate) {
+                        isDuplicate = eventFingerprints.some(fp => existingFingerprints.has(fp));
+                    }
                     
                     return {
                         name: e.name,
@@ -667,6 +871,8 @@ ${contentToAnalyze.substring(0, 150000)}`;
         // Optimize: Only fetch events from the same source or recent events (last 90 days)
         // This reduces the query size significantly for large databases
         let existingFingerprints: Set<string>;
+        let existingSourceIds: Set<string>;
+        let existingUrls: Set<string>; // Track URLs for duplicate detection
         
         try {
             const ninetyDaysAgo = new Date();
@@ -674,25 +880,56 @@ ${contentToAnalyze.substring(0, 150000)}`;
             const dateStr = ninetyDaysAgo.toISOString().split('T')[0];
             
             // Try optimized query: same source OR recent events
+            // Fetch URLs too for better duplicate detection
             const { data: existingEvents, error: fetchError } = await supabase
                 .from("shout_events")
-                .select("name, event_date, city")
+                .select("name, event_date, city, venue, event_url, rsvp_url, source, source_id")
                 .or(`source_url.eq.${sourceUrl},event_date.gte.${dateStr}`);
             
             if (fetchError || !existingEvents) {
                 throw fetchError || new Error("No data returned");
             }
             
-            existingFingerprints = new Set(
-                existingEvents.map(e => generateEventFingerprint(e))
+            // Generate all fingerprints for existing events
+            existingFingerprints = new Set();
+            existingUrls = new Set();
+            for (const e of existingEvents) {
+                const fps = generateEventFingerprints(e);
+                fps.forEach(fp => existingFingerprints.add(fp));
+                
+                // Also track URLs directly
+                if (e.event_url) {
+                    try {
+                        const url = new URL(e.event_url);
+                        const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                        existingUrls.add(normalizedUrl.toLowerCase());
+                    } catch {
+                        existingUrls.add(e.event_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                    }
+                }
+                if (e.rsvp_url) {
+                    try {
+                        const url = new URL(e.rsvp_url);
+                        const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                        existingUrls.add(normalizedUrl.toLowerCase());
+                    } catch {
+                        existingUrls.add(e.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                    }
+                }
+            }
+            
+            existingSourceIds = new Set(
+                existingEvents
+                    .filter(e => e.source && e.source_id)
+                    .map(e => `${e.source}|${e.source_id}`)
             );
-            console.log("[Event Scrape] Fetched", existingFingerprints.size, "existing fingerprints (optimized query)");
+            console.log("[Event Scrape] Fetched", existingFingerprints.size, "existing fingerprints,", existingUrls.size, "URLs, and", existingSourceIds.size, "source_ids (optimized query)");
         } catch (error) {
             console.warn("[Event Scrape] Optimized query failed, falling back to full query:", error);
             // Fallback to fetching all if optimized query fails
             const { data: allEvents, error: fetchError } = await supabase
                 .from("shout_events")
-                .select("name, event_date, city");
+                .select("name, event_date, city, venue, event_url, rsvp_url, source, source_id");
             
             if (fetchError) {
                 console.error("[Event Scrape] Error fetching existing events:", fetchError);
@@ -702,10 +939,40 @@ ${contentToAnalyze.substring(0, 150000)}`;
                 }, { status: 500 });
             }
             
-            existingFingerprints = new Set(
-                (allEvents || []).map(e => generateEventFingerprint(e))
+            // Generate all fingerprints for existing events
+            existingFingerprints = new Set();
+            existingUrls = new Set();
+            for (const e of (allEvents || [])) {
+                const fps = generateEventFingerprints(e);
+                fps.forEach(fp => existingFingerprints.add(fp));
+                
+                // Track URLs
+                if (e.event_url) {
+                    try {
+                        const url = new URL(e.event_url);
+                        const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                        existingUrls.add(normalizedUrl.toLowerCase());
+                    } catch {
+                        existingUrls.add(e.event_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                    }
+                }
+                if (e.rsvp_url) {
+                    try {
+                        const url = new URL(e.rsvp_url);
+                        const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                        existingUrls.add(normalizedUrl.toLowerCase());
+                    } catch {
+                        existingUrls.add(e.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                    }
+                }
+            }
+            
+            existingSourceIds = new Set(
+                (allEvents || [])
+                    .filter(e => e.source && e.source_id)
+                    .map(e => `${e.source}|${e.source_id}`)
             );
-            console.log("[Event Scrape] Using fallback: fetched", existingFingerprints.size, "existing fingerprints");
+            console.log("[Event Scrape] Using fallback: fetched", existingFingerprints.size, "existing fingerprints,", existingUrls.size, "URLs, and", existingSourceIds.size, "source_ids");
         }
 
         // Batch geocode all unique locations first
@@ -720,29 +987,57 @@ ${contentToAnalyze.substring(0, 150000)}`;
         const eventsToInsert: any[] = [];
         const eventFingerprints: string[] = [];
         
+        // Filter out invalid event names (promotional text, discounts, etc.)
+        const invalidNamePatterns = [
+            /^CNC Member/i,
+            /^Member Discount/i,
+            /^Member tix/i,
+            /^Member ticket/i,
+            /^Discount$/i,
+            /^tix$/i,
+            /^ticket$/i,
+            /^RSVP$/i,
+            /^Register$/i,
+            /^Sign up$/i,
+            /^Get tickets$/i,
+        ];
+        
+        function isValidEventName(name: string): boolean {
+            if (!name || name.trim().length < 3) return false;
+            // Check against invalid patterns
+            for (const pattern of invalidNamePatterns) {
+                if (pattern.test(name.trim())) {
+                    return false;
+                }
+            }
+            // Event names should be at least 3 characters and not just generic words
+            const trimmed = name.trim();
+            if (trimmed.length < 3) return false;
+            return true;
+        }
+        
         console.log("[Event Scrape] Pre-processing events for batch insert...");
+        const seenFingerprints = new Set<string>(); // Track fingerprints within this batch
+        
         for (const event of extractedEvents) {
             if (!event.name || !event.event_date || !event.event_type) {
                 console.log("[Event Scrape] Skipping invalid event (missing required fields):", { name: event.name, date: event.event_date, type: event.event_type });
                 skipped++;
                 continue;
             }
-
-            // Check for duplicates using fingerprint
-            const fingerprint = generateEventFingerprint({ 
-                name: event.name, 
-                event_date: event.event_date, 
-                city: event.city 
-            });
             
-            if (existingFingerprints.has(fingerprint)) {
-                console.log("[Event Scrape] Duplicate detected:", event.name, event.event_date);
-                duplicates++;
+            // Clean and validate event name
+            const cleanedName = event.name.trim();
+            if (!isValidEventName(cleanedName)) {
+                console.log("[Event Scrape] Skipping invalid event name (promotional text):", cleanedName);
                 skipped++;
                 continue;
             }
+            
+            // Use cleaned name
+            event.name = cleanedName;
 
-            // Generate a unique source_id using normalized name
+            // Generate source_id first (for source_id duplicate check)
             const normalizedName = normalizeEventName(event.name);
             let sourceId: string;
             try {
@@ -755,6 +1050,109 @@ ${contentToAnalyze.substring(0, 150000)}`;
             } catch {
                 sourceId = `preview-${normalizedName}-${event.event_date}`.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 200);
             }
+            
+            // Check for duplicate source_id FIRST (database unique constraint - most reliable)
+            const sourceIdKey = `firecrawl|${sourceId}`;
+            if (existingSourceIds.has(sourceIdKey)) {
+                console.log("[Event Scrape] Duplicate detected (same source_id in DB):", event.name, event.event_date, sourceId);
+                duplicates++;
+                skipped++;
+                continue;
+            }
+            
+            // Track this source_id to prevent duplicates within the same batch
+            existingSourceIds.add(sourceIdKey);
+
+            // Generate all fingerprints for this event (name+date+city, URLs, etc.)
+            const eventFingerprints = generateEventFingerprints({
+                name: event.name,
+                event_date: event.event_date,
+                city: event.city,
+                venue: event.venue,
+                event_url: event.event_url,
+                rsvp_url: event.rsvp_url
+            });
+            
+            // Check URL-based duplicates SECOND (very reliable)
+            let isDuplicate = false;
+            if (event.event_url) {
+                try {
+                    const url = new URL(event.event_url);
+                    const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                    if (existingUrls.has(normalizedUrl.toLowerCase())) {
+                        console.log("[Event Scrape] Duplicate detected (URL match in DB):", event.name, event.event_url);
+                        isDuplicate = true;
+                    }
+                } catch {
+                    const normalizedUrl = event.event_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+                    if (existingUrls.has(normalizedUrl)) {
+                        console.log("[Event Scrape] Duplicate detected (URL match in DB):", event.name, event.event_url);
+                        isDuplicate = true;
+                    }
+                }
+            }
+            
+            if (!isDuplicate && event.rsvp_url) {
+                try {
+                    const url = new URL(event.rsvp_url);
+                    const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                    if (existingUrls.has(normalizedUrl.toLowerCase())) {
+                        console.log("[Event Scrape] Duplicate detected (RSVP URL match in DB):", event.name, event.rsvp_url);
+                        isDuplicate = true;
+                    }
+                } catch {
+                    const normalizedUrl = event.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+                    if (existingUrls.has(normalizedUrl)) {
+                        console.log("[Event Scrape] Duplicate detected (RSVP URL match in DB):", event.name, event.rsvp_url);
+                        isDuplicate = true;
+                    }
+                }
+            }
+            
+            // Check fingerprint-based duplicates THIRD (name + date + location)
+            if (!isDuplicate) {
+                for (const fp of eventFingerprints) {
+                    if (existingFingerprints.has(fp)) {
+                        console.log("[Event Scrape] Duplicate detected (fingerprint match in DB):", event.name, event.event_date, "fingerprint:", fp);
+                        isDuplicate = true;
+                        break;
+                    }
+                    if (seenFingerprints.has(fp)) {
+                        console.log("[Event Scrape] Duplicate detected (fingerprint match in batch):", event.name, event.event_date, "fingerprint:", fp);
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (isDuplicate) {
+                duplicates++;
+                skipped++;
+                continue;
+            }
+            
+            // Mark all fingerprints as seen
+            eventFingerprints.forEach(fp => seenFingerprints.add(fp));
+            
+            // Track URLs in this batch
+            if (event.event_url) {
+                try {
+                    const url = new URL(event.event_url);
+                    const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                    existingUrls.add(normalizedUrl.toLowerCase());
+                } catch {
+                    existingUrls.add(event.event_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                }
+            }
+            if (event.rsvp_url) {
+                try {
+                    const url = new URL(event.rsvp_url);
+                    const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                    existingUrls.add(normalizedUrl.toLowerCase());
+                } catch {
+                    existingUrls.add(event.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                }
+            }
 
             // Get geocoded location from batch results
             const locationStr = [event.city, event.country].filter(Boolean).join(", ");
@@ -762,6 +1160,19 @@ ${contentToAnalyze.substring(0, 150000)}`;
             const latitude = coords?.lat || null;
             const longitude = coords?.lon || null;
 
+            // Normalize RSVP URL - ensure we capture registration links
+            let rsvpUrl = event.rsvp_url || null;
+            let eventUrl = event.event_url || null;
+            
+            // If event_url is a registration platform (Luma, Eventbrite), use it as rsvp_url
+            if (eventUrl && !rsvpUrl) {
+                const registrationPlatforms = ['lu.ma', 'eventbrite.com', 'meetup.com', 'lu.ma/event'];
+                if (registrationPlatforms.some(platform => eventUrl!.includes(platform))) {
+                    rsvpUrl = eventUrl;
+                    eventUrl = null; // Keep event_url empty if it's just a registration link
+                }
+            }
+            
             // Prepare event for batch insert
             eventsToInsert.push({
                 name: event.name,
@@ -776,19 +1187,21 @@ ${contentToAnalyze.substring(0, 150000)}`;
                 latitude,
                 longitude,
                 organizer: event.organizer || null,
-                event_url: event.event_url || null,
-                rsvp_url: event.rsvp_url || null,
+                event_url: eventUrl,
+                rsvp_url: rsvpUrl, // Ensure RSVP URL is captured
                 banner_image_url: event.image_url || null,
                 tags: event.tags || [],
                 blockchain_focus: event.blockchain_focus || null,
                 source: "firecrawl",
-                source_url: sourceUrl || event.event_url || null,
+                source_url: sourceUrl || eventUrl || null,
                 source_id: sourceId,
                 status: "draft",
                 created_by: address,
             });
             
-            eventFingerprints.push(fingerprint);
+            // Store primary fingerprint for batch tracking
+            const primaryFingerprint = eventFingerprints[0];
+            eventFingerprints.push(primaryFingerprint);
         }
 
         // Batch insert events (Supabase supports up to 1000 rows per insert)
@@ -827,6 +1240,26 @@ ${contentToAnalyze.substring(0, 150000)}`;
                             } else {
                                 inserted++;
                                 insertedEvents.push(newEvent);
+                                // Add fingerprints and URLs to prevent duplicates
+                                const insertedEvent = batch[j];
+                                if (insertedEvent.event_url) {
+                                    try {
+                                        const url = new URL(insertedEvent.event_url);
+                                        const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                                        existingUrls.add(normalizedUrl.toLowerCase());
+                                    } catch {
+                                        existingUrls.add(insertedEvent.event_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                                    }
+                                }
+                                if (insertedEvent.rsvp_url) {
+                                    try {
+                                        const url = new URL(insertedEvent.rsvp_url);
+                                        const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                                        existingUrls.add(normalizedUrl.toLowerCase());
+                                    } catch {
+                                        existingUrls.add(insertedEvent.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                                    }
+                                }
                                 existingFingerprints.add(batchFingerprints[j]);
                             }
                         } catch (err) {
@@ -838,8 +1271,32 @@ ${contentToAnalyze.substring(0, 150000)}`;
                     // Batch insert succeeded
                     inserted += newEvents?.length || 0;
                     insertedEvents.push(...(newEvents || []));
-                    // Add fingerprints to prevent duplicates
+                    // Add fingerprints, URLs, and source_ids to prevent duplicates
                     batchFingerprints.forEach(fp => existingFingerprints.add(fp));
+                    batch.forEach((event, idx) => {
+                        if (event.source_id) {
+                            existingSourceIds.add(`firecrawl|${event.source_id}`);
+                        }
+                        // Track URLs
+                        if (event.event_url) {
+                            try {
+                                const url = new URL(event.event_url);
+                                const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                                existingUrls.add(normalizedUrl.toLowerCase());
+                            } catch {
+                                existingUrls.add(event.event_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                            }
+                        }
+                        if (event.rsvp_url) {
+                            try {
+                                const url = new URL(event.rsvp_url);
+                                const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+                                existingUrls.add(normalizedUrl.toLowerCase());
+                            } catch {
+                                existingUrls.add(event.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0]);
+                            }
+                        }
+                    });
                     console.log("[Event Scrape] Successfully batch inserted", newEvents?.length || 0, "events");
                 }
             } catch (err) {

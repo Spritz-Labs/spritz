@@ -293,20 +293,36 @@ export async function waitForCrawl(
  * Generate scroll actions for infinite scroll pages
  * Scrolls down multiple times with waits to trigger lazy loading
  */
-export function generateScrollActions(scrollCount: number = 5, waitMs: number = 1500): ScrapeAction[] {
+export function generateScrollActions(scrollCount: number = 20, waitMs: number = 2500): ScrapeAction[] {
     const actions: ScrapeAction[] = [];
     
-    for (let i = 0; i < scrollCount; i++) {
+    // Firecrawl limits: max 50 actions, max 60s total wait time
+    // Each scroll = 1 action, each wait = 1 action, plus 2 for scroll up = 2*scrollCount + 2
+    // So max scrollCount = (50 - 2) / 2 = 24
+    // Also need to respect wait time: max 60s = 60000ms
+    // If waitMs = 2500, max scrolls = 60000 / 2500 = 24
+    const MAX_SCROLLS = 24;
+    const MAX_WAIT_MS = 60000;
+    
+    // Cap scrollCount to respect limits
+    const actualScrollCount = Math.min(scrollCount, MAX_SCROLLS);
+    const actualWaitMs = Math.min(waitMs, Math.floor(MAX_WAIT_MS / actualScrollCount));
+    
+    if (scrollCount > MAX_SCROLLS) {
+        console.warn(`[Firecrawl] Scroll count ${scrollCount} exceeds limit, capping at ${MAX_SCROLLS}`);
+    }
+    
+    for (let i = 0; i < actualScrollCount; i++) {
         // Scroll down - use larger scroll for efficiency
         actions.push({
             type: "scroll",
             direction: "down",
-            amount: 2000, // Scroll 2000px each time (about 1-2 viewport heights)
+            amount: 3000, // Increased to 3000px to load more content per scroll
         });
         // Wait for content to load
         actions.push({
             type: "wait",
-            milliseconds: waitMs,
+            milliseconds: actualWaitMs,
         });
     }
     
@@ -338,7 +354,7 @@ export async function fetchContent(
         onProgress?: (completed: number, total: number) => void;
         /** Enable infinite scroll handling - scrolls page multiple times before scraping */
         infiniteScroll?: boolean;
-        /** Number of times to scroll (default 5) */
+        /** Number of times to scroll (default 20, optimal for event listing pages like cryptonomads) */
         scrollCount?: number;
     } = {}
 ): Promise<{ content: string; pageCount: number; urls: string[] }> {
@@ -350,13 +366,14 @@ export async function fetchContent(
         
         // Add scroll actions for infinite scroll pages
         if (options.infiniteScroll) {
-            const scrollCount = options.scrollCount || 5;
-            scrapeOptions.actions = generateScrollActions(scrollCount);
-            // Each scroll needs ~2.5 seconds (1500px scroll + 2000ms wait), plus buffer
-            // Add 30 seconds base + 3 seconds per scroll to be safe
-            const timeoutMs = 30000 + (scrollCount * 3000);
+            const scrollCount = options.scrollCount || 20; // Default 20 (optimal for cryptonomads)
+            scrapeOptions.actions = generateScrollActions(scrollCount, 2500); // Use 2.5s wait (optimal)
+            // Calculate timeout: base 30s + (scrollCount * waitMs) + buffer
+            // Max scrollCount is capped at 24, max wait is 2.5s = 60s max wait
+            const actualScrollCount = Math.min(scrollCount, 24);
+            const timeoutMs = 30000 + (actualScrollCount * 3000) + 30000; // Base + scrolls + buffer
             scrapeOptions.timeout = timeoutMs;
-            console.log("[Firecrawl] Infinite scroll enabled:", scrollCount, "scrolls, timeout:", Math.round(timeoutMs / 1000), "s");
+            console.log("[Firecrawl] Infinite scroll enabled:", actualScrollCount, "scrolls (requested:", scrollCount, "), timeout:", Math.round(timeoutMs / 1000), "s");
         }
         
         const result = await scrapeUrl(url, scrapeOptions);

@@ -100,9 +100,9 @@ const PAGE_SIZES = [25, 50, 100, 200];
 
 // Known infinite scroll sites - auto-suggest settings
 const INFINITE_SCROLL_SITES = [
-    { pattern: "cryptonomads.org", scrollCount: 50 },
-    { pattern: "lu.ma", scrollCount: 25 },
-    { pattern: "meetup.com", scrollCount: 30 },
+    { pattern: "cryptonomads.org", scrollCount: 20 }, // Capped at 20 to respect Firecrawl limits (max 50 actions, max 60s wait)
+    { pattern: "lu.ma", scrollCount: 20 },
+    { pattern: "meetup.com", scrollCount: 20 },
     { pattern: "eventbrite.com", scrollCount: 20 },
 ];
 
@@ -187,10 +187,10 @@ export default function AdminEventsPage() {
     const [saveSource, setSaveSource] = useState(true); // Enable recurring scrapes by default
     const [scrapeInterval, setScrapeInterval] = useState(24); // Default daily
     const [sourceType, setSourceType] = useState("event_calendar");
-    const [crawlDepth, setCrawlDepth] = useState(2); // Default shallow crawl
-    const [maxPages, setMaxPages] = useState(20); // Default 20 pages
-    const [infiniteScroll, setInfiniteScroll] = useState(false); // For lazy-load pages
-    const [scrollCount, setScrollCount] = useState(5); // Number of scroll actions
+    const [crawlDepth, setCrawlDepth] = useState(1); // Default 1 for infinite scroll pages (optimal for cryptonomads)
+    const [maxPages, setMaxPages] = useState(1); // Default 1 page with infinite scroll (optimal for cryptonomads)
+    const [infiniteScroll, setInfiniteScroll] = useState(true); // Default enabled for event listing pages like cryptonomads
+    const [scrollCount, setScrollCount] = useState(20); // Default 20 scrolls (optimal, respects Firecrawl limits)
     const [skipPastEvents, setSkipPastEvents] = useState(true); // Skip events with past dates
     const [isScraping, setIsScraping] = useState(false);
     const [scrapeStatus, setScrapeStatus] = useState<"idle" | "connecting" | "scrolling" | "extracting" | "preview" | "saving">("idle");
@@ -541,6 +541,32 @@ export default function AdminEventsPage() {
         }
     };
 
+    const selectAllDrafts = async () => {
+        try {
+            setIsLoading(true);
+            const params = new URLSearchParams();
+            params.set("status", "draft");
+            params.set("limit", "10000"); // Get all drafts
+            
+            const res = await fetch(`/api/admin/events?${params.toString()}`, {
+                headers: getAuthHeaders() || {},
+            });
+            
+            const data = await res.json();
+            if (data.events && Array.isArray(data.events)) {
+                const draftIds = new Set<string>(data.events.map((e: GlobalEvent) => e.id));
+                setSelectedEvents(draftIds);
+                // Also set the status filter to draft so user can see what they selected
+                setStatusFilter("draft");
+            }
+        } catch (error) {
+            console.error("Failed to fetch all drafts:", error);
+            alert("Failed to select all drafts");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const toggleSelectEvent = (id: string) => {
         const newSelected = new Set(selectedEvents);
         if (newSelected.has(id)) {
@@ -833,22 +859,35 @@ export default function AdminEventsPage() {
 
                             {/* Select All / Deselect All */}
                             {events.length > 0 && (
-                                <button
-                                    onClick={toggleSelectAll}
-                                    className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                                        selectedEvents.size === events.length
-                                            ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
-                                            : "bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700"
-                                    }`}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedEvents.size === events.length && events.length > 0}
-                                        onChange={toggleSelectAll}
-                                        className="w-3 h-3 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
-                                    />
-                                    <span className="hidden sm:inline">{selectedEvents.size === events.length ? "Deselect" : "Select All"}</span>
-                                </button>
+                                <>
+                                    <button
+                                        onClick={toggleSelectAll}
+                                        className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                            selectedEvents.size === events.length
+                                                ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
+                                                : "bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700"
+                                        }`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedEvents.size === events.length && events.length > 0}
+                                            onChange={toggleSelectAll}
+                                            className="w-3 h-3 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                        />
+                                        <span className="hidden sm:inline">{selectedEvents.size === events.length ? "Deselect" : "Select All"}</span>
+                                    </button>
+                                    {statusFilter === "draft" && (
+                                        <button
+                                            onClick={selectAllDrafts}
+                                            disabled={isLoading}
+                                            className="px-2 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 bg-yellow-500/20 text-yellow-400 hover:text-yellow-300 border border-yellow-500/40 disabled:opacity-50"
+                                            title="Select all drafts across all pages"
+                                        >
+                                            <span className="hidden sm:inline">Select All Drafts</span>
+                                            <span className="sm:hidden">All Drafts</span>
+                                        </button>
+                                    )}
+                                </>
                             )}
 
                             {/* View Mode Toggle */}
