@@ -13,7 +13,7 @@
         "vercel:preview": "vercel"
     },
     "dependencies": {
-        "@alien_org/sso-sdk-react": "^1.0.37",
+        "@alien_org/sso-sdk-react": "^1.0.39",
         "@coinbase/onchainkit": "^1.1.2",
         "@coinbase/wallet-sdk": "^4.3.7",
         "@dnd-kit/core": "^6.3.1",

@@ -147,7 +147,7 @@ const nextConfig = {
                         value: [
                             "default-src 'self'",
                             // Scripts: self + inline (Next.js needs this) + eval (for some libraries) + SDKs
-                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com https://cdn.worldcoin.org https://*.huddle01.com",
+                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com https://cdn.worldcoin.org https://*.huddle01.com https://alien.org https://*.alien.org",
                             // Styles: self + inline (Tailwind, etc.)
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                             // Images: self + data URIs + external sources
@@ -155,11 +155,11 @@ const nextConfig = {
                             // Fonts: self + Google Fonts
                             "font-src 'self' https://fonts.gstatic.com data:",
                             // Connect: APIs, WebSockets, Waku, etc.
-                            "connect-src 'self' https: wss: ws: blob:",
+                            "connect-src 'self' https: wss: ws: blob: https://alien.org https://*.alien.org https://sso.alien-api.com https://*.alien-api.com",
                             // Media: self + blob for video/audio
                             "media-src 'self' blob: https:",
                             // Frame: self + WalletConnect + Cloudflare + Alien SSO + World ID + Huddle01 + Google OAuth
-                            "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://sso.alien-api.com https://*.alien-api.com https://id.worldcoin.org https://*.worldcoin.org https://app.huddle01.com https://*.huddle01.com https://accounts.google.com",
+                            "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://alien.org https://*.alien.org https://sso.alien-api.com https://*.alien-api.com https://id.worldcoin.org https://*.worldcoin.org https://app.huddle01.com https://*.huddle01.com https://accounts.google.com",
                             // Object: none (no plugins)
                             "object-src 'none'",
                             // Base URI: self only
