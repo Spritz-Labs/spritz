@@ -14,7 +14,10 @@
  *
  * Requires: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  *           GOOGLE_GEMINI_API_KEY, FIRECRAWL_API_KEY
- * Usage: node scripts/update-cryptonomads.mjs  (or npm run update-cryptonomads)
+ * Usage:
+ *   Full run:  node scripts/update-cryptonomads.mjs   (or npm run update-cryptonomads)
+ *   One URL:   node scripts/update-cryptonomads.mjs https://cryptonomads.org/ETHDenverSideEvents2026
+ *   Or:        npm run update-cryptonomads -- https://cryptonomads.org/ETHDenverSideEvents2026
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -320,9 +323,15 @@ function chunkMarkdown(markdown, chunkSize, overlap) {
 // Side-event listing page: each card = one event. Uses chunked extraction for long pages (100+ events).
 async function extractSidePageEvents(markdown) {
     const maxSingle = 250000;
-    const content = markdown.length > maxSingle ? markdown.substring(0, maxSingle) + "\n\n[Content truncated...]" : markdown;
+    const content =
+        markdown.length > maxSingle
+            ? markdown.substring(0, maxSingle) + "\n\n[Content truncated...]"
+            : markdown;
 
-    const promptForChunk = (chunk, partLabel) => `You are extracting INDIVIDUAL events from a SIDE EVENTS listing page (e.g. ETHDenver Side Events). Each card/row/tile is ONE event. This is ${partLabel} of the page.
+    const promptForChunk = (
+        chunk,
+        partLabel,
+    ) => `You are extracting INDIVIDUAL events from a SIDE EVENTS listing page (e.g. ETHDenver Side Events). Each card/row/tile is ONE event. This is ${partLabel} of the page.
 
 Rules:
 - One output object per event card. Use the EXACT title of that card as "name". Do not use the page title as the event name.
@@ -334,18 +343,32 @@ Content:
 ${chunk}`;
 
     if (content.length <= SIDE_PAGE_CHUNK_CHARS) {
-        const text = await callGemini(promptForChunk(content, "the full"), "application/json");
+        const text = await callGemini(
+            promptForChunk(content, "the full"),
+            "application/json",
+        );
         return parseEventsJson(text);
     }
 
-    const chunks = chunkMarkdown(content, SIDE_PAGE_CHUNK_CHARS, SIDE_PAGE_CHUNK_OVERLAP);
+    const chunks = chunkMarkdown(
+        content,
+        SIDE_PAGE_CHUNK_CHARS,
+        SIDE_PAGE_CHUNK_OVERLAP,
+    );
     const allEvents = [];
     const seenFp = new Set();
-    const fp = (e) => `${(e.name || "").toLowerCase().trim()}|${e.event_date || ""}|${(e.city || "").toLowerCase().trim()}`;
+    const fp = (e) =>
+        `${(e.name || "").toLowerCase().trim()}|${e.event_date || ""}|${(e.city || "").toLowerCase().trim()}`;
 
     for (let i = 0; i < chunks.length; i++) {
-        const partLabel = chunks.length > 1 ? `part ${i + 1} of ${chunks.length}` : "the full";
-        const text = await callGemini(promptForChunk(chunks[i], partLabel), "application/json");
+        const partLabel =
+            chunks.length > 1
+                ? `part ${i + 1} of ${chunks.length}`
+                : "the full";
+        const text = await callGemini(
+            promptForChunk(chunks[i], partLabel),
+            "application/json",
+        );
         const events = parseEventsJson(text);
         for (const e of events) {
             if (!e.name || !e.event_date) continue;
@@ -354,7 +377,10 @@ ${chunk}`;
             seenFp.add(key);
             allEvents.push(e);
         }
-        if (chunks.length > 1) console.log(`     chunk ${i + 1}/${chunks.length} → ${events.length} events`);
+        if (chunks.length > 1)
+            console.log(
+                `     chunk ${i + 1}/${chunks.length} → ${events.length} events`,
+            );
     }
     return allEvents;
 }
@@ -432,29 +458,14 @@ function eventToRow(event, sourceUrl, sourceIdPrefix) {
 }
 
 async function main() {
-    console.log("🚀 Event scraper – Cryptonomads + Coinpedia\n");
+    const singleUrlArg = process.argv[2]?.trim();
 
-    // 1) Scrape main page (full content so we get all links and cards)
-    console.log("1️⃣ Scraping main page...");
-    let mainMarkdown;
-    try {
-        mainMarkdown = await scrapeWithFirecrawl(BASE_URL + "/", {
-            onlyMainContent: false,
-            label: "main",
-        });
-    } catch (e) {
-        console.error("❌ Main page scrape failed:", e.message);
-        process.exit(1);
+    if (singleUrlArg) {
+        console.log("🚀 Event scraper – single URL mode\n");
+        console.log("   URL:", singleUrlArg, "\n");
+    } else {
+        console.log("🚀 Event scraper – Cryptonomads + Coinpedia\n");
     }
-    if (!mainMarkdown || mainMarkdown.length < 500) {
-        console.error("❌ Main page returned too little content");
-        process.exit(1);
-    }
-
-    // 2) Discover all side-event URLs (no cap)
-    const sideUrls = discoverSideEventUrls(mainMarkdown);
-    console.log("\n2️⃣ Side-event URLs:", sideUrls.length);
-    sideUrls.forEach((u) => console.log("   ", u));
 
     // Load existing events once for dedupe (updated after each batch insert)
     const { data: existing } = await supabase
@@ -473,7 +484,7 @@ async function main() {
         /^Register$/i,
     ];
 
-    function processAndInsertBatch(extractedEvents, sourceUrl, label) {
+    async function processAndInsertBatch(extractedEvents, sourceUrl, label) {
         const toInsert = [];
         let duplicates = 0;
         let invalid = 0;
@@ -519,7 +530,15 @@ async function main() {
         }
 
         if (toInsert.length === 0) {
-            console.log("   ", label, "→ 0 new (", duplicates, "duplicates,", invalid, "invalid)");
+            console.log(
+                "   ",
+                label,
+                "→ 0 new (",
+                duplicates,
+                "duplicates,",
+                invalid,
+                "invalid)",
+            );
             return 0;
         }
 
@@ -533,28 +552,111 @@ async function main() {
                 .select();
             if (error) {
                 for (const row of batch) {
-                    const { error: e } = await supabase.from("shout_events").insert(row);
+                    const { error: e } = await supabase
+                        .from("shout_events")
+                        .insert(row);
                     if (!e) inserted++;
                 }
             } else {
                 inserted += data?.length || 0;
             }
         }
-        console.log("   ", label, "→", inserted, "inserted (", duplicates, "duplicates,", invalid, "invalid)");
+        console.log(
+            "   ",
+            label,
+            "→",
+            inserted,
+            "inserted (",
+            duplicates,
+            "duplicates,",
+            invalid,
+            "invalid)",
+        );
         return inserted;
     }
+
+    // —— Single URL mode: scrape only the given side-event (or main/coinpedia) URL ——
+    if (singleUrlArg) {
+        try {
+            const markdown = await scrapeWithFirecrawl(singleUrlArg, {
+                onlyMainContent: false,
+                label: singleUrlArg,
+            });
+            if (!markdown || markdown.length < 300) {
+                console.error("❌ Too little content from URL");
+                process.exit(1);
+            }
+            let extracted = [];
+            if (
+                singleUrlArg.startsWith(COINPEDIA_EVENTS_URL) ||
+                singleUrlArg.includes("coinpedia.org")
+            ) {
+                extracted = await extractGenericEventListPage(
+                    markdown,
+                    "events.coinpedia.org (crypto/blockchain events list)",
+                );
+            } else if (
+                singleUrlArg === BASE_URL + "/" ||
+                singleUrlArg === BASE_URL
+            ) {
+                extracted = await extractMainPageEvents(markdown);
+            } else {
+                extracted = await extractSidePageEvents(markdown);
+            }
+            const n = await processAndInsertBatch(
+                extracted.map((e) => ({ ...e, _sourceUrl: singleUrlArg })),
+                singleUrlArg,
+                singleUrlArg,
+            );
+            console.log("\n🎉 Done. Inserted", n, "events from", singleUrlArg);
+        } catch (e) {
+            console.error("❌", e?.message || e);
+            process.exit(1);
+        }
+        return;
+    }
+
+    // —— Full pipeline: main page, then all side-event URLs, then Coinpedia ——
+
+    // 1) Scrape main page (full content so we get all links and cards)
+    console.log("1️⃣ Scraping main page...");
+    let mainMarkdown;
+    try {
+        mainMarkdown = await scrapeWithFirecrawl(BASE_URL + "/", {
+            onlyMainContent: false,
+            label: "main",
+        });
+    } catch (e) {
+        console.error("❌ Main page scrape failed:", e.message);
+        process.exit(1);
+    }
+    if (!mainMarkdown || mainMarkdown.length < 500) {
+        console.error("❌ Main page returned too little content");
+        process.exit(1);
+    }
+
+    // 2) Discover all side-event URLs (no cap)
+    const sideUrls = discoverSideEventUrls(mainMarkdown);
+    console.log("\n2️⃣ Side-event URLs:", sideUrls.length);
+    sideUrls.forEach((u) => console.log("   ", u));
 
     // 3) Extract main page events and insert
     console.log("\n3️⃣ Main page: extract + insert...");
     let mainEvents = [];
     try {
         mainEvents = await extractMainPageEvents(mainMarkdown);
-        const n = processAndInsertBatch(
+        const n = await processAndInsertBatch(
             mainEvents.map((e) => ({ ...e, _sourceUrl: BASE_URL + "/" })),
             BASE_URL + "/",
             "main",
         );
-        console.log("   Main page →", mainEvents.length, "extracted,", n, "inserted");
+        console.log(
+            "   Main page →",
+            mainEvents.length,
+            "extracted,",
+            n,
+            "inserted",
+        );
     } catch (e) {
         console.warn("   ⚠️ Main page failed:", e.message);
     }
@@ -570,7 +672,7 @@ async function main() {
             });
             if (!sideMarkdown || sideMarkdown.length < 300) continue;
             const sideEvents = await extractSidePageEvents(sideMarkdown);
-            const n = processAndInsertBatch(
+            const n = await processAndInsertBatch(
                 sideEvents.map((e) => ({ ...e, _sourceUrl: sideUrl })),
                 sideUrl,
                 sideUrl,
@@ -593,8 +695,11 @@ async function main() {
                 coinpediaMarkdown,
                 "events.coinpedia.org (crypto/blockchain events list)",
             );
-            processAndInsertBatch(
-                coinpediaEvents.map((e) => ({ ...e, _sourceUrl: COINPEDIA_EVENTS_URL })),
+            await processAndInsertBatch(
+                coinpediaEvents.map((e) => ({
+                    ...e,
+                    _sourceUrl: COINPEDIA_EVENTS_URL,
+                })),
                 COINPEDIA_EVENTS_URL,
                 "coinpedia",
             );
@@ -605,7 +710,9 @@ async function main() {
         console.warn("   ⚠️ Coinpedia failed:", e.message);
     }
 
-    console.log("\n🎉 Done. DB updated after each batch (main, each side page, Coinpedia).");
+    console.log(
+        "\n🎉 Done. DB updated after each batch (main, each side page, Coinpedia).",
+    );
 }
 
 main().catch((err) => {

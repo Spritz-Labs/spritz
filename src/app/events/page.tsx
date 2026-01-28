@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import {
@@ -944,6 +944,9 @@ function EventCard({
 export default function EventsPage() {
     const { isAdmin, isReady, getAuthHeaders } = useAdmin();
     const [events, setEvents] = useState<Event[]>([]);
+    const [rawEvents, setRawEvents] = useState<Event[]>([]);
+    const [totalFromApi, setTotalFromApi] = useState(0);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [filters, setFilters] = useState<Filters>({
         eventTypes: [],
         cities: [],
@@ -952,6 +955,7 @@ export default function EventsPage() {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [total, setTotal] = useState(0);
+    const loadMoreRef = useRef<HTMLDivElement>(null);
 
     // Filter state
     const [selectedType, setSelectedType] = useState<string>("");
@@ -984,6 +988,45 @@ export default function EventsPage() {
     });
     const [isSaving, setIsSaving] = useState(false);
 
+    // Apply tab filter + sort (featured first, then main, then date)
+    const applyFilterAndSort = useCallback(
+        (eventsList: Event[]): Event[] => {
+            let filtered: Event[] = eventsList;
+            if (activeTab === "main") {
+                filtered = eventsList.filter((e: Event) => isMainEvent(e));
+            } else if (activeTab === "side") {
+                filtered = eventsList.filter(
+                    (e: Event) => isSideEvent(e) && !isMainEvent(e),
+                );
+            } else if (activeTab !== "all") {
+                filtered = eventsList.filter(
+                    (e: Event) => e.event_type === activeTab,
+                );
+            }
+            if (eventCategory === "main" && activeTab === "all") {
+                filtered = eventsList.filter((e: Event) => isMainEvent(e));
+            } else if (eventCategory === "side" && activeTab === "all") {
+                filtered = eventsList.filter(
+                    (e: Event) => isSideEvent(e) && !isMainEvent(e),
+                );
+            }
+            filtered.sort((a, b) => {
+                if (a.is_featured && !b.is_featured) return -1;
+                if (!a.is_featured && b.is_featured) return 1;
+                const aIsMain = isMainEvent(a);
+                const bIsMain = isMainEvent(b);
+                if (aIsMain && !bIsMain) return -1;
+                if (!aIsMain && bIsMain) return 1;
+                return (
+                    new Date(a.event_date).getTime() -
+                    new Date(b.event_date).getTime()
+                );
+            });
+            return filtered;
+        },
+        [activeTab, eventCategory],
+    );
+
     useEffect(() => {
         fetchEvents();
     }, [
@@ -1007,59 +1050,19 @@ export default function EventsPage() {
             if (searchQuery) params.set("search", searchQuery);
             if (showUpcoming) params.set("upcoming", "true");
             params.set("limit", "50");
+            params.set("offset", "0");
 
             const res = await fetch(`/api/events?${params.toString()}`);
             const data = await res.json();
 
             if (data.events) {
-                // Apply client-side filtering based on active tab
                 const eventsList: Event[] = data.events;
-                let filteredEvents: Event[] = eventsList;
-
-                // Tab-based filtering (takes precedence over old eventCategory)
-                if (activeTab === "main") {
-                    filteredEvents = eventsList.filter((e: Event) =>
-                        isMainEvent(e),
-                    );
-                } else if (activeTab === "side") {
-                    filteredEvents = eventsList.filter(
-                        (e: Event) => isSideEvent(e) && !isMainEvent(e),
-                    );
-                } else if (activeTab !== "all") {
-                    // Filter by event type for specific tabs
-                    filteredEvents = eventsList.filter(
-                        (e: Event) => e.event_type === activeTab,
-                    );
-                }
-
-                // Legacy eventCategory support (for backward compatibility)
-                if (eventCategory === "main" && activeTab === "all") {
-                    filteredEvents = eventsList.filter((e: Event) =>
-                        isMainEvent(e),
-                    );
-                } else if (eventCategory === "side" && activeTab === "all") {
-                    filteredEvents = eventsList.filter(
-                        (e: Event) => isSideEvent(e) && !isMainEvent(e),
-                    );
-                }
-
-                // Sort: main events first, then featured, then by date
-                filteredEvents.sort((a, b) => {
-                    const aIsMain = isMainEvent(a);
-                    const bIsMain = isMainEvent(b);
-                    if (aIsMain && !bIsMain) return -1;
-                    if (!aIsMain && bIsMain) return 1;
-                    if (a.is_featured && !b.is_featured) return -1;
-                    if (!a.is_featured && b.is_featured) return 1;
-                    return (
-                        new Date(a.event_date).getTime() -
-                        new Date(b.event_date).getTime()
-                    );
-                });
-
-                setEvents(filteredEvents);
-                setTotal(filteredEvents.length);
-                setFilters(data.filters);
+                setRawEvents(eventsList);
+                setTotalFromApi(data.total ?? eventsList.length);
+                const filtered = applyFilterAndSort(eventsList);
+                setEvents(filtered);
+                setTotal(filtered.length);
+                if (data.filters) setFilters(data.filters);
             }
         } catch (error) {
             console.error("Failed to fetch events:", error);
@@ -1067,6 +1070,74 @@ export default function EventsPage() {
             setIsLoading(false);
         }
     }
+
+    const loadMoreEvents = useCallback(async () => {
+        if (rawEvents.length >= totalFromApi || isLoadingMore) return;
+        setIsLoadingMore(true);
+        try {
+            const params = new URLSearchParams();
+            if (selectedType) params.set("type", selectedType);
+            if (selectedCity) params.set("city", selectedCity);
+            if (selectedBlockchain)
+                params.set("blockchain", selectedBlockchain);
+            if (searchQuery) params.set("search", searchQuery);
+            if (showUpcoming) params.set("upcoming", "true");
+            params.set("limit", "50");
+            params.set("offset", String(rawEvents.length));
+
+            const res = await fetch(`/api/events?${params.toString()}`);
+            const data = await res.json();
+
+            if (data.events && data.events.length > 0) {
+                const nextRaw = [...rawEvents, ...(data.events as Event[])];
+                setRawEvents(nextRaw);
+                setTotalFromApi(data.total ?? nextRaw.length);
+                const filtered = applyFilterAndSort(nextRaw);
+                setEvents(filtered);
+                setTotal(filtered.length);
+            }
+        } catch (error) {
+            console.error("Failed to load more events:", error);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    }, [
+        rawEvents.length,
+        totalFromApi,
+        isLoadingMore,
+        selectedType,
+        selectedCity,
+        selectedBlockchain,
+        searchQuery,
+        showUpcoming,
+        applyFilterAndSort,
+    ]);
+
+    // Auto load more when user scrolls to bottom (sentinel enters viewport)
+    useEffect(() => {
+        const el = loadMoreRef.current;
+        if (!el || rawEvents.length >= totalFromApi || totalFromApi === 0)
+            return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (
+                    entries[0]?.isIntersecting &&
+                    rawEvents.length < totalFromApi &&
+                    !isLoadingMore
+                ) {
+                    loadMoreEvents();
+                }
+            },
+            { rootMargin: "200px" },
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [
+        rawEvents.length,
+        totalFromApi,
+        isLoadingMore,
+        loadMoreEvents,
+    ]);
 
     const handleEditEvent = (event: Event) => {
         setEditingEvent(event);
@@ -1450,25 +1521,41 @@ export default function EventsPage() {
                     </div>
                 ) : (
                     <AnimatePresence mode="popLayout">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {events.map((event, index) => (
-                                <motion.div
-                                    key={event.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.05 }}
-                                    className="h-full"
-                                >
-                                    <EventCard
-                                        event={event}
-                                        onEdit={
-                                            isAdmin && isReady
-                                                ? handleEditEvent
-                                                : undefined
-                                        }
-                                    />
-                                </motion.div>
-                            ))}
+                        <div className="space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {events.map((event, index) => (
+                                    <motion.div
+                                        key={event.id}
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: Math.min(index * 0.05, 0.5) }}
+                                        className="h-full"
+                                    >
+                                        <EventCard
+                                            event={event}
+                                            onEdit={
+                                                isAdmin && isReady
+                                                    ? handleEditEvent
+                                                    : undefined
+                                            }
+                                        />
+                                    </motion.div>
+                                ))}
+                            </div>
+                            {rawEvents.length < totalFromApi && totalFromApi > 0 && (
+                                <div className="flex justify-center py-6" ref={loadMoreRef}>
+                                    <button
+                                        type="button"
+                                        onClick={loadMoreEvents}
+                                        disabled={isLoadingMore}
+                                        className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+                                    >
+                                        {isLoadingMore
+                                            ? "Loading…"
+                                            : `Load more (${rawEvents.length} of ${totalFromApi} loaded)`}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </AnimatePresence>
                 )}

@@ -845,6 +845,32 @@ export default function AdminEventsPage() {
         });
     };
 
+    const isAddEventFormDirty = () => {
+        const d = formData;
+        return !!(
+            d.name?.trim() ||
+            d.description?.trim() ||
+            d.event_date ||
+            d.venue?.trim() ||
+            d.city?.trim() ||
+            d.country?.trim() ||
+            d.organizer?.trim() ||
+            d.event_url?.trim() ||
+            d.rsvp_url?.trim() ||
+            d.blockchain_focus?.trim() ||
+            d.tags?.trim()
+        );
+    };
+
+    const closeAddModal = () => {
+        if (isAddEventFormDirty()) {
+            if (!confirm("You have unsaved changes. Leave anyway?")) return;
+        }
+        setShowAddModal(false);
+        setEditingEvent(null);
+        resetForm();
+    };
+
     const openEditModal = (event: GlobalEvent) => {
         setEditingEvent(event);
         setFormData({
@@ -1736,7 +1762,7 @@ export default function AdminEventsPage() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                        onClick={() => setShowAddModal(false)}
+                        onClick={closeAddModal}
                     >
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0 }}
@@ -2080,7 +2106,7 @@ export default function AdminEventsPage() {
                                 <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
                                     <button
                                         type="button"
-                                        onClick={() => setShowAddModal(false)}
+                                        onClick={closeAddModal}
                                         className="px-4 py-2.5 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
                                     >
                                         Cancel
