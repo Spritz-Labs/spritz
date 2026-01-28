@@ -9,6 +9,7 @@
         "start": "next start",
         "lint": "eslint",
         "generate-icons": "node scripts/generate-icons.js",
+        "update-cryptonomads": "node scripts/update-cryptonomads.mjs",
         "vercel": "vercel --prod",
         "vercel:preview": "vercel"
     },

@@ -301,24 +301,62 @@ ${content}`;
     return parseEventsJson(text);
 }
 
-// Side-event listing page: each card = one event.
+// Chunk size for side-event pages so each AI call returns a smaller array (avoids output truncation).
+const SIDE_PAGE_CHUNK_CHARS = 90000;
+const SIDE_PAGE_CHUNK_OVERLAP = 5000;
+
+function chunkMarkdown(markdown, chunkSize, overlap) {
+    const chunks = [];
+    let start = 0;
+    while (start < markdown.length) {
+        let end = Math.min(start + chunkSize, markdown.length);
+        chunks.push(markdown.slice(start, end));
+        if (end >= markdown.length) break;
+        start = end - overlap;
+    }
+    return chunks;
+}
+
+// Side-event listing page: each card = one event. Uses chunked extraction for long pages (100+ events).
 async function extractSidePageEvents(markdown) {
-    const content =
-        markdown.length > 250000
-            ? markdown.substring(0, 250000) + "\n\n[Content truncated...]"
-            : markdown;
-    const prompt = `You are extracting INDIVIDUAL events from a SIDE EVENTS listing page (e.g. ETHDenver Side Events). Each card/row/tile is ONE event.
+    const maxSingle = 250000;
+    const content = markdown.length > maxSingle ? markdown.substring(0, maxSingle) + "\n\n[Content truncated...]" : markdown;
+
+    const promptForChunk = (chunk, partLabel) => `You are extracting INDIVIDUAL events from a SIDE EVENTS listing page (e.g. ETHDenver Side Events). Each card/row/tile is ONE event. This is ${partLabel} of the page.
 
 Rules:
 - One output object per event card. Use the EXACT title of that card as "name". Do not use the page title as the event name.
 - Include: name (required), event_type (meetup, party, workshop, networking, conference, other), event_date (YYYY-MM-DD), start_time, end_time, venue, city, country, organizer, event_url, rsvp_url, description, image_url, tags, blockchain_focus.
-- Extract EVERY card. Do not summarize. Skip only: navigation, footers, "Member Discount" promos.
-- Return ONLY a JSON array. No markdown fences, no explanation. Example: [{"name":"Event A","event_type":"meetup",...},...]
+- Extract EVERY card in this section. Do not summarize. Skip only: navigation, footers, "Member Discount" promos.
+- Return ONLY a JSON array. No markdown fences, no explanation.
 
 Content:
-${content}`;
-    const text = await callGemini(prompt, "application/json");
-    return parseEventsJson(text);
+${chunk}`;
+
+    if (content.length <= SIDE_PAGE_CHUNK_CHARS) {
+        const text = await callGemini(promptForChunk(content, "the full"), "application/json");
+        return parseEventsJson(text);
+    }
+
+    const chunks = chunkMarkdown(content, SIDE_PAGE_CHUNK_CHARS, SIDE_PAGE_CHUNK_OVERLAP);
+    const allEvents = [];
+    const seenFp = new Set();
+    const fp = (e) => `${(e.name || "").toLowerCase().trim()}|${e.event_date || ""}|${(e.city || "").toLowerCase().trim()}`;
+
+    for (let i = 0; i < chunks.length; i++) {
+        const partLabel = chunks.length > 1 ? `part ${i + 1} of ${chunks.length}` : "the full";
+        const text = await callGemini(promptForChunk(chunks[i], partLabel), "application/json");
+        const events = parseEventsJson(text);
+        for (const e of events) {
+            if (!e.name || !e.event_date) continue;
+            const key = fp(e);
+            if (seenFp.has(key)) continue;
+            seenFp.add(key);
+            allEvents.push(e);
+        }
+        if (chunks.length > 1) console.log(`     chunk ${i + 1}/${chunks.length} → ${events.length} events`);
+    }
+    return allEvents;
 }
 
 // Generic event listing page (e.g. Coinpedia): extract all crypto/blockchain/fintech events.
@@ -418,77 +456,12 @@ async function main() {
     console.log("\n2️⃣ Side-event URLs:", sideUrls.length);
     sideUrls.forEach((u) => console.log("   ", u));
 
-    // 3) Extract main events from main page
-    console.log("\n3️⃣ Extracting main page events...");
-    let mainEvents = [];
-    try {
-        mainEvents = await extractMainPageEvents(mainMarkdown);
-        console.log("   Main page →", mainEvents.length, "events");
-    } catch (e) {
-        console.warn("   ⚠️ Main page extraction failed:", e.message);
-    }
-
-    // 4) Scrape each side page and extract individual events
-    const allExtracted = [
-        ...mainEvents.map((e) => ({ ...e, _sourceUrl: BASE_URL + "/" })),
-    ];
-    for (const sideUrl of sideUrls) {
-        try {
-            const sideMarkdown = await scrapeWithFirecrawl(sideUrl, {
-                onlyMainContent: false,
-                label: sideUrl,
-            });
-            if (!sideMarkdown || sideMarkdown.length < 300) continue;
-            const sideEvents = await extractSidePageEvents(sideMarkdown);
-            sideEvents.forEach((e) =>
-                allExtracted.push({ ...e, _sourceUrl: sideUrl }),
-            );
-            console.log("   ", sideUrl, "→", sideEvents.length, "events");
-        } catch (e) {
-            console.warn("   ⚠️", sideUrl, "failed:", e.message);
-        }
-    }
-
-    // 4b) Coinpedia events (https://events.coinpedia.org/)
-    console.log("\n4️⃣ Coinpedia: scraping", COINPEDIA_EVENTS_URL);
-    try {
-        const coinpediaMarkdown = await scrapeWithFirecrawl(
-            COINPEDIA_EVENTS_URL,
-            {
-                onlyMainContent: false,
-                label: "coinpedia",
-            },
-        );
-        if (coinpediaMarkdown && coinpediaMarkdown.length >= 300) {
-            const coinpediaEvents = await extractGenericEventListPage(
-                coinpediaMarkdown,
-                "events.coinpedia.org (crypto/blockchain events list)",
-            );
-            coinpediaEvents.forEach((e) =>
-                allExtracted.push({ ...e, _sourceUrl: COINPEDIA_EVENTS_URL }),
-            );
-            console.log("   Coinpedia →", coinpediaEvents.length, "events");
-        } else {
-            console.warn("   ⚠️ Coinpedia returned too little content");
-        }
-    } catch (e) {
-        console.warn("   ⚠️ Coinpedia failed:", e.message);
-    }
-
-    console.log("\n📊 Total extracted:", allExtracted.length);
-
-    // 5) Load existing for dedupe
+    // Load existing events once for dedupe (updated after each batch insert)
     const { data: existing } = await supabase
         .from("shout_events")
         .select("name, event_date, city");
     const existingFps = new Set((existing || []).map((e) => fingerprint(e)));
-
-    // 6) Build rows, dedupe by fingerprint and source_id
-    const seenFp = new Set();
     const seenSourceId = new Set();
-    const toInsert = [];
-    let duplicates = 0;
-    let invalid = 0;
 
     const skipNamePatterns = [
         /^CNC Member/i,
@@ -499,25 +472,11 @@ async function main() {
         /^RSVP$/i,
         /^Register$/i,
     ];
-    for (const event of allExtracted) {
-        if (!event.name || !event.event_date) {
-            invalid++;
-            continue;
-        }
-        const nameTrim = String(event.name).trim();
-        if (
-            nameTrim.length < 3 ||
-            skipNamePatterns.some((p) => p.test(nameTrim))
-        ) {
-            invalid++;
-            continue;
-        }
-        const fp = fingerprint(event);
-        if (existingFps.has(fp) || seenFp.has(fp)) {
-            duplicates++;
-            continue;
-        }
-        const sourceUrl = event._sourceUrl || BASE_URL + "/";
+
+    function processAndInsertBatch(extractedEvents, sourceUrl, label) {
+        const toInsert = [];
+        let duplicates = 0;
+        let invalid = 0;
         const isCoinpedia =
             sourceUrl.startsWith(COINPEDIA_EVENTS_URL) ||
             sourceUrl.includes("coinpedia.org");
@@ -530,50 +489,123 @@ async function main() {
             : isSide
               ? "cryptonomads-side"
               : "cryptonomads";
-        const row = eventToRow(event, sourceUrl, prefix);
-        if (seenSourceId.has(row.source_id)) {
-            duplicates++;
-            continue;
-        }
-        seenSourceId.add(row.source_id);
-        seenFp.add(fp);
-        toInsert.push(row);
-    }
 
-    console.log(
-        "   New:",
-        toInsert.length,
-        "| Duplicates:",
-        duplicates,
-        "| Invalid:",
-        invalid,
-    );
-
-    if (toInsert.length === 0) {
-        console.log("\nℹ️ No new events to insert.");
-        return;
-    }
-
-    const BATCH = 100;
-    let inserted = 0;
-    for (let i = 0; i < toInsert.length; i += BATCH) {
-        const batch = toInsert.slice(i, i + BATCH);
-        const { data, error } = await supabase
-            .from("shout_events")
-            .insert(batch)
-            .select();
-        if (error) {
-            for (const row of batch) {
-                const { error: e } = await supabase
-                    .from("shout_events")
-                    .insert(row);
-                if (!e) inserted++;
+        for (const event of extractedEvents) {
+            if (!event.name || !event.event_date) {
+                invalid++;
+                continue;
             }
-        } else {
-            inserted += data?.length || 0;
+            const nameTrim = String(event.name).trim();
+            if (
+                nameTrim.length < 3 ||
+                skipNamePatterns.some((p) => p.test(nameTrim))
+            ) {
+                invalid++;
+                continue;
+            }
+            const fp = fingerprint(event);
+            if (existingFps.has(fp)) {
+                duplicates++;
+                continue;
+            }
+            const row = eventToRow(event, sourceUrl, prefix);
+            if (seenSourceId.has(row.source_id)) {
+                duplicates++;
+                continue;
+            }
+            seenSourceId.add(row.source_id);
+            existingFps.add(fp);
+            toInsert.push(row);
+        }
+
+        if (toInsert.length === 0) {
+            console.log("   ", label, "→ 0 new (", duplicates, "duplicates,", invalid, "invalid)");
+            return 0;
+        }
+
+        const BATCH = 100;
+        let inserted = 0;
+        for (let i = 0; i < toInsert.length; i += BATCH) {
+            const batch = toInsert.slice(i, i + BATCH);
+            const { data, error } = await supabase
+                .from("shout_events")
+                .insert(batch)
+                .select();
+            if (error) {
+                for (const row of batch) {
+                    const { error: e } = await supabase.from("shout_events").insert(row);
+                    if (!e) inserted++;
+                }
+            } else {
+                inserted += data?.length || 0;
+            }
+        }
+        console.log("   ", label, "→", inserted, "inserted (", duplicates, "duplicates,", invalid, "invalid)");
+        return inserted;
+    }
+
+    // 3) Extract main page events and insert
+    console.log("\n3️⃣ Main page: extract + insert...");
+    let mainEvents = [];
+    try {
+        mainEvents = await extractMainPageEvents(mainMarkdown);
+        const n = processAndInsertBatch(
+            mainEvents.map((e) => ({ ...e, _sourceUrl: BASE_URL + "/" })),
+            BASE_URL + "/",
+            "main",
+        );
+        console.log("   Main page →", mainEvents.length, "extracted,", n, "inserted");
+    } catch (e) {
+        console.warn("   ⚠️ Main page failed:", e.message);
+    }
+
+    // 4) Each side-event page: scrape, extract, insert immediately
+    console.log("\n4️⃣ Side-event pages: scrape → extract → insert per page...");
+    let sideInserted = 0;
+    for (const sideUrl of sideUrls) {
+        try {
+            const sideMarkdown = await scrapeWithFirecrawl(sideUrl, {
+                onlyMainContent: false,
+                label: sideUrl,
+            });
+            if (!sideMarkdown || sideMarkdown.length < 300) continue;
+            const sideEvents = await extractSidePageEvents(sideMarkdown);
+            const n = processAndInsertBatch(
+                sideEvents.map((e) => ({ ...e, _sourceUrl: sideUrl })),
+                sideUrl,
+                sideUrl,
+            );
+            sideInserted += n;
+        } catch (e) {
+            console.warn("   ⚠️", sideUrl, "failed:", e.message);
         }
     }
-    console.log("\n🎉 Inserted", inserted, "events.");
+
+    // 5) Coinpedia: scrape, extract, insert
+    console.log("\n5️⃣ Coinpedia: scrape → extract → insert...");
+    try {
+        const coinpediaMarkdown = await scrapeWithFirecrawl(
+            COINPEDIA_EVENTS_URL,
+            { onlyMainContent: false, label: "coinpedia" },
+        );
+        if (coinpediaMarkdown && coinpediaMarkdown.length >= 300) {
+            const coinpediaEvents = await extractGenericEventListPage(
+                coinpediaMarkdown,
+                "events.coinpedia.org (crypto/blockchain events list)",
+            );
+            processAndInsertBatch(
+                coinpediaEvents.map((e) => ({ ...e, _sourceUrl: COINPEDIA_EVENTS_URL })),
+                COINPEDIA_EVENTS_URL,
+                "coinpedia",
+            );
+        } else {
+            console.warn("   ⚠️ Coinpedia returned too little content");
+        }
+    } catch (e) {
+        console.warn("   ⚠️ Coinpedia failed:", e.message);
+    }
+
+    console.log("\n🎉 Done. DB updated after each batch (main, each side page, Coinpedia).");
 }
 
 main().catch((err) => {
