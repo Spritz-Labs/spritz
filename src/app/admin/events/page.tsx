@@ -143,6 +143,7 @@ const SUGGESTED_SCRAPE_SOURCES = [
         url: "https://cryptonomads.org/ETHDenverSideEvents2026",
     },
     { label: "Cryptonomads (main)", url: "https://cryptonomads.org/" },
+    { label: "Coinpedia Events", url: "https://events.coinpedia.org/" },
 ];
 
 // Type for extracted event preview
@@ -967,6 +968,20 @@ export default function AdminEventsPage() {
                         </button>
                     </div>
                 </div>
+
+                {/* Bulk import hint when event count is low */}
+                {total < 30 && (
+                    <div className="mb-2 sm:mb-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-200/90 text-sm">
+                        <span className="font-medium">Want more events?</span>{" "}
+                        To bulk-import from cryptonomads.org and
+                        events.coinpedia.org (main + side-event pages, 50+
+                        events), run locally:{" "}
+                        <code className="px-1.5 py-0.5 rounded bg-zinc-800 text-amber-100 font-mono text-xs">
+                            npm run update-cryptonomads
+                        </code>{" "}
+                        (takes ~5–10 min). Then refresh this page.
+                    </div>
+                )}
 
                 {/* Compact Filters & Controls */}
                 <div className="bg-zinc-900/50 rounded-lg p-2 sm:p-3 border border-zinc-800 shrink-0 mb-2 sm:mb-3">
