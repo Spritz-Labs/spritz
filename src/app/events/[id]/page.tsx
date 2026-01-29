@@ -293,15 +293,15 @@ export default function EventDetailPage() {
             <main className="relative max-w-3xl mx-auto px-4 sm:px-6 py-8">
                 <article className="bg-zinc-900/60 backdrop-blur-sm rounded-2xl border border-zinc-800 overflow-hidden">
                     {event.banner_image_url ? (
-                        <div className="aspect-video bg-zinc-800 overflow-hidden">
+                        <div className="aspect-square max-h-[420px] w-full bg-zinc-800 overflow-hidden flex items-center justify-center">
                             <img
                                 src={event.banner_image_url}
                                 alt=""
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain"
                             />
                         </div>
                     ) : (
-                        <div className="h-32 bg-gradient-to-br from-[#FF5500]/20 via-zinc-900 to-zinc-900 flex items-center justify-center border-b border-zinc-800">
+                        <div className="aspect-square max-h-[420px] w-full bg-gradient-to-br from-[#FF5500]/20 via-zinc-900 to-zinc-900 flex items-center justify-center border-b border-zinc-800">
                             <span className="text-5xl opacity-50">
                                 {typeIcon}
                             </span>

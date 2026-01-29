@@ -310,13 +310,13 @@ export default function EventBySlugPage() {
                 </div>
             </header>
 
-            {/* Luma-style: full-width hero */}
-            <div className="w-full aspect-[2.2/1] max-h-[420px] bg-zinc-900 overflow-hidden">
+            {/* Luma-style: square banner that fits inside the frame */}
+            <div className="w-full max-w-2xl mx-auto aspect-square max-h-[420px] bg-zinc-900 overflow-hidden flex items-center justify-center">
                 {event.banner_image_url ? (
                     <img
                         src={event.banner_image_url}
                         alt=""
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                     />
                 ) : (
                     <div className="w-full h-full bg-gradient-to-br from-[#FF5500]/15 via-zinc-900 to-zinc-900 flex items-center justify-center">

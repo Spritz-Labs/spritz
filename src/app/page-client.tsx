@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { useAccount, useReconnect } from "wagmi";
@@ -34,14 +35,24 @@ function hasSavedWalletSession(): boolean {
         const evmCredentials = localStorage.getItem(AUTH_CREDENTIALS_KEY);
         if (evmCredentials) {
             const parsed = JSON.parse(evmCredentials);
-            if (parsed?.address && parsed?.signature && Date.now() - parsed.timestamp < AUTH_TTL) {
+            if (
+                parsed?.address &&
+                parsed?.signature &&
+                Date.now() - parsed.timestamp < AUTH_TTL
+            ) {
                 return true;
             }
         }
-        const solanaCredentials = localStorage.getItem(SOLANA_AUTH_CREDENTIALS_KEY);
+        const solanaCredentials = localStorage.getItem(
+            SOLANA_AUTH_CREDENTIALS_KEY,
+        );
         if (solanaCredentials) {
             const parsed = JSON.parse(solanaCredentials);
-            if (parsed?.address && parsed?.signature && Date.now() - parsed.timestamp < AUTH_TTL) {
+            if (
+                parsed?.address &&
+                parsed?.signature &&
+                Date.now() - parsed.timestamp < AUTH_TTL
+            ) {
                 return true;
             }
         }
@@ -49,13 +60,20 @@ function hasSavedWalletSession(): boolean {
         const wagmiState = localStorage.getItem("wagmi.store");
         if (wagmiState) {
             const parsed = JSON.parse(wagmiState);
-            if (parsed?.state?.connections?.size > 0 || parsed?.state?.current) {
+            if (
+                parsed?.state?.connections?.size > 0 ||
+                parsed?.state?.current
+            ) {
                 return true;
             }
         }
         // Check for @reown appkit state (Solana + EVM)
         for (const key of Object.keys(localStorage)) {
-            if (key.startsWith("@reown") || key.startsWith("wc@") || key.includes("walletconnect")) {
+            if (
+                key.startsWith("@reown") ||
+                key.startsWith("wc@") ||
+                key.includes("walletconnect")
+            ) {
                 return true;
             }
         }
@@ -65,15 +83,33 @@ function hasSavedWalletSession(): boolean {
     return false;
 }
 
+// Safe redirect path: must be same-origin path (no protocol or host)
+function isSafeRedirect(path: string | null): path is string {
+    if (!path || typeof path !== "string") return false;
+    const trimmed = path.trim();
+    if (!trimmed.startsWith("/")) return false;
+    if (trimmed.startsWith("//")) return false;
+    return true;
+}
+
 export default function Home() {
-    const [activeTab, setActiveTab] = useState<"wallet" | "email" | "passkey" | "digitalid">("wallet");
-    
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const redirectAfterLogin = searchParams.get("redirect");
+    const [activeTab, setActiveTab] = useState<
+        "wallet" | "email" | "passkey" | "digitalid"
+    >("wallet");
+
     // EVM wallet via wagmi
-    const { address: wagmiAddress, isConnected: isWagmiConnected, isReconnecting } = useAccount();
+    const {
+        address: wagmiAddress,
+        isConnected: isWagmiConnected,
+        isReconnecting,
+    } = useAccount();
     const { reconnect, connectors } = useReconnect();
     // AppKit disconnect (works for both EVM and Solana)
     const { disconnect: walletDisconnect } = useDisconnect();
-    
+
     // Track last reconnect attempt to prevent spam
     const lastReconnectAttempt = useRef<number>(0);
     const RECONNECT_COOLDOWN = 3000; // 3 seconds cooldown between reconnect attempts
@@ -82,22 +118,26 @@ export default function Home() {
     const attemptReconnect = useCallback(() => {
         // Check if user intentionally disconnected - don't auto-reconnect
         if (typeof window !== "undefined") {
-            const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
+            const intentionallyDisconnected = sessionStorage.getItem(
+                "wallet_intentionally_disconnected",
+            );
             if (intentionallyDisconnected === "true") {
-                console.log("[PWA] User intentionally disconnected, skipping auto-reconnect");
+                console.log(
+                    "[PWA] User intentionally disconnected, skipping auto-reconnect",
+                );
                 return;
             }
         }
-        
+
         const now = Date.now();
         if (now - lastReconnectAttempt.current < RECONNECT_COOLDOWN) {
             console.log("[PWA] Reconnect attempt too soon, skipping");
             return;
         }
-        
+
         lastReconnectAttempt.current = now;
         console.log("[PWA] Attempting wallet reconnection...");
-        
+
         // Try reconnecting with all available connectors
         reconnect({ connectors });
     }, [reconnect, connectors]);
@@ -106,7 +146,7 @@ export default function Home() {
     // This is important for wallet sessions, messages, and other cached data
     useEffect(() => {
         if (typeof window === "undefined") return;
-        
+
         const requestPersistentStorage = async () => {
             if (navigator.storage && navigator.storage.persist) {
                 try {
@@ -115,23 +155,30 @@ export default function Home() {
                         console.log("[PWA] Storage is already persistent");
                         return;
                     }
-                    
+
                     const granted = await navigator.storage.persist();
                     if (granted) {
-                        console.log("[PWA] Persistent storage granted - data will not be evicted");
+                        console.log(
+                            "[PWA] Persistent storage granted - data will not be evicted",
+                        );
                     } else {
-                        console.log("[PWA] Persistent storage denied - data may be evicted by browser");
+                        console.log(
+                            "[PWA] Persistent storage denied - data may be evicted by browser",
+                        );
                     }
                 } catch (err) {
-                    console.warn("[PWA] Could not request persistent storage:", err);
+                    console.warn(
+                        "[PWA] Could not request persistent storage:",
+                        err,
+                    );
                 }
             }
         };
-        
+
         // Request persistent storage (browsers may auto-grant for installed PWAs)
         requestPersistentStorage();
     }, []);
-    
+
     // PWA Wallet Reconnection Strategy:
     // - If user intentionally disconnected -> don't reconnect
     // - If user has NEVER connected wallet -> don't reconnect (show auth options)
@@ -139,11 +186,15 @@ export default function Home() {
     // The actual reconnection logic is handled by usePWAWalletPersistence hook
     useEffect(() => {
         if (typeof window === "undefined") return;
-        
-        const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
-        const lastWalletAddress = localStorage.getItem("spritz_last_wallet_address");
+
+        const intentionallyDisconnected = sessionStorage.getItem(
+            "wallet_intentionally_disconnected",
+        );
+        const lastWalletAddress = localStorage.getItem(
+            "spritz_last_wallet_address",
+        );
         const pwaUpdateReload = sessionStorage.getItem("pwa_update_reload");
-        
+
         // If this is a PWA update reload, we've already shown the message
         // Clear the flag after 10 seconds so it doesn't persist forever
         if (pwaUpdateReload === "true") {
@@ -152,52 +203,76 @@ export default function Home() {
                 sessionStorage.removeItem("pwa_update_reload");
             }, 10000);
         }
-        
+
         if (intentionallyDisconnected === "true") {
-            console.log("[PWA] Wallet reconnection disabled - user chose other auth method");
+            console.log(
+                "[PWA] Wallet reconnection disabled - user chose other auth method",
+            );
         } else if (!lastWalletAddress) {
-            console.log("[PWA] No previous wallet connection found - showing auth options");
+            console.log(
+                "[PWA] No previous wallet connection found - showing auth options",
+            );
         } else {
-            console.log("[PWA] Previous wallet user detected - usePWAWalletPersistence will handle reconnect");
+            console.log(
+                "[PWA] Previous wallet user detected - usePWAWalletPersistence will handle reconnect",
+            );
         }
     }, []);
-    
+
     // Reconnect wallet when app comes back to foreground (PWA resume)
     // ONLY if user hasn't intentionally disconnected
     useEffect(() => {
         if (typeof window === "undefined") return;
-        
+
         const shouldAutoReconnect = () => {
-            const intentionallyDisconnected = sessionStorage.getItem("wallet_intentionally_disconnected");
+            const intentionallyDisconnected = sessionStorage.getItem(
+                "wallet_intentionally_disconnected",
+            );
             return intentionallyDisconnected !== "true";
         };
-        
+
         const handleVisibilityChange = () => {
             if (!document.hidden && shouldAutoReconnect()) {
                 // App is now visible
-                console.log("[PWA] App foregrounded, checking wallet connection...");
-                
+                console.log(
+                    "[PWA] App foregrounded, checking wallet connection...",
+                );
+
                 // If we have saved session but wallet isn't connected, try reconnecting
-                if (hasSavedWalletSession() && !isWagmiConnected && !isReconnecting) {
-                    console.log("[PWA] Wallet not connected but session exists, reconnecting...");
+                if (
+                    hasSavedWalletSession() &&
+                    !isWagmiConnected &&
+                    !isReconnecting
+                ) {
+                    console.log(
+                        "[PWA] Wallet not connected but session exists, reconnecting...",
+                    );
                     attemptReconnect();
                 }
             }
         };
-        
+
         // Also handle focus events (backup for visibility change)
         const handleFocus = () => {
-            if (shouldAutoReconnect() && hasSavedWalletSession() && !isWagmiConnected && !isReconnecting) {
+            if (
+                shouldAutoReconnect() &&
+                hasSavedWalletSession() &&
+                !isWagmiConnected &&
+                !isReconnecting
+            ) {
                 console.log("[PWA] Window focused, reconnecting wallet...");
                 attemptReconnect();
             }
         };
-        
+
         document.addEventListener("visibilitychange", handleVisibilityChange);
         window.addEventListener("focus", handleFocus);
-        
+
         return () => {
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange,
+            );
             window.removeEventListener("focus", handleFocus);
         };
     }, [isWagmiConnected, isReconnecting, attemptReconnect]);
@@ -259,10 +334,14 @@ export default function Home() {
     // Track failed sign-in attempts per wallet to prevent infinite loops
     const failedSignInAttempts = useRef<Map<string, number>>(new Map());
     const hasAutoSignInFailed = useRef<boolean>(false);
-    
+
     // Server-side session - source of truth after updates/refreshes
-    const [serverAuthMethod, setServerAuthMethod] = useState<string | null>(null);
-    const [serverUserAddress, setServerUserAddress] = useState<string | null>(null);
+    const [serverAuthMethod, setServerAuthMethod] = useState<string | null>(
+        null,
+    );
+    const [serverUserAddress, setServerUserAddress] = useState<string | null>(
+        null,
+    );
 
     // Handle hydration
     useEffect(() => {
@@ -270,12 +349,12 @@ export default function Home() {
         // Check for saved session on mount
         hasSavedSession.current = hasSavedWalletSession();
     }, []);
-    
+
     // Fetch session from server on mount
     // This ensures correct auth type detection after app updates
     useEffect(() => {
         if (!mounted) return;
-        
+
         const fetchServerSession = async () => {
             try {
                 const res = await fetch("/api/auth/session", {
@@ -285,7 +364,11 @@ export default function Home() {
                 if (res.ok) {
                     const data = await res.json();
                     if (data.authenticated && data.session) {
-                        console.log("[Auth] Server session:", data.session.authMethod, data.session.userAddress?.slice(0, 10));
+                        console.log(
+                            "[Auth] Server session:",
+                            data.session.authMethod,
+                            data.session.userAddress?.slice(0, 10),
+                        );
                         setServerAuthMethod(data.session.authMethod);
                         setServerUserAddress(data.session.userAddress);
                     }
@@ -294,7 +377,7 @@ export default function Home() {
                 console.error("[Auth] Failed to fetch server session:", error);
             }
         };
-        
+
         fetchServerSession();
     }, [mounted]);
 
@@ -302,7 +385,9 @@ export default function Home() {
     useEffect(() => {
         if (mounted && (isSiweLoading || initializing)) {
             const timeout = setTimeout(() => {
-                console.log("[Auth] Loading timeout reached - showing recovery option");
+                console.log(
+                    "[Auth] Loading timeout reached - showing recovery option",
+                );
                 setAuthTimeout(true);
             }, 15000); // 15 second timeout
             return () => clearTimeout(timeout);
@@ -320,7 +405,7 @@ export default function Home() {
             // PWA force quit can take longer to restore wallet connection
             // But if we're already authenticated via SIWE, we can be faster
             const delay = isSiweAuthenticated ? 100 : hasSession ? 4000 : 500;
-            
+
             const timer = setTimeout(() => {
                 setInitializing(false);
             }, delay);
@@ -335,13 +420,16 @@ export default function Home() {
             setInitializing(false);
         }
     }, [mounted, initializing, isWalletConnected, walletAddress]);
-    
+
     // Detect if wallet is still reconnecting (checking multiple signals)
     // Be more patient with reconnection after PWA force quit
-    const isWalletReconnecting = 
-        isReconnecting || 
+    const isWalletReconnecting =
+        isReconnecting ||
         (hasSavedSession.current && !isWalletConnected && initializing) ||
-        (hasSavedSession.current && !isWalletConnected && !initializing && isSiweLoading);
+        (hasSavedSession.current &&
+            !isWalletConnected &&
+            !initializing &&
+            isSiweLoading);
 
     // Clear failed attempts when wallet disconnects or changes
     useEffect(() => {
@@ -365,7 +453,9 @@ export default function Home() {
             (walletType === "evm" || walletType === "solana") // Auto-sign for both EVM and Solana
         ) {
             // Check if this wallet has failed too many times
-            const failures = failedSignInAttempts.current.get(walletAddress.toLowerCase()) || 0;
+            const failures =
+                failedSignInAttempts.current.get(walletAddress.toLowerCase()) ||
+                0;
             if (failures >= 2) {
                 // Too many failures, don't auto-sign
                 hasAutoSignInFailed.current = true;
@@ -377,28 +467,53 @@ export default function Home() {
                 setSigningIn(true);
                 const success = await siweSignIn();
                 setSigningIn(false);
-                
+
                 if (!success) {
                     // Track failure
-                    const currentFailures = failedSignInAttempts.current.get(walletAddress.toLowerCase()) || 0;
-                    failedSignInAttempts.current.set(walletAddress.toLowerCase(), currentFailures + 1);
+                    const currentFailures =
+                        failedSignInAttempts.current.get(
+                            walletAddress.toLowerCase(),
+                        ) || 0;
+                    failedSignInAttempts.current.set(
+                        walletAddress.toLowerCase(),
+                        currentFailures + 1,
+                    );
                     hasAutoSignInFailed.current = true;
                 } else {
                     // Success - clear failures
-                    failedSignInAttempts.current.delete(walletAddress.toLowerCase());
+                    failedSignInAttempts.current.delete(
+                        walletAddress.toLowerCase(),
+                    );
                     hasAutoSignInFailed.current = false;
                 }
             }, 100);
             return () => clearTimeout(timer);
         }
-    }, [mounted, initializing, isWalletConnected, walletAddress, isSiweAuthenticated, isSiweLoading, signingIn, siweSignIn, walletType]);
+    }, [
+        mounted,
+        initializing,
+        isWalletConnected,
+        walletAddress,
+        isSiweAuthenticated,
+        isSiweLoading,
+        signingIn,
+        siweSignIn,
+        walletType,
+    ]);
 
     // Determine the active user address (supports both EVM and Solana)
     // Can come from email auth, passkey, Alien identity, World ID, connected wallet, authenticated SIWE user, or server session
     // Note: alienAddress should be consistent (user_id from Alien SDK), not session-based
     // serverUserAddress is used as fallback for users who have a valid server session but client providers haven't reconnected yet
     const userAddress: string | null = mounted
-        ? emailAddress || passkeyAddress || alienAddress || worldIdAddress || walletAddress || siweUser?.walletAddress || serverUserAddress || null
+        ? emailAddress ||
+          passkeyAddress ||
+          alienAddress ||
+          worldIdAddress ||
+          walletAddress ||
+          siweUser?.walletAddress ||
+          serverUserAddress ||
+          null
         : null;
 
     // Determine wallet type for dashboard
@@ -408,33 +523,54 @@ export default function Home() {
     const activeWalletType: WalletType = isEmailAuthenticated
         ? "evm" // Email users always use EVM (derived addresses)
         : isPasskeyAuthenticated
-        ? "evm" // Passkey users always use EVM (smart accounts)
-        : isAlienAuthenticated
-        ? "evm" // Alien users use EVM (identity addresses)
-        : isWorldIdAuthenticated
-        ? "evm" // World ID users use EVM (nullifier hash as address)
-        : walletType 
-        || (siweUser?.walletAddress?.startsWith("0x") ? "evm" : siweUser?.walletAddress ? "solana" : null)
-        || (serverAuthMethod === "passkey" || serverAuthMethod === "email" ? "evm" : null)
-        || (serverUserAddress?.startsWith("0x") ? "evm" : serverUserAddress ? "solana" : null);
+          ? "evm" // Passkey users always use EVM (smart accounts)
+          : isAlienAuthenticated
+            ? "evm" // Alien users use EVM (identity addresses)
+            : isWorldIdAuthenticated
+              ? "evm" // World ID users use EVM (nullifier hash as address)
+              : walletType ||
+                (siweUser?.walletAddress?.startsWith("0x")
+                    ? "evm"
+                    : siweUser?.walletAddress
+                      ? "solana"
+                      : null) ||
+                (serverAuthMethod === "passkey" || serverAuthMethod === "email"
+                    ? "evm"
+                    : null) ||
+                (serverUserAddress?.startsWith("0x")
+                    ? "evm"
+                    : serverUserAddress
+                      ? "solana"
+                      : null);
 
     // Require authentication for all users
     // Email auth, passkey auth, Alien auth, World ID auth, SIWE/SIWS authentication, or valid server session
     // serverUserAddress means user has a valid HttpOnly cookie - they're authenticated even if providers haven't reconnected yet
-    const isFullyAuthenticated = mounted && (
-        isEmailAuthenticated ||
-        isPasskeyAuthenticated ||
-        isAlienAuthenticated ||
-        isWorldIdAuthenticated ||
-        isSiweAuthenticated ||
-        !!serverUserAddress // User has valid server session (survives app updates)
-    );
+    const isFullyAuthenticated =
+        mounted &&
+        (isEmailAuthenticated ||
+            isPasskeyAuthenticated ||
+            isAlienAuthenticated ||
+            isWorldIdAuthenticated ||
+            isSiweAuthenticated ||
+            !!serverUserAddress); // User has valid server session (survives app updates)
+
+    // After login: redirect back to the URL that sent the user to login (e.g. event page)
+    useEffect(() => {
+        if (
+            isFullyAuthenticated &&
+            userAddress &&
+            isSafeRedirect(redirectAfterLogin)
+        ) {
+            router.replace(redirectAfterLogin);
+        }
+    }, [isFullyAuthenticated, userAddress, redirectAfterLogin, router]);
 
     // Show loading while checking auth state
     // If already authenticated via email/passkey/Alien/World ID/SIWE, don't wait for wallet reconnection
     // Auth credentials are self-contained and can work without wallet
     const isCheckingAuth =
-        !mounted || 
+        !mounted ||
         isPasskeyLoading ||
         isEmailLoading ||
         (isAlienLoading && !isAlienAuthenticated) ||
@@ -445,11 +581,11 @@ export default function Home() {
 
     const handleLogout = async () => {
         console.log("[Logout] Starting logout...");
-        
+
         // IMPORTANT: Set flag FIRST to prevent auto-reconnect after reload
         // This must be done before any disconnect/reload to prevent race conditions
         sessionStorage.setItem("wallet_intentionally_disconnected", "true");
-        
+
         // Call server logout FIRST to clear HTTP-only session cookie
         try {
             await fetch("/api/auth/logout", {
@@ -460,7 +596,7 @@ export default function Home() {
         } catch (e) {
             console.error("[Logout] Server logout error:", e);
         }
-        
+
         // Sign out SIWE (this also clears auth storage)
         await siweSignOut();
         // Disconnect wallet (AppKit handles both EVM and Solana)
@@ -469,11 +605,11 @@ export default function Home() {
         } catch (e) {
             console.error("[Logout] Disconnect error:", e);
         }
-        
+
         // ALWAYS call passkeyLogout to clear any stored passkey data
         // (even if not currently authenticated via passkey, there might be leftover data)
         await passkeyLogout();
-        
+
         // Logout email if authenticated
         if (isEmailAuthenticated) {
             emailLogout();
@@ -495,26 +631,31 @@ export default function Home() {
         // Clear ALL user-related localStorage to ensure clean state
         // IMPORTANT: This prevents data leaking between users
         try {
-            const keysToRemove = Object.keys(localStorage).filter(k => 
-                k.startsWith("wagmi") || 
-                k.startsWith("@reown") || 
-                k.startsWith("wc@") ||
-                k.includes("walletconnect") ||
-                k.startsWith("spritz_") || // Clear ALL spritz keys
-                k.startsWith("waku_") || // Clear ALL Waku/messaging data
-                k.startsWith("shout_") || // Clear group data
-                k === AUTH_CREDENTIALS_KEY ||
-                k === SOLANA_AUTH_CREDENTIALS_KEY
+            const keysToRemove = Object.keys(localStorage).filter(
+                (k) =>
+                    k.startsWith("wagmi") ||
+                    k.startsWith("@reown") ||
+                    k.startsWith("wc@") ||
+                    k.includes("walletconnect") ||
+                    k.startsWith("spritz_") || // Clear ALL spritz keys
+                    k.startsWith("waku_") || // Clear ALL Waku/messaging data
+                    k.startsWith("shout_") || // Clear group data
+                    k === AUTH_CREDENTIALS_KEY ||
+                    k === SOLANA_AUTH_CREDENTIALS_KEY,
             );
-            keysToRemove.forEach(k => localStorage.removeItem(k));
-            console.log("[Logout] Cleared localStorage keys:", keysToRemove.length);
+            keysToRemove.forEach((k) => localStorage.removeItem(k));
+            console.log(
+                "[Logout] Cleared localStorage keys:",
+                keysToRemove.length,
+            );
         } catch (e) {
             console.error("[Logout] Clear storage error:", e);
         }
         // Clear IndexedDB auth data
         try {
             const deleteRequest = indexedDB.deleteDatabase("spritz_auth");
-            deleteRequest.onsuccess = () => console.log("[Logout] Cleared IndexedDB");
+            deleteRequest.onsuccess = () =>
+                console.log("[Logout] Cleared IndexedDB");
         } catch (e) {
             console.error("[Logout] IndexedDB clear error:", e);
         }
@@ -529,46 +670,47 @@ export default function Home() {
         try {
             // Set flag to prevent auto-reconnect after reload
             sessionStorage.setItem("wallet_intentionally_disconnected", "true");
-            
+
             // Clear ALL wallet and auth related localStorage
-            const keysToRemove = Object.keys(localStorage).filter(k => 
-                k.startsWith("wagmi") || 
-                k.startsWith("@reown") ||
-                k.startsWith("@w3m") ||
-                k.startsWith("@appkit") ||
-                k.startsWith("waku_") ||
-                k.startsWith("shout_") ||
-                k.startsWith("wc@") ||
-                k.startsWith("spritz_") ||
-                k.includes("walletconnect") ||
-                k.includes("wallet") ||
-                k === AUTH_CREDENTIALS_KEY ||
-                k === SOLANA_AUTH_CREDENTIALS_KEY
+            const keysToRemove = Object.keys(localStorage).filter(
+                (k) =>
+                    k.startsWith("wagmi") ||
+                    k.startsWith("@reown") ||
+                    k.startsWith("@w3m") ||
+                    k.startsWith("@appkit") ||
+                    k.startsWith("waku_") ||
+                    k.startsWith("shout_") ||
+                    k.startsWith("wc@") ||
+                    k.startsWith("spritz_") ||
+                    k.includes("walletconnect") ||
+                    k.includes("wallet") ||
+                    k === AUTH_CREDENTIALS_KEY ||
+                    k === SOLANA_AUTH_CREDENTIALS_KEY,
             );
             console.log("[Recovery] Removing keys:", keysToRemove.length);
-            keysToRemove.forEach(k => {
+            keysToRemove.forEach((k) => {
                 console.log("[Recovery] Removing:", k);
                 localStorage.removeItem(k);
             });
-            
+
             // Also clear session storage (except the disconnect flag)
-            const sessionKeysToRemove = Object.keys(sessionStorage).filter(k => 
-                k !== "wallet_intentionally_disconnected"
+            const sessionKeysToRemove = Object.keys(sessionStorage).filter(
+                (k) => k !== "wallet_intentionally_disconnected",
             );
-            sessionKeysToRemove.forEach(k => sessionStorage.removeItem(k));
-            
+            sessionKeysToRemove.forEach((k) => sessionStorage.removeItem(k));
+
             // Clear IndexedDB databases
             indexedDB.deleteDatabase("spritz_auth");
             indexedDB.deleteDatabase("WALLET_CONNECT_V2_INDEXED_DB");
-            
+
             // Clear cookies related to auth
-            document.cookie.split(";").forEach(c => {
+            document.cookie.split(";").forEach((c) => {
                 const name = c.trim().split("=")[0];
                 if (name.includes("spritz") || name.includes("session")) {
                     document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
                 }
             });
-            
+
             console.log("[Recovery] All data cleared, reloading...");
         } catch (e) {
             console.error("[Recovery] Error clearing auth:", e);
@@ -592,20 +734,27 @@ export default function Home() {
 
         // Show error or timeout recovery UI
         const showRecovery = authTimeout || siweError;
-        
+
         return (
             <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="flex flex-col items-center justify-center text-center max-w-md">
-                    <div className={`mb-4 ${showRecovery ? '' : 'animate-pulse'}`}>
-                        <SpritzLogo size="2xl" className="shadow-lg shadow-[#FF5500]/30" />
+                    <div
+                        className={`mb-4 ${showRecovery ? "" : "animate-pulse"}`}
+                    >
+                        <SpritzLogo
+                            size="2xl"
+                            className="shadow-lg shadow-[#FF5500]/30"
+                        />
                     </div>
                     <h1 className="text-2xl font-bold text-white mb-2">
                         Spritz
                     </h1>
                     <p className="text-zinc-500 text-sm mb-4">
-                        {showRecovery ? (siweError || "Taking longer than expected...") : loadingMessage}
+                        {showRecovery
+                            ? siweError || "Taking longer than expected..."
+                            : loadingMessage}
                     </p>
-                    
+
                     {showRecovery && (
                         <div className="space-y-3 w-full">
                             <button
@@ -621,7 +770,8 @@ export default function Home() {
                                 Clear Session & Start Fresh
                             </button>
                             <p className="text-zinc-600 text-xs mt-2">
-                                If you&apos;re stuck, try clearing your session. You&apos;ll need to reconnect your wallet.
+                                If you&apos;re stuck, try clearing your session.
+                                You&apos;ll need to reconnect your wallet.
                             </p>
                         </div>
                     )}
@@ -631,13 +781,14 @@ export default function Home() {
     }
 
     // Show sign-in prompt for wallet users who haven't signed yet (both EVM and Solana)
-    const canShowSignIn = isWalletConnected && !isSiweAuthenticated && !signingIn;
-    
+    const canShowSignIn =
+        isWalletConnected && !isSiweAuthenticated && !signingIn;
+
     if (canShowSignIn) {
         const isEVM = walletType === "evm";
         const isSolana = walletType === "solana";
         const chainLabel = isSolana ? "Solana" : "Ethereum";
-        
+
         return (
             <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <motion.div
@@ -646,22 +797,28 @@ export default function Home() {
                     className="w-full max-w-md"
                 >
                     <div className="glass-card rounded-3xl p-8 shadow-2xl text-center flex flex-col items-center">
-                        <SpritzLogo size="xl" className="mb-6 shadow-lg shadow-[#FF5500]/30" />
-                        
+                        <SpritzLogo
+                            size="xl"
+                            className="mb-6 shadow-lg shadow-[#FF5500]/30"
+                        />
+
                         <h2 className="text-2xl font-bold text-white mb-2">
                             Sign In to Spritz
                         </h2>
                         <p className="text-zinc-400 mb-6">
-                            Please sign the message in your {chainLabel} wallet to verify ownership and continue.
+                            Please sign the message in your {chainLabel} wallet
+                            to verify ownership and continue.
                         </p>
 
                         {/* Chain indicator */}
                         <div className="mb-4 flex items-center justify-center gap-2 text-sm">
-                            <span className={`px-3 py-1 rounded-full ${
-                                isSolana 
-                                    ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" 
-                                    : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                            }`}>
+                            <span
+                                className={`px-3 py-1 rounded-full ${
+                                    isSolana
+                                        ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                                        : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                }`}
+                            >
                                 {isSolana ? "🟣 Solana" : "🔵 Ethereum"}
                             </span>
                         </div>
@@ -671,20 +828,28 @@ export default function Home() {
                                 {siweError}
                             </div>
                         )}
-                        
+
                         <button
                             onClick={async () => {
                                 setSigningIn(true);
                                 const success = await siweSignIn();
                                 setSigningIn(false);
-                                
+
                                 if (!success && walletAddress) {
                                     // Track failure for manual attempts too
-                                    const currentFailures = failedSignInAttempts.current.get(walletAddress.toLowerCase()) || 0;
-                                    failedSignInAttempts.current.set(walletAddress.toLowerCase(), currentFailures + 1);
+                                    const currentFailures =
+                                        failedSignInAttempts.current.get(
+                                            walletAddress.toLowerCase(),
+                                        ) || 0;
+                                    failedSignInAttempts.current.set(
+                                        walletAddress.toLowerCase(),
+                                        currentFailures + 1,
+                                    );
                                 } else if (success && walletAddress) {
                                     // Success - clear failures
-                                    failedSignInAttempts.current.delete(walletAddress.toLowerCase());
+                                    failedSignInAttempts.current.delete(
+                                        walletAddress.toLowerCase(),
+                                    );
                                     hasAutoSignInFailed.current = false;
                                 }
                             }}
@@ -702,7 +867,8 @@ export default function Home() {
                         </button>
 
                         <p className="text-xs text-zinc-500 mt-4">
-                            This signature proves you own this wallet. No transaction will be made.
+                            This signature proves you own this wallet. No
+                            transaction will be made.
                         </p>
                     </div>
                 </motion.div>
@@ -712,6 +878,28 @@ export default function Home() {
 
     // Show dashboard if fully authenticated
     if (isFullyAuthenticated && userAddress) {
+        // After login from event/register or other deep link: show "Taking you back..." (redirect runs in useEffect above)
+        if (isSafeRedirect(redirectAfterLogin)) {
+            return (
+                <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+                    <div className="flex flex-col items-center justify-center text-center max-w-md">
+                        <div className="animate-pulse">
+                            <SpritzLogo
+                                size="2xl"
+                                className="shadow-lg shadow-[#FF5500]/30"
+                            />
+                        </div>
+                        <h1 className="text-2xl font-bold text-white mb-2 mt-4">
+                            Spritz
+                        </h1>
+                        <p className="text-zinc-500 text-sm">
+                            Taking you back…
+                        </p>
+                    </div>
+                </main>
+            );
+        }
+
         // IMPORTANT: Determine auth method based on HOW user logged in, not what credentials they have
         // 1. First check server authMethod (most reliable - survives app updates)
         // 2. Fall back to client-side detection (for initial login)
@@ -720,15 +908,15 @@ export default function Home() {
         // - isSiweAuthenticated = user logged in via wallet signature → "wallet" user
         // - isPasskeyAuthenticated = user logged in via passkey → "passkey" user
         // A wallet user with a passkey registered should still be treated as "wallet" user!
-        const isActuallyPasskeyUser = serverAuthMethod 
-            ? serverAuthMethod === "passkey" 
-            : (isPasskeyAuthenticated && !isSiweAuthenticated);
-        
+        const isActuallyPasskeyUser = serverAuthMethod
+            ? serverAuthMethod === "passkey"
+            : isPasskeyAuthenticated && !isSiweAuthenticated;
+
         return (
             <>
                 <PWAInstallPrompt />
                 {/* Show wallet connection status banner for wallet-connected PWA users only */}
-                <WalletConnectionStatus 
+                <WalletConnectionStatus
                     isPasskeyUser={isActuallyPasskeyUser}
                     isEmailUser={isEmailAuthenticated}
                     isWorldIdUser={isWorldIdAuthenticated}
@@ -750,16 +938,25 @@ export default function Home() {
     }
 
     return (
-        <main className="relative min-h-screen gradient-bg overflow-hidden" role="main">
+        <main
+            className="relative min-h-screen gradient-bg overflow-hidden"
+            role="main"
+        >
             {/* PWA Install Prompt for mobile users */}
             <PWAInstallPrompt />
 
             {/* Background effects */}
             <div className="absolute inset-0 grid-pattern" aria-hidden="true" />
-            <div className="absolute inset-0 noise-overlay" aria-hidden="true" />
+            <div
+                className="absolute inset-0 noise-overlay"
+                aria-hidden="true"
+            />
 
             {/* Globe Background */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden" aria-hidden="true">
+            <div
+                className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden"
+                aria-hidden="true"
+            >
                 <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 0.85, scale: 1 }}
@@ -776,53 +973,58 @@ export default function Home() {
             <div className="relative z-10 flex flex-col items-center min-h-screen px-4 pt-6 md:pt-12 pb-6 md:pb-12 safe-area-inset">
                 {/* Header - at top */}
                 <header className="text-center mb-8 md:mb-12 mt-12 md:mt-16">
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
-                >
-                    <div className="flex items-center justify-center gap-3 mb-2 md:mb-4">
-                        <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{
-                                type: "spring",
-                                stiffness: 200,
-                                delay: 0.2,
-                            }}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6 }}
+                    >
+                        <div className="flex items-center justify-center gap-3 mb-2 md:mb-4">
+                            <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 200,
+                                    delay: 0.2,
+                                }}
+                            >
+                                <SpritzLogo
+                                    size="xl"
+                                    className="shadow-lg shadow-[#FF5500]/30"
+                                />
+                            </motion.div>
+                        </div>
+
+                        <motion.h1
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.3 }}
+                            className="text-3xl md:text-5xl font-bold text-white mb-2 md:mb-3 tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
                         >
-                            <SpritzLogo size="xl" className="shadow-lg shadow-[#FF5500]/30" />
-                        </motion.div>
-                    </div>
+                            Spritz
+                        </motion.h1>
 
-                    <motion.h1
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.3 }}
-                        className="text-3xl md:text-5xl font-bold text-white mb-2 md:mb-3 tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
-                    >
-                        Spritz
-                    </motion.h1>
-
-                    <motion.p
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.4 }}
-                        className="text-zinc-300 text-base md:text-xl max-w-md mx-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
-                    >
-                        Voice calls over Ethereum & Solana. Connect your wallet
-                        and start talking.
-                    </motion.p>
-                    {/* SEO: Additional descriptive text for crawlers */}
-                    <div className="sr-only">
-                        <p>
-                            Spritz is a censorship-resistant chat application for Web3. 
-                            Connect with friends using passkeys or cryptocurrency wallets. 
-                            Make HD video calls, go live with livestreaming, create AI agents, 
-                            and chat freely on decentralized networks. Built on Ethereum, Base, and Solana.
-                        </p>
-                    </div>
-                </motion.div>
+                        <motion.p
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.4 }}
+                            className="text-zinc-300 text-base md:text-xl max-w-md mx-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                        >
+                            Voice calls over Ethereum & Solana. Connect your
+                            wallet and start talking.
+                        </motion.p>
+                        {/* SEO: Additional descriptive text for crawlers */}
+                        <div className="sr-only">
+                            <p>
+                                Spritz is a censorship-resistant chat
+                                application for Web3. Connect with friends using
+                                passkeys or cryptocurrency wallets. Make HD
+                                video calls, go live with livestreaming, create
+                                AI agents, and chat freely on decentralized
+                                networks. Built on Ethereum, Base, and Solana.
+                            </p>
+                        </div>
+                    </motion.div>
                 </header>
 
                 {/* Auth Card - pushed to bottom */}
@@ -834,18 +1036,22 @@ export default function Home() {
                 >
                     <div className="glass-card rounded-2xl md:rounded-3xl p-5 md:p-8 shadow-2xl">
                         {/* PWA Update Notice */}
-                        {typeof window !== "undefined" && sessionStorage.getItem("pwa_update_reload") === "true" && (
-                            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
-                                <div className="flex items-center gap-2">
-                                    <span>✅</span>
-                                    <span className="font-medium">App updated!</span>
+                        {typeof window !== "undefined" &&
+                            sessionStorage.getItem("pwa_update_reload") ===
+                                "true" && (
+                                <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <span>✅</span>
+                                        <span className="font-medium">
+                                            App updated!
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-emerald-400/80 text-xs">
+                                        Please sign in again to continue.
+                                    </p>
                                 </div>
-                                <p className="mt-1 text-emerald-400/80 text-xs">
-                                    Please sign in again to continue.
-                                </p>
-                            </div>
-                        )}
-                        
+                            )}
+
                         {/* Tabs */}
                         <div className="flex bg-zinc-900/50 rounded-xl p-1 mb-6">
                             <button

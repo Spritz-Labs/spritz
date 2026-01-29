@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import HomeClient from "./page-client";
 
 export const metadata: Metadata = {
@@ -40,7 +41,13 @@ export default function HomePage() {
     return (
         <>
             <SEOFallback />
-            <HomeClient />
+            <Suspense fallback={
+                <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+                    <div className="animate-pulse text-zinc-500">Loading…</div>
+                </main>
+            }>
+                <HomeClient />
+            </Suspense>
         </>
     );
 }
