@@ -12,6 +12,7 @@ import {
 
 interface GlobalEvent {
     id: string;
+    slug?: string | null;
     name: string;
     description: string | null;
     event_type: string;
@@ -207,6 +208,7 @@ export default function AdminEventsPage() {
     // Form state
     const [formData, setFormData] = useState({
         name: "",
+        slug: "",
         description: "",
         event_type: "conference",
         event_date: "",
@@ -825,6 +827,7 @@ export default function AdminEventsPage() {
     const resetForm = () => {
         setFormData({
             name: "",
+            slug: "",
             description: "",
             event_type: "conference",
             event_date: "",
@@ -875,6 +878,7 @@ export default function AdminEventsPage() {
         setEditingEvent(event);
         setFormData({
             name: event.name,
+            slug: event.slug || "",
             description: event.description || "",
             event_type: event.event_type,
             event_date: event.event_date,
@@ -1799,6 +1803,26 @@ export default function AdminEventsPage() {
                                             }
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
                                         />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Custom URL slug
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. example → /event/example"
+                                            value={formData.slug}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    slug: e.target.value.replace(/\s+/g, "-").toLowerCase().replace(/[^a-z0-9-_]/g, ""),
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500"
+                                        />
+                                        <p className="text-xs text-zinc-500 mt-0.5">
+                                            Optional. URL: app.spritz.chat/event/<strong>{formData.slug || "your-slug"}</strong>
+                                        </p>
                                     </div>
                                     <div>
                                         <label className="block text-sm text-zinc-400 mb-1">

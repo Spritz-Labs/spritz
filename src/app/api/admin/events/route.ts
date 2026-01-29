@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const {
             name,
+            slug,
             description,
             event_type,
             event_date,
@@ -177,6 +178,7 @@ export async function POST(request: NextRequest) {
             .from("shout_events")
             .insert({
                 name,
+                slug: (slug && String(slug).trim()) || null,
                 description: description || null,
                 event_type,
                 event_date,

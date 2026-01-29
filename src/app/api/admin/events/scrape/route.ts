@@ -1682,7 +1682,7 @@ ${contentToAnalyze.substring(0, 150000)}`;
                 organizer: event.organizer || null,
                 event_url: eventUrl,
                 rsvp_url: rsvpUrl, // Ensure RSVP URL is captured
-                banner_image_url: event.image_url || null,
+                banner_image_url: null, // Do not use scraped images; they were often wrong
                 tags: event.tags || [],
                 blockchain_focus: event.blockchain_focus || null,
                 source: "firecrawl",

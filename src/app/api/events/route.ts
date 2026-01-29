@@ -246,7 +246,7 @@ export async function GET(request: NextRequest) {
             .from("shout_events")
             .select(
                 `
-                id, name, description, event_type, event_date, start_time, end_time,
+                id, slug, name, description, event_type, event_date, start_time, end_time,
                 timezone, is_multi_day, end_date, venue, address, city, country, is_virtual,
                 virtual_url, organizer, organizer_logo_url, organizer_website, event_url, rsvp_url,
                 ticket_url, banner_image_url, tags, blockchain_focus, is_featured,

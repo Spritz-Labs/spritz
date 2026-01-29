@@ -5,9 +5,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     useChannelMessages,
     CHANNEL_REACTION_EMOJIS,
+    type ChannelMessageReaction,
 } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
-import type { ChannelMessage } from "@/app/api/channels/[id]/messages/route";
+import type {
+    ChannelMessage,
+    ChannelReaction,
+} from "@/app/api/channels/[id]/messages/route";
 import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
 import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
 import { MentionInput, type MentionUser } from "./MentionInput";
@@ -140,7 +144,68 @@ export function ChannelChatModal({
         : standardMessages.messages;
 
     const pinnedMessages = isWakuChannel ? [] : standardMessages.pinnedMessages;
-    const reactions = isWakuChannel ? {} : standardMessages.reactions;
+
+    // Waku channels: fetch and hold reactions by message id (same API, different message source)
+    const [wakuReactions, setWakuReactions] = useState<
+        Record<string, ChannelMessageReaction[]>
+    >({});
+    const processWakuReactions = useCallback(
+        (raw: ChannelReaction[]) => {
+            const map: Record<string, ChannelMessageReaction[]> = {};
+            raw.forEach((r) => {
+                if (!map[r.message_id]) {
+                    map[r.message_id] = CHANNEL_REACTION_EMOJIS.map((emoji) => ({
+                        emoji,
+                        count: 0,
+                        hasReacted: false,
+                        users: [],
+                    }));
+                }
+                const idx = map[r.message_id].findIndex((x) => x.emoji === r.emoji);
+                if (idx >= 0) {
+                    map[r.message_id][idx].count++;
+                    map[r.message_id][idx].users.push(r.user_address);
+                    if (
+                        userAddress &&
+                        r.user_address.toLowerCase() === userAddress.toLowerCase()
+                    ) {
+                        map[r.message_id][idx].hasReacted = true;
+                    }
+                }
+            });
+            return map;
+        },
+        [userAddress],
+    );
+    useEffect(() => {
+        if (!isWakuChannel || !channel.id || wakuMessages.messages.length === 0) {
+            if (isWakuChannel && wakuMessages.messages.length === 0) {
+                setWakuReactions({});
+            }
+            return;
+        }
+        const messageIds = wakuMessages.messages.map((m) => m.id);
+        const idsParam = messageIds.join(",");
+        fetch(
+            `/api/channels/${channel.id}/reactions?messageIds=${encodeURIComponent(idsParam)}`,
+        )
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.reactions) {
+                    setWakuReactions(processWakuReactions(data.reactions));
+                }
+            })
+            .catch((e) => {
+                console.error("[ChannelChatModal] Waku reactions fetch error:", e);
+            });
+    }, [
+        isWakuChannel,
+        channel.id,
+        wakuMessages.messages,
+        processWakuReactions,
+    ]);
+
+    const reactions = isWakuChannel ? wakuReactions : standardMessages.reactions;
     const isLoading = isWakuChannel
         ? wakuMessages.isLoading
         : standardMessages.isLoading;
@@ -175,8 +240,66 @@ export function ChannelChatModal({
         ? async () => false // Not supported yet for Waku
         : standardMessages.deleteMessage;
 
+    const toggleReactionWaku = useCallback(
+        async (messageId: string, emoji: string) => {
+            if (!channel.id || !userAddress) return false;
+            try {
+                const res = await fetch(`/api/channels/${channel.id}/messages`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        messageId,
+                        userAddress,
+                        emoji,
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || "Failed to toggle reaction");
+                }
+                setWakuReactions((prev) => {
+                    const updated = { ...prev };
+                    if (!updated[messageId]) {
+                        updated[messageId] = CHANNEL_REACTION_EMOJIS.map((e) => ({
+                            emoji: e,
+                            count: 0,
+                            hasReacted: false,
+                            users: [],
+                        }));
+                    }
+                    const idx = updated[messageId].findIndex((r) => r.emoji === emoji);
+                    if (idx >= 0) {
+                        const wasReacted = updated[messageId][idx].hasReacted;
+                        updated[messageId][idx] = {
+                            ...updated[messageId][idx],
+                            count: wasReacted
+                                ? Math.max(0, updated[messageId][idx].count - 1)
+                                : updated[messageId][idx].count + 1,
+                            hasReacted: !wasReacted,
+                            users: wasReacted
+                                ? updated[messageId][idx].users.filter(
+                                      (u) =>
+                                          u.toLowerCase() !== userAddress.toLowerCase(),
+                                  )
+                                : [
+                                      ...updated[messageId][idx].users,
+                                      userAddress.toLowerCase(),
+                                  ],
+                        };
+                    }
+                    return updated;
+                });
+                return true;
+            } catch (e) {
+                console.error("[ChannelChatModal] Waku reaction error:", e);
+                return false;
+            }
+        },
+        [channel.id, userAddress],
+    );
+
     const toggleReaction = isWakuChannel
-        ? async () => {} // Not supported yet for Waku
+        ? toggleReactionWaku
         : standardMessages.toggleReaction;
 
     const togglePinMessage = isWakuChannel

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthProvider";
+import { SpritzFooter } from "@/components/SpritzFooter";
 
 const EVENT_TYPE_ICONS: Record<string, string> = {
     conference: "🎤",
@@ -53,6 +54,7 @@ function formatDateRange(
 
 interface EventDetail {
     id: string;
+    slug?: string | null;
     name: string;
     description: string | null;
     event_type: string;
@@ -78,9 +80,9 @@ interface EventDetail {
     current_registrations: number;
 }
 
-export default function EventDetailPage() {
+export default function EventBySlugPage() {
     const params = useParams();
-    const id = params?.id as string;
+    const slug = params?.slug as string;
     const { isAuthenticated } = useAuth();
     const [event, setEvent] = useState<EventDetail | null>(null);
     const [isRegistered, setIsRegistered] = useState(false);
@@ -92,12 +94,17 @@ export default function EventDetailPage() {
     const [interestedCount, setInterestedCount] = useState(0);
     const [goingCount, setGoingCount] = useState(0);
     const [isLoadingInterest, setIsLoadingInterest] = useState(false);
+    const [showUpdateRegistration, setShowUpdateRegistration] = useState(false);
+    const [registrationData, setRegistrationData] = useState<{ email?: string; name?: string }>({});
+    const [updatingRegistration, setUpdatingRegistration] = useState(false);
 
     useEffect(() => {
-        if (!id) return;
+        if (!slug) return;
         async function fetchEvent() {
             try {
-                const res = await fetch(`/api/events/${id}`);
+                const res = await fetch(`/api/events/by-slug/${slug}`, {
+                    credentials: "include",
+                });
                 if (!res.ok) {
                     if (res.status === 404) setError("Event not found");
                     else setError("Failed to load event");
@@ -113,13 +120,16 @@ export default function EventDetailPage() {
             }
         }
         fetchEvent();
-    }, [id]);
+    }, [slug]);
 
     useEffect(() => {
-        if (!id) return;
+        const eventId = event?.id;
+        if (!eventId) return;
         async function fetchInterest() {
             try {
-                const res = await fetch(`/api/events/${id}/interest`);
+                const res = await fetch(`/api/events/${eventId}/interest`, {
+                    credentials: "include",
+                });
                 const data = await res.json();
                 if (data) {
                     setUserInterest(data.user_interest || null);
@@ -132,18 +142,19 @@ export default function EventDetailPage() {
             }
         }
         fetchInterest();
-    }, [id]);
+    }, [event?.id]);
 
     const handleInterest = async (type: "interested" | "going") => {
+        if (!event?.id) return;
         if (!isAuthenticated) {
-            window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}`)}`;
+            window.location.href = `/?login=true&redirect=${encodeURIComponent(`/event/${slug}`)}`;
             return;
         }
         setIsLoadingInterest(true);
         try {
             if (userInterest === type) {
                 const res = await fetch(
-                    `/api/events/${id}/interest?type=${type}`,
+                    `/api/events/${event.id}/interest?type=${type}`,
                     { method: "DELETE", credentials: "include" },
                 );
                 if (res.ok) {
@@ -153,7 +164,7 @@ export default function EventDetailPage() {
                     else setGoingCount((c) => Math.max(0, c - 1));
                 }
             } else {
-                const res = await fetch(`/api/events/${id}/interest`, {
+                const res = await fetch(`/api/events/${event.id}/interest`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
@@ -171,36 +182,21 @@ export default function EventDetailPage() {
                     else setGoingCount((c) => c + 1);
                 }
             }
-            // Refetch so UI matches server
-            const refetch = await fetch(`/api/events/${id}/interest`, {
-                credentials: "include",
-            });
-            const refetchData = await refetch.json();
-            if (refetchData.user_interest !== undefined)
-                setUserInterest(refetchData.user_interest ?? null);
-            if (refetchData.interested_count !== undefined)
-                setInterestedCount(refetchData.interested_count ?? 0);
-            if (refetchData.going_count !== undefined)
-                setGoingCount(refetchData.going_count ?? 0);
-            if (refetchData.is_registered !== undefined)
-                setIsRegistered(!!refetchData.is_registered);
-        } catch (error) {
-            console.error("Failed to update interest:", error);
         } finally {
             setIsLoadingInterest(false);
         }
     };
 
     const handleRegister = async () => {
-        if (!event) return;
+        if (!event?.id) return;
         setRegisterError(null);
         setRegistering(true);
         try {
-            const res = await fetch(`/api/events/${id}`, {
+            const res = await fetch(`/api/events/${event.id}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ registration_data: {} }),
+                body: JSON.stringify({ registration_data: registrationData || {} }),
             });
             const data = await res.json();
             if (res.ok && data.success) {
@@ -209,7 +205,7 @@ export default function EventDetailPage() {
                 setGoingCount((c) => c + 1);
             } else {
                 if (res.status === 401) {
-                    window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}`)}`;
+                    window.location.href = `/?login=true&redirect=${encodeURIComponent(`/event/${slug}`)}`;
                     return;
                 }
                 setRegisterError(data.error || "Registration failed");
@@ -218,6 +214,29 @@ export default function EventDetailPage() {
             setRegisterError("Registration failed");
         } finally {
             setRegistering(false);
+        }
+    };
+
+    const handleUpdateRegistration = async () => {
+        if (!event?.id) return;
+        setUpdatingRegistration(true);
+        try {
+            const res = await fetch(`/api/events/${event.id}/register`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ registration_data: registrationData }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setShowUpdateRegistration(false);
+            } else {
+                alert(data.error || "Failed to update registration");
+            }
+        } catch {
+            alert("Failed to update registration");
+        } finally {
+            setUpdatingRegistration(false);
         }
     };
 
@@ -258,135 +277,95 @@ export default function EventDetailPage() {
     return (
         <div className="min-h-screen bg-[#09090b] text-white">
             <div className="fixed inset-0 pointer-events-none">
-                <div className="absolute top-0 left-0 w-full h-[600px] bg-[radial-gradient(ellipse_at_top,rgba(255,85,0,0.12)_0%,transparent_60%)]" />
+                <div className="absolute top-0 left-0 w-full h-[400px] bg-[radial-gradient(ellipse_at_top,rgba(255,85,0,0.08)_0%,transparent_60%)]" />
             </div>
 
-            <header className="sticky top-0 z-50 bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-800/50">
-                <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
+            <header className="sticky top-0 z-50 bg-[#09090b]/90 backdrop-blur-xl border-b border-zinc-800/50">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-4">
                     <Link
                         href="/events"
-                        className="flex items-center justify-center w-10 h-10 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                        className="flex items-center justify-center w-10 h-10 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
                         title="Back to events"
                     >
-                        <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15 19l-7-7 7-7"
-                            />
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                     </Link>
-                    <span className="text-zinc-400 text-sm truncate">
-                        Event
-                    </span>
+                    <span className="text-zinc-500 text-sm">Event</span>
                 </div>
             </header>
 
-            <main className="relative max-w-3xl mx-auto px-4 sm:px-6 py-8">
-                <article className="bg-zinc-900/60 backdrop-blur-sm rounded-2xl border border-zinc-800 overflow-hidden">
-                    {event.banner_image_url ? (
-                        <div className="aspect-video bg-zinc-800 overflow-hidden">
-                            <img
-                                src={event.banner_image_url}
-                                alt=""
-                                className="w-full h-full object-cover"
-                            />
-                        </div>
-                    ) : (
-                        <div className="h-32 bg-gradient-to-br from-[#FF5500]/20 via-zinc-900 to-zinc-900 flex items-center justify-center border-b border-zinc-800">
-                            <span className="text-5xl opacity-50">
-                                {typeIcon}
-                            </span>
-                        </div>
-                    )}
+            {/* Luma-style: full-width hero */}
+            <div className="w-full aspect-[2.2/1] max-h-[420px] bg-zinc-900 overflow-hidden">
+                {event.banner_image_url ? (
+                    <img
+                        src={event.banner_image_url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                    />
+                ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#FF5500]/15 via-zinc-900 to-zinc-900 flex items-center justify-center">
+                        <span className="text-6xl opacity-40">{typeIcon}</span>
+                    </div>
+                )}
+            </div>
 
-                    <div className="p-6 sm:p-8">
-                        <div className="flex flex-wrap items-center gap-2 mb-4">
+            <main className="relative max-w-6xl mx-auto px-4 sm:px-6 py-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Main content */}
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-[#FF5500]/10 text-[#FF5500] border border-[#FF5500]/20">
                                 {typeIcon} {event.event_type}
                             </span>
                             {event.is_featured && (
-                                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white">
-                                    ⭐ Featured
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#FF5500] text-white">
+                                    Featured
                                 </span>
                             )}
                         </div>
-
-                        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+                        <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
                             {event.name}
                         </h1>
-
-                        <div className="text-sm text-zinc-400 mb-4">
-                            {formatDateRange(
-                                event.event_date,
-                                event.end_date,
-                                event.start_time,
-                                event.end_time,
-                            )}
-                        </div>
-
-                        {locationStr && (
-                            <div className="flex items-start gap-2 text-sm text-zinc-400 mb-4">
-                                <span className="text-[#FF5500] mt-0.5">
-                                    📍
-                                </span>
-                                <span>{locationStr}</span>
-                            </div>
-                        )}
-
                         {event.organizer && (
-                            <div className="flex items-center gap-2 text-sm text-zinc-400 mb-4">
-                                <span className="text-[#FF5500]">🏢</span>
+                            <p className="text-zinc-400 text-sm flex items-center gap-2">
+                                <span className="text-[#FF5500]">Hosted by</span>
                                 <span>{event.organizer}</span>
-                            </div>
+                            </p>
                         )}
-
                         {event.description && (
-                            <div className="prose prose-invert prose-sm max-w-none text-zinc-300 mb-6">
-                                <p className="whitespace-pre-wrap">
+                            <div className="prose prose-invert prose-sm max-w-none text-zinc-300 pt-2">
+                                <p className="whitespace-pre-wrap leading-relaxed">
                                     {event.description}
                                 </p>
                             </div>
                         )}
+                        {event.blockchain_focus && event.blockchain_focus.length > 0 && (
+                            <div className="flex flex-wrap gap-2 pt-2">
+                                {event.blockchain_focus.map((chain) => (
+                                    <span
+                                        key={chain}
+                                        className="px-2.5 py-1 text-xs rounded-lg bg-zinc-800/80 text-zinc-300 border border-zinc-700/50 capitalize"
+                                    >
+                                        {chain}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
 
-                        {event.blockchain_focus &&
-                            event.blockchain_focus.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mb-6">
-                                    {event.blockchain_focus.map((chain) => (
-                                        <span
-                                            key={chain}
-                                            className="px-2 py-1 text-xs rounded-md bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 capitalize"
-                                        >
-                                            {chain}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-
-                        {/* Interested / Going (counts only, toggle one or the other) */}
-                        <div className="flex gap-2 mb-4">
+                        <div className="flex gap-2 pt-2">
                             <button
                                 onClick={() => handleInterest("interested")}
                                 disabled={isLoadingInterest}
                                 className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                                     userInterest === "interested"
-                                        ? "bg-amber-500/30 text-amber-300 border-2 border-amber-400/60 shadow-[0_0_12px_rgba(251,191,36,0.25)]"
-                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+                                        ? "bg-amber-500/30 text-amber-300 border-2 border-amber-400/60"
+                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800"
                                 } disabled:opacity-50`}
                             >
                                 <span>★</span>
                                 <span>Interested</span>
-                                {interestedCount > 0 && (
-                                    <span className="text-xs opacity-75">
-                                        ({interestedCount})
-                                    </span>
-                                )}
+                                {interestedCount > 0 && <span className="text-xs opacity-75">({interestedCount})</span>}
                             </button>
                             <button
                                 onClick={() => handleInterest("going")}
@@ -394,30 +373,78 @@ export default function EventDetailPage() {
                                 className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                                     userInterest === "going" || isRegistered
                                         ? "bg-green-500/20 text-green-400 border border-green-500/40"
-                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800"
                                 } disabled:opacity-50`}
                             >
                                 <span>✓</span>
-                                <span>
-                                    {userInterest === "going" || isRegistered
-                                        ? "Going ✓"
-                                        : "Going"}
-                                </span>
-                                {goingCount > 0 && (
-                                    <span className="text-xs opacity-75">
-                                        ({goingCount})
-                                    </span>
-                                )}
+                                <span>{userInterest === "going" || isRegistered ? "Going ✓" : "Going"}</span>
+                                {goingCount > 0 && <span className="text-xs opacity-75">({goingCount})</span>}
                             </button>
                         </div>
+                    </div>
 
-                        {/* Actions */}
-                        <div className="flex flex-col gap-3 pt-4 border-t border-zinc-800">
+                    {/* Sidebar: date, location, CTA (Luma-style) */}
+                    <aside className="lg:col-span-1">
+                        <div className="sticky top-24 space-y-4">
+                            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Date & time</p>
+                                <p className="text-white font-medium">
+                                    {formatDateRange(
+                                        event.event_date,
+                                        event.end_date,
+                                        event.start_time,
+                                        event.end_time,
+                                    )}
+                                </p>
+                            </div>
+                            {locationStr && (
+                                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+                                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Location</p>
+                                    <p className="text-zinc-300 text-sm">{locationStr}</p>
+                                </div>
+                            )}
+                            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 space-y-3">
+                                {/* Actions */}
                             {event.registration_enabled && !hasExternalRsvp && (
                                 <>
                                     {isRegistered ? (
-                                        <div className="py-3 px-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-medium">
-                                            ✓ You&apos;re registered
+                                        <div className="space-y-2">
+                                            <div className="py-3 px-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-medium">
+                                                ✓ You&apos;re registered
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowUpdateRegistration((v) => !v)}
+                                                className="w-full py-2 px-4 rounded-xl border border-zinc-600 text-zinc-300 text-sm font-medium hover:bg-zinc-800 transition-colors"
+                                            >
+                                                {showUpdateRegistration ? "Cancel" : "Update registration"}
+                                            </button>
+                                            {showUpdateRegistration && (
+                                                <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700 space-y-3">
+                                                    <input
+                                                        type="email"
+                                                        placeholder="Email"
+                                                        value={registrationData.email ?? ""}
+                                                        onChange={(e) => setRegistrationData((p) => ({ ...p, email: e.target.value }))}
+                                                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[#FF5500]/50"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Name"
+                                                        value={registrationData.name ?? ""}
+                                                        onChange={(e) => setRegistrationData((p) => ({ ...p, name: e.target.value }))}
+                                                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[#FF5500]/50"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleUpdateRegistration}
+                                                        disabled={updatingRegistration}
+                                                        className="w-full py-2 px-4 rounded-xl bg-[#FF5500] hover:bg-[#e04d00] text-white text-sm font-medium disabled:opacity-50"
+                                                    >
+                                                        {updatingRegistration ? "Saving…" : "Save"}
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <>
@@ -459,11 +486,12 @@ export default function EventDetailPage() {
                                     Event website
                                 </a>
                             )}
+                            </div>
                         </div>
-                    </div>
-                </article>
+                    </aside>
+                </div>
 
-                <div className="mt-6 text-center">
+                <div className="mt-8 text-center">
                     <Link
                         href="/events"
                         className="text-zinc-400 hover:text-white text-sm transition-colors"
@@ -471,6 +499,8 @@ export default function EventDetailPage() {
                         ← All events
                     </Link>
                 </div>
+
+                <SpritzFooter className="mt-12" />
             </main>
         </div>
     );

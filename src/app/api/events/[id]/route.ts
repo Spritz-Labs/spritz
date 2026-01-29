@@ -29,7 +29,7 @@ export async function GET(
             .from("shout_events")
             .select(
                 `
-                id, name, description, event_type, event_date, start_time, end_time,
+                id, slug, name, description, event_type, event_date, start_time, end_time,
                 timezone, is_multi_day, end_date, venue, address, city, country, is_virtual,
                 virtual_url, organizer, organizer_logo_url, organizer_website, event_url, rsvp_url,
                 ticket_url, banner_image_url, tags, blockchain_focus, is_featured,
@@ -191,6 +191,91 @@ export async function POST(
         console.error("[Event Registration] Error:", error);
         return NextResponse.json(
             { error: "Failed to register" },
+            { status: 500 },
+        );
+    }
+}
+
+// PATCH: Update event (creator only)
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+) {
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
+    }
+
+    const session = await getAuthenticatedUser(request);
+    if (!session) {
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+        );
+    }
+
+    const { id } = await params;
+    const walletAddress = session.userAddress.toLowerCase();
+
+    try {
+        const { data: event, error: fetchError } = await supabase
+            .from("shout_events")
+            .select("id, created_by")
+            .eq("id", id)
+            .single();
+
+        if (fetchError || !event) {
+            return NextResponse.json(
+                { error: "Event not found" },
+                { status: 404 },
+            );
+        }
+
+        if (event.created_by?.toLowerCase() !== walletAddress) {
+            return NextResponse.json(
+                { error: "Only the event creator can update this event" },
+                { status: 403 },
+            );
+        }
+
+        const body = await request.json();
+        const allowed = [
+            "name", "slug", "description", "event_type", "event_date",
+            "start_time", "end_time", "timezone", "is_multi_day", "end_date",
+            "venue", "address", "city", "country", "is_virtual", "virtual_url",
+            "organizer", "organizer_logo_url", "organizer_website",
+            "event_url", "rsvp_url", "ticket_url", "banner_image_url",
+            "tags", "blockchain_focus", "status", "registration_enabled",
+            "max_attendees", "brand_id",
+        ];
+        const updates: Record<string, unknown> = {};
+        for (const key of allowed) {
+            if (key in body) updates[key] = body[key];
+        }
+        updates.updated_at = new Date().toISOString();
+
+        const { data: updated, error } = await supabase
+            .from("shout_events")
+            .update(updates)
+            .eq("id", id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error("[Events PATCH] Error:", error);
+            return NextResponse.json(
+                { error: error.message || "Failed to update event" },
+                { status: 500 },
+            );
+        }
+
+        return NextResponse.json({ success: true, event: updated });
+    } catch (error) {
+        console.error("[Events PATCH] Error:", error);
+        return NextResponse.json(
+            { error: "Failed to update event" },
             { status: 500 },
         );
     }

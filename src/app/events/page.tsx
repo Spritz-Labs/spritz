@@ -12,9 +12,11 @@ import {
 } from "@/lib/calendar";
 import { useAuth } from "@/context/AuthProvider";
 import { useAdmin } from "@/hooks/useAdmin";
+import { SpritzFooter } from "@/components/SpritzFooter";
 
 interface Event {
     id: string;
+    slug?: string | null;
     name: string;
     description: string | null;
     event_type: string;
@@ -204,7 +206,9 @@ function EventCard({
     useEffect(() => {
         async function fetchInterest() {
             try {
-                const res = await fetch(`/api/events/${event.id}/interest`);
+                const res = await fetch(`/api/events/${event.id}/interest`, {
+                    credentials: "include",
+                });
                 const data = await res.json();
                 if (data) {
                     setUserInterest(data.user_interest || null);
@@ -272,6 +276,19 @@ function EventCard({
                     }
                 }
             }
+            // Refetch so UI matches server (session/cookie may affect GET)
+            const refetch = await fetch(`/api/events/${event.id}/interest`, {
+                credentials: "include",
+            });
+            const refetchData = await refetch.json();
+            if (refetchData.user_interest !== undefined)
+                setUserInterest(refetchData.user_interest || null);
+            if (refetchData.interested_count !== undefined)
+                setInterestedCount(refetchData.interested_count ?? 0);
+            if (refetchData.going_count !== undefined)
+                setGoingCount(refetchData.going_count ?? 0);
+            if (refetchData.is_registered !== undefined)
+                setIsRegistered(!!refetchData.is_registered);
         } catch (error) {
             console.error("Failed to update interest:", error);
         } finally {
@@ -446,10 +463,19 @@ function EventCard({
                 </button>
             )}
 
-            {/* Featured Badge */}
+            {/* Registered badge – show on list when user is registered */}
+            {isRegistered && (
+                <div
+                    className={`absolute ${isAdmin && onEdit ? "top-12" : "top-3"} right-3 z-10 bg-green-500/90 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1`}
+                    title="You're registered"
+                >
+                    ✓ Registered
+                </div>
+            )}
+            {/* Featured Badge (below Registered when both) */}
             {event.is_featured && (
                 <div
-                    className={`absolute ${isAdmin && onEdit ? "top-12" : "top-3"} right-3 z-10 bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg`}
+                    className={`absolute ${isRegistered || (isAdmin && onEdit) ? "top-12" : "top-3"} right-3 z-10 bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg`}
                 >
                     ⭐ Featured
                 </div>
@@ -607,7 +633,11 @@ function EventCard({
                                 isRegistrationUrl(event.event_url)
                             ) && (
                                 <Link
-                                    href={`/events/${event.id}`}
+                                    href={
+                                        event.slug
+                                            ? `/event/${event.slug}`
+                                            : `/events/${event.id}`
+                                    }
                                     className="flex-1 text-center py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
                                 >
                                     Register
@@ -656,7 +686,7 @@ function EventCard({
                             disabled={isLoadingInterest}
                             className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
                                 userInterest === "interested"
-                                    ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/40"
+                                    ? "bg-amber-500/30 text-amber-300 border-2 border-amber-400/60 shadow-[0_0_12px_rgba(251,191,36,0.25)]"
                                     : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
                             } disabled:opacity-50`}
                         >
@@ -770,6 +800,7 @@ function EventCard({
 }
 
 export default function EventsPage() {
+    const { isAuthenticated } = useAuth();
     const { isAdmin, isReady, getAuthHeaders } = useAdmin();
     const [events, setEvents] = useState<Event[]>([]);
     const [rawEvents, setRawEvents] = useState<Event[]>([]);
@@ -815,6 +846,25 @@ export default function EventsPage() {
         status: "published",
     });
     const [isSaving, setIsSaving] = useState(false);
+
+    // Submit event modal (user-created events)
+    const [showSubmitEventModal, setShowSubmitEventModal] = useState(false);
+    const [submitFormData, setSubmitFormData] = useState({
+        name: "",
+        description: "",
+        event_type: "conference",
+        event_date: "",
+        start_time: "",
+        venue: "",
+        city: "",
+        country: "",
+        organizer: "",
+        event_url: "",
+        banner_image_url: "",
+    });
+    const [submitBannerFile, setSubmitBannerFile] = useState<File | null>(null);
+    const [submitLoading, setSubmitLoading] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     // Apply tab filter + sort (featured first, then main, then date)
     const applyFilterAndSort = useCallback(
@@ -1017,6 +1067,70 @@ export default function EventsPage() {
         }
     };
 
+    const handleSubmitEvent = async () => {
+        if (!submitFormData.name?.trim() || !submitFormData.event_type || !submitFormData.event_date) {
+            setSubmitError("Name, event type, and date are required.");
+            return;
+        }
+        setSubmitError(null);
+        setSubmitLoading(true);
+        try {
+            let bannerUrl = submitFormData.banner_image_url || "";
+            if (submitBannerFile) {
+                const formData = new FormData();
+                formData.append("file", submitBannerFile);
+                formData.append("context", "event");
+                const uploadRes = await fetch("/api/upload", {
+                    method: "POST",
+                    credentials: "include",
+                    body: formData,
+                });
+                const uploadData = await uploadRes.json();
+                if (!uploadRes.ok || !uploadData.url) {
+                    setSubmitError(uploadData.error || "Image upload failed");
+                    setSubmitLoading(false);
+                    return;
+                }
+                bannerUrl = uploadData.url;
+            }
+            const res = await fetch("/api/events/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    ...submitFormData,
+                    banner_image_url: bannerUrl || null,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setShowSubmitEventModal(false);
+                setSubmitFormData({
+                    name: "",
+                    description: "",
+                    event_type: "conference",
+                    event_date: "",
+                    start_time: "",
+                    venue: "",
+                    city: "",
+                    country: "",
+                    organizer: "",
+                    event_url: "",
+                    banner_image_url: "",
+                });
+                setSubmitBannerFile(null);
+                window.location.href = "/events/manage";
+            } else {
+                setSubmitError(data.error || "Failed to create event");
+            }
+        } catch (e) {
+            console.error("Submit event error:", e);
+            setSubmitError("Failed to create event");
+        } finally {
+            setSubmitLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#09090b] text-white">
             {/* Background gradient */}
@@ -1069,8 +1183,24 @@ export default function EventsPage() {
                             Find conferences, hackathons, meetups, and more.
                         </p>
                     </div>
-                    <div className="text-sm text-zinc-500">
-                        {total} event{total !== 1 ? "s" : ""} available
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        {isAuthenticated && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSubmitEventModal(true)}
+                                    className="px-4 py-2.5 rounded-xl bg-[#FF5500] hover:bg-[#e04d00] text-white text-sm font-medium transition-colors flex items-center gap-2"
+                                >
+                                    + Submit event
+                                </button>
+                                <Link
+                                    href="/events/manage"
+                                    className="px-4 py-2.5 rounded-xl border border-zinc-600 text-zinc-300 hover:bg-zinc-800 text-sm font-medium transition-colors"
+                                >
+                                    Manage my events
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1391,19 +1521,7 @@ export default function EventsPage() {
             </div>
 
             {/* Footer */}
-            <footer className="border-t border-zinc-800 py-8">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
-                    <p className="text-zinc-500 text-sm">
-                        Powered by{" "}
-                        <Link
-                            href="/"
-                            className="text-[#FF5500] hover:underline"
-                        >
-                            Spritz
-                        </Link>
-                    </p>
-                </div>
-            </footer>
+            <SpritzFooter />
 
             {/* Edit Event Modal */}
             {editingEvent && (
@@ -1693,6 +1811,167 @@ export default function EventsPage() {
                                 </button>
                                 <button
                                     onClick={() => setEditingEvent(null)}
+                                    className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Submit Event Modal */}
+            {showSubmitEventModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-zinc-900 rounded-2xl border border-zinc-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                    >
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-white">
+                                    Submit an event
+                                </h2>
+                                <button
+                                    onClick={() => {
+                                        setShowSubmitEventModal(false);
+                                        setSubmitError(null);
+                                    }}
+                                    className="text-zinc-400 hover:text-white transition-colors"
+                                >
+                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            {submitError && (
+                                <p className="mb-4 text-sm text-red-400">{submitError}</p>
+                            )}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Event name *</label>
+                                    <input
+                                        type="text"
+                                        value={submitFormData.name}
+                                        onChange={(e) => setSubmitFormData({ ...submitFormData, name: e.target.value })}
+                                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        placeholder="e.g. ETH Denver 2025"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Description</label>
+                                    <textarea
+                                        value={submitFormData.description}
+                                        onChange={(e) => setSubmitFormData({ ...submitFormData, description: e.target.value })}
+                                        rows={3}
+                                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        placeholder="Brief description of the event"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Event type *</label>
+                                        <select
+                                            value={submitFormData.event_type}
+                                            onChange={(e) => setSubmitFormData({ ...submitFormData, event_type: e.target.value })}
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        >
+                                            {Object.entries(EVENT_TYPE_ICONS).map(([type]) => (
+                                                <option key={type} value={type}>{EVENT_TYPE_ICONS[type]} {type}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Event date *</label>
+                                        <input
+                                            type="date"
+                                            value={submitFormData.event_date}
+                                            onChange={(e) => setSubmitFormData({ ...submitFormData, event_date: e.target.value })}
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Start time</label>
+                                    <input
+                                        type="time"
+                                        value={submitFormData.start_time}
+                                        onChange={(e) => setSubmitFormData({ ...submitFormData, start_time: e.target.value })}
+                                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Venue</label>
+                                    <input
+                                        type="text"
+                                        value={submitFormData.venue}
+                                        onChange={(e) => setSubmitFormData({ ...submitFormData, venue: e.target.value })}
+                                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        placeholder="Venue name"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">City</label>
+                                        <input
+                                            type="text"
+                                            value={submitFormData.city}
+                                            onChange={(e) => setSubmitFormData({ ...submitFormData, city: e.target.value })}
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Country</label>
+                                        <input
+                                            type="text"
+                                            value={submitFormData.country}
+                                            onChange={(e) => setSubmitFormData({ ...submitFormData, country: e.target.value })}
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Organizer</label>
+                                    <input
+                                        type="text"
+                                        value={submitFormData.organizer}
+                                        onChange={(e) => setSubmitFormData({ ...submitFormData, organizer: e.target.value })}
+                                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Event / ticket URL</label>
+                                    <input
+                                        type="url"
+                                        value={submitFormData.event_url}
+                                        onChange={(e) => setSubmitFormData({ ...submitFormData, event_url: e.target.value })}
+                                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
+                                        placeholder="https://..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Event image (optional)</label>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => setSubmitBannerFile(e.target.files?.[0] || null)}
+                                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-zinc-700 file:text-white"
+                                    />
+                                    <p className="mt-1 text-xs text-zinc-500">Max 5MB. JPG, PNG, WebP.</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    onClick={handleSubmitEvent}
+                                    disabled={submitLoading}
+                                    className="flex-1 px-4 py-2.5 bg-[#FF5500] hover:bg-[#e04d00] text-white rounded-xl font-semibold transition-colors disabled:opacity-50"
+                                >
+                                    {submitLoading ? "Creating…" : "Create event (draft)"}
+                                </button>
+                                <button
+                                    onClick={() => { setShowSubmitEventModal(false); setSubmitError(null); }}
                                     className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors"
                                 >
                                     Cancel

@@ -187,6 +187,90 @@ export async function POST(
 }
 
 /**
+ * PATCH /api/events/[id]/register
+ * Update registration data (e.g. email, name) for an existing registration
+ */
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+) {
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
+    }
+
+    const session = await getAuthenticatedUser(request);
+    if (!session) {
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+        );
+    }
+
+    const { id: eventId } = await params;
+    const walletAddress = session.userAddress.toLowerCase();
+
+    try {
+        const body = await request.json();
+        const { registration_data } = body;
+
+        const { data: existing } = await supabase
+            .from("shout_event_user_registrations")
+            .select("id, registration_data")
+            .eq("event_id", eventId)
+            .eq("wallet_address", walletAddress)
+            .single();
+
+        if (!existing) {
+            return NextResponse.json(
+                { error: "No registration found to update" },
+                { status: 404 },
+            );
+        }
+
+        const merged = {
+            ...((existing.registration_data as Record<string, unknown>) || {}),
+            ...(registration_data && typeof registration_data === "object"
+                ? registration_data
+                : {}),
+            updatedAt: new Date().toISOString(),
+        };
+
+        const { data: updated, error } = await supabase
+            .from("shout_event_user_registrations")
+            .update({
+                registration_data: merged,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error("[Event Registration] PATCH error:", error);
+            return NextResponse.json(
+                { error: "Failed to update registration" },
+                { status: 500 },
+            );
+        }
+
+        return NextResponse.json({
+            success: true,
+            registration: updated,
+            message: "Registration updated",
+        });
+    } catch (error) {
+        console.error("[Event Registration] Error:", error);
+        return NextResponse.json(
+            { error: "Failed to update registration" },
+            { status: 500 },
+        );
+    }
+}
+
+/**
  * GET /api/events/[id]/register
  * Check registration status for an event
  */

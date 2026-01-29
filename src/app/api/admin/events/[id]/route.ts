@@ -83,7 +83,7 @@ export async function PATCH(
 
         // Allowed fields to update
         const allowedFields = [
-            "name", "description", "event_type", "event_date", "start_time", "end_time",
+            "name", "slug", "description", "event_type", "event_date", "start_time", "end_time",
             "timezone", "is_multi_day", "end_date", "venue", "address", "city", "country",
             "is_virtual", "virtual_url", "organizer", "organizer_logo_url", "organizer_website",
             "event_url", "rsvp_url", "ticket_url", "banner_image_url", "tags", "blockchain_focus",

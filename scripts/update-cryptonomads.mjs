@@ -445,7 +445,7 @@ function eventToRow(event, sourceUrl, sourceIdPrefix) {
         organizer: event.organizer || null,
         event_url: event.event_url || null,
         rsvp_url: event.rsvp_url || null,
-        banner_image_url: event.image_url || null,
+        banner_image_url: null, // Do not use scraped images
         tags: Array.isArray(event.tags) ? event.tags : [],
         blockchain_focus: Array.isArray(event.blockchain_focus)
             ? event.blockchain_focus
