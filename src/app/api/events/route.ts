@@ -244,11 +244,12 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get("offset") || "0");
 
     try {
+        // Omit slug so this works when migration 068_event_slug has not been applied (avoids 500)
         let query = supabase
             .from("shout_events")
             .select(
                 `
-                id, slug, name, description, event_type, event_date, start_time, end_time,
+                id, name, description, event_type, event_date, start_time, end_time,
                 timezone, is_multi_day, end_date, venue, address, city, country, is_virtual,
                 virtual_url, organizer, organizer_logo_url, organizer_website, event_url, rsvp_url,
                 ticket_url, banner_image_url, tags, blockchain_focus, is_featured,
