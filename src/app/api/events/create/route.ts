@@ -70,43 +70,43 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Base columns only so create works when migrations 068/069 (slug, brand_id) are not applied
+        const insertRow: Record<string, unknown> = {
+            name,
+            description: description || null,
+            event_type,
+            event_date,
+            start_time: start_time || null,
+            end_time: end_time || null,
+            timezone: timezone || "UTC",
+            is_multi_day: is_multi_day || false,
+            end_date: end_date || null,
+            venue: venue || null,
+            address: address || null,
+            city: city || null,
+            country: country || null,
+            is_virtual: is_virtual || false,
+            virtual_url: virtual_url || null,
+            organizer: organizer || null,
+            organizer_logo_url: organizer_logo_url || null,
+            organizer_website: organizer_website || null,
+            event_url: event_url || null,
+            rsvp_url: rsvp_url || null,
+            ticket_url: ticket_url || null,
+            banner_image_url: banner_image_url || null,
+            tags: tags || [],
+            blockchain_focus: blockchain_focus || null,
+            source: "manual",
+            status: "draft",
+            is_featured: false,
+            is_verified: false,
+            registration_enabled: false,
+            max_attendees: null,
+            created_by: walletAddress,
+        };
         const { data: event, error } = await supabase
             .from("shout_events")
-            .insert({
-                name,
-                slug: (slug && String(slug).trim()) || null,
-                description: description || null,
-                event_type,
-                event_date,
-                start_time: start_time || null,
-                end_time: end_time || null,
-                timezone: timezone || "UTC",
-                is_multi_day: is_multi_day || false,
-                end_date: end_date || null,
-                venue: venue || null,
-                address: address || null,
-                city: city || null,
-                country: country || null,
-                is_virtual: is_virtual || false,
-                virtual_url: virtual_url || null,
-                organizer: organizer || null,
-                organizer_logo_url: organizer_logo_url || null,
-                organizer_website: organizer_website || null,
-                event_url: event_url || null,
-                rsvp_url: rsvp_url || null,
-                ticket_url: ticket_url || null,
-                banner_image_url: banner_image_url || null,
-                tags: tags || [],
-                blockchain_focus: blockchain_focus || null,
-                brand_id: brand_id || null,
-                source: "manual",
-                status: "draft",
-                is_featured: false,
-                is_verified: false,
-                registration_enabled: false,
-                max_attendees: null,
-                created_by: walletAddress,
-            })
+            .insert(insertRow)
             .select()
             .single();
 

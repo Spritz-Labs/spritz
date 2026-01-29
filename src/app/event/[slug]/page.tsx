@@ -95,7 +95,10 @@ export default function EventBySlugPage() {
     const [goingCount, setGoingCount] = useState(0);
     const [isLoadingInterest, setIsLoadingInterest] = useState(false);
     const [showUpdateRegistration, setShowUpdateRegistration] = useState(false);
-    const [registrationData, setRegistrationData] = useState<{ email?: string; name?: string }>({});
+    const [registrationData, setRegistrationData] = useState<{
+        email?: string;
+        name?: string;
+    }>({});
     const [updatingRegistration, setUpdatingRegistration] = useState(false);
 
     useEffect(() => {
@@ -196,7 +199,9 @@ export default function EventBySlugPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ registration_data: registrationData || {} }),
+                body: JSON.stringify({
+                    registration_data: registrationData || {},
+                }),
             });
             const data = await res.json();
             if (res.ok && data.success) {
@@ -287,8 +292,18 @@ export default function EventBySlugPage() {
                         className="flex items-center justify-center w-10 h-10 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
                         title="Back to events"
                     >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 19l-7-7 7-7"
+                            />
                         </svg>
                     </Link>
                     <span className="text-zinc-500 text-sm">Event</span>
@@ -329,7 +344,9 @@ export default function EventBySlugPage() {
                         </h1>
                         {event.organizer && (
                             <p className="text-zinc-400 text-sm flex items-center gap-2">
-                                <span className="text-[#FF5500]">Hosted by</span>
+                                <span className="text-[#FF5500]">
+                                    Hosted by
+                                </span>
                                 <span>{event.organizer}</span>
                             </p>
                         )}
@@ -340,18 +357,19 @@ export default function EventBySlugPage() {
                                 </p>
                             </div>
                         )}
-                        {event.blockchain_focus && event.blockchain_focus.length > 0 && (
-                            <div className="flex flex-wrap gap-2 pt-2">
-                                {event.blockchain_focus.map((chain) => (
-                                    <span
-                                        key={chain}
-                                        className="px-2.5 py-1 text-xs rounded-lg bg-zinc-800/80 text-zinc-300 border border-zinc-700/50 capitalize"
-                                    >
-                                        {chain}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
+                        {event.blockchain_focus &&
+                            event.blockchain_focus.length > 0 && (
+                                <div className="flex flex-wrap gap-2 pt-2">
+                                    {event.blockchain_focus.map((chain) => (
+                                        <span
+                                            key={chain}
+                                            className="px-2.5 py-1 text-xs rounded-lg bg-zinc-800/80 text-zinc-300 border border-zinc-700/50 capitalize"
+                                        >
+                                            {chain}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
 
                         <div className="flex gap-2 pt-2">
                             <button
@@ -365,7 +383,11 @@ export default function EventBySlugPage() {
                             >
                                 <span>★</span>
                                 <span>Interested</span>
-                                {interestedCount > 0 && <span className="text-xs opacity-75">({interestedCount})</span>}
+                                {interestedCount > 0 && (
+                                    <span className="text-xs opacity-75">
+                                        ({interestedCount})
+                                    </span>
+                                )}
                             </button>
                             <button
                                 onClick={() => handleInterest("going")}
@@ -377,8 +399,16 @@ export default function EventBySlugPage() {
                                 } disabled:opacity-50`}
                             >
                                 <span>✓</span>
-                                <span>{userInterest === "going" || isRegistered ? "Going ✓" : "Going"}</span>
-                                {goingCount > 0 && <span className="text-xs opacity-75">({goingCount})</span>}
+                                <span>
+                                    {userInterest === "going" || isRegistered
+                                        ? "Going ✓"
+                                        : "Going"}
+                                </span>
+                                {goingCount > 0 && (
+                                    <span className="text-xs opacity-75">
+                                        ({goingCount})
+                                    </span>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -387,7 +417,9 @@ export default function EventBySlugPage() {
                     <aside className="lg:col-span-1">
                         <div className="sticky top-24 space-y-4">
                             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Date & time</p>
+                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                                    Date & time
+                                </p>
                                 <p className="text-white font-medium">
                                     {formatDateRange(
                                         event.event_date,
@@ -399,93 +431,133 @@ export default function EventBySlugPage() {
                             </div>
                             {locationStr && (
                                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-                                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Location</p>
-                                    <p className="text-zinc-300 text-sm">{locationStr}</p>
+                                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                                        Location
+                                    </p>
+                                    <p className="text-zinc-300 text-sm">
+                                        {locationStr}
+                                    </p>
                                 </div>
                             )}
                             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 space-y-3">
                                 {/* Actions */}
-                            {event.registration_enabled && !hasExternalRsvp && (
-                                <>
-                                    {isRegistered ? (
-                                        <div className="space-y-2">
-                                            <div className="py-3 px-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-medium">
-                                                ✓ You&apos;re registered
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowUpdateRegistration((v) => !v)}
-                                                className="w-full py-2 px-4 rounded-xl border border-zinc-600 text-zinc-300 text-sm font-medium hover:bg-zinc-800 transition-colors"
-                                            >
-                                                {showUpdateRegistration ? "Cancel" : "Update registration"}
-                                            </button>
-                                            {showUpdateRegistration && (
-                                                <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700 space-y-3">
-                                                    <input
-                                                        type="email"
-                                                        placeholder="Email"
-                                                        value={registrationData.email ?? ""}
-                                                        onChange={(e) => setRegistrationData((p) => ({ ...p, email: e.target.value }))}
-                                                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[#FF5500]/50"
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Name"
-                                                        value={registrationData.name ?? ""}
-                                                        onChange={(e) => setRegistrationData((p) => ({ ...p, name: e.target.value }))}
-                                                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[#FF5500]/50"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleUpdateRegistration}
-                                                        disabled={updatingRegistration}
-                                                        className="w-full py-2 px-4 rounded-xl bg-[#FF5500] hover:bg-[#e04d00] text-white text-sm font-medium disabled:opacity-50"
-                                                    >
-                                                        {updatingRegistration ? "Saving…" : "Save"}
-                                                    </button>
+                                {!hasExternalRsvp && (
+                                    <>
+                                        {isRegistered ? (
+                                            <div className="space-y-2">
+                                                <div className="py-3 px-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-medium">
+                                                    ✓ You&apos;re registered
                                                 </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <button
-                                                onClick={handleRegister}
-                                                disabled={registering}
-                                                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                {registering
-                                                    ? "Registering…"
-                                                    : "Register"}
-                                            </button>
-                                            {registerError && (
-                                                <p className="text-sm text-red-400">
-                                                    {registerError}
-                                                </p>
-                                            )}
-                                        </>
-                                    )}
-                                </>
-                            )}
-                            {hasExternalRsvp && (
-                                <a
-                                    href={event.rsvp_url!}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="w-full text-center py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
-                                >
-                                    RSVP / Register
-                                </a>
-                            )}
-                            {event.event_url && (
-                                <a
-                                    href={event.event_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="w-full text-center py-2.5 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all"
-                                >
-                                    Event website
-                                </a>
-                            )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowUpdateRegistration(
+                                                            (v) => !v,
+                                                        )
+                                                    }
+                                                    className="w-full py-2 px-4 rounded-xl border border-zinc-600 text-zinc-300 text-sm font-medium hover:bg-zinc-800 transition-colors"
+                                                >
+                                                    {showUpdateRegistration
+                                                        ? "Cancel"
+                                                        : "Update registration"}
+                                                </button>
+                                                {showUpdateRegistration && (
+                                                    <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700 space-y-3">
+                                                        <input
+                                                            type="email"
+                                                            placeholder="Email"
+                                                            value={
+                                                                registrationData.email ??
+                                                                ""
+                                                            }
+                                                            onChange={(e) =>
+                                                                setRegistrationData(
+                                                                    (p) => ({
+                                                                        ...p,
+                                                                        email: e
+                                                                            .target
+                                                                            .value,
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[#FF5500]/50"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Name"
+                                                            value={
+                                                                registrationData.name ??
+                                                                ""
+                                                            }
+                                                            onChange={(e) =>
+                                                                setRegistrationData(
+                                                                    (p) => ({
+                                                                        ...p,
+                                                                        name: e
+                                                                            .target
+                                                                            .value,
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[#FF5500]/50"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={
+                                                                handleUpdateRegistration
+                                                            }
+                                                            disabled={
+                                                                updatingRegistration
+                                                            }
+                                                            className="w-full py-2 px-4 rounded-xl bg-[#FF5500] hover:bg-[#e04d00] text-white text-sm font-medium disabled:opacity-50"
+                                                        >
+                                                            {updatingRegistration
+                                                                ? "Saving…"
+                                                                : "Save"}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    onClick={handleRegister}
+                                                    disabled={registering}
+                                                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {registering
+                                                        ? "Registering…"
+                                                        : "Register"}
+                                                </button>
+                                                {registerError && (
+                                                    <p className="text-sm text-red-400">
+                                                        {registerError}
+                                                    </p>
+                                                )}
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                                {hasExternalRsvp && (
+                                    <a
+                                        href={event.rsvp_url!}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full text-center py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
+                                    >
+                                        RSVP / Register
+                                    </a>
+                                )}
+                                {event.event_url && (
+                                    <a
+                                        href={event.event_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full text-center py-2.5 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                                    >
+                                        Event website
+                                    </a>
+                                )}
                             </div>
                         </div>
                     </aside>

@@ -25,39 +25,55 @@ export async function GET(
     const { id } = await params;
 
     try {
-        const { data: event, error } = await supabase
+        // Fetch by id only; include created_by so creator can load their draft for editing
+        const { data: row, error } = await supabase
             .from("shout_events")
             .select(
                 `
-                id, slug, name, description, event_type, event_date, start_time, end_time,
+                id, name, description, event_type, event_date, start_time, end_time,
                 timezone, is_multi_day, end_date, venue, address, city, country, is_virtual,
                 virtual_url, organizer, organizer_logo_url, organizer_website, event_url, rsvp_url,
                 ticket_url, banner_image_url, tags, blockchain_focus, is_featured,
-                registration_enabled, registration_fields, max_attendees, current_registrations
+                registration_enabled, registration_fields, max_attendees, current_registrations,
+                status, created_by
             `,
             )
             .eq("id", id)
-            .eq("status", "published")
             .single();
 
-        if (error || !event) {
+        if (error || !row) {
             return NextResponse.json(
                 { error: "Event not found" },
                 { status: 404 },
             );
         }
 
-        // Check if user is registered (if authenticated)
-        let isRegistered = false;
         const session = await getAuthenticatedUser(request);
+        const wallet = session?.userAddress?.toLowerCase();
+        const isCreator = wallet && row.created_by?.toLowerCase() === wallet;
+
+        // Non-published: only creator can read (for editing)
+        if (row.status !== "published") {
+            if (!isCreator) {
+                return NextResponse.json(
+                    { error: "Event not found" },
+                    { status: 404 },
+                );
+            }
+            const { created_by: _cb, ...event } = row;
+            return NextResponse.json({ event, isRegistered: false });
+        }
+
+        // Published: public response; don't expose created_by
+        const { created_by: _cb, ...event } = row;
+        let isRegistered = false;
         if (session && event.registration_enabled) {
             const { data: registration } = await supabase
                 .from("shout_event_user_registrations")
                 .select("id, status")
                 .eq("event_id", id)
-                .eq("wallet_address", session.userAddress.toLowerCase())
+                .eq("wallet_address", wallet)
                 .single();
-
             isRegistered = !!registration;
         }
 
@@ -114,13 +130,7 @@ export async function POST(
             );
         }
 
-        if (!event.registration_enabled) {
-            return NextResponse.json(
-                { error: "Registration not enabled for this event" },
-                { status: 400 },
-            );
-        }
-
+        // Allow registration for any published event (registration_enabled is for capacity/features only)
         if (
             event.max_attendees &&
             event.current_registrations >= event.max_attendees
@@ -241,14 +251,35 @@ export async function PATCH(
         }
 
         const body = await request.json();
+        // Omit slug, brand_id so PATCH works when migrations 068/069 have not been applied
         const allowed = [
-            "name", "slug", "description", "event_type", "event_date",
-            "start_time", "end_time", "timezone", "is_multi_day", "end_date",
-            "venue", "address", "city", "country", "is_virtual", "virtual_url",
-            "organizer", "organizer_logo_url", "organizer_website",
-            "event_url", "rsvp_url", "ticket_url", "banner_image_url",
-            "tags", "blockchain_focus", "status", "registration_enabled",
-            "max_attendees", "brand_id",
+            "name",
+            "description",
+            "event_type",
+            "event_date",
+            "start_time",
+            "end_time",
+            "timezone",
+            "is_multi_day",
+            "end_date",
+            "venue",
+            "address",
+            "city",
+            "country",
+            "is_virtual",
+            "virtual_url",
+            "organizer",
+            "organizer_logo_url",
+            "organizer_website",
+            "event_url",
+            "rsvp_url",
+            "ticket_url",
+            "banner_image_url",
+            "tags",
+            "blockchain_focus",
+            "status",
+            "registration_enabled",
+            "max_attendees",
         ];
         const updates: Record<string, unknown> = {};
         for (const key of allowed) {

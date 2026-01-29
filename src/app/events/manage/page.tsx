@@ -33,6 +33,7 @@ export default function ManageEventsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
+    const [publishingId, setPublishingId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -59,8 +60,45 @@ export default function ManageEventsPage() {
         fetchMine();
     }, [isAuthenticated]);
 
+    const handlePublishEvent = async (eventId: string) => {
+        if (
+            !confirm(
+                "Publish this event? It will appear on the public events directory.",
+            )
+        )
+            return;
+        setPublishingId(eventId);
+        try {
+            const res = await fetch(`/api/events/${eventId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ status: "published" }),
+            });
+            if (res.ok) {
+                setEvents((prev) =>
+                    prev.map((e) =>
+                        e.id === eventId ? { ...e, status: "published" } : e,
+                    ),
+                );
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to publish event");
+            }
+        } catch {
+            alert("Failed to publish event");
+        } finally {
+            setPublishingId(null);
+        }
+    };
+
     const handleCancelEvent = async (eventId: string) => {
-        if (!confirm("Cancel this event? It will no longer be visible to the public.")) return;
+        if (
+            !confirm(
+                "Cancel this event? It will no longer be visible to the public.",
+            )
+        )
+            return;
         setCancellingId(eventId);
         try {
             const res = await fetch(`/api/events/${eventId}`, {
@@ -89,14 +127,19 @@ export default function ManageEventsPage() {
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-[#09090b] text-white flex flex-col items-center justify-center px-4">
-                <p className="text-zinc-400 mb-4">Sign in to manage your events.</p>
+                <p className="text-zinc-400 mb-4">
+                    Sign in to manage your events.
+                </p>
                 <Link
                     href="/?login=true&redirect=/events/manage"
                     className="px-4 py-2 bg-[#FF5500] hover:bg-[#e04d00] text-white rounded-xl font-medium"
                 >
                     Sign in
                 </Link>
-                <Link href="/events" className="mt-4 text-zinc-400 hover:text-white text-sm">
+                <Link
+                    href="/events"
+                    className="mt-4 text-zinc-400 hover:text-white text-sm"
+                >
                     ← Back to events
                 </Link>
             </div>
@@ -111,7 +154,10 @@ export default function ManageEventsPage() {
 
             <header className="sticky top-0 z-50 bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-800/50">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-                    <Link href="/events" className="text-zinc-400 hover:text-white text-sm flex items-center gap-2">
+                    <Link
+                        href="/events"
+                        className="text-zinc-400 hover:text-white text-sm flex items-center gap-2"
+                    >
                         ← Back to events
                     </Link>
                     <Link
@@ -124,20 +170,21 @@ export default function ManageEventsPage() {
             </header>
 
             <main className="relative max-w-4xl mx-auto px-4 sm:px-6 py-8">
-                <h1 className="text-2xl font-bold text-white mb-2">My events</h1>
+                <h1 className="text-2xl font-bold text-white mb-2">
+                    My events
+                </h1>
                 <p className="text-zinc-400 text-sm mb-8">
-                    Events you created. Drafts are only visible to you until published by an admin.
+                    Events you created. Publish drafts to make them visible on
+                    the events directory, or edit and cancel from here.
                 </p>
 
-                {loading && (
-                    <p className="text-zinc-400">Loading…</p>
-                )}
-                {error && (
-                    <p className="text-red-400 mb-4">{error}</p>
-                )}
+                {loading && <p className="text-zinc-400">Loading…</p>}
+                {error && <p className="text-red-400 mb-4">{error}</p>}
                 {!loading && !error && events.length === 0 && (
                     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-center">
-                        <p className="text-zinc-400 mb-4">You haven’t created any events yet.</p>
+                        <p className="text-zinc-400 mb-4">
+                            You haven’t created any events yet.
+                        </p>
                         <Link
                             href="/events"
                             className="inline-flex px-4 py-2 rounded-xl bg-[#FF5500] hover:bg-[#e04d00] text-white text-sm font-medium"
@@ -161,34 +208,81 @@ export default function ManageEventsPage() {
                                     />
                                 ) : (
                                     <div className="w-full sm:w-24 h-20 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
-                                        {EVENT_TYPE_ICONS[ev.event_type] || "📅"}
+                                        {EVENT_TYPE_ICONS[ev.event_type] ||
+                                            "📅"}
                                     </div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-white truncate">{ev.name}</p>
+                                    <p className="font-medium text-white truncate">
+                                        {ev.name}
+                                    </p>
                                     <p className="text-sm text-zinc-400">
-                                        {EVENT_TYPE_ICONS[ev.event_type]} {ev.event_type} · {new Date(ev.event_date).toLocaleDateString()} ·{" "}
-                                        <span className={ev.status === "published" ? "text-green-400" : ev.status === "cancelled" ? "text-red-400" : "text-amber-400"}>
+                                        {EVENT_TYPE_ICONS[ev.event_type]}{" "}
+                                        {ev.event_type} ·{" "}
+                                        {new Date(
+                                            ev.event_date,
+                                        ).toLocaleDateString()}{" "}
+                                        ·{" "}
+                                        <span
+                                            className={
+                                                ev.status === "published"
+                                                    ? "text-green-400"
+                                                    : ev.status === "cancelled"
+                                                      ? "text-red-400"
+                                                      : "text-amber-400"
+                                            }
+                                        >
                                             {ev.status}
                                         </span>
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    {ev.status === "published" && ev.slug && (
-                                        <Link
-                                            href={`/event/${ev.slug}`}
-                                            className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-sm"
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Link
+                                        href={`/events/${ev.id}/edit`}
+                                        className="px-3 py-1.5 rounded-lg bg-[#FF5500]/20 border border-[#FF5500]/40 text-[#FF5500] hover:bg-[#FF5500]/30 text-sm font-medium"
+                                    >
+                                        Edit
+                                    </Link>
+                                    {ev.status === "draft" && (
+                                        <button
+                                            onClick={() =>
+                                                handlePublishEvent(ev.id)
+                                            }
+                                            disabled={publishingId === ev.id}
+                                            className="px-3 py-1.5 rounded-lg bg-green-500/20 border border-green-500/40 text-green-400 hover:bg-green-500/30 text-sm disabled:opacity-50"
                                         >
-                                            View
-                                        </Link>
+                                            {publishingId === ev.id
+                                                ? "Publishing…"
+                                                : "Publish"}
+                                        </button>
                                     )}
+                                    {ev.status === "published" &&
+                                        (ev.slug ? (
+                                            <Link
+                                                href={`/event/${ev.slug}`}
+                                                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-sm"
+                                            >
+                                                View
+                                            </Link>
+                                        ) : (
+                                            <Link
+                                                href={`/events/${ev.id}`}
+                                                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-sm"
+                                            >
+                                                View
+                                            </Link>
+                                        ))}
                                     {ev.status !== "cancelled" && (
                                         <button
-                                            onClick={() => handleCancelEvent(ev.id)}
+                                            onClick={() =>
+                                                handleCancelEvent(ev.id)
+                                            }
                                             disabled={cancellingId === ev.id}
                                             className="px-3 py-1.5 rounded-lg border border-red-500/50 text-red-400 hover:bg-red-500/10 text-sm disabled:opacity-50"
                                         >
-                                            {cancellingId === ev.id ? "Cancelling…" : "Cancel event"}
+                                            {cancellingId === ev.id
+                                                ? "Cancelling…"
+                                                : "Cancel"}
                                         </button>
                                     )}
                                 </div>

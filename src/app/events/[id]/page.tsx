@@ -97,7 +97,9 @@ export default function EventDetailPage() {
         if (!id) return;
         async function fetchEvent() {
             try {
-                const res = await fetch(`/api/events/${id}`);
+                const res = await fetch(`/api/events/${id}`, {
+                    credentials: "include",
+                });
                 if (!res.ok) {
                     if (res.status === 404) setError("Event not found");
                     else setError("Failed to load event");
@@ -413,7 +415,7 @@ export default function EventDetailPage() {
 
                         {/* Actions */}
                         <div className="flex flex-col gap-3 pt-4 border-t border-zinc-800">
-                            {event.registration_enabled && !hasExternalRsvp && (
+                            {!hasExternalRsvp && (
                                 <>
                                     {isRegistered ? (
                                         <div className="py-3 px-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-medium">

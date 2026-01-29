@@ -24,18 +24,16 @@ export async function GET(
 
     const { slug } = await params;
     if (!slug) {
-        return NextResponse.json(
-            { error: "Slug required" },
-            { status: 400 },
-        );
+        return NextResponse.json({ error: "Slug required" }, { status: 400 });
     }
 
     try {
+        // Slug column may not exist until migration 068_event_slug is applied
         const { data: event, error } = await supabase
             .from("shout_events")
             .select(
                 `
-                id, slug, name, description, event_type, event_date, start_time, end_time,
+                id, name, description, event_type, event_date, start_time, end_time,
                 timezone, is_multi_day, end_date, venue, address, city, country, is_virtual,
                 virtual_url, organizer, organizer_logo_url, organizer_website, event_url, rsvp_url,
                 ticket_url, banner_image_url, tags, blockchain_focus, is_featured,
@@ -47,6 +45,7 @@ export async function GET(
             .single();
 
         if (error || !event) {
+            // PGRST/schema cache "slug" errors become 404 so app doesn't 500
             return NextResponse.json(
                 { error: "Event not found" },
                 { status: 404 },
@@ -70,8 +69,15 @@ export async function GET(
             event,
             isRegistered,
         });
-    } catch (error) {
-        console.error("[Public Events By Slug] Error:", error);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("slug") || msg.includes("schema cache")) {
+            return NextResponse.json(
+                { error: "Event not found" },
+                { status: 404 },
+            );
+        }
+        console.error("[Public Events By Slug] Error:", err);
         return NextResponse.json(
             { error: "Failed to fetch event" },
             { status: 500 },
