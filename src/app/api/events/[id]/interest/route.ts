@@ -3,24 +3,31 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase =
+    supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // POST: Mark interest or going for an event
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
     if (!session) {
-        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+        );
     }
 
     const { id } = await params;
@@ -29,8 +36,16 @@ export async function POST(
         const body = await request.json();
         const { interest_type } = body; // 'interested' or 'going'
 
-        if (!interest_type || !['interested', 'going'].includes(interest_type)) {
-            return NextResponse.json({ error: "Invalid interest_type. Must be 'interested' or 'going'" }, { status: 400 });
+        if (
+            !interest_type ||
+            !["interested", "going"].includes(interest_type)
+        ) {
+            return NextResponse.json(
+                {
+                    error: "Invalid interest_type. Must be 'interested' or 'going'",
+                },
+                { status: 400 },
+            );
         }
 
         // Verify event exists and is published
@@ -42,7 +57,10 @@ export async function POST(
             .single();
 
         if (eventError || !event) {
-            return NextResponse.json({ error: "Event not found" }, { status: 404 });
+            return NextResponse.json(
+                { error: "Event not found" },
+                { status: 404 },
+            );
         }
 
         const walletAddress = session.userAddress.toLowerCase();
@@ -66,14 +84,14 @@ export async function POST(
         }
 
         // Remove opposite interest type if exists (user can only be interested OR going, not both)
-        if (interest_type === 'going') {
+        if (interest_type === "going") {
             await supabase
                 .from("shout_event_interests")
                 .delete()
                 .eq("event_id", id)
                 .eq("wallet_address", walletAddress)
                 .eq("interest_type", "interested");
-        } else if (interest_type === 'interested') {
+        } else if (interest_type === "interested") {
             await supabase
                 .from("shout_event_interests")
                 .delete()
@@ -95,7 +113,10 @@ export async function POST(
 
         if (insertError) {
             console.error("[Event Interest] Insert error:", insertError);
-            return NextResponse.json({ error: "Failed to mark interest" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to mark interest" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({
@@ -106,22 +127,31 @@ export async function POST(
         });
     } catch (error) {
         console.error("[Event Interest] Error:", error);
-        return NextResponse.json({ error: "Failed to mark interest" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to mark interest" },
+            { status: 500 },
+        );
     }
 }
 
 // DELETE: Remove interest
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
     if (!session) {
-        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+        );
     }
 
     const { id } = await params;
@@ -146,7 +176,10 @@ export async function DELETE(
 
         if (error) {
             console.error("[Event Interest] Delete error:", error);
-            return NextResponse.json({ error: "Failed to remove interest" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to remove interest" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({
@@ -155,17 +188,23 @@ export async function DELETE(
         });
     } catch (error) {
         console.error("[Event Interest] Error:", error);
-        return NextResponse.json({ error: "Failed to remove interest" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to remove interest" },
+            { status: 500 },
+        );
     }
 }
 
 // GET: Get interest counts and user's interest status
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const { id } = await params;
@@ -179,40 +218,50 @@ export async function GET(
 
         if (interestsError) {
             console.error("[Event Interest] Fetch error:", interestsError);
-            return NextResponse.json({ error: "Failed to fetch interests" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to fetch interests" },
+                { status: 500 },
+            );
         }
 
-        const interestedCount = interests?.filter(i => i.interest_type === 'interested').length || 0;
-        const goingCount = interests?.filter(i => i.interest_type === 'going').length || 0;
+        const interestedCount =
+            interests?.filter((i) => i.interest_type === "interested").length ||
+            0;
+        const goingCount =
+            interests?.filter((i) => i.interest_type === "going").length || 0;
 
-        // Get user's interest status (if authenticated)
+        // Get user's interest status and registration (if authenticated)
         let userInterest: string | null = null;
+        let isRegistered = false;
         const session = await getAuthenticatedUser(request);
         if (session) {
             const walletAddress = session.userAddress.toLowerCase();
-            const userInterests = interests?.filter(i => i.wallet_address === walletAddress) || [];
+            const userInterests =
+                interests?.filter((i) => i.wallet_address === walletAddress) ||
+                [];
             if (userInterests.length > 0) {
-                userInterest = userInterests[0].interest_type; // User can only have one type
+                userInterest = userInterests[0].interest_type;
             }
-        }
-
-        // Get list of users (restricted to authenticated users only)
-        let users: Array<{ wallet_address: string; interest_type: string }> = [];
-        if (session) {
-            users = (interests || []).map(i => ({
-                wallet_address: i.wallet_address,
-                interest_type: i.interest_type,
-            }));
+            const { data: registration } = await supabase
+                .from("shout_event_user_registrations")
+                .select("id")
+                .eq("event_id", id)
+                .eq("wallet_address", walletAddress)
+                .single();
+            isRegistered = !!registration;
         }
 
         return NextResponse.json({
             interested_count: interestedCount,
             going_count: goingCount,
             user_interest: userInterest,
-            users: users, // Only returned if authenticated
+            is_registered: isRegistered,
         });
     } catch (error) {
         console.error("[Event Interest] Error:", error);
-        return NextResponse.json({ error: "Failed to fetch interests" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to fetch interests" },
+            { status: 500 },
+        );
     }
 }

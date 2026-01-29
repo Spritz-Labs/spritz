@@ -4469,21 +4469,6 @@ function DashboardContent({
                                 </span>
                             </button>
 
-                            {/* Search Button */}
-                            <button
-                                onClick={() => setIsGlobalSearchOpen(true)}
-                                className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all ${
-                                    isGlobalSearchOpen
-                                        ? "text-blue-400 bg-blue-500/20"
-                                        : "text-zinc-400 hover:text-zinc-200 active:bg-zinc-800/50"
-                                }`}
-                            >
-                                <span className="text-xl">🔍</span>
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Search
-                                </span>
-                            </button>
-
                             {/* Bug Report Tab */}
                             <button
                                 onClick={() => {

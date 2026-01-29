@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useAuth } from "@/context/AuthProvider";
 
 const EVENT_TYPE_ICONS: Record<string, string> = {
     conference: "🎤",
@@ -80,12 +81,17 @@ interface EventDetail {
 export default function EventDetailPage() {
     const params = useParams();
     const id = params?.id as string;
+    const { isAuthenticated } = useAuth();
     const [event, setEvent] = useState<EventDetail | null>(null);
     const [isRegistered, setIsRegistered] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [registering, setRegistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
+    const [userInterest, setUserInterest] = useState<string | null>(null);
+    const [interestedCount, setInterestedCount] = useState(0);
+    const [goingCount, setGoingCount] = useState(0);
+    const [isLoadingInterest, setIsLoadingInterest] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -109,6 +115,67 @@ export default function EventDetailPage() {
         fetchEvent();
     }, [id]);
 
+    useEffect(() => {
+        if (!id) return;
+        async function fetchInterest() {
+            try {
+                const res = await fetch(`/api/events/${id}/interest`);
+                const data = await res.json();
+                if (data) {
+                    setUserInterest(data.user_interest || null);
+                    setIsRegistered((prev) => prev || !!data.is_registered);
+                    setInterestedCount(data.interested_count || 0);
+                    setGoingCount(data.going_count || 0);
+                }
+            } catch {
+                // ignore
+            }
+        }
+        fetchInterest();
+    }, [id]);
+
+    const handleInterest = async (type: "interested" | "going") => {
+        if (!isAuthenticated) {
+            window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}`)}`;
+            return;
+        }
+        setIsLoadingInterest(true);
+        try {
+            if (userInterest === type) {
+                const res = await fetch(
+                    `/api/events/${id}/interest?type=${type}`,
+                    { method: "DELETE", credentials: "include" },
+                );
+                if (res.ok) {
+                    setUserInterest(null);
+                    if (type === "interested")
+                        setInterestedCount((c) => Math.max(0, c - 1));
+                    else setGoingCount((c) => Math.max(0, c - 1));
+                }
+            } else {
+                const res = await fetch(`/api/events/${id}/interest`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ interest_type: type }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const old = userInterest;
+                    setUserInterest(type);
+                    if (old === "interested")
+                        setInterestedCount((c) => Math.max(0, c - 1));
+                    else if (old === "going")
+                        setGoingCount((c) => Math.max(0, c - 1));
+                    if (type === "interested") setInterestedCount((c) => c + 1);
+                    else setGoingCount((c) => c + 1);
+                }
+            }
+        } finally {
+            setIsLoadingInterest(false);
+        }
+    };
+
     const handleRegister = async () => {
         if (!event) return;
         setRegisterError(null);
@@ -123,6 +190,8 @@ export default function EventDetailPage() {
             const data = await res.json();
             if (res.ok && data.success) {
                 setIsRegistered(true);
+                setUserInterest("going");
+                setGoingCount((c) => c + 1);
             } else {
                 if (res.status === 401) {
                     window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}`)}`;
@@ -284,6 +353,48 @@ export default function EventDetailPage() {
                                     ))}
                                 </div>
                             )}
+
+                        {/* Interested / Going (counts only, toggle one or the other) */}
+                        <div className="flex gap-2 mb-4">
+                            <button
+                                onClick={() => handleInterest("interested")}
+                                disabled={isLoadingInterest}
+                                className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                                    userInterest === "interested"
+                                        ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/40"
+                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+                                } disabled:opacity-50`}
+                            >
+                                <span>★</span>
+                                <span>Interested</span>
+                                {interestedCount > 0 && (
+                                    <span className="text-xs opacity-75">
+                                        ({interestedCount})
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => handleInterest("going")}
+                                disabled={isLoadingInterest}
+                                className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                                    userInterest === "going" || isRegistered
+                                        ? "bg-green-500/20 text-green-400 border border-green-500/40"
+                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+                                } disabled:opacity-50`}
+                            >
+                                <span>✓</span>
+                                <span>
+                                    {userInterest === "going" || isRegistered
+                                        ? "Going ✓"
+                                        : "Going"}
+                                </span>
+                                {goingCount > 0 && (
+                                    <span className="text-xs opacity-75">
+                                        ({goingCount})
+                                    </span>
+                                )}
+                            </button>
+                        </div>
 
                         {/* Actions */}
                         <div className="flex flex-col gap-3 pt-4 border-t border-zinc-800">

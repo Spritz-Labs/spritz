@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
-import { useXMTPContext, type XMTPGroup, DECRYPTION_FAILED_MARKER } from "@/context/WakuProvider";
+import {
+    useXMTPContext,
+    type XMTPGroup,
+    DECRYPTION_FAILED_MARKER,
+} from "@/context/WakuProvider";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { PixelArtShare } from "./PixelArtShare";
@@ -18,9 +22,14 @@ import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
-import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
+import {
+    LocationMessage,
+    isLocationMessage,
+    parseLocationMessage,
+    formatLocationMessage,
+    type LocationData,
+} from "./LocationMessage";
 import { TypingIndicator } from "./TypingIndicator";
-import { LongPressReactions } from "./LongPressReactions";
 import { AvatarWithStatus } from "./OnlineStatus";
 import { DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
@@ -32,12 +41,15 @@ import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 // Helper to detect if a message is emoji-only (for larger display)
-const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
+const EMOJI_REGEX =
+    /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
 const isEmojiOnly = (text: string): boolean => {
     const trimmed = text.trim();
     if (!trimmed) return false;
     if (!EMOJI_REGEX.test(trimmed)) return false;
-    const emojiCount = [...trimmed].filter(char => /\p{Emoji}/u.test(char) && !/\d/u.test(char)).length;
+    const emojiCount = [...trimmed].filter(
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+    ).length;
     return emojiCount >= 1 && emojiCount <= 3;
 };
 
@@ -60,7 +72,7 @@ interface GroupChatModalProps {
     onStartCall?: (
         groupId: string,
         groupName: string,
-        isVideo: boolean
+        isVideo: boolean,
     ) => void;
     hasActiveCall?: boolean;
     // For displaying usernames/avatars
@@ -102,6 +114,7 @@ export function GroupChatModal({
     const [messages, setMessages] = useState<Message[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [newMessage, setNewMessage] = useState("");
+    const draftAppliedRef = useRef(false);
     const [isSending, setIsSending] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -122,27 +135,30 @@ export function GroupChatModal({
         group?.id || null,
         "group",
         userAddress,
-        getUserInfo?.(userAddress)?.name || undefined
+        getUserInfo?.(userAddress)?.name || undefined,
     );
 
     const { resolveAddresses } = useENS();
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null
+        null,
     );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
-    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] =
+        useState<MessageActionConfig | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
-    const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
+    const [onlineStatuses, setOnlineStatuses] = useState<
+        Record<string, boolean>
+    >({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    
+
     // Fetch online statuses for group members
     useEffect(() => {
         const memberAddresses = members
-            .flatMap(m => m.addresses)
-            .map(a => a.toLowerCase());
+            .flatMap((m) => m.addresses)
+            .map((a) => a.toLowerCase());
         if (memberAddresses.length === 0) return;
 
-        fetchOnlineStatuses(memberAddresses).then(statuses => {
+        fetchOnlineStatuses(memberAddresses).then((statuses) => {
             setOnlineStatuses(statuses);
         });
     }, [members]);
@@ -178,7 +194,7 @@ export function GroupChatModal({
                 const address = member.addresses[0] || "";
                 const info = getUserInfo?.(address);
                 const ensData = memberENSData.get(address.toLowerCase());
-                
+
                 return {
                     address,
                     name: info?.name || ensData?.ensName || null,
@@ -196,19 +212,56 @@ export function GroupChatModal({
 
     // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
     const messagesContainerRef = useRef<HTMLDivElement>(null);
-    
+
     // Draft messages persistence
-    const { draft, saveDraft, clearDraft } = useDraftMessages("group", group?.id || "", userAddress);
-    
+    const { draft, saveDraft, clearDraft } = useDraftMessages(
+        "group",
+        group?.id || "",
+        userAddress,
+    );
+
+    // Apply draft when modal opens
+    useEffect(() => {
+        if (!isOpen) {
+            draftAppliedRef.current = false;
+            return;
+        }
+        if (draft?.text && !draftAppliedRef.current && group?.id) {
+            setNewMessage(draft.text);
+            draftAppliedRef.current = true;
+        }
+    }, [isOpen, draft?.text, group?.id]);
+
+    // Escape to close modal (or cancel reply first)
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            if (replyingTo) {
+                setReplyingTo(null);
+                return;
+            }
+            if (showManageMenu || showMembers || showAddMember) {
+                setShowManageMenu(false);
+                setShowMembers(false);
+                setShowAddMember(false);
+                return;
+            }
+            onClose();
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose, replyingTo, showManageMenu, showMembers, showAddMember]);
+
     // Scroll to bottom with unread badge
-    const { 
-        newMessageCount, 
-        isAtBottom, 
-        onNewMessage, 
+    const {
+        newMessageCount,
+        isAtBottom,
+        onNewMessage,
         resetUnreadCount,
-        scrollToBottom: scrollToBottomFn 
+        scrollToBottom: scrollToBottomFn,
     } = useScrollToBottom(messagesContainerRef);
-    
+
     useEffect(() => {
         if (messages.length > 0) {
             const container = messagesContainerRef.current;
@@ -235,9 +288,9 @@ export function GroupChatModal({
     // Lock body scroll when modal is open to prevent scroll bleed
     useEffect(() => {
         if (isOpen) {
-            document.body.style.overflow = 'hidden';
+            document.body.style.overflow = "hidden";
             return () => {
-                document.body.style.overflow = '';
+                document.body.style.overflow = "";
             };
         }
     }, [isOpen]);
@@ -291,7 +344,7 @@ export function GroupChatModal({
                     .filter(
                         (msg: any) =>
                             typeof msg.content === "string" &&
-                            msg.content.trim() !== ""
+                            msg.content.trim() !== "",
                     )
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     .map((msg: any) => ({
@@ -335,7 +388,7 @@ export function GroupChatModal({
                             return [...prev, newMsg];
                         });
                         markGroupAsRead(group.id);
-                    }
+                    },
                 );
                 streamRef.current = stream;
             } catch (err) {
@@ -388,7 +441,7 @@ export function GroupChatModal({
         if (addressesToResolve.length === 0) return;
 
         console.log(
-            `[GroupChat] Resolving ENS for ${addressesToResolve.length} members`
+            `[GroupChat] Resolving ENS for ${addressesToResolve.length} members`,
         );
 
         resolveAddresses(addressesToResolve).then((results) => {
@@ -417,7 +470,7 @@ export function GroupChatModal({
             let messageContent = newMessage.trim();
             if (replyingTo) {
                 const replySender = members.find(
-                    (m) => m.inboxId === replyingTo.senderInboxId
+                    (m) => m.inboxId === replyingTo.senderInboxId,
                 )?.addresses[0];
                 const replyPreview =
                     replyingTo.content.slice(0, 50) +
@@ -430,7 +483,7 @@ export function GroupChatModal({
                     senderInfo?.name ||
                     (replySender
                         ? `${replySender.slice(0, 6)}...${replySender.slice(
-                              -4
+                              -4,
                           )}`
                         : "Unknown");
                 messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
@@ -440,7 +493,7 @@ export function GroupChatModal({
             if (result.success) {
                 setNewMessage("");
                 setReplyingTo(null);
-                // Notify parent that message was sent (for updating chat order)
+                clearDraft();
                 onMessageSent?.();
             } else {
                 setError(result.error || "Failed to send");
@@ -459,6 +512,7 @@ export function GroupChatModal({
         members,
         getUserInfo,
         onMessageSent,
+        clearDraft,
     ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -494,7 +548,7 @@ export function GroupChatModal({
                 const pixelArtMessage = `[PIXEL_ART]${uploadResult.ipfsUrl}`;
                 const result = await sendGroupMessage(
                     group.id,
-                    pixelArtMessage
+                    pixelArtMessage,
                 );
 
                 if (!result.success) {
@@ -508,37 +562,41 @@ export function GroupChatModal({
                 setError(
                     `Failed to send pixel art: ${
                         err instanceof Error ? err.message : "Unknown error"
-                    }`
+                    }`,
                 );
             } finally {
                 setIsUploadingPixelArt(false);
             }
         },
-        [group, userAddress, sendGroupMessage, onMessageSent]
+        [group, userAddress, sendGroupMessage, onMessageSent],
     );
 
     // Handle GIF send
-    const handleSendGif = useCallback(async (gifUrl: string) => {
-        if (!gifUrl || isSending || !group) return;
-        
-        setIsSending(true);
-        try {
-            const result = await sendGroupMessage(group.id, `[GIF]${gifUrl}`);
-            if (result.success) {
-                onMessageSent?.();
+    const handleSendGif = useCallback(
+        async (gifUrl: string) => {
+            if (!gifUrl || isSending || !group) return;
+
+            setIsSending(true);
+            try {
+                const result = await sendGroupMessage(
+                    group.id,
+                    `[GIF]${gifUrl}`,
+                );
+                if (result.success) {
+                    onMessageSent?.();
+                }
+            } catch (err) {
+                console.error("Failed to send GIF:", err);
+            } finally {
+                setIsSending(false);
             }
-        } catch (err) {
-            console.error("Failed to send GIF:", err);
-        } finally {
-            setIsSending(false);
-        }
-    }, [group, isSending, sendGroupMessage, onMessageSent]);
+        },
+        [group, isSending, sendGroupMessage, onMessageSent],
+    );
 
     // Check if message is a GIF
-    const isGifMessage = (content: string) =>
-        content.startsWith("[GIF]");
-    const getGifUrl = (content: string) =>
-        content.replace("[GIF]", "");
+    const isGifMessage = (content: string) => content.startsWith("[GIF]");
+    const getGifUrl = (content: string) => content.replace("[GIF]", "");
 
     // Check if message is pixel art
     const isPixelArtMessage = (content: string) =>
@@ -577,8 +635,8 @@ export function GroupChatModal({
         const friendAddressLower = friend.address.toLowerCase();
         return !members.some((m) =>
             m.addresses.some(
-                (addr) => addr.toLowerCase() === friendAddressLower
-            )
+                (addr) => addr.toLowerCase() === friendAddressLower,
+            ),
         );
     });
 
@@ -611,7 +669,7 @@ export function GroupChatModal({
         if (!group) return;
 
         const confirmed = window.confirm(
-            "Are you sure you want to leave this group? You won't be able to see messages anymore."
+            "Are you sure you want to leave this group? You won't be able to see messages anymore.",
         );
         if (!confirmed) return;
 
@@ -632,7 +690,7 @@ export function GroupChatModal({
         } catch (err) {
             console.error("[GroupChat] Leave error:", err);
             setError(
-                err instanceof Error ? err.message : "Failed to leave group"
+                err instanceof Error ? err.message : "Failed to leave group",
             );
         } finally {
             setIsLeavingGroup(false);
@@ -699,25 +757,36 @@ export function GroupChatModal({
                         }`}
                     >
                         <div
-                            className={`bg-zinc-900 h-full flex flex-col overflow-hidden ${
+                            className={`bg-zinc-900 h-full min-h-0 flex flex-col overflow-hidden ${
                                 isFullscreen
                                     ? ""
                                     : "border border-zinc-800 rounded-2xl shadow-2xl"
                             }`}
-                            style={isFullscreen ? {
-                                paddingTop: 'env(safe-area-inset-top)',
-                                paddingLeft: 'env(safe-area-inset-left)',
-                                paddingRight: 'env(safe-area-inset-right)',
-                            } : undefined}
+                            style={
+                                isFullscreen
+                                    ? {
+                                          paddingTop:
+                                              "env(safe-area-inset-top)",
+                                          paddingLeft:
+                                              "env(safe-area-inset-left)",
+                                          paddingRight:
+                                              "env(safe-area-inset-right)",
+                                      }
+                                    : undefined
+                            }
                         >
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
                                 {/* Avatar */}
                                 <div className="shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center ml-1">
                                     {group.emoji ? (
-                                        <span className="text-lg">{group.emoji}</span>
+                                        <span className="text-lg">
+                                            {group.emoji}
+                                        </span>
                                     ) : (
-                                        <span className="text-white font-bold text-sm">{group.name[0].toUpperCase()}</span>
+                                        <span className="text-white font-bold text-sm">
+                                            {group.name[0].toUpperCase()}
+                                        </span>
                                     )}
                                 </div>
 
@@ -727,10 +796,13 @@ export function GroupChatModal({
                                         {group.name}
                                     </h2>
                                     <button
-                                        onClick={() => setShowMembers(!showMembers)}
+                                        onClick={() =>
+                                            setShowMembers(!showMembers)
+                                        }
                                         className="text-zinc-500 text-xs hover:text-zinc-400 transition-colors"
                                     >
-                                        {members.length} members • {showMembers ? "Hide" : "Show"}
+                                        {members.length} members •{" "}
+                                        {showMembers ? "Hide" : "Show"}
                                     </button>
                                 </div>
 
@@ -740,23 +812,55 @@ export function GroupChatModal({
                                     {onStartCall && (
                                         <>
                                             <button
-                                                onClick={() => onStartCall(group.id, group.name, false)}
+                                                onClick={() =>
+                                                    onStartCall(
+                                                        group.id,
+                                                        group.name,
+                                                        false,
+                                                    )
+                                                }
                                                 disabled={hasActiveCall}
                                                 className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
                                                 aria-label="Start voice call"
                                             >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                <svg
+                                                    className="w-5 h-5"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                                    />
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => onStartCall(group.id, group.name, true)}
+                                                onClick={() =>
+                                                    onStartCall(
+                                                        group.id,
+                                                        group.name,
+                                                        true,
+                                                    )
+                                                }
                                                 disabled={hasActiveCall}
                                                 className="hidden sm:flex p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-[#FFBBA7] hover:text-[#FFF0E0] disabled:opacity-50"
                                                 aria-label="Start video call"
                                             >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                <svg
+                                                    className="w-5 h-5"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                    />
                                                 </svg>
                                             </button>
                                         </>
@@ -765,103 +869,111 @@ export function GroupChatModal({
                                     {/* Manage Menu */}
                                     <div className="relative">
                                         <button
-                                            onClick={() => setShowManageMenu(!showManageMenu)}
+                                            onClick={() =>
+                                                setShowManageMenu(
+                                                    !showManageMenu,
+                                                )
+                                            }
                                             className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
                                             aria-label="More options"
                                         >
-                                        <svg
-                                            className="w-5 h-5 text-zinc-400"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                                            />
-                                        </svg>
-                                    </button>
-
-                                    <AnimatePresence>
-                                        {showManageMenu && (
-                                            <motion.div
-                                                initial={{
-                                                    opacity: 0,
-                                                    scale: 0.95,
-                                                    y: -5,
-                                                }}
-                                                animate={{
-                                                    opacity: 1,
-                                                    scale: 1,
-                                                    y: 0,
-                                                }}
-                                                exit={{
-                                                    opacity: 0,
-                                                    scale: 0.95,
-                                                    y: -5,
-                                                }}
-                                                className="absolute right-0 top-full mt-1 w-48 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-10"
+                                            <svg
+                                                className="w-5 h-5 text-zinc-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
                                             >
-                                                <button
-                                                    onClick={() => {
-                                                        setShowManageMenu(
-                                                            false
-                                                        );
-                                                        setShowAddMember(true);
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                                />
+                                            </svg>
+                                        </button>
+
+                                        <AnimatePresence>
+                                            {showManageMenu && (
+                                                <motion.div
+                                                    initial={{
+                                                        opacity: 0,
+                                                        scale: 0.95,
+                                                        y: -5,
                                                     }}
-                                                    disabled={
-                                                        availableFriends.length ===
-                                                        0
-                                                    }
-                                                    className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    <svg
-                                                        className="w-4 h-4"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={2}
-                                                            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-                                                        />
-                                                    </svg>
-                                                    Add Member
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setShowManageMenu(
-                                                            false
-                                                        );
-                                                        handleLeaveGroup();
+                                                    animate={{
+                                                        opacity: 1,
+                                                        scale: 1,
+                                                        y: 0,
                                                     }}
-                                                    disabled={isLeavingGroup}
-                                                    className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2 border-t border-zinc-700"
+                                                    exit={{
+                                                        opacity: 0,
+                                                        scale: 0.95,
+                                                        y: -5,
+                                                    }}
+                                                    className="absolute right-0 top-full mt-1 w-48 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-10"
                                                 >
-                                                    <svg
-                                                        className="w-4 h-4"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        stroke="currentColor"
+                                                    <button
+                                                        onClick={() => {
+                                                            setShowManageMenu(
+                                                                false,
+                                                            );
+                                                            setShowAddMember(
+                                                                true,
+                                                            );
+                                                        }}
+                                                        disabled={
+                                                            availableFriends.length ===
+                                                            0
+                                                        }
+                                                        className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
-                                                        <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={2}
-                                                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                                                        />
-                                                    </svg>
-                                                    {isLeavingGroup
-                                                        ? "Leaving..."
-                                                        : "Leave Group"}
-                                                </button>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                                                            />
+                                                        </svg>
+                                                        Add Member
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setShowManageMenu(
+                                                                false,
+                                                            );
+                                                            handleLeaveGroup();
+                                                        }}
+                                                        disabled={
+                                                            isLeavingGroup
+                                                        }
+                                                        className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2 border-t border-zinc-700"
+                                                    >
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                                                            />
+                                                        </svg>
+                                                        {isLeavingGroup
+                                                            ? "Leaving..."
+                                                            : "Leave Group"}
+                                                    </button>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
 
                                     {/* Close button (X) */}
@@ -870,8 +982,18 @@ export function GroupChatModal({
                                         className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
                                         aria-label="Close chat"
                                     >
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -933,14 +1055,14 @@ export function GroupChatModal({
                                                                 {isMe
                                                                     ? "You"
                                                                     : formatAddress(
-                                                                          memberAddress
+                                                                          memberAddress,
                                                                       )}
                                                             </span>
                                                             {!isMe && (
                                                                 <button
                                                                     onClick={() =>
                                                                         handleRemoveMember(
-                                                                            memberAddress
+                                                                            memberAddress,
                                                                         )
                                                                     }
                                                                     className="text-zinc-500 hover:text-red-400 transition-colors p-1"
@@ -973,7 +1095,12 @@ export function GroupChatModal({
                             </AnimatePresence>
 
                             {/* Messages - flex-col-reverse so newest at bottom */}
-                            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse">
+                            <div
+                                ref={messagesContainerRef}
+                                role="log"
+                                aria-label="Chat messages"
+                                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 flex flex-col-reverse"
+                            >
                                 {isLoading ? (
                                     <div className="flex items-center justify-center h-full">
                                         <div className="w-8 h-8 border-2 border-[#FB8D22] border-t-transparent rounded-full animate-spin" />
@@ -1010,279 +1137,414 @@ export function GroupChatModal({
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                    {messages
-                                    .filter((msg) => msg.content !== DECRYPTION_FAILED_MARKER)
-                                    .map((msg, msgIndex, filteredMsgs) => {
-                                        // Compare addresses case-insensitively
-                                        const isOwn = userAddress
-                                            ? msg.senderInboxId?.toLowerCase() ===
-                                              userAddress.toLowerCase()
-                                            : false;
-                                        const isPixelArt = isPixelArtMessage(
-                                            msg.content
-                                        );
-                                        const isGif = isGifMessage(msg.content);
-                                        const isLocation = isLocationMessage(msg.content);
-                                        const locationData = isLocation ? parseLocationMessage(msg.content) : null;
-                                        const senderAddress = members.find(
-                                            (m) =>
-                                                m.inboxId === msg.senderInboxId
-                                        )?.addresses[0];
+                                        {messages
+                                            .filter(
+                                                (msg) =>
+                                                    msg.content !==
+                                                    DECRYPTION_FAILED_MARKER,
+                                            )
+                                            .map(
+                                                (
+                                                    msg,
+                                                    msgIndex,
+                                                    filteredMsgs,
+                                                ) => {
+                                                    // Compare addresses case-insensitively
+                                                    const isOwn = userAddress
+                                                        ? msg.senderInboxId?.toLowerCase() ===
+                                                          userAddress.toLowerCase()
+                                                        : false;
+                                                    const isPixelArt =
+                                                        isPixelArtMessage(
+                                                            msg.content,
+                                                        );
+                                                    const isGif = isGifMessage(
+                                                        msg.content,
+                                                    );
+                                                    const isLocation =
+                                                        isLocationMessage(
+                                                            msg.content,
+                                                        );
+                                                    const locationData =
+                                                        isLocation
+                                                            ? parseLocationMessage(
+                                                                  msg.content,
+                                                              )
+                                                            : null;
+                                                    const senderAddress =
+                                                        members.find(
+                                                            (m) =>
+                                                                m.inboxId ===
+                                                                msg.senderInboxId,
+                                                        )?.addresses[0];
 
-                                        const senderAvatar = senderAddress
-                                            ? getMemberAvatar(senderAddress)
-                                            : null;
-                                        
-                                        // Check if we need a date divider
-                                        const msgDate = new Date(msg.sentAt);
-                                        const prevMsg = msgIndex > 0 ? filteredMsgs[msgIndex - 1] : null;
-                                        const prevMsgDate = prevMsg ? new Date(prevMsg.sentAt) : null;
-                                        const showDateDivider = !prevMsgDate || 
-                                            msgDate.toDateString() !== prevMsgDate.toDateString();
+                                                    const senderAvatar =
+                                                        senderAddress
+                                                            ? getMemberAvatar(
+                                                                  senderAddress,
+                                                              )
+                                                            : null;
 
-                                        return (
-                                            <div key={msg.id}>
-                                                {showDateDivider && (
-                                                    <DateDivider date={msgDate} className="mb-2" />
-                                                )}
-                                                <motion.div
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                className={`flex gap-2 ${
-                                                    isOwn
-                                                        ? "justify-end"
-                                                        : "justify-start"
-                                                }`}
-                                            >
-                                                {/* Avatar for other users with online status */}
-                                                {!isOwn && (
-                                                    <div className="flex-shrink-0 relative">
-                                                        {senderAvatar ? (
-                                                            <img
-                                                                src={
-                                                                    senderAvatar
-                                                                }
-                                                                alt=""
-                                                                className="w-8 h-8 rounded-full object-cover"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold">
-                                                                {senderAddress
-                                                                    ? formatAddress(
-                                                                          senderAddress
-                                                                      )
-                                                                          .slice(
-                                                                              0,
-                                                                              2
-                                                                          )
-                                                                          .toUpperCase()
-                                                                    : "?"}
-                                                            </div>
-                                                        )}
-                                                        {/* Online status dot */}
-                                                        {senderAddress && onlineStatuses[senderAddress.toLowerCase()] && (
-                                                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
-                                                        )}
-                                                    </div>
-                                                )}
-                                                <div
-                                                    onClick={() => {
-                                                        setSelectedMessage(selectedMessage === msg.id ? null : msg.id);
-                                                        setSelectedMessageConfig(selectedMessage === msg.id ? null : {
-                                                            messageId: msg.id,
-                                                            messageContent: msg.content,
-                                                            isOwn,
-                                                            hasMedia: isPixelArt || isGif,
-                                                            isPixelArt,
-                                                            mediaUrl: isPixelArt ? getPixelArtUrl(msg.content) : isGif ? getGifUrl(msg.content) : undefined,
-                                                        });
-                                                    }}
-                                                >
-                                                <div
-                                                    data-message-bubble
-                                                    className={`max-w-[70%] rounded-2xl px-4 py-2 relative cursor-pointer ${
-                                                        isOwn
-                                                            ? "bg-[#FF5500] text-white rounded-br-md"
-                                                            : "bg-zinc-800 text-white rounded-bl-md"
-                                                    } ${
-                                                        selectedMessage ===
-                                                        msg.id
-                                                            ? "ring-2 ring-[#FB8D22]/50"
-                                                            : ""
-                                                    }`}
-                                                >
-                                                    {!isOwn && (
-                                                        <p className="text-xs text-zinc-400 mb-1">
-                                                            {senderAddress
-                                                                ? formatAddress(
-                                                                      senderAddress
-                                                                  )
-                                                                : "Unknown"}
-                                                        </p>
-                                                    )}
+                                                    // Check if we need a date divider
+                                                    const msgDate = new Date(
+                                                        msg.sentAt,
+                                                    );
+                                                    const prevMsg =
+                                                        msgIndex > 0
+                                                            ? filteredMsgs[
+                                                                  msgIndex - 1
+                                                              ]
+                                                            : null;
+                                                    const prevMsgDate = prevMsg
+                                                        ? new Date(
+                                                              prevMsg.sentAt,
+                                                          )
+                                                        : null;
+                                                    const showDateDivider =
+                                                        !prevMsgDate ||
+                                                        msgDate.toDateString() !==
+                                                            prevMsgDate.toDateString();
 
-                                                    {/* Reply Preview - Check for reply pattern in message content */}
-                                                    {msg.content.startsWith(
-                                                        "↩️ "
-                                                    ) &&
-                                                        msg.content.includes(
-                                                            "\n\n"
-                                                        ) && (
-                                                            <div
-                                                                className={`mb-2 p-2 rounded-lg ${
+                                                    return (
+                                                        <div key={msg.id}>
+                                                            {showDateDivider && (
+                                                                <DateDivider
+                                                                    date={
+                                                                        msgDate
+                                                                    }
+                                                                    className="mb-2"
+                                                                />
+                                                            )}
+                                                            <motion.div
+                                                                initial={{
+                                                                    opacity: 0,
+                                                                    y: 10,
+                                                                }}
+                                                                animate={{
+                                                                    opacity: 1,
+                                                                    y: 0,
+                                                                }}
+                                                                className={`flex gap-2 ${
                                                                     isOwn
-                                                                        ? "bg-white/10 border-l-2 border-white/40"
-                                                                        : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                                        ? "justify-end"
+                                                                        : "justify-start"
                                                                 }`}
                                                             >
-                                                                <div className="flex items-center gap-1.5 text-xs font-medium">
-                                                                    <svg
-                                                                        className="w-3 h-3 flex-shrink-0"
-                                                                        fill="none"
-                                                                        viewBox="0 0 24 24"
-                                                                        stroke="currentColor"
-                                                                    >
-                                                                        <path
-                                                                            strokeLinecap="round"
-                                                                            strokeLinejoin="round"
-                                                                            strokeWidth={
-                                                                                2
-                                                                            }
-                                                                            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-                                                                        />
-                                                                    </svg>
-                                                                    <span
-                                                                        className={
-                                                                            isOwn
-                                                                                ? "text-white/80"
-                                                                                : "text-orange-400"
-                                                                        }
-                                                                    >
-                                                                        {msg.content
-                                                                            .split(
-                                                                                ":"
-                                                                            )[0]
-                                                                            .replace(
-                                                                                "↩️ ",
-                                                                                ""
+                                                                {/* Avatar for other users with online status */}
+                                                                {!isOwn && (
+                                                                    <div className="flex-shrink-0 relative">
+                                                                        {senderAvatar ? (
+                                                                            <img
+                                                                                src={
+                                                                                    senderAvatar
+                                                                                }
+                                                                                alt=""
+                                                                                className="w-8 h-8 rounded-full object-cover"
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold">
+                                                                                {senderAddress
+                                                                                    ? formatAddress(
+                                                                                          senderAddress,
+                                                                                      )
+                                                                                          .slice(
+                                                                                              0,
+                                                                                              2,
+                                                                                          )
+                                                                                          .toUpperCase()
+                                                                                    : "?"}
+                                                                            </div>
+                                                                        )}
+                                                                        {/* Online status dot */}
+                                                                        {senderAddress &&
+                                                                            onlineStatuses[
+                                                                                senderAddress.toLowerCase()
+                                                                            ] && (
+                                                                                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
                                                                             )}
-                                                                    </span>
-                                                                </div>
-                                                                <p
-                                                                    className={`text-xs mt-1 line-clamp-2 ${
-                                                                        isOwn
-                                                                            ? "text-white/70"
-                                                                            : "text-zinc-400"
-                                                                    }`}
-                                                                >
-                                                                    {msg.content
-                                                                        .split(
-                                                                            "\n\n"
-                                                                        )[0]
-                                                                        .split(
-                                                                            ': "'
-                                                                        )[1]
-                                                                        ?.replace(
-                                                                            /\"$/,
-                                                                            ""
-                                                                        ) || ""}
-                                                                </p>
-                                                            </div>
-                                                        )}
-
-                                                    {isPixelArt ? (
-                                                        <div className="relative group">
-                                                            <PixelArtImage
-                                                                src={getPixelArtUrl(
-                                                                    msg.content
+                                                                    </div>
                                                                 )}
-                                                                size="md"
-                                                            />
-                                                            {/* Quick Share Actions */}
-                                                            <div 
-                                                                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            >
-                                                                <PixelArtShare
-                                                                    imageUrl={getPixelArtUrl(msg.content)}
-                                                                    showQuickActions
-                                                                />
-                                                            </div>
+                                                                <div
+                                                                    onClick={() => {
+                                                                        setSelectedMessage(
+                                                                            selectedMessage ===
+                                                                                msg.id
+                                                                                ? null
+                                                                                : msg.id,
+                                                                        );
+                                                                        setSelectedMessageConfig(
+                                                                            selectedMessage ===
+                                                                                msg.id
+                                                                                ? null
+                                                                                : {
+                                                                                      messageId:
+                                                                                          msg.id,
+                                                                                      messageContent:
+                                                                                          msg.content,
+                                                                                      isOwn,
+                                                                                      hasMedia:
+                                                                                          isPixelArt ||
+                                                                                          isGif,
+                                                                                      isPixelArt,
+                                                                                      mediaUrl:
+                                                                                          isPixelArt
+                                                                                              ? getPixelArtUrl(
+                                                                                                    msg.content,
+                                                                                                )
+                                                                                              : isGif
+                                                                                                ? getGifUrl(
+                                                                                                      msg.content,
+                                                                                                  )
+                                                                                                : undefined,
+                                                                                  },
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    <div
+                                                                        data-message-bubble
+                                                                        className={`max-w-[70%] rounded-2xl px-4 py-2 relative cursor-pointer ${
+                                                                            isOwn
+                                                                                ? "bg-[#FF5500] text-white rounded-br-md"
+                                                                                : "bg-zinc-800 text-white rounded-bl-md"
+                                                                        } ${
+                                                                            selectedMessage ===
+                                                                            msg.id
+                                                                                ? "ring-2 ring-[#FB8D22]/50"
+                                                                                : ""
+                                                                        }`}
+                                                                    >
+                                                                        {!isOwn && (
+                                                                            <p className="text-xs text-zinc-400 mb-1">
+                                                                                {senderAddress
+                                                                                    ? formatAddress(
+                                                                                          senderAddress,
+                                                                                      )
+                                                                                    : "Unknown"}
+                                                                            </p>
+                                                                        )}
+
+                                                                        {/* Reply Preview - Check for reply pattern in message content */}
+                                                                        {msg.content.startsWith(
+                                                                            "↩️ ",
+                                                                        ) &&
+                                                                            msg.content.includes(
+                                                                                "\n\n",
+                                                                            ) && (
+                                                                                <div
+                                                                                    className={`mb-2 p-2 rounded-lg ${
+                                                                                        isOwn
+                                                                                            ? "bg-white/10 border-l-2 border-white/40"
+                                                                                            : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                                                    }`}
+                                                                                >
+                                                                                    <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                                                        <svg
+                                                                                            className="w-3 h-3 flex-shrink-0"
+                                                                                            fill="none"
+                                                                                            viewBox="0 0 24 24"
+                                                                                            stroke="currentColor"
+                                                                                        >
+                                                                                            <path
+                                                                                                strokeLinecap="round"
+                                                                                                strokeLinejoin="round"
+                                                                                                strokeWidth={
+                                                                                                    2
+                                                                                                }
+                                                                                                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                                            />
+                                                                                        </svg>
+                                                                                        <span
+                                                                                            className={
+                                                                                                isOwn
+                                                                                                    ? "text-white/80"
+                                                                                                    : "text-orange-400"
+                                                                                            }
+                                                                                        >
+                                                                                            {msg.content
+                                                                                                .split(
+                                                                                                    ":",
+                                                                                                )[0]
+                                                                                                .replace(
+                                                                                                    "↩️ ",
+                                                                                                    "",
+                                                                                                )}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <p
+                                                                                        className={`text-xs mt-1 line-clamp-2 ${
+                                                                                            isOwn
+                                                                                                ? "text-white/70"
+                                                                                                : "text-zinc-400"
+                                                                                        }`}
+                                                                                    >
+                                                                                        {msg.content
+                                                                                            .split(
+                                                                                                "\n\n",
+                                                                                            )[0]
+                                                                                            .split(
+                                                                                                ': "',
+                                                                                            )[1]
+                                                                                            ?.replace(
+                                                                                                /\"$/,
+                                                                                                "",
+                                                                                            ) ||
+                                                                                            ""}
+                                                                                    </p>
+                                                                                </div>
+                                                                            )}
+
+                                                                        {isPixelArt ? (
+                                                                            <div className="relative group">
+                                                                                <PixelArtImage
+                                                                                    src={getPixelArtUrl(
+                                                                                        msg.content,
+                                                                                    )}
+                                                                                    size="md"
+                                                                                />
+                                                                                {/* Quick Share Actions */}
+                                                                                <div
+                                                                                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                    onClick={(
+                                                                                        e,
+                                                                                    ) =>
+                                                                                        e.stopPropagation()
+                                                                                    }
+                                                                                >
+                                                                                    <PixelArtShare
+                                                                                        imageUrl={getPixelArtUrl(
+                                                                                            msg.content,
+                                                                                        )}
+                                                                                        showQuickActions
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : isGif ? (
+                                                                            <div className="relative max-w-[280px] rounded-xl overflow-hidden">
+                                                                                <img
+                                                                                    src={getGifUrl(
+                                                                                        msg.content,
+                                                                                    )}
+                                                                                    alt="GIF"
+                                                                                    className="w-full h-auto rounded-xl"
+                                                                                    loading="lazy"
+                                                                                />
+                                                                            </div>
+                                                                        ) : isLocation &&
+                                                                          locationData ? (
+                                                                            <LocationMessage
+                                                                                location={
+                                                                                    locationData
+                                                                                }
+                                                                                isOwn={
+                                                                                    isOwn
+                                                                                }
+                                                                            />
+                                                                        ) : (
+                                                                            (() => {
+                                                                                const displayContent =
+                                                                                    msg.content.startsWith(
+                                                                                        "↩️ ",
+                                                                                    ) &&
+                                                                                    msg.content.includes(
+                                                                                        "\n\n",
+                                                                                    )
+                                                                                        ? msg.content
+                                                                                              .split(
+                                                                                                  "\n\n",
+                                                                                              )
+                                                                                              .slice(
+                                                                                                  1,
+                                                                                              )
+                                                                                              .join(
+                                                                                                  "\n\n",
+                                                                                              )
+                                                                                        : msg.content;
+
+                                                                                // Use ChatMarkdown for code blocks and other markdown
+                                                                                if (
+                                                                                    hasMarkdown(
+                                                                                        displayContent,
+                                                                                    )
+                                                                                ) {
+                                                                                    return (
+                                                                                        <ChatMarkdown
+                                                                                            content={
+                                                                                                displayContent
+                                                                                            }
+                                                                                            isOwnMessage={
+                                                                                                isOwn
+                                                                                            }
+                                                                                        />
+                                                                                    );
+                                                                                }
+
+                                                                                return (
+                                                                                    <p
+                                                                                        className={`break-words ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : ""}`}
+                                                                                    >
+                                                                                        <MentionText
+                                                                                            text={
+                                                                                                displayContent
+                                                                                            }
+                                                                                            currentUserAddress={
+                                                                                                userAddress
+                                                                                            }
+                                                                                            onMentionClick={
+                                                                                                handleMentionClick
+                                                                                            }
+                                                                                        />
+                                                                                    </p>
+                                                                                );
+                                                                            })()
+                                                                        )}
+
+                                                                        {/* Reactions Display - Mobile Friendly */}
+                                                                        <ReactionDisplay
+                                                                            reactions={
+                                                                                msgReactions[
+                                                                                    msg
+                                                                                        .id
+                                                                                ] ||
+                                                                                []
+                                                                            }
+                                                                            onReaction={(
+                                                                                emoji,
+                                                                            ) => {
+                                                                                toggleMsgReaction(
+                                                                                    msg.id,
+                                                                                    emoji,
+                                                                                );
+                                                                                setSelectedMessage(
+                                                                                    null,
+                                                                                );
+                                                                            }}
+                                                                            isOwnMessage={
+                                                                                isOwn
+                                                                            }
+                                                                        />
+
+                                                                        <p
+                                                                            className={`text-xs mt-1 ${
+                                                                                isOwn
+                                                                                    ? "text-[#FFF0E0]"
+                                                                                    : "text-zinc-500"
+                                                                            }`}
+                                                                        >
+                                                                            {msg.sentAt.toLocaleTimeString(
+                                                                                [],
+                                                                                {
+                                                                                    hour: "2-digit",
+                                                                                    minute: "2-digit",
+                                                                                },
+                                                                            )}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </motion.div>
                                                         </div>
-                                                    ) : isGif ? (
-                                                        <div className="relative max-w-[280px] rounded-xl overflow-hidden">
-                                                            <img
-                                                                src={getGifUrl(msg.content)}
-                                                                alt="GIF"
-                                                                className="w-full h-auto rounded-xl"
-                                                                loading="lazy"
-                                                            />
-                                                        </div>
-                                                    ) : isLocation && locationData ? (
-                                                        <LocationMessage
-                                                            location={locationData}
-                                                            isOwn={isOwn}
-                                                        />
-                                                    ) : (
-                                                        (() => {
-                                                            const displayContent = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n")
-                                                                ? msg.content.split("\n\n").slice(1).join("\n\n")
-                                                                : msg.content;
-                                                            
-                                                            // Use ChatMarkdown for code blocks and other markdown
-                                                            if (hasMarkdown(displayContent)) {
-                                                                return (
-                                                                    <ChatMarkdown 
-                                                                        content={displayContent} 
-                                                                        isOwnMessage={isOwn}
-                                                                    />
-                                                                );
-                                                            }
-                                                            
-                                                            return (
-                                                                <p className={`break-words ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : ""}`}>
-                                                                    <MentionText
-                                                                        text={displayContent}
-                                                                        currentUserAddress={userAddress}
-                                                                        onMentionClick={handleMentionClick}
-                                                                    />
-                                                                </p>
-                                                            );
-                                                        })()
-                                                    )}
-
-                                                    {/* Reactions Display - Mobile Friendly */}
-                                                    <ReactionDisplay
-                                                        reactions={msgReactions[msg.id] || []}
-                                                        onReaction={(emoji) => {
-                                                            toggleMsgReaction(msg.id, emoji);
-                                                            setSelectedMessage(null);
-                                                        }}
-                                                        isOwnMessage={isOwn}
-                                                    />
-
-                                                    <p
-                                                        className={`text-xs mt-1 ${
-                                                            isOwn
-                                                                ? "text-[#FFF0E0]"
-                                                                : "text-zinc-500"
-                                                        }`}
-                                                    >
-                                                        {msg.sentAt.toLocaleTimeString(
-                                                            [],
-                                                            {
-                                                                hour: "2-digit",
-                                                                minute: "2-digit",
-                                                            }
-                                                        )}
-                                                    </p>
-
-                                                    </div>
-                                                </div>
-                                            </motion.div>
-                                            </div>
-                                        );
-                                    })}
+                                                    );
+                                                },
+                                            )}
                                     </div>
                                 )}
                             </div>
@@ -1301,9 +1563,9 @@ export function GroupChatModal({
                                                       members.find(
                                                           (m) =>
                                                               m.inboxId ===
-                                                              replyingTo.senderInboxId
+                                                              replyingTo.senderInboxId,
                                                       )?.addresses[0] ||
-                                                          "Unknown"
+                                                          "Unknown",
                                                   )}
                                         </p>
                                         <p className="text-xs text-zinc-400 truncate">
@@ -1335,16 +1597,27 @@ export function GroupChatModal({
                             <AnimatePresence>
                                 {typingUsers.length > 0 && (
                                     <TypingIndicator
-                                        users={typingUsers.map(u => u.name || `${u.address.slice(0, 6)}...`)}
+                                        users={typingUsers.map(
+                                            (u) =>
+                                                u.name ||
+                                                `${u.address.slice(0, 6)}...`,
+                                        )}
                                         className="border-t border-zinc-800/50"
                                     />
                                 )}
                             </AnimatePresence>
 
                             {/* Input - with safe area padding for bottom */}
-                            <div 
+                            <div
                                 className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
-                                style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
+                                style={
+                                    isFullscreen
+                                        ? {
+                                              paddingBottom:
+                                                  "max(env(safe-area-inset-bottom), 16px)",
+                                          }
+                                        : undefined
+                                }
                             >
                                 <div className="flex items-center gap-2">
                                     {/* Consolidated attachment menu */}
@@ -1353,8 +1626,12 @@ export function GroupChatModal({
                                         onGif={handleSendGif}
                                         onLocation={async (location) => {
                                             if (!group) return;
-                                            const locationMsg = formatLocationMessage(location);
-                                            await sendGroupMessage(group.id, locationMsg);
+                                            const locationMsg =
+                                                formatLocationMessage(location);
+                                            await sendGroupMessage(
+                                                group.id,
+                                                locationMsg,
+                                            );
                                             onMessageSent?.();
                                         }}
                                         showLocation={true}
@@ -1490,7 +1767,7 @@ export function GroupChatModal({
                                                     key={friend.id}
                                                     onClick={() =>
                                                         handleAddMember(
-                                                            friend.address
+                                                            friend.address,
                                                         )
                                                     }
                                                     disabled={isAddingMember}
@@ -1500,14 +1777,14 @@ export function GroupChatModal({
                                                         <img
                                                             src={friend.avatar}
                                                             alt={getDisplayName(
-                                                                friend
+                                                                friend,
                                                             )}
                                                             className="w-8 h-8 rounded-full object-cover"
                                                         />
                                                     ) : (
                                                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center text-white text-xs font-bold">
                                                             {getDisplayName(
-                                                                friend
+                                                                friend,
                                                             )
                                                                 .slice(0, 2)
                                                                 .toUpperCase()}
@@ -1562,6 +1839,11 @@ export function GroupChatModal({
                             </>
                         )}
                     </AnimatePresence>
+                    <ScrollToBottom
+                        containerRef={messagesContainerRef}
+                        unreadCount={newMessageCount}
+                        onScrollToBottom={resetUnreadCount}
+                    />
                     {/* Message Action Bar */}
                     <MessageActionBar
                         isOpen={!!selectedMessage && !!selectedMessageConfig}
@@ -1571,15 +1853,35 @@ export function GroupChatModal({
                         }}
                         config={selectedMessageConfig}
                         callbacks={{
-                            onReaction: selectedMessageConfig ? (emoji) => toggleMsgReaction(selectedMessageConfig.messageId, emoji) : undefined,
-                            onReply: selectedMessageConfig ? () => {
-                                const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
-                                if (msg) setReplyingTo(msg);
-                            } : undefined,
+                            onReaction: selectedMessageConfig
+                                ? (emoji) =>
+                                      toggleMsgReaction(
+                                          selectedMessageConfig.messageId,
+                                          emoji,
+                                      )
+                                : undefined,
+                            onReply: selectedMessageConfig
+                                ? () => {
+                                      const msg = messages.find(
+                                          (m) =>
+                                              m.id ===
+                                              selectedMessageConfig.messageId,
+                                      );
+                                      if (msg) setReplyingTo(msg);
+                                  }
+                                : undefined,
                             onCopy: () => {},
-                            onDelete: selectedMessageConfig?.isOwn ? () => {
-                                setMessages(prev => prev.filter(m => m.id !== selectedMessageConfig?.messageId));
-                            } : undefined,
+                            onDelete: selectedMessageConfig?.isOwn
+                                ? () => {
+                                      setMessages((prev) =>
+                                          prev.filter(
+                                              (m) =>
+                                                  m.id !==
+                                                  selectedMessageConfig?.messageId,
+                                          ),
+                                      );
+                                  }
+                                : undefined,
                         }}
                         reactions={MESSAGE_REACTION_EMOJIS}
                     />

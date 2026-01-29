@@ -3,19 +3,23 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase =
+    supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // GET: Get a single public event
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const { id } = await params;
@@ -23,19 +27,24 @@ export async function GET(
     try {
         const { data: event, error } = await supabase
             .from("shout_events")
-            .select(`
+            .select(
+                `
                 id, name, description, event_type, event_date, start_time, end_time,
                 timezone, is_multi_day, end_date, venue, address, city, country, is_virtual,
                 virtual_url, organizer, organizer_logo_url, organizer_website, event_url, rsvp_url,
                 ticket_url, banner_image_url, tags, blockchain_focus, is_featured,
                 registration_enabled, registration_fields, max_attendees, current_registrations
-            `)
+            `,
+            )
             .eq("id", id)
             .eq("status", "published")
             .single();
 
         if (error || !event) {
-            return NextResponse.json({ error: "Event not found" }, { status: 404 });
+            return NextResponse.json(
+                { error: "Event not found" },
+                { status: 404 },
+            );
         }
 
         // Check if user is registered (if authenticated)
@@ -48,32 +57,41 @@ export async function GET(
                 .eq("event_id", id)
                 .eq("wallet_address", session.userAddress.toLowerCase())
                 .single();
-            
+
             isRegistered = !!registration;
         }
 
-        return NextResponse.json({ 
+        return NextResponse.json({
             event,
             isRegistered,
         });
     } catch (error) {
         console.error("[Public Events] Error:", error);
-        return NextResponse.json({ error: "Failed to fetch event" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to fetch event" },
+            { status: 500 },
+        );
     }
 }
 
 // POST: Register for an event
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
     if (!session) {
-        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+        );
     }
 
     const { id } = await params;
@@ -82,21 +100,35 @@ export async function POST(
         // Get the event
         const { data: event, error: eventError } = await supabase
             .from("shout_events")
-            .select("id, name, registration_enabled, max_attendees, current_registrations, registration_fields")
+            .select(
+                "id, name, registration_enabled, max_attendees, current_registrations, registration_fields",
+            )
             .eq("id", id)
             .eq("status", "published")
             .single();
 
         if (eventError || !event) {
-            return NextResponse.json({ error: "Event not found" }, { status: 404 });
+            return NextResponse.json(
+                { error: "Event not found" },
+                { status: 404 },
+            );
         }
 
         if (!event.registration_enabled) {
-            return NextResponse.json({ error: "Registration not enabled for this event" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Registration not enabled for this event" },
+                { status: 400 },
+            );
         }
 
-        if (event.max_attendees && event.current_registrations >= event.max_attendees) {
-            return NextResponse.json({ error: "Event is full" }, { status: 400 });
+        if (
+            event.max_attendees &&
+            event.current_registrations >= event.max_attendees
+        ) {
+            return NextResponse.json(
+                { error: "Event is full" },
+                { status: 400 },
+            );
         }
 
         // Get registration data from request
@@ -112,7 +144,10 @@ export async function POST(
             .single();
 
         if (existing) {
-            return NextResponse.json({ error: "Already registered for this event" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Already registered for this event" },
+                { status: 400 },
+            );
         }
 
         // Register the user
@@ -129,8 +164,23 @@ export async function POST(
 
         if (regError) {
             console.error("[Event Registration] Error:", regError);
-            return NextResponse.json({ error: "Failed to register" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to register" },
+                { status: 500 },
+            );
         }
+
+        const wallet = session.userAddress.toLowerCase();
+        await supabase
+            .from("shout_event_interests")
+            .delete()
+            .eq("event_id", id)
+            .eq("wallet_address", wallet);
+        await supabase.from("shout_event_interests").insert({
+            event_id: id,
+            wallet_address: wallet,
+            interest_type: "going",
+        });
 
         return NextResponse.json({
             success: true,
@@ -139,22 +189,31 @@ export async function POST(
         });
     } catch (error) {
         console.error("[Event Registration] Error:", error);
-        return NextResponse.json({ error: "Failed to register" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to register" },
+            { status: 500 },
+        );
     }
 }
 
 // DELETE: Cancel registration
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
     if (!session) {
-        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+        );
     }
 
     const { id } = await params;
@@ -168,12 +227,18 @@ export async function DELETE(
 
         if (error) {
             console.error("[Event Registration] Error cancelling:", error);
-            return NextResponse.json({ error: "Failed to cancel registration" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to cancel registration" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error("[Event Registration] Error:", error);
-        return NextResponse.json({ error: "Failed to cancel registration" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to cancel registration" },
+            { status: 500 },
+        );
     }
 }

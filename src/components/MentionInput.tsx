@@ -201,6 +201,7 @@ type MentionInputProps = {
     multiline?: boolean; // Enable Shift+Enter for new lines
     maxRows?: number; // Max height in rows (default 6)
     onSubmit?: () => void; // Called when Enter is pressed (without Shift)
+    "aria-label"?: string;
 };
 
 export function MentionInput({
@@ -215,6 +216,7 @@ export function MentionInput({
     multiline = true,
     maxRows = 6,
     onSubmit,
+    "aria-label": ariaLabel,
 }: MentionInputProps) {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [suggestionFilter, setSuggestionFilter] = useState("");
@@ -567,6 +569,7 @@ export function MentionInput({
                 placeholder={placeholder}
                 disabled={disabled}
                 rows={1}
+                aria-label={ariaLabel}
                 className={`w-full resize-none overflow-y-auto ${className || ""}`}
                 style={{ minHeight: '24px', maxHeight: `${24 * maxRows}px` }}
             />

@@ -193,17 +193,14 @@ function EventCard({
     const isMain = isMainEvent(event);
     const isSide = isSideEvent(event);
     const [userInterest, setUserInterest] = useState<string | null>(null); // 'interested' | 'going' | null
+    const [isRegistered, setIsRegistered] = useState(false);
     const [interestedCount, setInterestedCount] = useState(
         event.interested_count || 0,
     );
     const [goingCount, setGoingCount] = useState(event.going_count || 0);
-    const [showAttendees, setShowAttendees] = useState(false);
-    const [attendees, setAttendees] = useState<
-        Array<{ wallet_address: string; interest_type: string }>
-    >([]);
     const [isLoadingInterest, setIsLoadingInterest] = useState(false);
 
-    // Fetch user's interest status and counts
+    // Fetch user's interest status and counts (no list exposed)
     useEffect(() => {
         async function fetchInterest() {
             try {
@@ -211,11 +208,9 @@ function EventCard({
                 const data = await res.json();
                 if (data) {
                     setUserInterest(data.user_interest || null);
+                    setIsRegistered(!!data.is_registered);
                     setInterestedCount(data.interested_count || 0);
                     setGoingCount(data.going_count || 0);
-                    if (data.users) {
-                        setAttendees(data.users);
-                    }
                 }
             } catch (error) {
                 console.error("Failed to fetch interest:", error);
@@ -275,15 +270,6 @@ function EventCard({
                     } else {
                         setGoingCount((prev) => prev + 1);
                     }
-
-                    // Refresh attendees list
-                    const interestRes = await fetch(
-                        `/api/events/${event.id}/interest`,
-                    );
-                    const interestData = await interestRes.json();
-                    if (interestData.users) {
-                        setAttendees(interestData.users);
-                    }
                 }
             }
         } catch (error) {
@@ -293,13 +279,8 @@ function EventCard({
         }
     };
 
-    const handleShowAttendees = async () => {
-        if (!isAuthenticated) {
-            window.location.href = "/?login=true";
-            return;
-        }
-        setShowAttendees(!showAttendees);
-    };
+    // Show "Going ✓" when user chose Going or registered on Spritz
+    const showAsGoing = userInterest === "going" || isRegistered;
 
     // Get country flag emoji
     const getCountryFlag = (country: string | null): string => {
@@ -691,13 +672,13 @@ function EventCard({
                             onClick={() => handleInterest("going")}
                             disabled={isLoadingInterest}
                             className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
-                                userInterest === "going"
+                                showAsGoing
                                     ? "bg-green-500/20 text-green-400 border border-green-500/40"
                                     : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
                             } disabled:opacity-50`}
                         >
                             <span>✓</span>
-                            <span>Going?</span>
+                            <span>{showAsGoing ? "Going ✓" : "Going"}</span>
                             {goingCount > 0 && (
                                 <span className="text-xs opacity-75">
                                     ({goingCount})
@@ -705,159 +686,6 @@ function EventCard({
                             )}
                         </button>
                     </div>
-
-                    {/* Show Attendees Button (restricted) */}
-                    {(interestedCount > 0 || goingCount > 0) && (
-                        <button
-                            onClick={handleShowAttendees}
-                            className="w-full py-1.5 px-3 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 transition-colors border border-zinc-800 hover:border-zinc-700"
-                        >
-                            {isAuthenticated ? (
-                                showAttendees ? (
-                                    "Hide"
-                                ) : (
-                                    <>
-                                        See who&apos;s{" "}
-                                        {interestedCount > 0 &&
-                                            `${interestedCount} interested`}
-                                        {interestedCount > 0 &&
-                                            goingCount > 0 &&
-                                            " and "}
-                                        {goingCount > 0 &&
-                                            `${goingCount} going`}
-                                    </>
-                                )
-                            ) : (
-                                "Log in to see who's going"
-                            )}
-                        </button>
-                    )}
-
-                    {/* Attendees List (restricted to authenticated users) */}
-                    {showAttendees &&
-                        isAuthenticated &&
-                        attendees.length > 0 && (
-                            <div className="mt-2 p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/50 max-h-40 overflow-y-auto">
-                                <div className="space-y-2">
-                                    {attendees.filter(
-                                        (a) => a.interest_type === "going",
-                                    ).length > 0 && (
-                                        <div>
-                                            <div className="text-xs font-medium text-zinc-400 mb-1">
-                                                Going (
-                                                {
-                                                    attendees.filter(
-                                                        (a) =>
-                                                            a.interest_type ===
-                                                            "going",
-                                                    ).length
-                                                }
-                                                )
-                                            </div>
-                                            <div className="flex flex-wrap gap-1">
-                                                {attendees
-                                                    .filter(
-                                                        (a) =>
-                                                            a.interest_type ===
-                                                            "going",
-                                                    )
-                                                    .slice(0, 10)
-                                                    .map((attendee, idx) => (
-                                                        <span
-                                                            key={idx}
-                                                            className="text-xs px-2 py-0.5 rounded bg-zinc-700/50 text-zinc-300"
-                                                            title={
-                                                                attendee.wallet_address
-                                                            }
-                                                        >
-                                                            {attendee.wallet_address.slice(
-                                                                0,
-                                                                6,
-                                                            )}
-                                                            ...
-                                                            {attendee.wallet_address.slice(
-                                                                -4,
-                                                            )}
-                                                        </span>
-                                                    ))}
-                                                {attendees.filter(
-                                                    (a) =>
-                                                        a.interest_type ===
-                                                        "going",
-                                                ).length > 10 && (
-                                                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
-                                                        +
-                                                        {attendees.filter(
-                                                            (a) =>
-                                                                a.interest_type ===
-                                                                "going",
-                                                        ).length - 10}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {attendees.filter(
-                                        (a) => a.interest_type === "interested",
-                                    ).length > 0 && (
-                                        <div>
-                                            <div className="text-xs font-medium text-zinc-400 mb-1">
-                                                Interested (
-                                                {
-                                                    attendees.filter(
-                                                        (a) =>
-                                                            a.interest_type ===
-                                                            "interested",
-                                                    ).length
-                                                }
-                                                )
-                                            </div>
-                                            <div className="flex flex-wrap gap-1">
-                                                {attendees
-                                                    .filter(
-                                                        (a) =>
-                                                            a.interest_type ===
-                                                            "interested",
-                                                    )
-                                                    .slice(0, 10)
-                                                    .map((attendee, idx) => (
-                                                        <span
-                                                            key={idx}
-                                                            className="text-xs px-2 py-0.5 rounded bg-zinc-700/50 text-zinc-300"
-                                                            title={
-                                                                attendee.wallet_address
-                                                            }
-                                                        >
-                                                            {attendee.wallet_address.slice(
-                                                                0,
-                                                                6,
-                                                            )}
-                                                            ...
-                                                            {attendee.wallet_address.slice(
-                                                                -4,
-                                                            )}
-                                                        </span>
-                                                    ))}
-                                                {attendees.filter(
-                                                    (a) =>
-                                                        a.interest_type ===
-                                                        "interested",
-                                                ).length > 10 && (
-                                                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
-                                                        +
-                                                        {attendees.filter(
-                                                            (a) =>
-                                                                a.interest_type ===
-                                                                "interested",
-                                                        ).length - 10}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
 
                     {/* Add to Calendar Button */}
                     <div className="relative">
@@ -1132,12 +960,7 @@ export default function EventsPage() {
         );
         observer.observe(el);
         return () => observer.disconnect();
-    }, [
-        rawEvents.length,
-        totalFromApi,
-        isLoadingMore,
-        loadMoreEvents,
-    ]);
+    }, [rawEvents.length, totalFromApi, isLoadingMore, loadMoreEvents]);
 
     const handleEditEvent = (event: Event) => {
         setEditingEvent(event);
@@ -1528,7 +1351,9 @@ export default function EventsPage() {
                                         key={event.id}
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: Math.min(index * 0.05, 0.5) }}
+                                        transition={{
+                                            delay: Math.min(index * 0.05, 0.5),
+                                        }}
                                         className="h-full"
                                     >
                                         <EventCard
@@ -1542,20 +1367,24 @@ export default function EventsPage() {
                                     </motion.div>
                                 ))}
                             </div>
-                            {rawEvents.length < totalFromApi && totalFromApi > 0 && (
-                                <div className="flex justify-center py-6" ref={loadMoreRef}>
-                                    <button
-                                        type="button"
-                                        onClick={loadMoreEvents}
-                                        disabled={isLoadingMore}
-                                        className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+                            {rawEvents.length < totalFromApi &&
+                                totalFromApi > 0 && (
+                                    <div
+                                        className="flex justify-center py-6"
+                                        ref={loadMoreRef}
                                     >
-                                        {isLoadingMore
-                                            ? "Loading…"
-                                            : `Load more (${rawEvents.length} of ${totalFromApi} loaded)`}
-                                    </button>
-                                </div>
-                            )}
+                                        <button
+                                            type="button"
+                                            onClick={loadMoreEvents}
+                                            disabled={isLoadingMore}
+                                            className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+                                        >
+                                            {isLoadingMore
+                                                ? "Loading…"
+                                                : `Load more (${rawEvents.length} of ${totalFromApi} loaded)`}
+                                        </button>
+                                    </div>
+                                )}
                         </div>
                     </AnimatePresence>
                 )}

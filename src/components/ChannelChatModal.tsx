@@ -27,7 +27,6 @@ import {
     type WakuChannelMessage,
 } from "@/hooks/useWakuChannel";
 import { TypingIndicator } from "./TypingIndicator";
-import { LongPressReactions } from "./LongPressReactions";
 import { AvatarWithStatus } from "./OnlineStatus";
 import { UnreadDivider, DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
@@ -200,6 +199,7 @@ export function ChannelChatModal({
     );
     const [inputValue, setInputValue] = useState("");
     const [isSending, setIsSending] = useState(false);
+    const draftAppliedRef = useRef(false);
     const [isUploading, setIsUploading] = useState(false);
 
     // Typing indicator
@@ -369,6 +369,44 @@ export function ChannelChatModal({
         channel.id,
         userAddress,
     );
+
+    // Apply draft when modal opens
+    useEffect(() => {
+        if (!isOpen) {
+            draftAppliedRef.current = false;
+            return;
+        }
+        if (draft?.text && !draftAppliedRef.current) {
+            setInputValue(draft.text);
+            draftAppliedRef.current = true;
+        }
+    }, [isOpen, draft?.text]);
+
+    // Escape to close modal (or cancel reply/edit first)
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            if (replyingTo) {
+                setReplyingTo(null);
+                return;
+            }
+            if (editingMessage) {
+                setEditingMessage(null);
+                setEditContent("");
+                return;
+            }
+            if (showSettings || showPinnedMessages || showMembersList) {
+                setShowSettings(false);
+                setShowPinnedMessages(false);
+                setShowMembersList(false);
+                return;
+            }
+            onClose();
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose, replyingTo, editingMessage, showSettings, showPinnedMessages, showMembersList]);
 
     // Scroll to bottom with unread badge
     const {
@@ -711,10 +749,13 @@ export function ChannelChatModal({
         const result = await sendMessage(content, "text", replyingTo?.id);
         setIsSending(false);
 
-        // For Waku channels, keep failed-send content so user can retry (e.g. after joining)
-        if (isWakuChannel && !result) setInputValue(content);
+        // On any send failure, keep content so user can retry
+        if (!result) setInputValue(content);
 
-        if (result) onMessageSent?.();
+        if (result) {
+            clearDraft();
+            onMessageSent?.();
+        }
     };
 
     // Handle sending GIF
@@ -1058,7 +1099,7 @@ export function ChannelChatModal({
                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                    className={`bg-zinc-900 flex flex-col overflow-hidden ${
+                    className={`bg-zinc-900 flex flex-col min-h-0 overflow-hidden ${
                         isFullscreen
                             ? "w-full h-full max-w-none max-h-none"
                             : "w-full max-w-2xl max-h-[70vh] h-[600px] border border-zinc-800 rounded-2xl"
@@ -1555,16 +1596,16 @@ export function ChannelChatModal({
                         </div>
                     )}
 
-                    {/* Messages - flex-col-reverse so newest at bottom, no scroll needed on open */}
+                    {/* Messages - flex-1 min-h-0 so area shrinks and scrolls on mobile */}
                     <div
                         ref={messagesContainerRef}
                         onScroll={handleScroll}
-                        className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse"
+                        role="log"
+                        aria-label="Chat messages"
+                        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 flex flex-col-reverse"
                     >
                         {isLoading && messages.length === 0 ? (
-                            <div className="flex items-center justify-center h-full">
-                                <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
-                            </div>
+                            <ChatSkeleton messageCount={6} className="p-4" />
                         ) : messages.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-center">
                                 <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center text-3xl mb-4">
@@ -1830,6 +1871,7 @@ export function ChannelChatModal({
                                                                         msg.content
                                                                     }
                                                                     alt="Shared image"
+                                                                    loading="lazy"
                                                                     className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
                                                                     onClick={() =>
                                                                         setPreviewImage(
@@ -1839,10 +1881,12 @@ export function ChannelChatModal({
                                                                     onError={(
                                                                         e,
                                                                     ) => {
-                                                                        (
-                                                                            e.target as HTMLImageElement
-                                                                        ).style.display =
-                                                                            "none";
+                                                                        const el = e.target as HTMLImageElement;
+                                                                        el.style.display = "none";
+                                                                        const fallback = document.createElement("div");
+                                                                        fallback.className = "py-8 px-4 text-center text-zinc-500 text-sm";
+                                                                        fallback.textContent = "Image failed to load";
+                                                                        el.parentNode?.appendChild(fallback);
                                                                     }}
                                                                 />
                                                                 {/* Download Button */}
@@ -2375,7 +2419,9 @@ export function ChannelChatModal({
                                 inputRef={inputRef}
                                 value={inputValue}
                                 onChange={(val) => {
+                                    if (val.length > 10000) return;
                                     setInputValue(val);
+                                    saveDraft(val, replyingTo?.id, replyingTo ? (replyingTo.content?.slice(0, 80) ?? "") : undefined);
                                     if (
                                         isWakuChannel &&
                                         wakuMessages.clearError
@@ -2392,6 +2438,7 @@ export function ChannelChatModal({
                                 onClick={handleSend}
                                 disabled={!inputValue.trim() || isSending}
                                 className="p-3 bg-[#FF5500] text-white rounded-xl hover:bg-[#FF6600] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                aria-label="Send message"
                             >
                                 {isSending ? (
                                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -2412,6 +2459,11 @@ export function ChannelChatModal({
                                 )}
                             </button>
                         </div>
+                        {inputValue.length > 500 && (
+                            <p className="mt-1.5 text-right text-xs text-zinc-500">
+                                {inputValue.length.toLocaleString()} / 10,000
+                            </p>
+                        )}
                     </div>
                 </motion.div>
 
@@ -2679,6 +2731,13 @@ export function ChannelChatModal({
                             icon: channel.emoji,
                         },
                     ]}
+                />
+
+                {/* Scroll to bottom FAB */}
+                <ScrollToBottom
+                    containerRef={messagesContainerRef}
+                    unreadCount={newMessageCount}
+                    onScrollToBottom={resetUnreadCount}
                 />
 
                 {/* Message Action Bar */}

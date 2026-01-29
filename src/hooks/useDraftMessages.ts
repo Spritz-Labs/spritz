@@ -58,7 +58,7 @@ function saveDrafts(drafts: DraftsStore) {
 
 // Generate a unique key for a conversation
 function getConversationKey(
-    type: "dm" | "group" | "channel" | "alpha" | "room",
+    type: "dm" | "group" | "channel" | "alpha" | "room" | "agent",
     id: string,
     userAddress?: string
 ): string {
@@ -68,7 +68,7 @@ function getConversationKey(
 }
 
 export function useDraftMessages(
-    conversationType: "dm" | "group" | "channel" | "alpha" | "room",
+    conversationType: "dm" | "group" | "channel" | "alpha" | "room" | "agent",
     conversationId: string,
     userAddress?: string
 ) {
