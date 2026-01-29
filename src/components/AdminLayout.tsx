@@ -17,9 +17,24 @@ interface AdminLayoutProps {
 const NAV_ITEMS = [
     { href: "/admin", label: "Invites", icon: "🎟️", mobileLabel: "Invites" },
     { href: "/admin/users", label: "Users", icon: "👥", mobileLabel: "Users" },
-    { href: "/admin/events", label: "Events", icon: "📅", mobileLabel: "Events" },
-    { href: "/admin/analytics", label: "Analytics", icon: "📊", mobileLabel: "Stats" },
-    { href: "/admin/bug-reports", label: "Bug Reports", icon: "🐛", mobileLabel: "Bugs" },
+    {
+        href: "/admin/events",
+        label: "Events",
+        icon: "📅",
+        mobileLabel: "Events",
+    },
+    {
+        href: "/admin/analytics",
+        label: "Analytics",
+        icon: "📊",
+        mobileLabel: "Stats",
+    },
+    {
+        href: "/admin/bug-reports",
+        label: "Bug Reports",
+        icon: "🐛",
+        mobileLabel: "Bugs",
+    },
 ];
 
 export function AdminLayout({
@@ -47,14 +62,28 @@ export function AdminLayout({
                                 href="/"
                                 className="flex items-center gap-1 text-[#FF5500] hover:text-[#FF7733] transition-colors shrink-0"
                             >
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                <svg
+                                    className="w-4 h-4 sm:w-5 sm:h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                                    />
                                 </svg>
-                                <span className="hidden lg:inline text-sm font-medium">Home</span>
+                                <span className="hidden lg:inline text-sm font-medium">
+                                    Home
+                                </span>
                             </Link>
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                    <h1 className="text-base sm:text-lg font-bold truncate">{title}</h1>
+                                    <h1 className="text-base sm:text-lg font-bold truncate">
+                                        {title}
+                                    </h1>
                                     {isSuperAdmin && (
                                         <span className="px-1.5 py-0.5 bg-[#FF5500]/20 text-[#FF5500] text-[10px] sm:text-xs rounded-full whitespace-nowrap">
                                             Super
@@ -62,7 +91,9 @@ export function AdminLayout({
                                     )}
                                 </div>
                                 {subtitle && (
-                                    <p className="text-[10px] sm:text-xs text-zinc-500 truncate">{subtitle}</p>
+                                    <p className="text-[10px] sm:text-xs text-zinc-500 truncate">
+                                        {subtitle}
+                                    </p>
                                 )}
                             </div>
                         </div>
@@ -82,14 +113,20 @@ export function AdminLayout({
                                         }`}
                                     >
                                         <span className="flex items-center gap-1.5">
-                                            <span className="text-sm">{item.icon}</span>
+                                            <span className="text-sm">
+                                                {item.icon}
+                                            </span>
                                             <span>{item.label}</span>
                                         </span>
                                         {isActive && (
                                             <motion.div
                                                 layoutId="admin-nav-indicator"
                                                 className="absolute inset-0 bg-zinc-800 rounded-lg -z-10"
-                                                transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                                                transition={{
+                                                    type: "spring",
+                                                    bounce: 0.2,
+                                                    duration: 0.4,
+                                                }}
                                             />
                                         )}
                                     </Link>
@@ -117,11 +154,9 @@ export function AdminLayout({
                 </div>
             </header>
 
-            {/* Main Content - fills remaining space */}
-            <main className="flex-1 overflow-hidden">
-                <div className="h-full w-full">
-                    {children}
-                </div>
+            {/* Main Content - fills remaining space and scrolls when content overflows */}
+            <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+                <div className="w-full">{children}</div>
             </main>
 
             {/* Mobile Bottom Navigation */}
@@ -139,8 +174,12 @@ export function AdminLayout({
                                         : "text-zinc-400 active:bg-zinc-800"
                                 }`}
                             >
-                                <span className="text-lg mb-0.5">{item.icon}</span>
-                                <span className="text-[9px] font-medium">{item.mobileLabel}</span>
+                                <span className="text-lg mb-0.5">
+                                    {item.icon}
+                                </span>
+                                <span className="text-[9px] font-medium">
+                                    {item.mobileLabel}
+                                </span>
                             </Link>
                         );
                     })}
@@ -161,7 +200,9 @@ export function AdminAuthWrapper({
     return (
         <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 pt-[env(safe-area-inset-top)]">
             <div className="bg-zinc-900 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center border border-zinc-800">
-                <h1 className="text-xl sm:text-2xl font-bold text-white mb-4">{title}</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-white mb-4">
+                    {title}
+                </h1>
                 {children}
                 <Link
                     href="/"
