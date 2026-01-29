@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Web3Provider } from "@/context/Web3Provider";
 import { PasskeyProvider } from "@/context/PasskeyProvider";
@@ -141,6 +142,19 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en" className="dark">
+            {/* Google Analytics */}
+            <Script
+                src="https://www.googletagmanager.com/gtag/js?id=G-EXM67L0P13"
+                strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+                {`
+                    window.dataLayer = window.dataLayer || [];
+                    function gtag(){dataLayer.push(arguments);}
+                    gtag('js', new Date());
+                    gtag('config', 'G-EXM67L0P13');
+                `}
+            </Script>
             <head>
                 <meta name="application-name" content="Spritz" />
                 <meta name="mobile-web-app-capable" content="yes" />

@@ -9,6 +9,7 @@ import { type SocialLinks } from "@/hooks/useSocials";
 import { SocialLinksDisplay } from "./SocialsModal";
 import { FriendTagModal, getTagColorConfig } from "./FriendTagModal";
 import { useFriendTags, type FriendTag } from "@/hooks/useFriendTags";
+import { formatAddress, getDisplayName as getBaseDisplayName, getSecondaryDisplayText } from "@/utils/address";
 
 export type Friend = {
     id: string;
@@ -47,10 +48,6 @@ type FriendsListProps = {
 const FAVORITES_STORAGE_KEY = "spritz_favorite_friends";
 
 // Helper functions (moved outside component)
-const formatAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
-
 const formatPhoneNumber = (phone: string) => {
     if (phone.length >= 4) {
         const last4 = phone.slice(-4);
@@ -59,35 +56,24 @@ const formatPhoneNumber = (phone: string) => {
     return "Verified";
 };
 
+// Get display name with local nickname support
+// Priority: nickname > ENS > username > address
 const getDisplayName = (friend: Friend) => {
-    return (
-        friend.nickname ||
-        (friend.reachUsername ? `@${friend.reachUsername}` : null) ||
-        friend.ensName ||
-        formatAddress(friend.address)
-    );
+    return getBaseDisplayName({
+        address: friend.address,
+        ensName: friend.ensName,
+        username: friend.reachUsername,
+        nickname: friend.nickname,
+    }, true); // includeNickname = true for friends list
 };
 
 const getSecondaryText = (friend: Friend) => {
-    const displayName = getDisplayName(friend);
-    const parts: string[] = [];
-
-    if (friend.reachUsername && !displayName.includes(friend.reachUsername)) {
-        parts.push(`@${friend.reachUsername}`);
-    }
-    if (friend.ensName && !displayName.includes(friend.ensName)) {
-        parts.push(friend.ensName);
-    }
-    if (
-        parts.length > 0 ||
-        friend.nickname ||
-        friend.reachUsername ||
-        friend.ensName
-    ) {
-        parts.push(formatAddress(friend.address));
-    }
-
-    return parts.length > 0 ? parts.join(" · ") : null;
+    return getSecondaryDisplayText({
+        address: friend.address,
+        ensName: friend.ensName,
+        username: friend.reachUsername,
+        nickname: friend.nickname,
+    }, getDisplayName(friend));
 };
 
 // Get effective avatar - custom avatar if enabled, otherwise ENS avatar

@@ -117,15 +117,17 @@ export const BLOCKSCOUT_URLS: Record<number, string> = {
 };
 
 // RPC URLs for native balance fallback
+import { getRpcUrl } from "./rpc";
+
 export const RPC_URLS: Record<number, string> = {
-    1: "https://eth.llamarpc.com",
-    8453: "https://mainnet.base.org",
-    42161: "https://arb1.arbitrum.io/rpc",
-    10: "https://mainnet.optimism.io",
-    137: "https://polygon-rpc.com",
-    56: "https://bsc-dataseed.binance.org",
-    43114: "https://api.avax.network/ext/bc/C/rpc",
-    130: "https://mainnet.unichain.org",
+    1: getRpcUrl(1),
+    8453: getRpcUrl(8453),
+    42161: getRpcUrl(42161),
+    10: getRpcUrl(10),
+    137: getRpcUrl(137),
+    56: getRpcUrl(56),
+    43114: getRpcUrl(43114),
+    130: getRpcUrl(130),
 };
 
 export type TokenBalance = {

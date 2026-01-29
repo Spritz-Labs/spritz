@@ -3,7 +3,7 @@ import type { PublicChannel } from "@/app/api/channels/route";
 import type { ChannelMessage, ChannelReaction } from "@/app/api/channels/[id]/messages/route";
 import { createClient } from "@supabase/supabase-js";
 
-export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
+export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "🙏", "💯", "🙌", "🎉"];
 
 // Initialize Supabase client for realtime
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -162,6 +162,7 @@ export function useChannels(userAddress: string | null) {
             description?: string;
             emoji?: string;
             category?: string;
+            messagingType?: "standard" | "waku";
         }) => {
             if (!userAddress) return null;
 
@@ -173,6 +174,7 @@ export function useChannels(userAddress: string | null) {
                     body: JSON.stringify({
                         ...params,
                         creatorAddress: userAddress,
+                        messagingType: params.messagingType || "standard",
                     }),
                 });
 
@@ -432,7 +434,7 @@ export function useChannelMessages(channelId: string | null, userAddress: string
     }, [channelId, isLoadingMore, hasMore, messages, processReactions]);
 
     const sendMessage = useCallback(
-        async (content: string, messageType: "text" | "image" = "text", replyToId?: string) => {
+        async (content: string, messageType: "text" | "image" | "pixel_art" | "location" = "text", replyToId?: string) => {
             if (!channelId || !userAddress || !content.trim()) return null;
 
             try {
@@ -458,6 +460,33 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                 
                 // Clear reply state
                 setReplyingTo(null);
+                
+                // Check for agent mentions and trigger responses (fire and forget)
+                if (content.includes("@[") && content.includes("](")) {
+                    fetch("/api/channels/agent-response", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            messageContent: content,
+                            senderAddress: userAddress,
+                            channelType: "channel",
+                            channelId: channelId,
+                            originalMessageId: data.message?.id,
+                        }),
+                    })
+                    .then(async (res) => {
+                        const result = await res.json();
+                        if (!res.ok) {
+                            console.error("[useChannelMessages] Agent response error:", result.error);
+                        } else {
+                            console.log("[useChannelMessages] Agent response:", result);
+                            if (result.processed && result.responsesGenerated === 0 && result.mentionsFound > 0) {
+                                console.warn("[useChannelMessages] Agent mentioned but no response generated. Check server logs for details.");
+                            }
+                        }
+                    })
+                    .catch(err => console.error("[useChannelMessages] Agent response error:", err));
+                }
 
                 return data.message as ChannelMessage;
             } catch (e) {
@@ -610,13 +639,128 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         fetchPinnedMessages();
     }, [fetchMessages, fetchPinnedMessages]);
 
-    // Poll for new messages every 5 seconds
+    // Subscribe to real-time updates for this channel
+    useEffect(() => {
+        if (!channelId || !supabase) return;
+
+        const client = supabase;
+        console.log("[useChannelMessages] Setting up realtime subscription for channel:", channelId);
+
+        const subscription = client
+            .channel(`channel-messages-${channelId}`)
+            .on(
+                "postgres_changes",
+                {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "shout_channel_messages",
+                    filter: `channel_id=eq.${channelId}`,
+                },
+                (payload) => {
+                    const newMessage = payload.new as ChannelMessage;
+                    console.log("[useChannelMessages] Realtime message received:", newMessage.id);
+                    
+                    setMessages((prev) => {
+                        // Check if message already exists
+                        const exists = prev.some(m => m.id === newMessage.id);
+                        if (exists) {
+                            return prev;
+                        }
+                        // Add new message to the end
+                        return [...prev, newMessage];
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            console.log("[useChannelMessages] Cleaning up realtime subscription");
+            subscription.unsubscribe();
+        };
+    }, [channelId, supabase]);
+
+    // Poll for new messages every 5 seconds (fallback)
     useEffect(() => {
         if (!channelId) return;
 
         const interval = setInterval(fetchMessages, 5000);
         return () => clearInterval(interval);
     }, [channelId, fetchMessages]);
+
+    // Edit message (within 15 minute window)
+    const editMessage = useCallback(
+        async (messageId: string, newContent: string) => {
+            if (!channelId || !userAddress || !newContent.trim()) return false;
+
+            try {
+                const res = await fetch(`/api/channels/${channelId}/messages/${messageId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        content: newContent.trim(),
+                        userAddress,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "Failed to edit message");
+                }
+
+                // Update local state
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === messageId
+                            ? { ...msg, content: newContent.trim(), is_edited: true, edited_at: new Date().toISOString() }
+                            : msg
+                    )
+                );
+
+                return true;
+            } catch (err) {
+                console.error("[useChannels] Error editing message:", err);
+                return false;
+            }
+        },
+        [channelId, userAddress]
+    );
+
+    // Delete message (own messages or admin)
+    const deleteMessage = useCallback(
+        async (messageId: string) => {
+            if (!channelId || !userAddress) return false;
+
+            try {
+                const res = await fetch(`/api/channels/${channelId}/messages/${messageId}`, {
+                    method: "DELETE",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "x-user-address": userAddress,
+                    },
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "Failed to delete message");
+                }
+
+                // Update local state - mark as deleted
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === messageId
+                            ? { ...msg, content: "[Message deleted]", is_deleted: true }
+                            : msg
+                    )
+                );
+
+                return true;
+            } catch (err) {
+                console.error("[useChannels] Error deleting message:", err);
+                return false;
+            }
+        },
+        [channelId, userAddress]
+    );
 
     return {
         messages,
@@ -630,6 +774,8 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         fetchPinnedMessages,
         loadMoreMessages,
         sendMessage,
+        editMessage,
+        deleteMessage,
         toggleReaction,
         togglePinMessage,
         replyingTo,

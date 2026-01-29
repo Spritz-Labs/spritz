@@ -16,7 +16,7 @@ export async function GET(
 
     const { data: stream, error } = await supabase
         .from("shout_streams")
-        .select("id, title, description, status, playback_id, user_address, started_at, ended_at, viewer_count")
+        .select("id, title, description, status, stream_id, playback_id, user_address, started_at, ended_at, viewer_count")
         .eq("id", id)
         .single();
 
@@ -27,12 +27,11 @@ export async function GET(
         );
     }
 
-    // Get live status from Livepeer if stream is supposed to be live
+    // Get live status from Livepeer if stream is supposed to be live (use stream_id, not playback_id)
     let isLive = stream.status === "live";
-    if (stream.status === "live" && stream.playback_id) {
+    if (stream.status === "live" && stream.stream_id) {
         try {
-            // Try to get the actual live status from Livepeer
-            const livepeerStream = await getLivepeerStream(stream.playback_id);
+            const livepeerStream = await getLivepeerStream(stream.stream_id);
             isLive = livepeerStream?.isActive || false;
         } catch {
             // If we can't check, assume it's live based on DB status

@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type UserSettings } from "@/hooks/useUserSettings";
 import { useCalendar } from "@/hooks/useCalendar";
+import { useAddressBook, type AddressBookEntry } from "@/hooks/useSendSuggestions";
 import { AvailabilityWindowsModal } from "./AvailabilityWindowsModal";
 import { KeyBackupModal } from "./KeyBackupModal";
 import { PasskeyManager } from "./PasskeyManager";
+import { MessagingKeyStatus } from "./MessagingKeyStatusInline";
+import { RegistrationPreferencesModal } from "./RegistrationPreferencesModal";
 import { supabase } from "@/config/supabase";
+import { isAddress } from "viem";
 
 // Supported payment networks
 const PAYMENT_NETWORKS = [
@@ -40,6 +44,9 @@ type SettingsModalProps = {
     onDisablePush: () => Promise<boolean>;
     // Calendar props
     userAddress: string | null;
+    // Auth type for messaging key
+    authType?: "wallet" | "passkey" | "email" | "digitalid" | "solana";
+    passkeyCredentialId?: string | null;
     // Status props
     onOpenStatusModal: () => void;
     // Invites props
@@ -73,6 +80,8 @@ export function SettingsModal({
     onEnablePush,
     onDisablePush,
     userAddress,
+    authType = "wallet",
+    passkeyCredentialId,
     onOpenStatusModal,
     availableInvites,
     usedInvites,
@@ -89,6 +98,79 @@ export function SettingsModal({
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const [showKeyBackup, setShowKeyBackup] = useState(false);
     const [showPasskeyManager, setShowPasskeyManager] = useState(false);
+    const [showAddressBook, setShowAddressBook] = useState(false);
+    const [showRegistrationPrefs, setShowRegistrationPrefs] = useState(false);
+    
+    // Address book
+    const { entries: addressBookEntries, isLoading: addressBookLoading, addEntry, updateEntry, deleteEntry, refresh: refreshAddressBook } = useAddressBook();
+    const [newAddressLabel, setNewAddressLabel] = useState("");
+    const [newAddressValue, setNewAddressValue] = useState("");
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+    const [editingLabel, setEditingLabel] = useState("");
+    const [addressBookError, setAddressBookError] = useState<string | null>(null);
+    
+    const [isAddingAddress, setIsAddingAddress] = useState(false);
+    
+    // Check if input looks like an ENS name
+    const isEnsName = useCallback((input: string) => {
+        return /\.(eth|xyz|com|org|id|art|luxury|kred|club|luxe|reverse)$/i.test(input.trim());
+    }, []);
+    
+    // Handle adding new address to address book
+    const handleAddToAddressBook = useCallback(async () => {
+        if (!newAddressLabel.trim() || !newAddressValue.trim()) {
+            setAddressBookError("Both label and address/ENS are required");
+            return;
+        }
+        
+        const input = newAddressValue.trim();
+        
+        // Basic validation - must be either a valid address or look like an ENS name
+        if (!isAddress(input) && !isEnsName(input)) {
+            setAddressBookError("Enter a valid address (0x...) or ENS name (e.g., vitalik.eth)");
+            return;
+        }
+        
+        try {
+            setAddressBookError(null);
+            setIsAddingAddress(true);
+            await addEntry({
+                address: input, // API will resolve ENS if needed
+                label: newAddressLabel.trim(),
+            });
+            setNewAddressLabel("");
+            setNewAddressValue("");
+        } catch (err) {
+            setAddressBookError(err instanceof Error ? err.message : "Failed to add");
+        } finally {
+            setIsAddingAddress(false);
+        }
+    }, [newAddressLabel, newAddressValue, addEntry, isEnsName]);
+    
+    // Handle updating entry label
+    const handleUpdateLabel = useCallback(async (id: string) => {
+        if (!editingLabel.trim()) return;
+        
+        try {
+            await updateEntry(id, { label: editingLabel.trim() });
+            setEditingEntryId(null);
+            setEditingLabel("");
+        } catch {
+            // Silently fail
+        }
+    }, [editingLabel, updateEntry]);
+    
+    // Handle toggling favorite
+    const handleToggleFavorite = useCallback(async (entry: AddressBookEntry) => {
+        await updateEntry(entry.id, { isFavorite: !entry.isFavorite });
+    }, [updateEntry]);
+    
+    // Handle delete
+    const handleDeleteEntry = useCallback(async (id: string) => {
+        if (confirm("Remove this address from your address book?")) {
+            await deleteEntry(id);
+        }
+    }, [deleteEntry]);
 
     // Resize image for avatar (ensure high quality)
     // Increased to 1024px and 95% quality for sharper profile photos
@@ -568,6 +650,27 @@ export function SettingsModal({
                                             </svg>
                                         </div>
                                     </button>
+
+                                    {/* Registration Preferences */}
+                                    <button
+                                        onClick={() => setShowRegistrationPrefs(true)}
+                                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                                <span className="text-lg">🎫</span>
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-white font-medium">Event Registration</p>
+                                                <p className="text-zinc-500 text-xs">
+                                                    Save info for quick registration
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </button>
                                 </div>
 
                                 {/* Censorship Resistance Section */}
@@ -639,50 +742,12 @@ export function SettingsModal({
                                         </p>
                                     )}
 
-                                    {/* Message Encryption Key Backup */}
-                                    <button
-                                        onClick={() => setShowKeyBackup(true)}
-                                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                                                <svg
-                                                    className="w-4 h-4 text-purple-400"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        strokeWidth={2}
-                                                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                                                    />
-                                                </svg>
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-white font-medium">
-                                                    Message Encryption Key
-                                                </p>
-                                                <p className="text-zinc-500 text-xs">
-                                                    Backup or restore for new devices
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <svg
-                                            className="w-5 h-5 text-zinc-500"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M9 5l7 7-7 7"
-                                            />
-                                        </svg>
-                                    </button>
+                                    {/* Message Encryption - Simplified Status */}
+                                    <MessagingKeyStatus 
+                                        userAddress={userAddress} 
+                                        authType={authType}
+                                        passkeyCredentialId={passkeyCredentialId}
+                                    />
 
                                     {/* Passkeys */}
                                     <button
@@ -711,6 +776,54 @@ export function SettingsModal({
                                                 </p>
                                                 <p className="text-zinc-500 text-xs">
                                                     Manage biometric login
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <svg
+                                            className="w-5 h-5 text-zinc-500"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M9 5l7 7-7 7"
+                                            />
+                                        </svg>
+                                    </button>
+
+                                    {/* Address Book */}
+                                    <button
+                                        onClick={() => setShowAddressBook(true)}
+                                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                                <svg
+                                                    className="w-4 h-4 text-emerald-400"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                                    />
+                                                </svg>
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-white font-medium">
+                                                    Address Book
+                                                </p>
+                                                <p className="text-zinc-500 text-xs">
+                                                    {addressBookEntries.length > 0 
+                                                        ? `${addressBookEntries.length} saved address${addressBookEntries.length === 1 ? '' : 'es'}`
+                                                        : 'Save frequent recipients'
+                                                    }
                                                 </p>
                                             </div>
                                         </div>
@@ -1645,6 +1758,241 @@ export function SettingsModal({
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Address Book Modal */}
+            <AnimatePresence>
+                {showAddressBook && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                        onClick={() => setShowAddressBook(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-md bg-zinc-900 rounded-2xl border border-zinc-800 shadow-2xl max-h-[85vh] flex flex-col"
+                        >
+                            {/* Header */}
+                            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                                        <span className="text-xl">📖</span>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-white">Address Book</h2>
+                                        <p className="text-xs text-zinc-500">Save addresses for quick access</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowAddressBook(false)}
+                                    className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+                                >
+                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Add new address form */}
+                            <div className="p-4 border-b border-zinc-800 bg-zinc-800/30">
+                                <div className="space-y-2">
+                                    <input
+                                        type="text"
+                                        value={newAddressLabel}
+                                        onChange={(e) => setNewAddressLabel(e.target.value)}
+                                        placeholder="Label (e.g., Mom, Work)"
+                                        maxLength={50}
+                                        className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={newAddressValue}
+                                        onChange={(e) => setNewAddressValue(e.target.value)}
+                                        placeholder="0x... or ENS (vitalik.eth)"
+                                        spellCheck={false}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                                    />
+                                    {addressBookError && (
+                                        <p className="text-xs text-red-400">{addressBookError}</p>
+                                    )}
+                                    <button
+                                        onClick={handleAddToAddressBook}
+                                        disabled={!newAddressLabel.trim() || !newAddressValue.trim() || isAddingAddress}
+                                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {isAddingAddress ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                {isEnsName(newAddressValue) ? "Resolving ENS..." : "Adding..."}
+                                            </>
+                                        ) : (
+                                            "Add to Address Book"
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Entries list */}
+                            <div className="flex-1 overflow-y-auto">
+                                {addressBookLoading ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <div className="w-6 h-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+                                    </div>
+                                ) : addressBookEntries.length === 0 ? (
+                                    <div className="text-center py-12 px-4">
+                                        <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-4">
+                                            <span className="text-3xl">📖</span>
+                                        </div>
+                                        <p className="text-zinc-400 text-sm">No saved addresses yet</p>
+                                        <p className="text-zinc-500 text-xs mt-1">
+                                            Add addresses above or save them when sending
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-zinc-800">
+                                        {addressBookEntries.map((entry) => (
+                                            <div 
+                                                key={entry.id}
+                                                className="p-4 hover:bg-zinc-800/30 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    {/* Avatar/icon */}
+                                                    <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0">
+                                                        <span className="text-lg">📖</span>
+                                                    </div>
+                                                    
+                                                    {/* Info */}
+                                                    <div className="flex-1 min-w-0">
+                                                        {editingEntryId === entry.id ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    value={editingLabel}
+                                                                    onChange={(e) => setEditingLabel(e.target.value)}
+                                                                    className="flex-1 px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                                                                    autoFocus
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === "Enter") handleUpdateLabel(entry.id);
+                                                                        if (e.key === "Escape") {
+                                                                            setEditingEntryId(null);
+                                                                            setEditingLabel("");
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <button
+                                                                    onClick={() => handleUpdateLabel(entry.id)}
+                                                                    className="p-1 text-emerald-400 hover:text-emerald-300"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingEntryId(null);
+                                                                        setEditingLabel("");
+                                                                    }}
+                                                                    className="p-1 text-zinc-400 hover:text-zinc-300"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-medium text-white truncate">
+                                                                        {entry.label}
+                                                                    </span>
+                                                                    {entry.isFavorite && (
+                                                                        <span className="text-yellow-400 text-xs">★</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                                                    <span className="font-mono truncate">
+                                                                        {entry.address.slice(0, 8)}...{entry.address.slice(-6)}
+                                                                    </span>
+                                                                    {entry.ensName && (
+                                                                        <span className="text-emerald-400">{entry.ensName}</span>
+                                                                    )}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Actions */}
+                                                    {editingEntryId !== entry.id && (
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                onClick={() => handleToggleFavorite(entry)}
+                                                                className={`p-1.5 rounded hover:bg-zinc-700 transition-colors ${
+                                                                    entry.isFavorite ? "text-yellow-400" : "text-zinc-500 hover:text-yellow-400"
+                                                                }`}
+                                                                title={entry.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                                                            >
+                                                                <svg className="w-4 h-4" fill={entry.isFavorite ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                                                </svg>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingEntryId(entry.id);
+                                                                    setEditingLabel(entry.label);
+                                                                }}
+                                                                className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-700 transition-colors"
+                                                                title="Edit label"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                </svg>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => navigator.clipboard.writeText(entry.address)}
+                                                                className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-700 transition-colors"
+                                                                title="Copy address"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                </svg>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteEntry(entry.id)}
+                                                                className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-700 transition-colors"
+                                                                title="Delete"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Registration Preferences Modal */}
+            {userAddress && (
+                <RegistrationPreferencesModal
+                    isOpen={showRegistrationPrefs}
+                    onClose={() => setShowRegistrationPrefs(false)}
+                    userAddress={userAddress}
+                />
+            )}
         </>
     );
 }

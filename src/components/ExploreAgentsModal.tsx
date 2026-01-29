@@ -175,9 +175,17 @@ export function ExploreAgentsModal({
                                             onKeyDown={(e) => e.key === "Enter" && onSelectAgent(agent)}
                                         >
                                             <div className="flex items-start gap-4">
-                                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                                    {agent.avatar_emoji}
-                                                </div>
+                                                {agent.avatar_url ? (
+                                                    <img
+                                                        src={agent.avatar_url}
+                                                        alt={agent.name}
+                                                        className="w-12 h-12 rounded-xl object-cover shrink-0 group-hover:scale-110 transition-transform ring-1 ring-purple-500/30"
+                                                    />
+                                                ) : (
+                                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
+                                                        {agent.avatar_emoji || "🤖"}
+                                                    </div>
+                                                )}
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 mb-1">
                                                         <h4 className="font-semibold text-white truncate">{agent.name}</h4>

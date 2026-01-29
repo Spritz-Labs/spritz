@@ -574,6 +574,20 @@ export async function GET(request: NextRequest) {
                 byMessages: topAgentsByMessages,
             },
             agentVisibilityBreakdown,
+            // Official agents list for admin integration management
+            officialAgentsList: allAgents
+                ?.filter(a => a.visibility === "official")
+                .map(a => ({
+                    id: a.id,
+                    name: a.name,
+                    avatar_emoji: a.avatar_emoji || "🤖",
+                    avatar_url: a.avatar_url,
+                    personality: a.personality,
+                    x402_enabled: a.x402_enabled,
+                    x402_price_cents: a.x402_price_cents,
+                    message_count: a.message_count || 0,
+                    created_at: a.created_at,
+                })) || [],
             pointsBreakdown: Object.entries(pointsBreakdown).map(([reason, points]) => ({
                 reason,
                 points,

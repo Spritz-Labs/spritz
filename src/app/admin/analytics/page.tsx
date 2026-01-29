@@ -87,6 +87,18 @@ type NetworkStat = {
     volumeUsd: number;
 };
 
+type OfficialAgent = {
+    id: string;
+    name: string;
+    avatar_emoji: string;
+    avatar_url: string | null;
+    personality: string | null;
+    x402_enabled: boolean;
+    x402_price_cents: number;
+    message_count: number;
+    created_at: string;
+};
+
 type AnalyticsData = {
     summary: {
         totalUsers: number;
@@ -175,6 +187,7 @@ type AnalyticsData = {
         byMessages: TopAgent[];
     };
     agentVisibilityBreakdown: AgentVisibility[];
+    officialAgentsList: OfficialAgent[];
     pointsBreakdown: PointsBreakdown[];
     walletTypeBreakdown: WalletTypeBreakdown[];
     networkStats: NetworkStat[];
@@ -834,6 +847,254 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
                         <p className="text-zinc-500 text-center py-4 col-span-3">No agent activity yet</p>
                     )}
                 </div>
+            </div>
+
+            {/* Official Agents Integration */}
+            {data.officialAgentsList?.length > 0 && (
+                <OfficialAgentsIntegration agents={data.officialAgentsList} />
+            )}
+        </div>
+    );
+}
+
+// ============================================
+// OFFICIAL AGENTS INTEGRATION
+// ============================================
+
+function OfficialAgentsIntegration({ agents }: { agents: OfficialAgent[] }) {
+    const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+    const [embedTab, setEmbedTab] = useState<Record<string, "iframe" | "js" | "react" | "nextjs">>({});
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+
+    const copyToClipboard = async (text: string, fieldId: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedField(fieldId);
+            setTimeout(() => setCopiedField(null), 2000);
+        } catch (err) {
+            console.error("Copy failed:", err);
+        }
+    };
+
+    const getPublicUrl = (agentId: string) => 
+        `${typeof window !== "undefined" ? window.location.origin : "https://app.spritz.chat"}/agent/${agentId}`;
+
+    const getEmbedCode = (agentId: string, type: "iframe" | "js" | "react" | "nextjs") => {
+        const publicUrl = getPublicUrl(agentId);
+        
+        switch (type) {
+            case "iframe":
+                return `<iframe 
+  src="${publicUrl}"
+  width="100%"
+  height="600"
+  frameborder="0"
+  allow="clipboard-read; clipboard-write"
+  style="border-radius: 12px; border: 1px solid #3f3f46;">
+</iframe>`;
+            case "js":
+                return `<!-- Add this to your HTML -->
+<div id="spritz-agent-${agentId}"></div>
+<script>
+  (function() {
+    const iframe = document.createElement('iframe');
+    iframe.src = '${publicUrl}';
+    iframe.width = '100%';
+    iframe.height = '600';
+    iframe.frameBorder = '0';
+    iframe.allow = 'clipboard-read; clipboard-write';
+    iframe.style.borderRadius = '12px';
+    iframe.style.border = '1px solid #3f3f46';
+    document.getElementById('spritz-agent-${agentId}').appendChild(iframe);
+  })();
+</script>`;
+            case "react":
+                return `// SpritzAgent.tsx
+export function SpritzAgent() {
+  return (
+    <iframe
+      src="${publicUrl}"
+      width="100%"
+      height="600"
+      frameBorder="0"
+      allow="clipboard-read; clipboard-write"
+      style={{
+        borderRadius: '12px',
+        border: '1px solid #3f3f46',
+      }}
+    />
+  );
+}`;
+            case "nextjs":
+                return `// app/components/SpritzAgent.tsx
+'use client';
+
+export function SpritzAgent() {
+  return (
+    <iframe
+      src="${publicUrl}"
+      width="100%"
+      height={600}
+      frameBorder={0}
+      allow="clipboard-read; clipboard-write"
+      className="rounded-xl border border-zinc-700"
+    />
+  );
+}`;
+        }
+    };
+
+    return (
+        <div className="bg-zinc-900/50 rounded-xl p-4 border border-orange-500/30">
+            <h3 className="text-sm font-semibold text-orange-400 mb-4 flex items-center gap-2">
+                <span>⭐</span>
+                Official Agents - Public URLs & Integration
+            </h3>
+            <p className="text-xs text-zinc-400 mb-4">
+                Manage public URLs and embed codes for all official platform agents.
+            </p>
+            
+            <div className="space-y-3">
+                {agents.map((agent) => {
+                    const isExpanded = expandedAgent === agent.id;
+                    const publicUrl = getPublicUrl(agent.id);
+                    const currentTab = embedTab[agent.id] || "iframe";
+                    
+                    return (
+                        <div 
+                            key={agent.id}
+                            className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl overflow-hidden"
+                        >
+                            {/* Agent Header */}
+                            <button
+                                onClick={() => setExpandedAgent(isExpanded ? null : agent.id)}
+                                className="w-full flex items-center gap-3 p-4 hover:bg-zinc-800/80 transition-colors"
+                            >
+                                {agent.avatar_url ? (
+                                    <img 
+                                        src={agent.avatar_url} 
+                                        alt={agent.name} 
+                                        className="w-10 h-10 rounded-xl object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/30 to-amber-500/30 flex items-center justify-center text-xl">
+                                        {agent.avatar_emoji}
+                                    </div>
+                                )}
+                                <div className="flex-1 text-left">
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-medium text-white">{agent.name}</h4>
+                                        <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">
+                                            ⭐ Official
+                                        </span>
+                                        {agent.x402_enabled && (
+                                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">
+                                                💰 ${(agent.x402_price_cents / 100).toFixed(2)}/msg
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-zinc-500 truncate">
+                                        {agent.personality || "AI Assistant"} • {agent.message_count} messages
+                                    </p>
+                                </div>
+                                <svg 
+                                    className={`w-5 h-5 text-zinc-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                    fill="none" 
+                                    viewBox="0 0 24 24" 
+                                    stroke="currentColor"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                                <div className="px-4 pb-4 space-y-4 border-t border-zinc-700/50">
+                                    {/* Public URL */}
+                                    <div className="pt-4">
+                                        <label className="block text-xs text-zinc-400 mb-2 font-medium">
+                                            🔗 Public Chat URL
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={publicUrl}
+                                                readOnly
+                                                className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm font-mono"
+                                            />
+                                            <button
+                                                onClick={() => copyToClipboard(publicUrl, `url-${agent.id}`)}
+                                                className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors min-w-[70px]"
+                                            >
+                                                {copiedField === `url-${agent.id}` ? "Copied!" : "Copy"}
+                                            </button>
+                                            <a
+                                                href={publicUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="px-3 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm rounded-lg transition-colors flex items-center gap-1"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                                Open
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    {/* Embed Code */}
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <label className="text-xs text-zinc-400 font-medium">📦 Embed Code</label>
+                                            <div className="flex gap-1 bg-zinc-900 rounded-lg p-0.5">
+                                                {(["iframe", "js", "react", "nextjs"] as const).map((tab) => (
+                                                    <button
+                                                        key={tab}
+                                                        onClick={() => setEmbedTab(prev => ({ ...prev, [agent.id]: tab }))}
+                                                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                            currentTab === tab
+                                                                ? "bg-zinc-800 text-zinc-300"
+                                                                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+                                                        }`}
+                                                    >
+                                                        {tab === "iframe" ? "iframe" : tab === "js" ? "JavaScript" : tab === "react" ? "React" : "Next.js"}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <textarea
+                                                value={getEmbedCode(agent.id, currentTab)}
+                                                readOnly
+                                                rows={currentTab === "iframe" ? 7 : 12}
+                                                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-xs font-mono resize-none"
+                                            />
+                                            <button
+                                                onClick={() => copyToClipboard(getEmbedCode(agent.id, currentTab), `embed-${agent.id}-${currentTab}`)}
+                                                className="absolute top-2 right-2 px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded transition-colors"
+                                            >
+                                                {copiedField === `embed-${agent.id}-${currentTab}` ? "Copied!" : "Copy"}
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-zinc-500 mt-1.5">
+                                            {currentTab === "iframe" && "Paste this iframe code directly into your HTML"}
+                                            {currentTab === "js" && "Add this script to dynamically load the agent"}
+                                            {currentTab === "react" && "Use this React component in your app"}
+                                            {currentTab === "nextjs" && "Client component for Next.js App Router"}
+                                        </p>
+                                    </div>
+
+                                    {/* Quick Stats */}
+                                    <div className="flex items-center gap-4 pt-2 border-t border-zinc-700/50 text-xs text-zinc-500">
+                                        <span>ID: <code className="text-zinc-400">{agent.id}</code></span>
+                                        <span>Messages: <span className="text-cyan-400">{agent.message_count}</span></span>
+                                        <span>Created: {new Date(agent.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

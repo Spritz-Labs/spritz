@@ -11,7 +11,6 @@
  */
 
 import { usePWAWalletPersistence } from "@/hooks/usePWAWalletPersistence";
-import { useEffect, useState } from "react";
 
 interface WalletConnectionStatusProps {
     /** If true, user is authenticated via passkey (not wallet) - don't show reconnection banner */
@@ -49,99 +48,17 @@ export function WalletConnectionStatus({
 /**
  * Inner component that actually uses the PWA wallet persistence hook.
  * Only rendered for wallet-connected users.
+ * 
+ * NOTE: We no longer show any UI here. Wallet reconnection happens silently
+ * in the background via usePWAWalletPersistence. The popup was annoying
+ * because PWA wallet reconnection rarely succeeds anyway.
  */
 function WalletConnectionStatusInner() {
-    const { connectionState, isReconnecting, reconnectAttempts, forceReconnect, clearSession } = usePWAWalletPersistence();
-    const [showBanner, setShowBanner] = useState(false);
-    const [dismissed, setDismissed] = useState(false);
-
-    // Only show banner after a delay to avoid flashing during quick reconnects
-    useEffect(() => {
-        let timeout: NodeJS.Timeout;
-        
-        if (isReconnecting && reconnectAttempts >= 2 && !dismissed) {
-            timeout = setTimeout(() => {
-                setShowBanner(true);
-            }, 2000);
-        } else if (connectionState === "connected") {
-            setShowBanner(false);
-            setDismissed(false);
-        }
-
-        return () => {
-            if (timeout) clearTimeout(timeout);
-        };
-    }, [isReconnecting, reconnectAttempts, connectionState, dismissed]);
-
-    // Handle "Use passkey" - clear wallet data and reload
-    const handleUsePasskey = () => {
-        clearSession();
-        // Small delay then reload to reset state
-        setTimeout(() => {
-            window.location.reload();
-        }, 100);
-    };
-
-    if (!showBanner || connectionState === "connected") {
-        return null;
-    }
-
-    return (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-2 duration-300">
-            <div className="bg-yellow-900/90 backdrop-blur-sm border border-yellow-700/50 rounded-lg px-4 py-3 shadow-lg">
-                <div className="flex items-center gap-3">
-                    {/* Reconnecting spinner */}
-                    <div className="w-5 h-5 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-                    
-                    <div className="text-sm">
-                        <span className="text-yellow-200">Reconnecting wallet...</span>
-                        {reconnectAttempts > 2 && (
-                            <span className="text-yellow-400/70 ml-1">
-                                (attempt {reconnectAttempts})
-                            </span>
-                        )}
-                    </div>
-
-                    {/* Manual reconnect button after several attempts */}
-                    {reconnectAttempts >= 2 && (
-                        <button
-                            onClick={() => {
-                                forceReconnect();
-                                setDismissed(false);
-                            }}
-                            className="text-xs bg-yellow-700/50 hover:bg-yellow-700/70 text-yellow-200 px-2 py-1 rounded transition-colors"
-                        >
-                            Retry
-                        </button>
-                    )}
-
-                    {/* Dismiss button */}
-                    <button
-                        onClick={() => setDismissed(true)}
-                        className="text-yellow-400/60 hover:text-yellow-400 transition-colors"
-                        aria-label="Dismiss"
-                    >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-                
-                {/* Show escape hatch after multiple failed attempts */}
-                {reconnectAttempts >= 3 && (
-                    <div className="mt-2 pt-2 border-t border-yellow-700/30 text-xs text-yellow-300/80">
-                        <span>Having trouble? </span>
-                        <button 
-                            onClick={handleUsePasskey}
-                            className="underline hover:text-yellow-200 transition-colors"
-                        >
-                            Clear wallet data and use passkey instead
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
+    // Still run the hook to attempt background reconnection,
+    // but don't render any UI - let it happen silently
+    usePWAWalletPersistence();
+    
+    return null;
 }
 
 /**

@@ -212,7 +212,7 @@ export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading 
                         </span>
                     </h2>
                     <span className="text-[10px] sm:text-xs text-zinc-500">
-                        {agents.length}/5
+                        {isAdmin ? agents.length : `${agents.length}/5`}
                         {favorites.length > 0 && (
                             <span className="ml-1 text-yellow-400">⭐{favorites.length}</span>
                         )}

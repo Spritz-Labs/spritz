@@ -86,7 +86,37 @@ export async function GET(request: NextRequest) {
                 .eq("wallet_address", spritzId)
                 .single();
 
-            walletType = determineWalletType(user);
+            // IMPORTANT: Use session authMethod as source of truth
+            // The session knows how the user ACTUALLY logged in
+            // The database wallet_type might be wrong (bug where adding passkey changed wallet users to passkey)
+            const sessionAuthMethod = session.authMethod;
+            
+            // Map session authMethod to walletType
+            let correctWalletType: WalletType = "wallet";
+            if (sessionAuthMethod === "passkey") correctWalletType = "passkey";
+            else if (sessionAuthMethod === "email") correctWalletType = "email";
+            else if (sessionAuthMethod === "world_id" || sessionAuthMethod === "alien_id") correctWalletType = "digitalid";
+            else if (sessionAuthMethod === "wallet" || sessionAuthMethod === "solana") correctWalletType = "wallet";
+            
+            // Check if database is wrong and fix it
+            const dbWalletType = determineWalletType(user);
+            if (dbWalletType !== correctWalletType && correctWalletType === "wallet" && dbWalletType === "passkey") {
+                console.warn("[SmartWallet] FIX: User logged in as wallet but DB says passkey!");
+                console.warn("[SmartWallet] Session authMethod:", sessionAuthMethod, "DB wallet_type:", user?.wallet_type);
+                console.warn("[SmartWallet] Fixing wallet_type to 'wallet' for:", spritzId.slice(0, 10));
+                
+                // Fix the database
+                await supabase
+                    .from("shout_users")
+                    .update({ 
+                        wallet_type: "wallet",
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("wallet_address", spritzId);
+            }
+            
+            // Use the correct wallet type from session
+            walletType = correctWalletType;
             
             // Check if user has a passkey
             const { data: credential } = await supabase
@@ -136,10 +166,19 @@ export async function GET(request: NextRequest) {
                 if (!hasValidPasskey) {
                     // No passkey - user needs to create one first
                     needsPasskey = true;
-                    smartWalletAddress = null;
                     canSign = false;
                     signerType = "none";
-                    console.log("[SmartWallet] Non-wallet user without passkey - needs passkey setup");
+                    
+                    // If they have a stored address from before (lost passkey scenario),
+                    // still return it so they can at least see their balance
+                    if (user?.smart_wallet_address) {
+                        smartWalletAddress = user.smart_wallet_address as Address;
+                        console.log("[SmartWallet] Non-wallet user with stored address but NO passkey:", smartWalletAddress.slice(0, 10));
+                        console.log("[SmartWallet] User can view but cannot transact until passkey is restored");
+                    } else {
+                        smartWalletAddress = null;
+                        console.log("[SmartWallet] Non-wallet user without passkey - needs passkey setup");
+                    }
                     
                 } else {
                     // Has passkey - Safe is owned by the passkey signer
@@ -221,9 +260,13 @@ export async function GET(request: NextRequest) {
             supportedChains: getSupportedChains(),
             // Safe app URL for direct wallet access (even outside Spritz)
             safeAppUrl,
-            // Warning message for non-wallet users
+            // Warning messages for non-wallet users
             ...(requiresPasskeyToSign(walletType) && !needsPasskey && {
                 warning: "Your passkey is your wallet key. If you delete your passkey, you will lose access to this wallet and any funds in it.",
+            }),
+            // Warning for users who have a stored address but lost their passkey
+            ...(needsPasskey && smartWalletAddress && {
+                warning: "Your passkey credentials were not found. You can view your wallet balance but cannot send transactions until you restore or re-register your passkey.",
             }),
         });
 

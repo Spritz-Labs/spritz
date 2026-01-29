@@ -10,11 +10,12 @@
         "lint": "eslint",
         "test": "node --test --experimental-strip-types",
         "generate-icons": "node scripts/generate-icons.js",
+        "update-cryptonomads": "node scripts/update-cryptonomads.mjs",
         "vercel": "vercel --prod",
         "vercel:preview": "vercel"
     },
     "dependencies": {
-        "@alien_org/sso-sdk-react": "^1.0.37",
+        "@alien_org/sso-sdk-react": "^1.0.39",
         "@coinbase/onchainkit": "^1.1.2",
         "@coinbase/wallet-sdk": "^4.3.7",
         "@dnd-kit/core": "^6.3.1",
@@ -91,7 +92,7 @@
         "eslint-config-next": "16.0.7",
         "tailwindcss": "^4",
         "typescript": "^5",
-        "vercel": "^50.4.8"
+        "vercel": "^50.6.1"
     },
     "packageManager": "yarn@3.2.3+sha512.f26f951f67de0c6a33ee381e5ff364709c87e70eb5e65c694e4facde3512f1fa80b8679e6ba31ce7d340fbb46f08dd683af9457e240f25a204be7427940d767e"
 }

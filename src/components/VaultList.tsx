@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useVaults, type VaultListItem, type VaultDetails } from "@/hooks/useVaults";
 import { useVaultExecution } from "@/hooks/useVaultExecution";
 import { getChainById } from "@/config/chains";
 import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
+import { useSendSuggestions, useAddressBook, type SendSuggestion } from "@/hooks/useSendSuggestions";
 import { useWalletClient, usePublicClient, useAccount, useSignMessage, useSignTypedData } from "wagmi";
 import { useWalletReconnect } from "@/hooks/useWalletReconnect";
 import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas, deployVaultViaPasskey, type PasskeyCredential, getPublicClient } from "@/lib/safeWallet";
@@ -19,6 +20,7 @@ const AA_TX_TIMEOUT = 120_000;
 type VaultListProps = {
     userAddress: string;
     onCreateNew: () => void;
+    refreshKey?: number; // Increment to trigger a refresh after vault creation
 };
 
 // Transaction types for activity tab
@@ -64,8 +66,16 @@ const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "�
 // Tab types for vault detail view
 type VaultTab = "assets" | "send" | "receive" | "activity";
 
-export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
+export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListProps) {
     const { vaults, isLoading, getVault, updateVault, deleteVault, getDeploymentInfo, confirmDeployment, fetchVaults } = useVaults(userAddress);
+    
+    // Refetch vaults when refreshKey changes (after vault creation)
+    useEffect(() => {
+        if (refreshKey !== undefined && refreshKey > 0) {
+            console.log("[VaultList] Refreshing vaults due to refreshKey change:", refreshKey);
+            fetchVaults();
+        }
+    }, [refreshKey, fetchVaults]);
     // Pass the userAddress to support passkey users who don't have a wagmi wallet connected
     const vaultExecution = useVaultExecution(userAddress as Address | undefined);
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
@@ -97,6 +107,160 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
     const [sendToken, setSendToken] = useState<VaultTokenBalance | null>(null);
     const [isSending, setIsSending] = useState(false);
     const [showTokenSelector, setShowTokenSelector] = useState(false);
+    const [isUsdMode, setIsUsdMode] = useState(false); // Toggle between USD and token amount input
+    
+    // Send suggestions (friends, vaults, address book)
+    const { suggestions: sendSuggestions, filter: filterSuggestions, refresh: refreshSuggestions, isLoading: suggestionsLoading } = useSendSuggestions(true);
+    const { addEntry: addToAddressBook } = useAddressBook();
+    const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false);
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+    const [showSaveAddressDialog, setShowSaveAddressDialog] = useState(false);
+    const [saveAddressLabel, setSaveAddressLabel] = useState("");
+    
+    // Calculate token price per unit for USD conversion (Vault send)
+    const vaultTokenPriceUsd = useMemo(() => {
+        if (!sendToken?.balanceUsd || !sendToken?.balanceFormatted) return 0;
+        const balance = parseFloat(sendToken.balanceFormatted);
+        if (balance <= 0) return 0;
+        return sendToken.balanceUsd / balance;
+    }, [sendToken]);
+    
+    // Convert between USD and token amounts (Vault send)
+    const getVaultTokenAmount = useCallback((usdAmount: string): string => {
+        if (!usdAmount || !vaultTokenPriceUsd || vaultTokenPriceUsd <= 0) return "";
+        const usd = parseFloat(usdAmount);
+        if (isNaN(usd) || usd <= 0) return "";
+        return (usd / vaultTokenPriceUsd).toFixed(sendToken?.decimals || 18);
+    }, [vaultTokenPriceUsd, sendToken]);
+    
+    const getVaultUsdAmount = useCallback((tokenAmount: string): string => {
+        if (!tokenAmount || !vaultTokenPriceUsd) return "";
+        const amount = parseFloat(tokenAmount);
+        if (isNaN(amount) || amount <= 0) return "";
+        return (amount * vaultTokenPriceUsd).toFixed(2);
+    }, [vaultTokenPriceUsd]);
+    
+    // Get the actual token amount to send (Vault send - converts from USD if needed)
+    const actualVaultSendAmount = useMemo(() => {
+        if (!sendAmount) return "";
+        if (isUsdMode) {
+            return getVaultTokenAmount(sendAmount);
+        }
+        return sendAmount;
+    }, [sendAmount, isUsdMode, getVaultTokenAmount]);
+    
+    // Toggle between USD and token mode (Vault send)
+    const toggleVaultAmountMode = useCallback(() => {
+        if (!sendAmount || !vaultTokenPriceUsd) {
+            setIsUsdMode(!isUsdMode);
+            return;
+        }
+        
+        if (isUsdMode) {
+            // Converting from USD to token
+            const tokenAmount = getVaultTokenAmount(sendAmount);
+            setSendAmount(tokenAmount || "");
+        } else {
+            // Converting from token to USD
+            const usdAmount = getVaultUsdAmount(sendAmount);
+            setSendAmount(usdAmount || "");
+        }
+        setIsUsdMode(!isUsdMode);
+    }, [sendAmount, isUsdMode, vaultTokenPriceUsd, getVaultTokenAmount, getVaultUsdAmount]);
+    
+    // Filter suggestions based on recipient input and selected vault's chain
+    // For vaults, only show those on the same chain to prevent cross-chain mistakes
+    const filteredSuggestions = useMemo(() => {
+        const currentChainId = selectedVault?.chainId;
+        if (ensResolver.input.length > 0) {
+            return filterSuggestions(ensResolver.input, currentChainId);
+        }
+        return filterSuggestions("", currentChainId);
+    }, [ensResolver.input, filterSuggestions, selectedVault?.chainId]);
+    
+    // Check if current address can be saved to address book
+    const canSaveToAddressBook = useMemo(() => {
+        if (!ensResolver.input || !ensResolver.isValid) return false;
+        const addr = (ensResolver.resolvedAddress || ensResolver.input).toLowerCase();
+        return !sendSuggestions.some(s => s.address.toLowerCase() === addr);
+    }, [ensResolver.input, ensResolver.isValid, ensResolver.resolvedAddress, sendSuggestions]);
+    
+    // Handle selecting a suggestion
+    const handleSelectSuggestion = useCallback((suggestion: SendSuggestion) => {
+        const targetAddress = suggestion.smartWalletAddress || suggestion.address;
+        ensResolver.setInput(targetAddress);
+        setShowRecipientSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+    }, [ensResolver]);
+    
+    // Handle keyboard navigation for suggestions
+    const handleRecipientKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (!showRecipientSuggestions || filteredSuggestions.length === 0) return;
+        
+        switch (e.key) {
+            case "ArrowDown":
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev < filteredSuggestions.length - 1 ? prev + 1 : 0
+                );
+                break;
+            case "ArrowUp":
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev > 0 ? prev - 1 : filteredSuggestions.length - 1
+                );
+                break;
+            case "Enter":
+                if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < filteredSuggestions.length) {
+                    e.preventDefault();
+                    handleSelectSuggestion(filteredSuggestions[selectedSuggestionIndex]);
+                }
+                break;
+            case "Escape":
+                setShowRecipientSuggestions(false);
+                setSelectedSuggestionIndex(-1);
+                break;
+        }
+    }, [showRecipientSuggestions, filteredSuggestions, selectedSuggestionIndex, handleSelectSuggestion]);
+    
+    // Handle saving address to address book
+    const handleSaveToAddressBook = useCallback(async () => {
+        if (!saveAddressLabel.trim() || !ensResolver.resolvedAddress) return;
+        
+        try {
+            await addToAddressBook({
+                address: ensResolver.resolvedAddress,
+                label: saveAddressLabel.trim(),
+                ensName: ensResolver.ensName || undefined,
+            });
+            setShowSaveAddressDialog(false);
+            setSaveAddressLabel("");
+            refreshSuggestions();
+        } catch (err) {
+            console.error("Failed to save to address book:", err);
+        }
+    }, [saveAddressLabel, ensResolver.resolvedAddress, ensResolver.ensName, addToAddressBook, refreshSuggestions]);
+    
+    // Get suggestion type icon
+    const getSuggestionIcon = (type: SendSuggestion["type"]) => {
+        switch (type) {
+            case "friend": return "👤";
+            case "vault": return "🔐";
+            case "address_book": return "📖";
+            case "recent": return "🕐";
+            default: return "📍";
+        }
+    };
+    
+    const getSuggestionLabel = (type: SendSuggestion["type"]) => {
+        switch (type) {
+            case "friend": return "Friend";
+            case "vault": return "Vault";
+            case "address_book": return "Saved";
+            case "recent": return "Recent";
+            default: return "";
+        }
+    };
     
     // Activity state
     const [transactions, setTransactions] = useState<VaultTransaction[]>([]);
@@ -464,23 +628,71 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 }
             }
             
-            // If polling timed out, try force-sync as a last resort
-            // The transaction was submitted successfully, so the vault may exist
+            // If polling timed out, do ONE final on-chain check before giving up
+            // DO NOT use force=true here - that should only be for Create2 failures
             if (!deployed) {
-                console.log("[VaultList] Polling timed out, attempting force sync...");
+                console.log("[VaultList] Polling timed out, doing final on-chain verification...");
                 try {
-                    await confirmDeployment(vaultId, txHash, true); // force=true
-                    deployed = true;
-                    console.log("[VaultList] Force sync succeeded!");
-                } catch (forceSyncError) {
-                    console.warn("[VaultList] Force sync failed:", forceSyncError);
-                    // Don't throw - show a helpful message instead
+                    const finalCheckClient = publicClient || getPublicClient(deployInfo.chainId);
+                    const code = await finalCheckClient.getCode({ address: safeAddress as Address });
+                    const actuallyDeployed = code && code !== '0x' && code.length > 2;
+                    
+                    if (actuallyDeployed) {
+                        console.log("[VaultList] Contract exists on-chain! Confirming deployment...");
+                        await confirmDeployment(vaultId, txHash, false); // NOT force - verify on-chain
+                        deployed = true;
+                    } else {
+                        console.warn("[VaultList] Contract NOT deployed on-chain after timeout");
+                        setDeployError("Deployment may have failed. Please try again or check the transaction.");
+                        setIsDeploying(false);
+                        return;
+                    }
+                } catch (finalCheckError) {
+                    console.warn("[VaultList] Final verification failed:", finalCheckError);
                     setDeployError("Transaction sent but verification timed out. Click Sync to check status.");
                     setIsDeploying(false);
                     return;
                 }
             }
 
+            // Verify on-chain owners match expected owners
+            console.log("[VaultList] Verifying vault owners match expected...");
+            try {
+                const verifyClient = publicClient || getPublicClient(deployInfo.chainId);
+                const onChainOwners = await verifyClient.readContract({
+                    address: safeAddress as Address,
+                    abi: [{
+                        name: "getOwners",
+                        type: "function",
+                        inputs: [],
+                        outputs: [{ name: "", type: "address[]" }],
+                    }],
+                    functionName: "getOwners",
+                }) as Address[];
+                
+                // Normalize for comparison
+                const expectedOwners = (deployInfo.owners as string[]).map(o => o.toLowerCase()).sort();
+                const actualOwners = (onChainOwners as string[]).map(o => o.toLowerCase()).sort();
+                
+                console.log("[VaultList] Expected owners:", expectedOwners);
+                console.log("[VaultList] Actual owners:", actualOwners);
+                
+                // Check if they match
+                const ownersMatch = expectedOwners.length === actualOwners.length &&
+                    expectedOwners.every((owner, i) => owner === actualOwners[i]);
+                
+                if (!ownersMatch) {
+                    console.error("[VaultList] OWNER MISMATCH DETECTED!");
+                    console.error("[VaultList] Expected:", expectedOwners);
+                    console.error("[VaultList] Got:", actualOwners);
+                    // Don't fail deployment, but log a warning - the vault is deployed
+                    // but users might have trouble executing transactions
+                    setDeployError("Warning: Vault deployed but owners may not match expected. Try refreshing.");
+                }
+            } catch (ownerCheckError) {
+                console.warn("[VaultList] Could not verify owners:", ownerCheckError);
+            }
+            
             // Refresh vault details
             const updatedVault = await getVault(vaultId);
             if (updatedVault) {
@@ -523,10 +735,10 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
     // Sync deployment status - checks on-chain state and updates DB if needed
     const [isSyncing, setIsSyncing] = useState(false);
-    const handleSyncStatus = useCallback(async (vaultId: string) => {
-        if (!selectedVault) return;
+    const handleSyncStatus = useCallback(async (vaultId: string, silent: boolean = false) => {
+        if (!selectedVault) return false;
         
-        setIsSyncing(true);
+        if (!silent) setIsSyncing(true);
         try {
             console.log("[VaultList] Syncing deployment status for vault:", vaultId);
             
@@ -545,21 +757,59 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                     setSelectedVault(updatedVault);
                 }
                 await fetchVaults();
+                return true; // Deployment confirmed
             } else if (deployInfo.isDeployed) {
                 // Just refresh to get latest state
                 const updatedVault = await getVault(vaultId);
                 if (updatedVault) {
                     setSelectedVault(updatedVault);
                 }
+                return true;
             } else {
                 console.log("[VaultList] Safe is not deployed on-chain yet");
+                return false;
             }
         } catch (err) {
             console.error("[VaultList] Sync error:", err);
+            return false;
         } finally {
-            setIsSyncing(false);
+            if (!silent) setIsSyncing(false);
         }
     }, [selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults]);
+
+    // Auto-sync for undeployed vaults: check every 5 seconds after deployment attempt
+    const [autoSyncAttempts, setAutoSyncAttempts] = useState(0);
+    useEffect(() => {
+        // Only auto-sync if vault is selected, not deployed, and we're not already deploying/syncing
+        if (!selectedVault || selectedVault.isDeployed || isDeploying || isSyncing) {
+            setAutoSyncAttempts(0);
+            return;
+        }
+
+        // Limit auto-sync attempts to avoid infinite polling
+        if (autoSyncAttempts >= 12) { // 12 attempts = 1 minute of checking
+            console.log("[VaultList] Auto-sync: max attempts reached");
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            console.log(`[VaultList] Auto-sync attempt ${autoSyncAttempts + 1}/12...`);
+            const deployed = await handleSyncStatus(selectedVault.id, true);
+            if (deployed) {
+                console.log("[VaultList] Auto-sync: deployment confirmed!");
+                setAutoSyncAttempts(0);
+            } else {
+                setAutoSyncAttempts(prev => prev + 1);
+            }
+        }, 5000); // Check every 5 seconds
+
+        return () => clearTimeout(timer);
+    }, [selectedVault, isDeploying, isSyncing, autoSyncAttempts, handleSyncStatus]);
+
+    // Reset auto-sync counter when vault changes
+    useEffect(() => {
+        setAutoSyncAttempts(0);
+    }, [selectedVault?.id]);
 
     // Fetch balances when vault is selected
     const fetchBalances = useCallback(async (vaultId: string) => {
@@ -754,6 +1004,15 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
         if (!selectedVault) return;
         
         try {
+            // Find the user's Smart Wallet address from vault members
+            // This is required for passkey users whose Smart Wallet is the vault owner
+            const userMember = selectedVault.members.find(
+                (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+            );
+            const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
+            
+            console.log("[VaultList] Signing with Smart Wallet:", userSmartWalletAddress || userAddress);
+            
             // Get the transaction details for signing
             const signResult = await vaultExecution.signTransaction({
                 safeAddress: selectedVault.safeAddress as Address,
@@ -762,6 +1021,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                 value: tx.value || "0",
                 data: (tx.data || "0x") as Hex,
                 nonce: tx.nonce,
+                smartWalletAddress: userSmartWalletAddress, // Pass Smart Wallet address for EIP-1271 signing
             });
             
             if (!signResult.success || !signResult.signature) {
@@ -898,35 +1158,84 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
     // Propose a new transaction
     const proposeTransaction = async () => {
-        if (!selectedVault || !sendToken || !sendAmount || !ensResolver.resolvedAddress) {
+        if (!selectedVault || !sendToken || !actualVaultSendAmount || !ensResolver.resolvedAddress) {
             alert("Please fill in all fields");
             return;
         }
 
         setIsProposing(true);
         try {
+            const displayAmount = isUsdMode 
+                ? `$${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(6)} ${sendToken.symbol})`
+                : `${actualVaultSendAmount} ${sendToken.symbol}`;
+            
             const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
                 body: JSON.stringify({
                     toAddress: ensResolver.resolvedAddress,
-                    amount: sendAmount,
+                    amount: actualVaultSendAmount,
                     tokenAddress: sendToken.contractAddress === "native" ? null : sendToken.contractAddress,
                     tokenDecimals: sendToken.decimals,
                     tokenSymbol: sendToken.symbol,
-                    description: `Send ${sendAmount} ${sendToken.symbol} to ${ensResolver.input}`,
+                    description: `Send ${displayAmount} to ${ensResolver.input}`,
                 }),
             });
 
             const data = await response.json();
             
-            if (response.ok) {
-                alert(data.message || "Transaction proposed!");
+            if (response.ok && data.transaction) {
                 // Reset form
                 setSendAmount("");
+                setIsUsdMode(false);
                 setSendToken(null);
                 ensResolver.clear();
+                
+                // Now sign the transaction we just created
+                // This ensures the creator's signature is a real one (not a placeholder)
+                const userMember = selectedVault.members.find(
+                    (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+                );
+                const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
+                
+                console.log("[VaultList] Proposer signing their own transaction...");
+                
+                const signResult = await vaultExecution.signTransaction({
+                    safeAddress: selectedVault.safeAddress as Address,
+                    chainId: selectedVault.chainId,
+                    to: data.transaction.to_address as Address,
+                    value: data.transaction.value || "0",
+                    data: (data.transaction.data || "0x") as Hex,
+                    nonce: data.transaction.nonce,
+                    smartWalletAddress: userSmartWalletAddress,
+                });
+                
+                if (signResult.success && signResult.signature) {
+                    // Store the creator's real signature
+                    const signResponse = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({
+                            transactionId: data.transaction.id,
+                            action: "sign",
+                            signature: signResult.signature,
+                            signerAddress: signResult.signerAddress,
+                            safeTxHash: signResult.safeTxHash,
+                        }),
+                    });
+                    
+                    const signData = await signResponse.json();
+                    if (signResponse.ok) {
+                        alert(signData.message || "Transaction proposed and signed!");
+                    } else {
+                        alert(`Transaction proposed but signing failed: ${signData.error}`);
+                    }
+                } else {
+                    alert(`Transaction proposed but signing failed: ${signResult.error || "Unknown error"}`);
+                }
+                
                 // Refresh pending txs and switch to activity tab
                 fetchPendingTxs(selectedVault.id);
                 setActiveTab("activity");
@@ -1028,6 +1337,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
             alert(`Transaction proposal feature coming soon!\n\nTo: ${displayTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`);
             ensResolver.clear();
             setSendAmount("");
+            setIsUsdMode(false);
             setSendToken(null);
         } catch (err) {
             alert(err instanceof Error ? err.message : "Failed to create transaction");
@@ -1052,6 +1362,7 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                         setActiveTab("assets");
                         ensResolver.clear();
                         setSendAmount("");
+                        setIsUsdMode(false);
                         setSendToken(null);
                     }}
                     className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
@@ -1609,39 +1920,88 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
 
                                     {/* Amount input */}
                                     <div>
-                                        <label className="block text-xs text-zinc-400 mb-2">Amount</label>
-                                        <div className="relative">
-                                            <input
-                                                type="number"
-                                                value={sendAmount}
-                                                onChange={(e) => setSendAmount(e.target.value)}
-                                                onWheel={(e) => e.currentTarget.blur()}
-                                                placeholder="0.00"
-                                                className="w-full px-3 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-lg placeholder-zinc-500 focus:outline-none focus:border-orange-500 pr-20"
-                                            />
-                                            {sendToken && (
-                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                                    <span className="text-sm text-zinc-400">{sendToken.symbol}</span>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-xs text-zinc-400">Amount</label>
+                                            <div className="flex items-center gap-2">
+                                                {/* USD/Token toggle */}
+                                                {sendToken && vaultTokenPriceUsd > 0 && (
                                                     <button
-                                                        onClick={() => setSendAmount(sendToken.balanceFormatted)}
-                                                        className="text-xs font-medium text-orange-400 hover:text-orange-300 px-2 py-1 bg-orange-500/10 rounded"
+                                                        onClick={toggleVaultAmountMode}
+                                                        className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                                                        title={isUsdMode ? "Switch to token amount" : "Switch to USD amount"}
+                                                    >
+                                                        <span className={isUsdMode ? "text-emerald-400" : "text-zinc-500"}>$</span>
+                                                        <span className="text-zinc-500">/</span>
+                                                        <span className={!isUsdMode ? "text-emerald-400" : "text-zinc-500"}>{sendToken.symbol}</span>
+                                                    </button>
+                                                )}
+                                                {sendToken && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (isUsdMode && sendToken.balanceUsd) {
+                                                                setSendAmount(sendToken.balanceUsd.toFixed(2));
+                                                            } else {
+                                                                setSendAmount(sendToken.balanceFormatted);
+                                                            }
+                                                        }}
+                                                        className="text-xs font-medium text-orange-400 hover:text-orange-300 px-2 py-0.5 bg-orange-500/10 rounded"
                                                     >
                                                         MAX
                                                     </button>
-                                                </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg focus-within:border-orange-500">
+                                                {isUsdMode && <span className="pl-3 text-zinc-400 text-lg">$</span>}
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={sendAmount}
+                                                    onChange={(e) => {
+                                                        // Only allow valid decimal numbers
+                                                        const value = e.target.value;
+                                                        if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                                            setSendAmount(value);
+                                                        }
+                                                    }}
+                                                    placeholder="0.00"
+                                                    className="flex-1 px-3 py-3 bg-transparent text-white text-lg placeholder-zinc-500 focus:outline-none"
+                                                />
+                                                {!isUsdMode && sendToken && (
+                                                    <span className="pr-3 text-sm text-zinc-400">{sendToken.symbol}</span>
+                                                )}
+                                            </div>
+                                            {/* Show conversion */}
+                                            {sendToken && sendAmount && (
+                                                <p className="mt-1 text-xs text-zinc-500">
+                                                    {isUsdMode 
+                                                        ? `≈ ${actualVaultSendAmount ? parseFloat(actualVaultSendAmount).toFixed(6) : "0"} ${sendToken.symbol}`
+                                                        : `≈ $${getVaultUsdAmount(sendAmount) || "0.00"}`
+                                                    }
+                                                </p>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Recipient input with ENS support */}
-                                    <div>
+                                    {/* Recipient input with ENS support and suggestions */}
+                                    <div className="relative">
                                         <label className="block text-xs text-zinc-400 mb-2">Recipient Address or ENS</label>
                                         <div className="relative">
                                             <input
                                                 type="text"
                                                 value={ensResolver.input}
-                                                onChange={(e) => ensResolver.setInput(e.target.value)}
-                                                placeholder="0x... or vitalik.eth"
+                                                onChange={(e) => {
+                                                    ensResolver.setInput(e.target.value);
+                                                    setShowRecipientSuggestions(true);
+                                                    setSelectedSuggestionIndex(-1);
+                                                }}
+                                                onFocus={() => setShowRecipientSuggestions(true)}
+                                                onBlur={() => {
+                                                    setTimeout(() => setShowRecipientSuggestions(false), 200);
+                                                }}
+                                                onKeyDown={handleRecipientKeyDown}
+                                                placeholder="0x..., ENS, or select from contacts"
                                                 spellCheck={false}
                                                 autoComplete="off"
                                                 autoCorrect="off"
@@ -1655,13 +2015,13 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 }`}
                                             />
                                             {/* Loading indicator */}
-                                            {ensResolver.isResolving && (
+                                            {(ensResolver.isResolving || suggestionsLoading) && (
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                                                     <div className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
                                                 </div>
                                             )}
                                             {/* Valid indicator */}
-                                            {!ensResolver.isResolving && ensResolver.isValid && (
+                                            {!ensResolver.isResolving && !suggestionsLoading && ensResolver.isValid && (
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400">
                                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1669,6 +2029,130 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 </div>
                                             )}
                                         </div>
+                                        
+                                        {/* Suggestions dropdown */}
+                                        {showRecipientSuggestions && !showSaveAddressDialog && (filteredSuggestions.length > 0 || canSaveToAddressBook) && (
+                                            <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                                                {/* Save to address book option */}
+                                                {canSaveToAddressBook && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowSaveAddressDialog(true);
+                                                            setShowRecipientSuggestions(false);
+                                                        }}
+                                                        className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-zinc-700/50 transition-colors border-b border-zinc-700"
+                                                    >
+                                                        <span className="text-base">💾</span>
+                                                        <div className="text-left">
+                                                            <div className="text-xs font-medium text-white">Save to Address Book</div>
+                                                            <div className="text-[10px] text-zinc-400 font-mono">
+                                                                {(ensResolver.resolvedAddress || ensResolver.input).slice(0, 10)}...{(ensResolver.resolvedAddress || ensResolver.input).slice(-8)}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                )}
+
+                                                {/* Suggestions list */}
+                                                {filteredSuggestions.length > 0 && (
+                                                    <div className="py-1">
+                                                        {filteredSuggestions.slice(0, 8).map((suggestion, index) => (
+                                                            <button
+                                                                key={`${suggestion.type}-${suggestion.address}`}
+                                                                type="button"
+                                                                onClick={() => handleSelectSuggestion(suggestion)}
+                                                                className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${
+                                                                    index === selectedSuggestionIndex
+                                                                        ? "bg-orange-600/20"
+                                                                        : "hover:bg-zinc-700/50"
+                                                                }`}
+                                                            >
+                                                                {/* Avatar or type icon */}
+                                                                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                                                    {suggestion.avatar ? (
+                                                                        <img 
+                                                                            src={suggestion.avatar} 
+                                                                            alt="" 
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-sm">{getSuggestionIcon(suggestion.type)}</span>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                {/* Info */}
+                                                                <div className="flex-1 min-w-0 text-left">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-xs font-medium text-white truncate">
+                                                                            {suggestion.label}
+                                                                        </span>
+                                                                        {suggestion.isFavorite && (
+                                                                            <span className="text-yellow-400 text-[10px]">★</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                                                        <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
+                                                                            {getSuggestionLabel(suggestion.type)}
+                                                                        </span>
+                                                                        {suggestion.sublabel && (
+                                                                            <span className="truncate">{suggestion.sublabel}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Address preview */}
+                                                                <div className="text-[10px] text-zinc-500 font-mono flex-shrink-0">
+                                                                    {(suggestion.smartWalletAddress || suggestion.address).slice(0, 6)}...
+                                                                    {(suggestion.smartWalletAddress || suggestion.address).slice(-4)}
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        
+                                        {/* Save address dialog */}
+                                        {showSaveAddressDialog && (
+                                            <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3">
+                                                <div className="text-xs font-medium text-white mb-2">
+                                                    Save to Address Book
+                                                </div>
+                                                <div className="text-[10px] text-zinc-400 font-mono mb-2 break-all">
+                                                    {ensResolver.resolvedAddress || ensResolver.input}
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={saveAddressLabel}
+                                                    onChange={(e) => setSaveAddressLabel(e.target.value)}
+                                                    placeholder="Label (e.g., Mom, Work, Exchange)"
+                                                    maxLength={50}
+                                                    autoFocus
+                                                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/50 mb-2"
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowSaveAddressDialog(false);
+                                                            setSaveAddressLabel("");
+                                                        }}
+                                                        className="flex-1 px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSaveToAddressBook}
+                                                        disabled={!saveAddressLabel.trim()}
+                                                        className="flex-1 px-3 py-1.5 text-xs bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        Save
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        
                                         {/* Show resolved info */}
                                         {ensResolver.ensName && ensResolver.resolvedAddress && (
                                             <p className="mt-1 text-xs text-emerald-400 flex items-center gap-1">
@@ -1698,10 +2182,23 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                         </ol>
                                     </div>
 
+                                    {/* Transaction summary when amount entered */}
+                                    {sendToken && actualVaultSendAmount && parseFloat(actualVaultSendAmount) > 0 && (
+                                        <div className="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg space-y-2">
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-zinc-500">You send</span>
+                                                <span className="text-zinc-300 font-medium">
+                                                    {parseFloat(actualVaultSendAmount).toFixed(6)} {sendToken.symbol}
+                                                    {isUsdMode && sendAmount && <> (${sendAmount})</>}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Send button */}
                                     <button
                                         onClick={proposeTransaction}
-                                        disabled={!ensResolver.isValid || !sendAmount || !sendToken || isProposing || ensResolver.isResolving}
+                                        disabled={!ensResolver.isValid || !actualVaultSendAmount || parseFloat(actualVaultSendAmount) <= 0 || !sendToken || isProposing || ensResolver.isResolving}
                                         className="w-full py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {isProposing ? (
@@ -1709,12 +2206,24 @@ export function VaultList({ userAddress, onCreateNew }: VaultListProps) {
                                                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                 Creating Proposal...
                                             </>
+                                        ) : !sendToken ? (
+                                            "Select Token"
+                                        ) : !sendAmount ? (
+                                            "Enter Amount"
+                                        ) : !ensResolver.input ? (
+                                            "Enter Recipient"
+                                        ) : ensResolver.isResolving ? (
+                                            "Resolving ENS..."
+                                        ) : !ensResolver.isValid ? (
+                                            "Invalid Address"
                                         ) : (
                                             <>
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                                 </svg>
-                                                Propose Transaction
+                                                {isUsdMode 
+                                                    ? `Propose $${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(4)} ${sendToken.symbol})`
+                                                    : `Propose ${sendAmount} ${sendToken.symbol}`}
                                             </>
                                         )}
                                     </button>

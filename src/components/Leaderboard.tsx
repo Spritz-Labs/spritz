@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "motion/react";
 import { createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
+import { getDisplayName as getBaseDisplayName, formatAddress } from "@/utils/address";
 
 type LeaderboardEntry = {
     rank: number;
@@ -167,16 +168,15 @@ export function Leaderboard({ userAddress, limit = 10 }: LeaderboardProps) {
         return () => clearInterval(interval);
     }, [fetchLeaderboard]);
 
-    const formatAddress = (address: string) =>
-        `${address.slice(0, 6)}...${address.slice(-4)}`;
-
     const getDisplayName = (entry: LeaderboardEntry) => {
-        // Priority: Spritz username > ENS from DB > resolved ENS > formatted address
-        if (entry.username) return `@${entry.username}`;
-        if (entry.ensName) return entry.ensName;
-        const resolved = resolvedNames[entry.address.toLowerCase()];
-        if (resolved) return resolved;
-        return formatAddress(entry.address);
+        // Use resolved ENS if available (from on-chain lookup)
+        const resolvedEns = resolvedNames[entry.address.toLowerCase()];
+        // Priority: ENS > username > address
+        return getBaseDisplayName({
+            address: entry.address,
+            ensName: entry.ensName || resolvedEns || null,
+            username: entry.username,
+        });
     };
 
     const displayedEntries = isExpanded ? entries : entries.slice(0, 5);

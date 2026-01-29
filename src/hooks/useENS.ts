@@ -5,15 +5,15 @@ import { createPublicClient, http, isAddress, type Address, fallback } from "vie
 import { mainnet } from "viem/chains";
 import { normalize } from "viem/ens";
 import { isSolanaAddress } from "@/utils/address";
+import { getRpcUrl } from "@/lib/rpc";
 
-// Multiple RPC endpoints for reliability
+// Multiple RPC endpoints for reliability (dRPC primary if configured)
 const publicClient = createPublicClient({
   chain: mainnet,
   transport: fallback([
-    http("https://eth.llamarpc.com", { timeout: 10000 }),
-    http("https://rpc.ankr.com/eth", { timeout: 10000 }),
-    http("https://mainnet.rpc.buidlguidl.com", { timeout: 10000 }),
+    http(getRpcUrl(1), { timeout: 10000 }),
     http("https://cloudflare-eth.com", { timeout: 10000 }),
+    http("https://eth.llamarpc.com", { timeout: 10000 }),
   ]),
 });
 

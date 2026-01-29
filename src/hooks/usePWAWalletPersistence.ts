@@ -23,6 +23,7 @@ const MAX_RECONNECT_ATTEMPTS = 3; // Reduced from 5 - don't spam reconnects
 const RECONNECT_BACKOFF_MULTIPLIER = 1.5;
 const GRACE_PERIOD_MS = 3000; // Time to wait before showing "disconnected" UI
 const SESSION_CHECK_INTERVAL = 30000; // Check session health every 30s
+const LAST_WALLET_ADDRESS_KEY = "spritz_last_wallet_address"; // Persists across sessions
 
 type ConnectionState = "connected" | "reconnecting" | "disconnected" | "checking";
 
@@ -43,6 +44,20 @@ export function usePWAWalletPersistence() {
     const wasIntentionallyDisconnected = useCallback((): boolean => {
         if (typeof window === "undefined") return false;
         return sessionStorage.getItem("wallet_intentionally_disconnected") === "true";
+    }, []);
+
+    // Check if this user has EVER connected via wallet before
+    // This persists in localStorage so it survives app restarts
+    const hasEverConnectedWallet = useCallback((): boolean => {
+        if (typeof window === "undefined") return false;
+        return !!localStorage.getItem(LAST_WALLET_ADDRESS_KEY);
+    }, []);
+    
+    // Save the wallet address when user connects (for PWA resume)
+    const saveWalletAddress = useCallback((addr: string) => {
+        if (typeof window !== "undefined" && addr) {
+            localStorage.setItem(LAST_WALLET_ADDRESS_KEY, addr);
+        }
     }, []);
 
     // Check if we have a saved session that should reconnect
@@ -137,6 +152,14 @@ export function usePWAWalletPersistence() {
             setConnectionState("connected");
             setLastConnectedAddress(address);
             
+            // Save wallet address for PWA resume (persists across sessions)
+            saveWalletAddress(address);
+            
+            // Clear intentional disconnect flag since user is now connected
+            if (typeof window !== "undefined") {
+                sessionStorage.removeItem("wallet_intentionally_disconnected");
+            }
+            
             // Clear any pending reconnect
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
@@ -147,7 +170,7 @@ export function usePWAWalletPersistence() {
                 gracePeriodRef.current = null;
             }
         }
-    }, [isConnected, address]);
+    }, [isConnected, address, saveWalletAddress]);
 
     // Handle visibility change (app foreground/background)
     useEffect(() => {
@@ -216,17 +239,31 @@ export function usePWAWalletPersistence() {
     }, [isConnected, hasSavedSession, attemptReconnect, connectionState]);
 
     // Initial mount - check connection state
+    // IMPORTANT: Only auto-reconnect if user has PREVIOUSLY connected via wallet
+    // This prevents the wallet modal from popping up for users who use passkey/email auth
     useEffect(() => {
         mountedRef.current = true;
         
         if (isConnected && address) {
+            // Already connected - great!
             setConnectionState("connected");
             setLastConnectedAddress(address);
-        } else if (hasSavedSession()) {
+            saveWalletAddress(address);
+        } else if (wasIntentionallyDisconnected()) {
+            // User chose to disconnect - respect that
+            setConnectionState("disconnected");
+            console.log("[PWA-Wallet] User intentionally disconnected, not auto-reconnecting");
+        } else if (hasEverConnectedWallet() && hasSavedSession()) {
+            // User HAS previously connected via wallet AND has a saved session
+            // This is likely a PWA resume scenario - try to reconnect
+            console.log("[PWA-Wallet] PWA resume detected - previous wallet user, attempting reconnect");
             setConnectionState("reconnecting");
             attemptReconnect();
         } else {
+            // Fresh user OR user who uses passkey/email
+            // Don't auto-reconnect, let them choose auth method
             setConnectionState("disconnected");
+            console.log("[PWA-Wallet] No previous wallet connection, showing auth options");
         }
 
         return () => {
@@ -249,7 +286,8 @@ export function usePWAWalletPersistence() {
     }, [attemptReconnect]);
 
     // Clear session - for logout or to escape reconnect loop
-    const clearSession = useCallback(() => {
+    // If `forgetWallet` is true, also clears the persistent wallet address so auto-reconnect won't happen
+    const clearSession = useCallback((forgetWallet: boolean = false) => {
         setLastConnectedAddress(null);
         setReconnectAttempts(0);
         setConnectionState("disconnected");
@@ -269,6 +307,13 @@ export function usePWAWalletPersistence() {
             try {
                 // Mark that we intentionally disconnected
                 sessionStorage.setItem("wallet_intentionally_disconnected", "true");
+                
+                // If forgetting wallet entirely, clear the persistent address
+                // This means auto-reconnect won't happen on next app launch
+                if (forgetWallet) {
+                    localStorage.removeItem(LAST_WALLET_ADDRESS_KEY);
+                    console.log("[PWA-Wallet] Wallet forgotten - won't auto-reconnect on next launch");
+                }
                 
                 // Clear wagmi state that causes reconnect loop
                 localStorage.removeItem("wagmi.store");

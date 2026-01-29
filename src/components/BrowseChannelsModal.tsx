@@ -1,32 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChannels } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
+import { ChannelIcon } from "./ChannelIcon";
 
 type BrowseChannelsModalProps = {
     isOpen: boolean;
     onClose: () => void;
     userAddress: string;
     onJoinChannel: (channel: PublicChannel) => void;
+    initialShowCreate?: boolean; // Auto-open the create form
 };
 
 const CATEGORIES = [
     { id: "all", name: "All", emoji: "🌐" },
+    // Location
     { id: "cities", name: "Cities", emoji: "🏙️" },
+    { id: "events", name: "Events", emoji: "🎉" },
+    // Tech & Web3
     { id: "crypto", name: "Crypto", emoji: "₿" },
+    { id: "nfts", name: "NFTs", emoji: "🖼️" },
+    { id: "defi", name: "DeFi", emoji: "🏦" },
+    { id: "daos", name: "DAOs", emoji: "🗳️" },
     { id: "tech", name: "Tech", emoji: "💻" },
+    { id: "dev", name: "Developers", emoji: "👨‍💻" },
+    { id: "ai", name: "AI", emoji: "🤖" },
+    // Entertainment
     { id: "gaming", name: "Gaming", emoji: "🎮" },
     { id: "sports", name: "Sports", emoji: "⚽" },
     { id: "music", name: "Music", emoji: "🎵" },
     { id: "art", name: "Art", emoji: "🎨" },
+    { id: "entertainment", name: "Entertainment", emoji: "🎬" },
+    { id: "memes", name: "Memes", emoji: "😂" },
+    // Learning & Growth
     { id: "finance", name: "Finance", emoji: "📈" },
     { id: "science", name: "Science", emoji: "🔬" },
-    { id: "lifestyle", name: "Lifestyle", emoji: "🌟" },
-    { id: "entertainment", name: "Entertainment", emoji: "🎬" },
+    { id: "education", name: "Education", emoji: "📚" },
     { id: "languages", name: "Languages", emoji: "🗣️" },
+    { id: "careers", name: "Careers", emoji: "💼" },
+    // Lifestyle
+    { id: "lifestyle", name: "Lifestyle", emoji: "🌟" },
+    { id: "food", name: "Food", emoji: "🍕" },
+    { id: "travel", name: "Travel", emoji: "✈️" },
+    { id: "fitness", name: "Fitness", emoji: "💪" },
+    { id: "health", name: "Health", emoji: "❤️‍🩹" },
+    // Social
     { id: "community", name: "Community", emoji: "👥" },
+    { id: "politics", name: "Politics", emoji: "🏛️" },
+    { id: "support", name: "Support", emoji: "🤝" },
+    { id: "random", name: "Random", emoji: "🎲" },
+    { id: "other", name: "Other", emoji: "💬" },
 ];
 
 export function BrowseChannelsModal({
@@ -34,18 +59,27 @@ export function BrowseChannelsModal({
     onClose,
     userAddress,
     onJoinChannel,
+    initialShowCreate = false,
 }: BrowseChannelsModalProps) {
     const { channels, isLoading, joinChannel, leaveChannel, createChannel } =
         useChannels(userAddress);
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [joiningChannel, setJoiningChannel] = useState<string | null>(null);
-    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(initialShowCreate);
+    
+    // Reset showCreateModal when the modal opens/closes
+    useEffect(() => {
+        if (isOpen) {
+            setShowCreateModal(initialShowCreate);
+        }
+    }, [isOpen, initialShowCreate]);
     const [newChannel, setNewChannel] = useState({
         name: "",
         description: "",
         emoji: "💬",
-        category: "community",
+        category: "other",
+        messagingType: "standard" as "standard" | "waku",
     });
     const [createError, setCreateError] = useState<string | null>(null);
 
@@ -87,11 +121,12 @@ export function BrowseChannelsModal({
                 description: newChannel.description.trim() || undefined,
                 emoji: newChannel.emoji,
                 category: newChannel.category,
+                messagingType: newChannel.messagingType,
             });
 
             if (channel) {
                 setShowCreateModal(false);
-                setNewChannel({ name: "", description: "", emoji: "💬", category: "community" });
+                setNewChannel({ name: "", description: "", emoji: "💬", category: "community", messagingType: "standard" });
                 onJoinChannel(channel);
             }
         } catch (e) {
@@ -212,9 +247,13 @@ export function BrowseChannelsModal({
                                         className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
                                     >
                                         <div className="flex items-start gap-3">
-                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
-                                                {channel.emoji}
-                                            </div>
+                                            <ChannelIcon
+                                                emoji={channel.emoji}
+                                                iconUrl={channel.icon_url}
+                                                name={channel.name}
+                                                size="md"
+                                                className="flex-shrink-0"
+                                            />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <p className="text-white font-medium truncate">
@@ -349,6 +388,57 @@ export function BrowseChannelsModal({
                                                 <option value="entertainment">Entertainment</option>
                                             </select>
                                         </div>
+                                    </div>
+
+                                    {/* Messaging Type Selection */}
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-2">
+                                            Messaging Type
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setNewChannel({ ...newChannel, messagingType: "standard" })}
+                                                className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                    newChannel.messagingType === "standard"
+                                                        ? "border-[#FF5500] bg-[#FF5500]/10"
+                                                        : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-lg">☁️</span>
+                                                    <span className="text-white font-medium text-sm">Standard</span>
+                                                </div>
+                                                <p className="text-zinc-500 text-xs">
+                                                    Fast & reliable cloud storage
+                                                </p>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setNewChannel({ ...newChannel, messagingType: "waku" })}
+                                                className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                    newChannel.messagingType === "waku"
+                                                        ? "border-purple-500 bg-purple-500/10"
+                                                        : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-lg">🌐</span>
+                                                    <span className="text-white font-medium text-sm">Decentralized</span>
+                                                </div>
+                                                <p className="text-zinc-500 text-xs">
+                                                    Censorship-resistant messaging
+                                                </p>
+                                            </button>
+                                        </div>
+                                        {newChannel.messagingType === "waku" && (
+                                            <p className="text-purple-400 text-xs mt-2 flex items-center gap-1">
+                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                                </svg>
+                                                Messages are stored on a decentralized network
+                                            </p>
+                                        )}
                                     </div>
 
                                     {createError && (

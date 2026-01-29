@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatInTimeZone } from "date-fns-tz";
 import { isPast, isFuture, differenceInMinutes, addMinutes } from "date-fns";
+import { formatAddress } from "@/utils/address";
 
 type ScheduledCallUser = {
     wallet_address: string;
@@ -71,21 +72,25 @@ export function ScheduledCalls({ userAddress, onJoinCall }: ScheduledCallsProps)
         fetchCalls();
     }, [fetchCalls]);
 
+    // Get display name with priority: guest_name (for external guests) > ENS (display_name) > username > address
     const getDisplayName = (call: ScheduledCall): string => {
         if (call.is_host) {
             // Show who scheduled with you
+            // Guest name takes priority for external guests
             if (call.guest_name) return call.guest_name;
+            // ENS (stored as display_name) > username > address
             if (call.scheduler_user?.display_name) return call.scheduler_user.display_name;
-            if (call.scheduler_user?.username) return call.scheduler_user.username;
+            if (call.scheduler_user?.username) return `@${call.scheduler_user.username}`;
             if (call.scheduler_wallet_address) {
-                return `${call.scheduler_wallet_address.slice(0, 6)}...${call.scheduler_wallet_address.slice(-4)}`;
+                return formatAddress(call.scheduler_wallet_address);
             }
             return "Guest";
         } else {
             // Show who you scheduled with
+            // ENS (stored as display_name) > username > address
             if (call.recipient_user?.display_name) return call.recipient_user.display_name;
-            if (call.recipient_user?.username) return call.recipient_user.username;
-            return `${call.recipient_wallet_address.slice(0, 6)}...${call.recipient_wallet_address.slice(-4)}`;
+            if (call.recipient_user?.username) return `@${call.recipient_user.username}`;
+            return formatAddress(call.recipient_wallet_address);
         }
     };
 

@@ -78,7 +78,8 @@ export async function PATCH(
         const { 
             userAddress: bodyUserAddress, 
             name, 
-            personality, 
+            personality,
+            systemInstructions,
             avatarEmoji,
             avatarUrl,
             visibility, 
@@ -87,8 +88,13 @@ export async function PATCH(
             mcpEnabled,
             apiEnabled,
             schedulingEnabled,
+            eventsAccess,
+            // Public access for Official agents
+            publicAccessEnabled,
             // Tags for searchability
             tags,
+            // Suggested questions (Official agents)
+            suggestedQuestions,
             // x402 fields
             x402Enabled,
             x402PriceCents,
@@ -149,7 +155,14 @@ export async function PATCH(
         if (name !== undefined) updates.name = name.trim();
         if (personality !== undefined) {
             updates.personality = personality?.trim() || null;
-            // Update system instructions when personality changes
+        }
+        
+        // System instructions: use explicit value if provided, otherwise auto-generate from personality
+        if (systemInstructions !== undefined) {
+            // Direct system instructions override (for advanced users)
+            updates.system_instructions = systemInstructions?.trim() || null;
+        } else if (personality !== undefined) {
+            // Auto-generate from personality (backward compatibility)
             updates.system_instructions = personality
                 ? `You are an AI assistant named "${agentName}". Your personality: ${personality}. Be helpful, friendly, and stay in character.`
                 : `You are an AI assistant named "${agentName}". Be helpful and friendly.`;
@@ -162,6 +175,8 @@ export async function PATCH(
         if (mcpEnabled !== undefined) updates.mcp_enabled = mcpEnabled;
         if (apiEnabled !== undefined) updates.api_enabled = apiEnabled;
         if (schedulingEnabled !== undefined) updates.scheduling_enabled = schedulingEnabled;
+        if (eventsAccess !== undefined) updates.events_access = eventsAccess;
+        if (publicAccessEnabled !== undefined) updates.public_access_enabled = publicAccessEnabled;
         
         // Tags (max 5, each max 20 chars)
         if (tags !== undefined) {
@@ -172,6 +187,21 @@ export async function PATCH(
                     .filter((t: string) => t.length > 0)
                 : [];
             updates.tags = validatedTags;
+        }
+        
+        // Suggested questions (max 4, each max 100 chars, only for official agents)
+        if (suggestedQuestions !== undefined) {
+            // Only allow suggested questions for official agents
+            const finalVisibility = visibility || existingAgent.visibility;
+            if (finalVisibility === "official") {
+                const validatedQuestions = Array.isArray(suggestedQuestions) 
+                    ? suggestedQuestions
+                        .slice(0, 4)
+                        .map((q: string) => q.trim().slice(0, 100))
+                        .filter((q: string) => q.length > 0)
+                    : [];
+                updates.suggested_questions = validatedQuestions.length > 0 ? validatedQuestions : null;
+            }
         }
         
         // x402 configuration updates

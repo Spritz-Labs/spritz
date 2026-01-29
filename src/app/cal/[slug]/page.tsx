@@ -13,10 +13,12 @@ import { injected, coinbaseWallet } from "wagmi/connectors";
 import { base, baseSepolia, mainnet, arbitrum, optimism, polygon } from "wagmi/chains";
 import { normalize } from "viem/ens";
 
+import { getRpcUrl } from "@/lib/rpc";
+
 // Public client for ENS resolution
 const ensClient = createPublicClient({
     chain: mainnet,
-    transport: http("https://eth.llamarpc.com"),
+    transport: http(getRpcUrl(1)),
 });
 
 type ScheduleType = "free" | "paid";
@@ -441,7 +443,15 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.error || "Failed to book");
+                // Include details in error message if available
+                let errorMsg = data.error || "Failed to book";
+                if (data.details) {
+                    errorMsg += ` - ${data.details}`;
+                }
+                if (data.source) {
+                    errorMsg += ` (Source: ${data.source})`;
+                }
+                throw new Error(errorMsg);
             }
 
             setBookingSuccess(true);

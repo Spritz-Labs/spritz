@@ -161,22 +161,27 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if slot is still available (race condition protection)
+        // Use a wider window to catch all potential conflicts
         const slotStart = scheduledTime.getTime();
         const slotEnd = new Date(scheduledTime.getTime() + duration * 60 * 1000);
         const slotEndTime = slotEnd.getTime();
 
-        // Check existing scheduled calls - need to check for ANY overlap, not just calls starting in this slot
-        // Get all calls in a reasonable time window around this slot
-        const windowStart = new Date(slotStart - 24 * 60 * 60 * 1000); // 24 hours before
-        const windowEnd = new Date(slotEndTime + 24 * 60 * 60 * 1000); // 24 hours after
+        // Check existing scheduled calls - need to check for ANY overlap
+        // Query calls that could potentially overlap with our slot
+        // A call overlaps if: callStart < slotEnd AND callEnd > slotStart
+        // To catch all overlaps, query calls that start up to maxDuration before slotEnd
+        // and also check calls that start up to slotEnd
+        const maxDurationMinutes = 120; // Assume max call duration of 2 hours for query window
+        const queryStart = new Date(slotStart - maxDurationMinutes * 60 * 1000); // Query from before our slot
+        const queryEnd = new Date(slotEndTime + maxDurationMinutes * 60 * 1000); // Query to after our slot
         
         const { data: existingCalls } = await supabase
             .from("shout_scheduled_calls")
             .select("id, scheduled_at, duration_minutes")
             .eq("recipient_wallet_address", recipientAddress.toLowerCase())
             .in("status", ["pending", "confirmed"])
-            .gte("scheduled_at", windowStart.toISOString())
-            .lte("scheduled_at", windowEnd.toISOString());
+            .gte("scheduled_at", queryStart.toISOString())
+            .lte("scheduled_at", queryEnd.toISOString());
 
         // Check for any overlapping calls
         const hasConflict = existingCalls?.some((call) => {
@@ -193,33 +198,14 @@ export async function POST(request: NextRequest) {
         });
 
         if (hasConflict) {
-            const conflictingCall = existingCalls?.find((call) => {
-                const callStart = new Date(call.scheduled_at).getTime();
-                const callDuration = (call.duration_minutes || 30) * 60 * 1000;
-                const callEnd = callStart + callDuration;
-                return (
-                    (slotStart >= callStart && slotStart < callEnd) ||
-                    (slotEndTime > callStart && slotEndTime <= callEnd) ||
-                    (slotStart <= callStart && slotEndTime >= callEnd)
-                );
-            });
-            
             console.log("[Schedule] Database conflict detected:", {
                 requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
-                conflictingCall,
-                existingCalls: existingCalls?.map(c => ({
-                    id: c.id,
-                    scheduledAt: c.scheduled_at,
-                    duration: c.duration_minutes,
-                })),
+                existingCallsCount: existingCalls?.length || 0,
             });
             return NextResponse.json(
                 { 
                     error: "This time slot is no longer available", 
                     source: "database",
-                    details: conflictingCall 
-                        ? `Existing call at ${conflictingCall.scheduled_at} (${conflictingCall.duration_minutes}min)`
-                        : "Conflicting scheduled call found",
                 },
                 { status: 409 }
             );
@@ -271,7 +257,9 @@ export async function POST(request: NextRequest) {
                     },
                 });
 
-                const busyPeriods = busyResponse.data.calendars?.[calendarConnection.calendar_id || "primary"]?.busy || [];
+                const calendarData = busyResponse.data.calendars?.[calendarConnection.calendar_id || "primary"];
+                const busyPeriods = calendarData?.busy || [];
+                const calendarErrors = calendarData?.errors || [];
                 
                 // Log detailed info about the freebusy response
                 console.log("[Schedule] Google Calendar freebusy check:", {
@@ -279,44 +267,21 @@ export async function POST(request: NextRequest) {
                     requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
                     busyPeriodsCount: busyPeriods.length,
                     busyPeriods: busyPeriods.map(b => ({ start: b.start, end: b.end })),
-                    rawResponse: JSON.stringify(busyResponse.data),
+                    errors: calendarErrors,
                 });
                 
+                // If there are calendar API errors, log them
+                if (calendarErrors.length > 0) {
+                    console.warn("[Schedule] Calendar API errors:", calendarErrors);
+                }
+                
                 if (busyPeriods.length > 0) {
-                    // Try to get more details about what's blocking
-                    let eventDetails = "Unknown event";
-                    try {
-                        // Query actual events to find what's blocking
-                        const eventsResponse = await calendar.events.list({
-                            calendarId: calendarConnection.calendar_id || "primary",
-                            timeMin: scheduledTime.toISOString(),
-                            timeMax: slotEnd.toISOString(),
-                            singleEvents: true,
-                            orderBy: "startTime",
-                        });
-                        
-                        const events = eventsResponse.data.items || [];
-                        console.log("[Schedule] Found blocking events:", events.map(e => ({
-                            summary: e.summary,
-                            start: e.start,
-                            end: e.end,
-                            status: e.status,
-                            transparency: e.transparency,
-                        })));
-                        
-                        if (events.length > 0) {
-                            const event = events[0];
-                            eventDetails = event.summary || "Busy (no title)";
-                        }
-                    } catch (eventsError) {
-                        console.error("[Schedule] Could not fetch event details:", eventsError);
-                    }
-                    
+                    // Don't expose calendar event details for privacy
+                    // Just indicate there's a conflict
                     return NextResponse.json(
                         { 
-                            error: "This time slot conflicts with an existing calendar event",
+                            error: "This time slot is no longer available",
                             source: "google_calendar",
-                            details: `Blocked by: "${eventDetails}" (${busyPeriods[0]?.start} to ${busyPeriods[0]?.end})`,
                         },
                         { status: 409 }
                     );

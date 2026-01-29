@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Agent, MCPServer, APITool } from "@/hooks/useAgents";
+import AgentEventsModal from "./AgentEventsModal";
 
 const AGENT_EMOJIS = [
     "🤖", "🧠", "💡", "🎯", "🚀", "⚡", "🔮", "🎨",
@@ -33,15 +34,19 @@ interface EditAgentModalProps {
     onSave: (agentId: string, updates: {
         name?: string;
         personality?: string;
+        systemInstructions?: string;
         avatarEmoji?: string;
         avatarUrl?: string | null;
         visibility?: "private" | "friends" | "public" | "official";
         tags?: string[];
+        suggestedQuestions?: string[];
         webSearchEnabled?: boolean;
         useKnowledgeBase?: boolean;
         mcpEnabled?: boolean;
         apiEnabled?: boolean;
         schedulingEnabled?: boolean;
+        eventsAccess?: boolean;
+        publicAccessEnabled?: boolean;
         x402Enabled?: boolean;
         x402PriceCents?: number;
         x402Network?: "base" | "base-sepolia";
@@ -62,12 +67,19 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     // General settings
     const [name, setName] = useState("");
     const [personality, setPersonality] = useState("");
+    const [systemInstructions, setSystemInstructions] = useState("");
     const [emoji, setEmoji] = useState("🤖");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [visibility, setVisibility] = useState<"private" | "friends" | "public" | "official">("private");
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
+    const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(["", "", "", ""]);
+    
+    // Channel presence (for Official agents)
+    const [availableChannels, setAvailableChannels] = useState<Array<{id: string; name: string; emoji: string}>>([]);
+    const [channelMemberships, setChannelMemberships] = useState<{global: boolean; channels: string[]}>({ global: false, channels: [] });
+    const [isSavingChannels, setIsSavingChannels] = useState(false);
     
     // Tag helpers
     const addTag = (tag: string) => {
@@ -147,6 +159,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [mcpEnabled, setMcpEnabled] = useState(true);
     const [apiEnabled, setApiEnabled] = useState(true);
     const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+    const [eventsAccess, setEventsAccess] = useState(false); // Global events database access
+    const [publicAccessEnabled, setPublicAccessEnabled] = useState(true); // For Official agents
     const [x402Enabled, setX402Enabled] = useState(false);
     const [x402PriceCents, setX402PriceCents] = useState(1);
     const [x402Network, setX402Network] = useState<"base" | "base-sepolia">("base");
@@ -192,11 +206,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [error, setError] = useState<string | null>(null);
     const [showEmbedCode, setShowEmbedCode] = useState(false);
     const [embedData, setEmbedData] = useState<{ code: { sdk: string }; endpoints: { chat: string } } | null>(null);
+    const [showEventsModal, setShowEventsModal] = useState(false);
 
     // Track original values to detect changes
     const [originalValues, setOriginalValues] = useState<{
         name: string;
         personality: string;
+        systemInstructions: string;
         emoji: string;
         avatarUrl: string | null;
         visibility: "private" | "friends" | "public" | "official";
@@ -206,6 +222,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         mcpEnabled: boolean;
         apiEnabled: boolean;
         schedulingEnabled: boolean;
+        eventsAccess: boolean;
         x402Enabled: boolean;
         x402PriceCents: number;
         x402Network: "base" | "base-sepolia";
@@ -220,6 +237,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         if (agent && isOpen) {
             const agentName = agent.name;
             const agentPersonality = agent.personality || "";
+            const agentSystemInstructions = agent.system_instructions || "";
             const agentEmoji = agent.avatar_emoji || "🤖";
             const agentAvatarUrl = agent.avatar_url || null;
             const agentVisibility = agent.visibility;
@@ -229,6 +247,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             const agentMcp = agent.mcp_enabled !== false;
             const agentApi = agent.api_enabled !== false;
             const agentScheduling = agent.scheduling_enabled || false;
+            const agentEventsAccess = agent.events_access || false;
+            const agentPublicAccess = agent.public_access_enabled !== false; // Defaults to true
             const agentX402 = agent.x402_enabled || false;
             const agentX402Price = agent.x402_price_cents || 1;
             const agentX402Network = agent.x402_network || "base";
@@ -236,20 +256,31 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             const agentX402Mode = agent.x402_pricing_mode || "global";
             const agentMcpServers = agent.mcp_servers || [];
             const agentApiTools = agent.api_tools || [];
+            const agentSuggestedQuestions = agent.suggested_questions || [];
 
             // Set all state values
             setName(agentName);
             setPersonality(agentPersonality);
+            setSystemInstructions(agentSystemInstructions);
             setEmoji(agentEmoji);
             setAvatarUrl(agentAvatarUrl);
             setVisibility(agentVisibility);
             setTags(agentTags);
             setTagInput("");
+            // Pad suggested questions to always have 4 slots
+            setSuggestedQuestions([
+                agentSuggestedQuestions[0] || "",
+                agentSuggestedQuestions[1] || "",
+                agentSuggestedQuestions[2] || "",
+                agentSuggestedQuestions[3] || "",
+            ]);
             setWebSearchEnabled(agentWebSearch);
             setUseKnowledgeBase(agentKnowledgeBase);
             setMcpEnabled(agentMcp);
             setApiEnabled(agentApi);
             setSchedulingEnabled(agentScheduling);
+            setEventsAccess(agentEventsAccess);
+            setPublicAccessEnabled(agentPublicAccess);
             setX402Enabled(agentX402);
             setX402PriceCents(agentX402Price);
             setX402Network(agentX402Network);
@@ -265,6 +296,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setOriginalValues({
                 name: agentName,
                 personality: agentPersonality,
+                systemInstructions: agentSystemInstructions,
                 emoji: agentEmoji,
                 avatarUrl: agentAvatarUrl,
                 visibility: agentVisibility,
@@ -274,6 +306,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 mcpEnabled: agentMcp,
                 apiEnabled: agentApi,
                 schedulingEnabled: agentScheduling,
+                eventsAccess: agentEventsAccess,
                 x402Enabled: agentX402,
                 x402PriceCents: agentX402Price,
                 x402Network: agentX402Network,
@@ -287,6 +320,98 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setOriginalValues(null);
         }
     }, [agent?.id, isOpen, userAddress]); // Use agent.id to ensure reset when switching agents
+    
+    // Fetch available channels and agent's channel memberships (for Official agents)
+    useEffect(() => {
+        if (!isOpen || !agent?.id || visibility !== "official") return;
+        
+        const agentId = agent.id;
+        
+        // Fetch available public channels
+        async function fetchChannels() {
+            try {
+                const res = await fetch("/api/channels");
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableChannels(data.channels || []);
+                }
+            } catch (err) {
+                console.error("[EditAgent] Error fetching channels:", err);
+            }
+        }
+        
+        // Fetch agent's current channel memberships
+        async function fetchMemberships() {
+            try {
+                const res = await fetch(`/api/agents/${agentId}/channels`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const memberships = data.memberships || [];
+                    const isInGlobal = memberships.some((m: { channel_type: string }) => m.channel_type === "global");
+                    const channelIds = memberships
+                        .filter((m: { channel_type: string }) => m.channel_type === "channel")
+                        .map((m: { channel_id: string }) => m.channel_id);
+                    setChannelMemberships({ global: isInGlobal, channels: channelIds });
+                }
+            } catch (err) {
+                console.error("[EditAgent] Error fetching memberships:", err);
+            }
+        }
+        
+        fetchChannels();
+        fetchMemberships();
+    }, [isOpen, agent?.id, visibility]);
+    
+    // Handle channel membership toggle
+    const toggleChannelMembership = async (channelType: "global" | "channel", channelId?: string) => {
+        if (!agent || !userAddress) return;
+        
+        setIsSavingChannels(true);
+        try {
+            const isCurrentlyIn = channelType === "global" 
+                ? channelMemberships.global 
+                : channelMemberships.channels.includes(channelId!);
+            
+            if (isCurrentlyIn) {
+                // Remove from channel
+                const params = new URLSearchParams({
+                    userAddress,
+                    channelType,
+                    ...(channelId && { channelId }),
+                });
+                await fetch(`/api/agents/${agent.id}/channels?${params}`, { method: "DELETE" });
+                
+                setChannelMemberships(prev => ({
+                    global: channelType === "global" ? false : prev.global,
+                    channels: channelType === "channel" 
+                        ? prev.channels.filter(id => id !== channelId) 
+                        : prev.channels,
+                }));
+            } else {
+                // Add to channel
+                await fetch(`/api/agents/${agent.id}/channels`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userAddress,
+                        channelType,
+                        channelId: channelType === "channel" ? channelId : undefined,
+                    }),
+                });
+                
+                setChannelMemberships(prev => ({
+                    global: channelType === "global" ? true : prev.global,
+                    channels: channelType === "channel" && channelId
+                        ? [...prev.channels, channelId] 
+                        : prev.channels,
+                }));
+            }
+        } catch (err) {
+            console.error("[EditAgent] Error toggling channel membership:", err);
+        } finally {
+            setIsSavingChannels(false);
+        }
+    };
 
     // Fetch embed code
     const fetchEmbedCode = async () => {
@@ -452,18 +577,27 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         setError(null);
 
         try {
+            // Filter out empty suggested questions for Official agents
+            const filteredQuestions = visibility === "official" 
+                ? suggestedQuestions.filter(q => q.trim()).map(q => q.trim())
+                : undefined;
+            
             await onSave(agent.id, {
                 name: name.trim(),
                 personality: personality.trim(),
+                systemInstructions: systemInstructions.trim() || undefined,
                 avatarEmoji: emoji,
                 avatarUrl,
                 visibility,
                 tags,
+                suggestedQuestions: filteredQuestions,
                 webSearchEnabled,
                 useKnowledgeBase,
                 mcpEnabled,
                 apiEnabled,
                 schedulingEnabled,
+                eventsAccess,
+                publicAccessEnabled: visibility === "official" ? publicAccessEnabled : undefined,
                 x402Enabled,
                 x402PriceCents,
                 x402Network,
@@ -493,6 +627,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         mcpEnabled !== originalValues.mcpEnabled ||
         apiEnabled !== originalValues.apiEnabled ||
         schedulingEnabled !== originalValues.schedulingEnabled ||
+        eventsAccess !== originalValues.eventsAccess ||
         x402Enabled !== originalValues.x402Enabled ||
         x402PriceCents !== originalValues.x402PriceCents ||
         x402Network !== originalValues.x402Network ||
@@ -714,8 +849,53 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                             onChange={(e) => setPersonality(e.target.value)}
                                             maxLength={1000}
                                             rows={3}
+                                            placeholder="Friendly and helpful assistant..."
                                             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 resize-none"
                                         />
+                                    </div>
+
+                                    {/* System Instructions (Advanced) */}
+                                    <div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const el = document.getElementById('system-instructions-section');
+                                                if (el) el.classList.toggle('hidden');
+                                            }}
+                                            className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 mb-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            System Instructions (Advanced)
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        <div id="system-instructions-section" className={systemInstructions ? "" : "hidden"}>
+                                            <p className="text-xs text-zinc-500 mb-2">
+                                                Detailed instructions that tell the AI how to behave. Use this for knowledge source context, response formatting, and specific behaviors.
+                                            </p>
+                                            <textarea
+                                                value={systemInstructions}
+                                                onChange={(e) => setSystemInstructions(e.target.value)}
+                                                maxLength={4000}
+                                                rows={6}
+                                                placeholder={`Example for an agent with multiple knowledge sources:
+
+You are a helpful assistant. Your knowledge base has MULTIPLE sources:
+
+1. **source-name.com** = Official documentation
+2. **community-data** = Community-contributed information
+
+When users ask about X, prioritize results from source Y...`}
+                                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 resize-none font-mono text-sm"
+                                            />
+                                            <p className="text-xs text-zinc-500 mt-1 text-right">
+                                                {systemInstructions.length}/4000
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {/* Visibility */}
@@ -799,6 +979,39 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                             </p>
                                         </div>
                                     )}
+                                    
+                                    {/* Suggested Questions (Official agents only) */}
+                                    {visibility === "official" && (
+                                        <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="text-lg">💬</span>
+                                                <label className="text-sm font-medium text-orange-400">
+                                                    Suggested Questions
+                                                </label>
+                                                <span className="text-xs text-zinc-500 font-normal">(Optional)</span>
+                                            </div>
+                                            <p className="text-xs text-zinc-400 mb-3">
+                                                Custom prompts shown to users on the public agent page. Leave empty for auto-generated questions.
+                                            </p>
+                                            <div className="space-y-2">
+                                                {suggestedQuestions.map((question, idx) => (
+                                                    <input
+                                                        key={idx}
+                                                        type="text"
+                                                        value={question}
+                                                        onChange={(e) => {
+                                                            const newQuestions = [...suggestedQuestions];
+                                                            newQuestions[idx] = e.target.value;
+                                                            setSuggestedQuestions(newQuestions);
+                                                        }}
+                                                        placeholder={`Question ${idx + 1} (e.g., "What can you help me with?")`}
+                                                        maxLength={100}
+                                                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </>
                             )}
 
@@ -854,6 +1067,61 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                             onChange={setSchedulingEnabled}
                                             color="cyan"
                                         />
+                                        
+                                        {/* Events Database Access */}
+                                        <CapabilityToggle
+                                            icon="🎪"
+                                            title="Events Database Access"
+                                            description="Access global events database"
+                                            enabled={eventsAccess}
+                                            onChange={setEventsAccess}
+                                            color="emerald"
+                                        />
+                                        
+                                        {/* Public Access Toggle - Only for Official agents */}
+                                        {visibility === "official" && (
+                                            <CapabilityToggle
+                                                icon="🌐"
+                                                title="Public Access"
+                                                description="Allow anyone to chat via /agent/[id] page"
+                                                enabled={publicAccessEnabled}
+                                                onChange={setPublicAccessEnabled}
+                                                color="orange"
+                                            />
+                                        )}
+                                        
+                                        {/* Channel Presence - Only for Official agents */}
+                                        {visibility === "official" && (
+                                            <ChannelPresenceSection
+                                                channelMemberships={channelMemberships}
+                                                availableChannels={availableChannels}
+                                                isSavingChannels={isSavingChannels}
+                                                toggleChannelMembership={toggleChannelMembership}
+                                                agentName={name}
+                                            />
+                                        )}
+
+                                        {/* Event Management - Only for Official agents */}
+                                        {visibility === "official" && agent && (
+                                            <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-base">📅</span>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-purple-400">Event Management</h4>
+                                                            <p className="text-xs text-zinc-500">Create an events page for your agent</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowEventsModal(true)}
+                                                        className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm font-medium transition-colors"
+                                                    >
+                                                        Manage Events
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* x402 API Access */}
                                         <CapabilityToggle
@@ -1855,7 +2123,169 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                     </motion.div>
                 </motion.div>
             )}
+
+            {/* Events Management Modal */}
+            {agent && userAddress && (
+                <AgentEventsModal
+                    isOpen={showEventsModal}
+                    onClose={() => setShowEventsModal(false)}
+                    agentId={agent.id}
+                    agentName={name || agent.name}
+                    userAddress={userAddress}
+                />
+            )}
         </AnimatePresence>
+    );
+}
+
+// Compact Channel Presence section for Official agents
+function ChannelPresenceSection({
+    channelMemberships,
+    availableChannels,
+    isSavingChannels,
+    toggleChannelMembership,
+    agentName,
+}: {
+    channelMemberships: { global: boolean; channels: string[] };
+    availableChannels: Array<{ id: string; name: string; emoji: string }>;
+    isSavingChannels: boolean;
+    toggleChannelMembership: (type: "global" | "channel", channelId?: string) => void;
+    agentName: string;
+}) {
+    const [showChannelPicker, setShowChannelPicker] = useState(false);
+    const [channelSearch, setChannelSearch] = useState("");
+    
+    // Get selected channel names for display
+    const selectedChannels = availableChannels.filter(c => channelMemberships.channels.includes(c.id));
+    const unselectedChannels = availableChannels.filter(c => !channelMemberships.channels.includes(c.id));
+    const filteredChannels = unselectedChannels.filter(c => 
+        c.name.toLowerCase().includes(channelSearch.toLowerCase())
+    );
+    
+    const totalActive = (channelMemberships.global ? 1 : 0) + channelMemberships.channels.length;
+    
+    return (
+        <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    <span className="text-base">🤖</span>
+                    <h4 className="text-sm font-medium text-purple-400">Channel Presence</h4>
+                    {isSavingChannels && (
+                        <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    )}
+                </div>
+                <span className="text-xs text-zinc-500">
+                    {totalActive > 0 ? `${totalActive} active` : "Not in any channels"}
+                </span>
+            </div>
+            
+            {/* Active channels as compact chips */}
+            <div className="flex flex-wrap gap-1.5 mb-2">
+                {/* Global Chat chip */}
+                <button
+                    onClick={() => toggleChannelMembership("global")}
+                    disabled={isSavingChannels}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                        channelMemberships.global
+                            ? "bg-orange-500/20 text-orange-400 border border-orange-500/40 hover:bg-orange-500/30"
+                            : "bg-zinc-800 text-zinc-500 border border-zinc-700 hover:bg-zinc-700 hover:text-zinc-300"
+                    }`}
+                >
+                    <span>🌍</span>
+                    <span>Global</span>
+                    {channelMemberships.global && (
+                        <svg className="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    )}
+                </button>
+                
+                {/* Selected channel chips */}
+                {selectedChannels.map(channel => (
+                    <button
+                        key={channel.id}
+                        onClick={() => toggleChannelMembership("channel", channel.id)}
+                        disabled={isSavingChannels}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
+                    >
+                        <span>{channel.emoji || "#"}</span>
+                        <span className="max-w-[80px] truncate">{channel.name}</span>
+                        <svg className="w-3 h-3 ml-0.5 text-purple-400/70 hover:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                ))}
+                
+                {/* Add channel button */}
+                {unselectedChannels.length > 0 && (
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowChannelPicker(!showChannelPicker)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700 border-dashed hover:bg-zinc-700 hover:text-white transition-all"
+                        >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Add channel</span>
+                        </button>
+                        
+                        {/* Channel picker dropdown */}
+                        {showChannelPicker && (
+                            <>
+                                <div 
+                                    className="fixed inset-0 z-40" 
+                                    onClick={() => setShowChannelPicker(false)}
+                                />
+                                <div className="absolute top-full left-0 mt-1 w-56 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                                    {/* Search input */}
+                                    <div className="p-2 border-b border-zinc-700">
+                                        <input
+                                            type="text"
+                                            value={channelSearch}
+                                            onChange={(e) => setChannelSearch(e.target.value)}
+                                            placeholder="Search channels..."
+                                            className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    
+                                    {/* Channel list */}
+                                    <div className="max-h-40 overflow-y-auto">
+                                        {filteredChannels.length === 0 ? (
+                                            <p className="p-3 text-xs text-zinc-500 text-center">
+                                                {channelSearch ? "No channels found" : "No more channels"}
+                                            </p>
+                                        ) : (
+                                            filteredChannels.map(channel => (
+                                                <button
+                                                    key={channel.id}
+                                                    onClick={() => {
+                                                        toggleChannelMembership("channel", channel.id);
+                                                        setChannelSearch("");
+                                                        setShowChannelPicker(false);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-700 transition-colors"
+                                                >
+                                                    <span>{channel.emoji || "#"}</span>
+                                                    <span className="text-sm text-white truncate">{channel.name}</span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
+            
+            {/* Help text */}
+            {totalActive > 0 && (
+                <p className="text-[10px] text-zinc-500">
+                    Users can @mention <code className="px-1 py-0.5 bg-zinc-800 rounded text-purple-400">{agentName || "Agent"}</code> in these channels
+                </p>
+            )}
+        </div>
     );
 }
 
@@ -1873,9 +2303,9 @@ function CapabilityToggle({
     description: string; 
     enabled: boolean; 
     onChange: (v: boolean) => void;
-    color?: "purple" | "emerald" | "cyan";
+    color?: "purple" | "emerald" | "cyan" | "orange";
 }) {
-    const colorClass = color === "emerald" ? "bg-emerald-500" : color === "cyan" ? "bg-cyan-500" : "bg-purple-500";
+    const colorClass = color === "emerald" ? "bg-emerald-500" : color === "cyan" ? "bg-cyan-500" : color === "orange" ? "bg-orange-500" : "bg-purple-500";
     
     return (
         <div 

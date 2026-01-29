@@ -160,8 +160,48 @@ export async function GET(request: NextRequest) {
             current.setDate(current.getDate() + 1);
         }
 
-        // If Google Calendar is connected, check for conflicts
+        // FIRST: Check for existing scheduled calls in database
+        // This is critical to prevent double-booking
+        // Query a wider range to catch calls that might overlap even if they start outside the date range
+        const maxDurationMinutes = 120; // Assume max call duration
+        const queryStart = new Date(start.getTime() - maxDurationMinutes * 60 * 1000);
+        const queryEnd = new Date(end.getTime() + maxDurationMinutes * 60 * 1000);
+        
+        const { data: existingCalls } = await supabase
+            .from("shout_scheduled_calls")
+            .select("scheduled_at, duration_minutes")
+            .eq("recipient_wallet_address", userAddress.toLowerCase())
+            .in("status", ["pending", "confirmed"])
+            .gte("scheduled_at", queryStart.toISOString())
+            .lte("scheduled_at", queryEnd.toISOString());
+
         let availableSlots = potentialSlots;
+        
+        // Filter out slots that conflict with existing scheduled calls
+        if (existingCalls && existingCalls.length > 0) {
+            availableSlots = availableSlots.filter((slot) => {
+                const slotStart = slot.start.getTime();
+                const slotEnd = slot.end.getTime();
+
+                return !existingCalls.some((call) => {
+                    const callStart = new Date(call.scheduled_at).getTime();
+                    const callDuration = (call.duration_minutes || 30) * 60 * 1000;
+                    const callEnd = callStart + callDuration;
+
+                    // Check for overlap (any overlap = conflict)
+                    return (
+                        (slotStart >= callStart && slotStart < callEnd) ||
+                        (slotEnd > callStart && slotEnd <= callEnd) ||
+                        (slotStart <= callStart && slotEnd >= callEnd)
+                    );
+                });
+            });
+            
+            console.log("[Scheduling] Filtered from", potentialSlots.length, "to", availableSlots.length, "slots after database check");
+        }
+
+        // SECOND: If Google Calendar is connected, check for calendar conflicts
+        // This is done after database check to ensure we don't show slots that are already booked
         if (connection && connection.access_token) {
             try {
                 const oauth2Client = new google.auth.OAuth2(
@@ -269,9 +309,24 @@ export async function GET(request: NextRequest) {
                     },
                 });
 
-                const busyPeriods = busyResponse.data.calendars?.[connection.calendar_id || "primary"]?.busy || [];
+                const calendarData = busyResponse.data.calendars?.[connection.calendar_id || "primary"];
+                const busyPeriods = calendarData?.busy || [];
+                const calendarErrors = calendarData?.errors || [];
                 
-                console.log("[Scheduling] Found", busyPeriods.length, "busy periods from Google Calendar");
+                console.log("[Scheduling] Google Calendar freebusy response:", {
+                    calendarId: connection.calendar_id || "primary",
+                    busyPeriodsCount: busyPeriods.length,
+                    errors: calendarErrors,
+                    busyPeriods: busyPeriods.map(b => ({
+                        start: b.start,
+                        end: b.end,
+                    })),
+                });
+                
+                // If there are calendar errors, log them but continue (events might still be returned)
+                if (calendarErrors.length > 0) {
+                    console.warn("[Scheduling] Calendar errors:", calendarErrors);
+                }
                 
                 // Update last_sync_at on successful calendar check
                 await supabase
@@ -283,7 +338,8 @@ export async function GET(request: NextRequest) {
                     .eq("provider", "google");
 
                 // Filter out slots that conflict with busy periods
-                availableSlots = potentialSlots.filter((slot) => {
+                // This operates on already-filtered slots (after database check)
+                availableSlots = availableSlots.filter((slot) => {
                     const slotStart = slot.start.getTime();
                     const slotEnd = slot.end.getTime();
 
@@ -291,7 +347,7 @@ export async function GET(request: NextRequest) {
                         const busyStart = new Date(busy.start!).getTime();
                         const busyEnd = new Date(busy.end!).getTime();
 
-                        // Check for overlap
+                        // Check for overlap (any overlap = conflict)
                         return (
                             (slotStart >= busyStart && slotStart < busyEnd) ||
                             (slotEnd > busyStart && slotEnd <= busyEnd) ||
@@ -300,7 +356,7 @@ export async function GET(request: NextRequest) {
                     });
                 });
                 
-                console.log("[Scheduling] Filtered from", potentialSlots.length, "to", availableSlots.length, "available slots");
+                console.log("[Scheduling] Filtered to", availableSlots.length, "available slots after calendar check");
             } catch (error) {
                 console.error("[Scheduling] Google Calendar error:", error);
                 // IMPORTANT: If calendar is connected but check fails, show NO slots
@@ -311,35 +367,6 @@ export async function GET(request: NextRequest) {
             }
         } else {
             console.log("[Scheduling] No Google Calendar connected for", userAddress);
-        }
-
-        // Also check for existing scheduled calls
-        const { data: existingCalls } = await supabase
-            .from("shout_scheduled_calls")
-            .select("scheduled_at, duration_minutes")
-            .eq("recipient_wallet_address", userAddress.toLowerCase())
-            .in("status", ["pending", "confirmed"])
-            .gte("scheduled_at", start.toISOString())
-            .lte("scheduled_at", end.toISOString());
-
-        if (existingCalls && existingCalls.length > 0) {
-            availableSlots = availableSlots.filter((slot) => {
-                const slotStart = slot.start.getTime();
-                const slotEnd = slot.end.getTime();
-
-                return !existingCalls.some((call) => {
-                    const callStart = new Date(call.scheduled_at).getTime();
-                    const callDuration = (call.duration_minutes || 30) * 60 * 1000;
-                    const callEnd = callStart + callDuration;
-
-                    // Check for overlap
-                    return (
-                        (slotStart >= callStart && slotStart < callEnd) ||
-                        (slotEnd > callStart && slotEnd <= callEnd) ||
-                        (slotStart <= callStart && slotEnd >= callEnd)
-                    );
-                });
-            });
         }
 
         // Format slots for response (all times in UTC)

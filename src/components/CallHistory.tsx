@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { formatCallDuration, getRelativeTime } from "@/hooks/useCallHistory";
 import type { CallHistoryEntry } from "@/app/api/calls/route";
 import type { Address } from "viem";
+import { getDisplayName as getBaseDisplayName } from "@/utils/address";
 
 type Friend = {
     id: string;
@@ -45,17 +46,18 @@ export function CallHistory({
     };
 
     // Helper to get display name for an address
+    // Priority: nickname > ENS > username > address
     const getDisplayName = (address: string): string => {
         const friend = getFriendByAddress(address);
         if (friend) {
-            return (
-                friend.nickname ||
-                friend.reachUsername ||
-                friend.ensName ||
-                `${address.slice(0, 6)}...${address.slice(-4)}`
-            );
+            return getBaseDisplayName({
+                address: friend.address,
+                ensName: friend.ensName,
+                username: friend.reachUsername,
+                nickname: friend.nickname,
+            }, true); // includeNickname = true for friends
         }
-        return `${address.slice(0, 6)}...${address.slice(-4)}`;
+        return getBaseDisplayName({ address });
     };
 
     // Helper to get avatar for an address

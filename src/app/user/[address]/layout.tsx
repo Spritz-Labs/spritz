@@ -9,9 +9,11 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+import { getRpcUrl } from "@/lib/rpc";
+
 const publicClient = createPublicClient({
     chain: mainnet,
-    transport: http("https://eth.llamarpc.com"),
+    transport: http(getRpcUrl(1)),
 });
 
 export async function generateMetadata({

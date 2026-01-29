@@ -24,6 +24,23 @@ const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 const mcpToolsCache = new Map<string, { tools: MCPTool[]; fetchedAt: number }>();
 const MCP_CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
+// Clean base64 data from content to prevent it from polluting AI context/responses
+function cleanBase64FromContent(content: string): string {
+    // Remove base64 image data (data:image/... format)
+    let cleaned = content.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{100,}/g, '[image removed]');
+    
+    // Remove markdown images with base64 src
+    cleaned = cleaned.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, '[base64 image removed]');
+    
+    // Remove standalone long base64-like strings (100+ chars of base64 alphabet)
+    cleaned = cleaned.replace(/[A-Za-z0-9+/=]{200,}/g, '[encoded data removed]');
+    
+    // Remove <Base64-Image-Removed> placeholders that Firecrawl may have added
+    cleaned = cleaned.replace(/<Base64-Image-Removed>/g, '');
+    
+    return cleaned;
+}
+
 interface MCPTool {
     name: string;
     description?: string;
@@ -302,12 +319,12 @@ async function retrieveRelevantChunks(
             return [];
         }
 
-        // Search for similar chunks
+        // Search for similar chunks - lower threshold for broader coverage
         const { data: chunks, error } = await supabase.rpc("match_knowledge_chunks", {
             p_agent_id: agentId,
             p_query_embedding: `[${queryEmbedding.join(",")}]`,
-            p_match_count: maxChunks,
-            p_match_threshold: 0.5, // Lower threshold to get more results
+            p_match_count: Math.max(maxChunks, 8), // At least 8 chunks for comprehensive context
+            p_match_threshold: 0.25, // Lower threshold to catch more relevant results
         });
 
         if (error) {
@@ -321,8 +338,10 @@ async function retrieveRelevantChunks(
         }
 
         console.log(`[Chat] Found ${chunks.length} relevant chunks`);
-        return chunks.map((c: { content: string; similarity: number }) => 
-            `[Relevance: ${(c.similarity * 100).toFixed(0)}%]\n${c.content}`
+        // Include source title for disambiguation between different knowledge sources
+        // Clean base64 data to prevent polluting AI responses
+        return chunks.map((c: { content: string; similarity: number; source_title?: string }) => 
+            `[Source: ${c.source_title || "Unknown"} | Relevance: ${(c.similarity * 100).toFixed(0)}%]\n${cleanBase64FromContent(c.content)}`
         );
     } catch (error) {
         console.error("[Chat] Error in RAG retrieval:", error);
@@ -663,6 +682,16 @@ Remember: The user asked a question and the answer is in the data above. Just pr
         // Now build the final system instructions with MCP results FIRST
         let systemInstructions = "";
         
+        // Add current date context
+        const now = new Date();
+        const currentDate = now.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        systemInstructions += `CURRENT DATE: Today is ${currentDate}. When users ask about "today", "tomorrow", "this week", etc., use this date as reference.\n\n`;
+        
         // Add MCP results at the VERY TOP if we have them
         if (mcpResultsSection) {
             systemInstructions += mcpResultsSection;
@@ -678,6 +707,15 @@ Remember: The user asked a question and the answer is in the data above. Just pr
 
         if (kgContext) {
             systemInstructions += formatKgContextForPrompt(kgContext);
+        }
+        
+        // Add markdown/image guidance for official agents with knowledge base
+        if (agent.visibility === "official" && agent.use_knowledge_base) {
+            systemInstructions += `\n\nYou can use markdown formatting:
+- Use **bold** and *italic* for emphasis
+- Use bullet points and numbered lists
+- When referencing images or logos from your knowledge, use markdown: ![Description](URL)
+- If you have image URLs in your context, display them!`;
         }
         
         // Add a final reminder if we had MCP results
@@ -983,6 +1021,81 @@ You can help users schedule meetings with your creator. When users ask about sch
             if (schedulingContext) {
                 systemInstructions += schedulingContext;
             }
+        }
+
+        // Handle events database access (if enabled)
+        const eventsAccessEnabled = agent.events_access === true;
+        if (eventsAccessEnabled) {
+            const messageLower = message.toLowerCase();
+            const isEventsQuery = 
+                messageLower.includes("event") ||
+                messageLower.includes("conference") ||
+                messageLower.includes("hackathon") ||
+                messageLower.includes("meetup") ||
+                messageLower.includes("summit") ||
+                messageLower.includes("workshop") ||
+                messageLower.includes("happening") ||
+                messageLower.includes("schedule") ||
+                messageLower.includes("register") ||
+                messageLower.includes("rsvp");
+            
+            if (isEventsQuery) {
+                console.log("[Chat] Events query detected, fetching from global events database");
+                
+                try {
+                    // Get upcoming events from global database
+                    const today = new Date().toISOString().split("T")[0];
+                    const { data: events, error: eventsError } = await supabase
+                        .from("shout_events")
+                        .select("id, name, description, event_type, event_date, start_time, end_time, venue, city, country, is_virtual, organizer, event_url, rsvp_url, registration_enabled, is_featured")
+                        .eq("status", "published")
+                        .gte("event_date", today)
+                        .order("is_featured", { ascending: false })
+                        .order("event_date", { ascending: true })
+                        .limit(15);
+                    
+                    if (eventsError) {
+                        console.error("[Chat] Error fetching events:", eventsError);
+                    } else if (events && events.length > 0) {
+                        systemInstructions += `\n\n## Global Events Database (${events.length} upcoming events):
+                        
+You have access to a curated events database. Here are upcoming events:
+
+${events.map(e => `- **${e.name}** (${e.event_type})
+  📅 ${e.event_date}${e.start_time ? ` @ ${e.start_time}` : ""}
+  📍 ${e.is_virtual ? "Virtual" : `${e.venue || ""} ${e.city || ""} ${e.country || ""}`.trim()}
+  ${e.organizer ? `🏢 ${e.organizer}` : ""}
+  ${e.event_url ? `🔗 Event: ${e.event_url}` : ""}
+  ${e.rsvp_url ? `🎫 Register: ${e.rsvp_url}` : ""}
+  ${e.registration_enabled ? "✅ Spritz Registration Available" : ""}
+  ${e.is_featured ? "⭐ Featured Event" : ""}`).join("\n\n")}
+
+When users ask to register for an event:
+1. If the event has "Spritz Registration Available", tell them you can register them directly
+2. If there's an RSVP URL, provide the link and offer to help
+3. If they want to register via Spritz, collect their email and confirm the registration
+
+Full events directory: https://app.spritz.chat/events
+`;
+                        console.log("[Chat] Added events context with", events.length, "events");
+                    } else {
+                        systemInstructions += `\n\n## Events Database
+                        
+You have access to a global events database, but there are currently no upcoming events listed.
+Users can browse events at: https://app.spritz.chat/events
+`;
+                    }
+                } catch (err) {
+                    console.error("[Chat] Error fetching events:", err);
+                }
+            }
+            
+            // Always add events capability info
+            systemInstructions += `\n\n## Events Capability
+You can help users discover and register for events (conferences, hackathons, meetups, etc.).
+When users ask about events, query the database and present relevant options.
+Full events directory: https://app.spritz.chat/events
+`;
         }
 
         // Add API tool information and potentially call them (if API is enabled)

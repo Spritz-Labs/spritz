@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { QRCodeSVG } from "qrcode.react";
 import { type Address } from "viem";
-import { useAccount } from "wagmi";
+import { useAccount, useReconnect } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
 import { useWalletBalances, formatUsd, formatTokenBalance } from "@/hooks/useWalletBalances";
 import { useSmartWallet } from "@/hooks/useSmartWallet";
@@ -15,6 +15,7 @@ import { useSafeWallet } from "@/hooks/useSafeWallet";
 import { useSafePasskeySend } from "@/hooks/useSafePasskeySend";
 import { useOnramp } from "@/hooks/useOnramp";
 import { useVaults } from "@/hooks/useVaults";
+import { useSendSuggestions, useAddressBook, type SendSuggestion } from "@/hooks/useSendSuggestions";
 import { PasskeyManager } from "./PasskeyManager";
 import { CreateVaultModal } from "./CreateVaultModal";
 import { VaultList } from "./VaultList";
@@ -590,18 +591,28 @@ type WalletTabType = "balances" | "send" | "history" | "receive" | "security";
 export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authMethod }: WalletModalProps) {
     // Check if wallet is connected (for sending)
     const { isConnected } = useAccount();
+    const { reconnect, connectors } = useReconnect();
     const { open: openConnectModal } = useAppKit();
+    const [isAutoReconnecting, setIsAutoReconnecting] = useState(false);
+    const autoReconnectAttemptedRef = useRef(false);
+    
+    // IMPORTANT: Default to "wallet" if authMethod is not provided
+    // This ensures EOA users never get passkey prompts
+    const effectiveAuthMethod = authMethod || "wallet";
     
     // Determine if user authenticated via passkey (needs Safe signing)
-    const isPasskeyUser = authMethod === "passkey";
+    const isPasskeyUser = effectiveAuthMethod === "passkey";
     
     // For email/digital_id/world_id/solana users, they should use passkey signing
     // This means we don't store any private keys - passkey is the only signer
     // Solana users need passkey because Solana wallets can't sign EVM transactions
-    const isSolanaUser = authMethod === "solana";
-    const needsPasskeyForSend = authMethod === "email" || authMethod === "alien_id" || authMethod === "world_id" || isSolanaUser;
-    const canUsePasskeySigning = isPasskeyUser || needsPasskeyForSend;
-
+    const isSolanaUser = effectiveAuthMethod === "solana";
+    const needsPasskeyForSend = effectiveAuthMethod === "email" || effectiveAuthMethod === "alien_id" || effectiveAuthMethod === "world_id" || isSolanaUser;
+    
+    // CRITICAL: Only use passkey signing for non-wallet users
+    // Wallet users should NEVER trigger passkey signing - they sign with their connected wallet
+    const canUsePasskeySigning = effectiveAuthMethod !== "wallet" && (isPasskeyUser || needsPasskeyForSend);
+    
     // Get Smart Wallet (Safe) address
     const { smartWallet, isLoading: isSmartWalletLoading } = useSmartWallet(
         isOpen ? userAddress : null
@@ -633,6 +644,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     const [hasAcknowledgedChainWarning, setHasAcknowledgedChainWarning] = useState(false);
     const [showNetworksInfo, setShowNetworksInfo] = useState(false);
     const [showCreateVaultModal, setShowCreateVaultModal] = useState(false);
+    const [vaultRefreshKey, setVaultRefreshKey] = useState(0);
     
     // Vaults hook
     const { vaults, createVault } = useVaults(isOpen ? userAddress : null);
@@ -644,6 +656,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
     // Send form state
     const [sendToken, setSendToken] = useState<TokenBalance | null>(null);
     const [sendAmount, setSendAmount] = useState("");
+    const [isUsdMode, setIsUsdMode] = useState(false); // Toggle between USD and token amount input
     
     // ENS resolver for recipient
     const {
@@ -656,6 +669,15 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         setInput: setRecipientInput,
         clear: clearRecipient,
     } = useEnsResolver();
+    
+    // Send suggestions (friends, vaults, address book)
+    const { suggestions: sendSuggestions, filter: filterSuggestions, refresh: refreshSuggestions, isLoading: suggestionsLoading } = useSendSuggestions(true);
+    const { addEntry: addToAddressBook } = useAddressBook();
+    const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false);
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+    const [showSaveAddressDialog, setShowSaveAddressDialog] = useState(false);
+    const [saveAddressLabel, setSaveAddressLabel] = useState("");
+    
     const [showTokenSelector, setShowTokenSelector] = useState(false);
     const [showSendConfirm, setShowSendConfirm] = useState(false);
     
@@ -701,14 +723,101 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         reset: resetPasskey,
     } = useSafePasskeySend();
 
+    // Reset passkey state when modal opens for WALLET users
+    // This clears any stale passkey errors from previous sessions
+    useEffect(() => {
+        if (isOpen && effectiveAuthMethod === "wallet") {
+            console.log("[WalletModal] Wallet user - resetting passkey state");
+            resetPasskey();
+        }
+    }, [isOpen, effectiveAuthMethod, resetPasskey]);
+
+    // Debug log on mount and when authMethod changes (after all hooks are declared)
+    useEffect(() => {
+        if (isOpen) {
+            console.log("[WalletModal] Auth state:", { 
+                authMethod, 
+                effectiveAuthMethod,
+                isPasskeyUser,
+                canUsePasskeySigning,
+                isConnected,
+                passkeyStatus,
+                userAddress: userAddress?.slice(0, 10),
+            });
+        }
+    }, [isOpen, authMethod, effectiveAuthMethod, isPasskeyUser, canUsePasskeySigning, isConnected, passkeyStatus, userAddress]);
+
     // Initialize passkey Safe when modal opens for users who can use passkey signing
     // This includes: passkey users, email users, alien_id users, world_id users
+    // IMPORTANT: Wallet users (effectiveAuthMethod === "wallet") should NEVER trigger this
     useEffect(() => {
         if (isOpen && canUsePasskeySigning && userAddress && !isPasskeyReady && passkeyStatus === "idle") {
-            console.log("[WalletModal] Initializing passkey Safe for user:", userAddress.slice(0, 10), "authMethod:", authMethod);
+            console.log("[WalletModal] Initializing passkey Safe for user:", userAddress.slice(0, 10), "authMethod:", effectiveAuthMethod);
             initializePasskey(userAddress as Address);
         }
-    }, [isOpen, canUsePasskeySigning, userAddress, isPasskeyReady, passkeyStatus, initializePasskey, authMethod]);
+    }, [isOpen, canUsePasskeySigning, userAddress, isPasskeyReady, passkeyStatus, initializePasskey, effectiveAuthMethod]);
+
+    // Auto-reconnect wallet for PWA users when Send tab is opened
+    // This runs silently in the background - no UI shown
+    useEffect(() => {
+        // Only for wallet users who are disconnected and on Send tab
+        if (!isOpen || activeTab !== "send" || isConnected || effectiveAuthMethod !== "wallet" || canUsePasskeySigning) {
+            return;
+        }
+        
+        // Only attempt once per modal open to avoid spam
+        if (autoReconnectAttemptedRef.current) {
+            return;
+        }
+        
+        // Check if there's a saved session to reconnect
+        const hasSavedSession = (() => {
+            try {
+                const wagmiState = localStorage.getItem("wagmi.store");
+                if (wagmiState) {
+                    const parsed = JSON.parse(wagmiState);
+                    if (parsed?.state?.current || parsed?.state?.connections) {
+                        return true;
+                    }
+                }
+                for (const key of Object.keys(localStorage)) {
+                    if (key.startsWith("wc@") || key.startsWith("@reown") || key.includes("walletconnect")) {
+                        return true;
+                    }
+                }
+            } catch {
+                // Ignore
+            }
+            return false;
+        })();
+        
+        if (!hasSavedSession) {
+            return;
+        }
+        
+        autoReconnectAttemptedRef.current = true;
+        setIsAutoReconnecting(true);
+        console.log("[WalletModal] Auto-reconnecting wallet for PWA user...");
+        
+        // Attempt silent reconnection
+        try {
+            reconnect({ connectors });
+        } catch {
+            // Silently fail - user can manually reconnect
+        }
+        
+        // Give reconnection a few seconds to complete, then hide spinner
+        setTimeout(() => {
+            setIsAutoReconnecting(false);
+        }, 3000);
+    }, [isOpen, activeTab, isConnected, effectiveAuthMethod, canUsePasskeySigning, reconnect, connectors]);
+    
+    // Reset auto-reconnect flag when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            autoReconnectAttemptedRef.current = false;
+        }
+    }, [isOpen]);
 
     // Onramp (Buy crypto) hook
     const {
@@ -796,24 +905,170 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             setDisplayError(null);
         }
     }, [effectiveError]);
+    
+    // Calculate token price per unit for USD conversion
+    const tokenPriceUsd = useMemo(() => {
+        if (!sendToken?.balanceUsd || !sendToken?.balanceFormatted) return 0;
+        const balance = parseFloat(sendToken.balanceFormatted);
+        if (balance <= 0) return 0;
+        return sendToken.balanceUsd / balance;
+    }, [sendToken]);
+    
+    // Convert between USD and token amounts
+    const getTokenAmount = useCallback((usdAmount: string): string => {
+        if (!usdAmount || !tokenPriceUsd || tokenPriceUsd <= 0) return "";
+        const usd = parseFloat(usdAmount);
+        if (isNaN(usd) || usd <= 0) return "";
+        return (usd / tokenPriceUsd).toFixed(sendToken?.decimals || 18);
+    }, [tokenPriceUsd, sendToken]);
+    
+    const getUsdAmount = useCallback((tokenAmount: string): string => {
+        if (!tokenAmount || !tokenPriceUsd) return "";
+        const amount = parseFloat(tokenAmount);
+        if (isNaN(amount) || amount <= 0) return "";
+        return (amount * tokenPriceUsd).toFixed(2);
+    }, [tokenPriceUsd]);
+    
+    // Get the actual token amount to send (converts from USD if needed)
+    const actualSendAmount = useMemo(() => {
+        if (!sendAmount) return "";
+        if (isUsdMode) {
+            return getTokenAmount(sendAmount);
+        }
+        return sendAmount;
+    }, [sendAmount, isUsdMode, getTokenAmount]);
+    
+    // Toggle between USD and token mode, converting the amount
+    const toggleAmountMode = useCallback(() => {
+        if (!sendAmount || !tokenPriceUsd) {
+            setIsUsdMode(!isUsdMode);
+            return;
+        }
+        
+        if (isUsdMode) {
+            // Converting from USD to token
+            const tokenAmount = getTokenAmount(sendAmount);
+            setSendAmount(tokenAmount || "");
+        } else {
+            // Converting from token to USD
+            const usdAmount = getUsdAmount(sendAmount);
+            setSendAmount(usdAmount || "");
+        }
+        setIsUsdMode(!isUsdMode);
+    }, [sendAmount, isUsdMode, tokenPriceUsd, getTokenAmount, getUsdAmount]);
+
+    // Filter suggestions based on recipient input and selected chain
+    // For vaults, only show those on the selected chain to prevent cross-chain mistakes
+    const filteredSuggestions = useMemo(() => {
+        // Pass the selectedChainId to filter vaults by chain
+        // This prevents users from accidentally sending to a vault on a different chain
+        if (recipientInput.length > 0) {
+            return filterSuggestions(recipientInput, selectedChainId);
+        }
+        return filterSuggestions("", selectedChainId);
+    }, [recipientInput, filterSuggestions, selectedChainId]);
+    
+    // Check if current address can be saved to address book
+    const canSaveToAddressBook = useMemo(() => {
+        if (!recipientInput || !isRecipientValid) return false;
+        const addr = (resolvedRecipient || recipientInput).toLowerCase();
+        return !sendSuggestions.some(s => s.address.toLowerCase() === addr);
+    }, [recipientInput, isRecipientValid, resolvedRecipient, sendSuggestions]);
+    
+    // Handle selecting a suggestion
+    const handleSelectSuggestion = useCallback((suggestion: SendSuggestion) => {
+        const targetAddress = suggestion.smartWalletAddress || suggestion.address;
+        setRecipientInput(targetAddress);
+        setShowRecipientSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+    }, [setRecipientInput]);
+    
+    // Handle keyboard navigation for suggestions
+    const handleRecipientKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (!showRecipientSuggestions || filteredSuggestions.length === 0) return;
+        
+        switch (e.key) {
+            case "ArrowDown":
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev < filteredSuggestions.length - 1 ? prev + 1 : 0
+                );
+                break;
+            case "ArrowUp":
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => 
+                    prev > 0 ? prev - 1 : filteredSuggestions.length - 1
+                );
+                break;
+            case "Enter":
+                if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < filteredSuggestions.length) {
+                    e.preventDefault();
+                    handleSelectSuggestion(filteredSuggestions[selectedSuggestionIndex]);
+                }
+                break;
+            case "Escape":
+                setShowRecipientSuggestions(false);
+                setSelectedSuggestionIndex(-1);
+                break;
+        }
+    }, [showRecipientSuggestions, filteredSuggestions, selectedSuggestionIndex, handleSelectSuggestion]);
+    
+    // Handle saving address to address book
+    const handleSaveToAddressBook = useCallback(async () => {
+        if (!saveAddressLabel.trim() || !resolvedRecipient) return;
+        
+        try {
+            await addToAddressBook({
+                address: resolvedRecipient,
+                label: saveAddressLabel.trim(),
+                ensName: recipientEnsName || undefined,
+            });
+            setShowSaveAddressDialog(false);
+            setSaveAddressLabel("");
+            refreshSuggestions();
+        } catch (err) {
+            console.error("Failed to save to address book:", err);
+        }
+    }, [saveAddressLabel, resolvedRecipient, recipientEnsName, addToAddressBook, refreshSuggestions]);
+    
+    // Get suggestion type icon
+    const getSuggestionIcon = (type: SendSuggestion["type"]) => {
+        switch (type) {
+            case "friend": return "👤";
+            case "vault": return "🔐";
+            case "address_book": return "📖";
+            case "recent": return "🕐";
+            default: return "📍";
+        }
+    };
+    
+    const getSuggestionLabel = (type: SendSuggestion["type"]) => {
+        switch (type) {
+            case "friend": return "Friend";
+            case "vault": return "Vault";
+            case "address_book": return "Saved";
+            case "recent": return "Recent";
+            default: return "";
+        }
+    };
 
     // Estimate gas when recipient and amount are valid
     const handleEstimateGas = useCallback(async () => {
-        if (!sendToken || !resolvedRecipient || !sendAmount) return;
+        if (!sendToken || !resolvedRecipient || !actualSendAmount) return;
 
         if (useSafeForSend && safeAddress) {
-            await estimateSafeGas(resolvedRecipient, sendAmount);
+            await estimateSafeGas(resolvedRecipient, actualSendAmount);
         } else {
             await estimateGas({
                 to: resolvedRecipient,
-                value: sendAmount,
+                value: actualSendAmount,
             });
         }
-    }, [sendToken, resolvedRecipient, sendAmount, estimateGas, estimateSafeGas, useSafeForSend, safeAddress]);
+    }, [sendToken, resolvedRecipient, actualSendAmount, estimateGas, estimateSafeGas, useSafeForSend, safeAddress]);
 
     // Handle send confirmation
     const handleSend = useCallback(async () => {
-        if (!sendToken || !resolvedRecipient || !sendAmount) return;
+        if (!sendToken || !resolvedRecipient || !actualSendAmount) return;
 
         let hash: string | null = null;
         
@@ -825,10 +1080,10 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         if (canUsePasskeySigning) {
             // Send via passkey-signed Safe transaction
             // This works for passkey, email, alien_id, and world_id users
-            console.log("[WalletModal] Sending via passkey Safe to:", resolvedRecipient, "authMethod:", authMethod);
+            console.log("[WalletModal] Sending via passkey Safe to:", resolvedRecipient, "authMethod:", effectiveAuthMethod);
             hash = await sendPasskeyTransaction(
                 resolvedRecipient,
-                sendAmount,
+                actualSendAmount,
                 tokenAddress,
                 tokenDecimals,
                 selectedChainId,
@@ -840,7 +1095,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             // On Mainnet, useEOAForGas allows the connected wallet to pay gas directly
             hash = await sendSafeTransaction(
                 resolvedRecipient,
-                sendAmount,
+                actualSendAmount,
                 tokenAddress,
                 tokenDecimals,
                 { chainId: selectedChainId, useEOAForGas }
@@ -853,7 +1108,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
             }
             hash = await send({
                 to: resolvedRecipient,
-                value: sendAmount,
+                value: actualSendAmount,
             });
         }
 
@@ -875,13 +1130,14 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 refreshTx();
             }, 15000);
         }
-    }, [sendToken, resolvedRecipient, sendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, authMethod, refresh, refreshTx, selectedChainId, useEOAForGas]);
+    }, [sendToken, resolvedRecipient, actualSendAmount, send, sendSafeTransaction, sendPasskeyTransaction, useSafeForSend, safeAddress, canUsePasskeySigning, effectiveAuthMethod, refresh, refreshTx, selectedChainId, useEOAForGas]);
 
     // Reset send form
     const resetSendForm = useCallback(() => {
         setSendToken(null);
         clearRecipient();
         setSendAmount("");
+        setIsUsdMode(false);
         setShowSendConfirm(false);
         setUseEOAForGas(false);
         resetSend();
@@ -935,12 +1191,22 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
         }
     }, [isOpen, resetSendForm]);
 
+    // Lock body scroll when modal is open to prevent scroll bleed
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = '';
+            };
+        }
+    }, [isOpen]);
+
     // Auto-estimate gas when send form is complete
     useEffect(() => {
-        if (sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0) {
+        if (sendToken && resolvedRecipient && actualSendAmount && parseFloat(actualSendAmount) > 0) {
             handleEstimateGas();
         }
-    }, [sendToken, resolvedRecipient, sendAmount, handleEstimateGas]);
+    }, [sendToken, resolvedRecipient, actualSendAmount, handleEstimateGas]);
 
     // Copy wallet address
     const handleCopy = () => {
@@ -1003,7 +1269,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <span className="text-xl">💳</span>
-                                    <h2 className="text-lg font-semibold text-white">Spritz Wallets</h2>
+                                    <h2 className="text-lg font-semibold text-white">Spritz Wallet</h2>
                                     <span className="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded-full">
                                         Beta
                                     </span>
@@ -1227,7 +1493,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                         {/* Tab Content */}
                         <div className="flex-1 flex flex-col overflow-hidden border-t border-zinc-800/50">
                             {activeTab === "balances" && (
-                                <div className="flex-1 overflow-y-auto">
+                                <div className="flex-1 overflow-y-auto overscroll-contain">
                                     {/* Chain selector dropdown */}
                                     <ChainSelectorDropdown
                                         selectedChainId={selectedChainId}
@@ -1356,9 +1622,9 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "receive" && (
-                                <div className="relative flex-1 flex flex-col overflow-y-auto">
-                                    {/* Email/Digital ID users without passkey - must create one to unlock wallet */}
-                                    {(smartWallet?.needsPasskey || (needsPasskeyForSend && passkeyStatus === "error")) ? (
+                                <div className="relative flex-1 flex flex-col overflow-y-auto overscroll-contain">
+                                    {/* Email/Digital ID users without passkey AND no existing wallet address - must create one */}
+                                    {((smartWallet?.needsPasskey && !smartWalletAddress) || (needsPasskeyForSend && passkeyStatus === "error" && !smartWalletAddress)) ? (
                                         <div className="flex flex-col items-center justify-center text-center p-6">
                                             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-500/10 flex items-center justify-center">
                                                 <span className="text-3xl">🔐</span>
@@ -1417,16 +1683,34 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                         </p>
                                     </div>
 
-                                    {/* Passkey wallet warning - remind users that passkey = wallet key */}
+                                    {/* Passkey wallet warning - different messages for normal vs lost passkey */}
                                     {smartWallet?.warning && needsPasskeyForSend && (
-                                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4 mx-auto max-w-xs">
-                                            <div className="flex items-start gap-2">
-                                                <span className="text-amber-400 text-sm">🔑</span>
-                                                <p className="text-xs text-amber-200/80">
-                                                    <strong>Your passkey controls this wallet.</strong> Keep it safe - losing your passkey means losing access to funds.
-                                                </p>
+                                        smartWallet?.needsPasskey ? (
+                                            // Lost passkey warning - more prominent
+                                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-4 mx-auto max-w-xs">
+                                                <div className="flex items-start gap-2">
+                                                    <span className="text-red-400 text-lg">⚠️</span>
+                                                    <div>
+                                                        <p className="text-sm text-red-200 font-semibold mb-1">
+                                                            Passkey Not Found
+                                                        </p>
+                                                        <p className="text-xs text-red-200/80">
+                                                            Your wallet address is shown below, but you cannot send transactions until you restore your passkey. Go to Security settings to re-register your passkey.
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
+                                        ) : (
+                                            // Normal warning
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4 mx-auto max-w-xs">
+                                                <div className="flex items-start gap-2">
+                                                    <span className="text-amber-400 text-sm">🔑</span>
+                                                    <p className="text-xs text-amber-200/80">
+                                                        <strong>Your passkey controls this wallet.</strong> Keep it safe - losing your passkey means losing access to funds.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )
                                     )}
 
                                     {/* QR Code - uses Smart Wallet address */}
@@ -1539,41 +1823,49 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
 
                             {activeTab === "send" && (
                                 <div className="flex-1 flex flex-col overflow-y-auto relative">
-                                    {/* Loading state */}
-                                    {((canUsePasskeySigning && passkeyStatus === "loading") || isSmartWalletLoading) ? (
+                                    {/* Loading state - includes passkey users initializing */}
+                                    {((canUsePasskeySigning && (passkeyStatus === "loading" || passkeyStatus === "idle")) || isSmartWalletLoading) ? (
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                                             <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
                                             <p className="text-sm text-zinc-400">Loading wallet...</p>
                                         </div>
                                     ) : (smartWallet?.needsPasskey || (canUsePasskeySigning && passkeyStatus === "error" && needsPasskeyForSend)) ? (
-                                        /* Email/Digital ID users without a passkey - prompt to create one */
+                                        /* Email/Digital ID users without a passkey - different message if they have an existing wallet */
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
-                                                <span className="text-3xl">🔐</span>
+                                            <div className={`w-16 h-16 rounded-full ${smartWalletAddress ? 'bg-red-500/20' : 'bg-purple-500/20'} flex items-center justify-center mb-4`}>
+                                                <span className="text-3xl">{smartWalletAddress ? '⚠️' : '🔐'}</span>
                                             </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Create Your Wallet</h3>
+                                            <h3 className="text-lg font-semibold text-white mb-2">
+                                                {smartWalletAddress ? 'Passkey Required' : 'Create Your Wallet'}
+                                            </h3>
                                             <p className="text-sm text-zinc-400 mb-4 max-w-xs">
-                                                {isSolanaUser ? (
+                                                {smartWalletAddress ? (
+                                                    <>Your passkey credentials were not found. Re-register your passkey in Security settings to send transactions.</>
+                                                ) : isSolanaUser ? (
                                                     <>Your Solana wallet can&apos;t sign EVM transactions. Create a passkey to get your EVM wallet.</>
                                                 ) : (
                                                     <>Set up a passkey to create your wallet. Your passkey will be your wallet key - it signs all your transactions.</>
                                                 )}
                                             </p>
-                                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-6 max-w-xs">
-                                                <p className="text-xs text-purple-300">
+                                            <div className={`${smartWalletAddress ? 'bg-red-500/10 border-red-500/30' : 'bg-purple-500/10 border-purple-500/30'} border rounded-xl p-4 mb-6 max-w-xs`}>
+                                                <p className={`text-xs ${smartWalletAddress ? 'text-red-300' : 'text-purple-300'}`}>
                                                     <strong>🔑 Your Passkey = Your Wallet Key</strong>
                                                     <br />
-                                                    <span className="text-zinc-400">Keep it safe - losing it means losing wallet access.</span>
+                                                    <span className="text-zinc-400">
+                                                        {smartWalletAddress 
+                                                            ? 'Go to Security settings to restore or re-register your passkey.' 
+                                                            : 'Keep it safe - losing it means losing wallet access.'}
+                                                    </span>
                                                 </p>
                                             </div>
                                             <button
                                                 onClick={() => setShowPasskeyManager(true)}
-                                                className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
+                                                className={`px-6 py-3 ${smartWalletAddress ? 'bg-red-500 hover:bg-red-600' : 'bg-purple-500 hover:bg-purple-600'} text-white font-medium rounded-xl transition-colors`}
                                             >
-                                                Create Passkey & Wallet
+                                                {smartWalletAddress ? 'Restore Passkey' : 'Create Passkey & Wallet'}
                                             </button>
                                             <p className="text-xs text-zinc-600 mt-4">
-                                                🔒 Your passkey stays on your device
+                                                🔒 {smartWalletAddress ? 'Re-register the same passkey to regain access' : 'Your passkey stays on your device'}
                                             </p>
                                         </div>
                                     ) : canUsePasskeySigning && passkeyStatus === "error" ? (
@@ -1627,34 +1919,47 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 </>
                                             )}
                                         </div>
-                                    ) : !isConnected && !canUsePasskeySigning ? (
+                                    ) : !isConnected && effectiveAuthMethod === "wallet" && !canUsePasskeySigning ? (
+                                        // Only show "Reconnect to Send" for wallet users who need wallet connection
+                                        // Passkey/email/digital_id users don't need wallet connection
                                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
-                                                <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                                </svg>
-                                            </div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">Reconnect to Send</h3>
-                                            <p className="text-sm text-zinc-400 mb-4 max-w-xs">
-                                                Your wallet session expired. Reconnect to sign transactions.
-                                            </p>
-                                            <button
-                                                onClick={() => openConnectModal?.()}
-                                                className="w-full max-w-[200px] px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
-                                            >
-                                                Reconnect Wallet
-                                            </button>
-                                            <div className="mt-6 pt-4 border-t border-zinc-800 w-full max-w-xs">
-                                                <p className="text-xs text-zinc-500 mb-3">
-                                                    💡 Set up a passkey to send without reconnecting
-                                                </p>
-                                                <button
-                                                    onClick={() => setActiveTab("security")}
-                                                    className="text-xs text-purple-400 hover:text-purple-300 font-medium"
-                                                >
-                                                    Go to Security →
-                                                </button>
-                                            </div>
+                                            {isAutoReconnecting ? (
+                                                // Auto-reconnecting state - show spinner
+                                                <>
+                                                    <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4" />
+                                                    <p className="text-sm text-zinc-400">Reconnecting wallet...</p>
+                                                </>
+                                            ) : (
+                                                // Disconnected state - show reconnect options
+                                                <>
+                                                    <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+                                                        <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                        </svg>
+                                                    </div>
+                                                    <h3 className="text-lg font-semibold text-white mb-2">Wallet Disconnected</h3>
+                                                    <p className="text-sm text-zinc-400 mb-4 max-w-xs">
+                                                        Your wallet session expired. This commonly happens on mobile PWA apps.
+                                                    </p>
+                                                    <button
+                                                        onClick={() => openConnectModal?.()}
+                                                        className="w-full max-w-[200px] px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors"
+                                                    >
+                                                        Reconnect Wallet
+                                                    </button>
+                                                    <div className="mt-6 pt-4 border-t border-zinc-800 w-full max-w-xs">
+                                                        <p className="text-xs text-zinc-500 mb-3">
+                                                            💡 <strong>Tip for PWA users:</strong> Set up a passkey to send without needing wallet reconnection
+                                                        </p>
+                                                        <button
+                                                            onClick={() => setActiveTab("security")}
+                                                            className="text-xs text-purple-400 hover:text-purple-300 font-medium"
+                                                        >
+                                                            Go to Security →
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     ) : (
                                     <>
@@ -1678,7 +1983,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                         </svg>
                                                     </button>
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto">
+                                                <div className="flex-1 overflow-y-auto overscroll-contain">
                                                     {allTokens.length === 0 ? (
                                                         <div className="p-8 text-center text-zinc-500 text-sm">
                                                             No tokens with balance
@@ -1858,8 +2163,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                             </div>
                                         )}
 
-                                        {/* Recipient Address with ENS support */}
-                                        <div>
+                                        {/* Recipient Address with ENS support and suggestions */}
+                                        <div className="relative">
                                             <label className="block text-xs font-medium text-zinc-400 mb-2">
                                                 Recipient
                                             </label>
@@ -1867,8 +2172,18 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 <input
                                                     type="text"
                                                     value={recipientInput}
-                                                    onChange={(e) => setRecipientInput(e.target.value)}
-                                                    placeholder="0x... or ENS name"
+                                                    onChange={(e) => {
+                                                        setRecipientInput(e.target.value);
+                                                        setShowRecipientSuggestions(true);
+                                                        setSelectedSuggestionIndex(-1);
+                                                    }}
+                                                    onFocus={() => setShowRecipientSuggestions(true)}
+                                                    onBlur={() => {
+                                                        // Delay hiding to allow click on suggestion
+                                                        setTimeout(() => setShowRecipientSuggestions(false), 200);
+                                                    }}
+                                                    onKeyDown={handleRecipientKeyDown}
+                                                    placeholder="0x..., ENS, or select from contacts"
                                                     spellCheck={false}
                                                     autoComplete="off"
                                                     autoCorrect="off"
@@ -1883,7 +2198,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 />
                                                 {/* Status indicator */}
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                    {isResolvingEns ? (
+                                                    {isResolvingEns || suggestionsLoading ? (
                                                         <div className="w-4 h-4 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
                                                     ) : isRecipientValid ? (
                                                         <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1896,6 +2211,130 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     ) : null}
                                                 </div>
                                             </div>
+                                            
+                                            {/* Suggestions dropdown */}
+                                            {showRecipientSuggestions && !showSaveAddressDialog && (filteredSuggestions.length > 0 || canSaveToAddressBook) && (
+                                                <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-64 overflow-y-auto overscroll-contain">
+                                                    {/* Save to address book option */}
+                                                    {canSaveToAddressBook && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setShowSaveAddressDialog(true);
+                                                                setShowRecipientSuggestions(false);
+                                                            }}
+                                                            className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-zinc-700/50 transition-colors border-b border-zinc-700"
+                                                        >
+                                                            <span className="text-base">💾</span>
+                                                            <div className="text-left">
+                                                                <div className="text-xs font-medium text-white">Save to Address Book</div>
+                                                                <div className="text-[10px] text-zinc-400 font-mono">
+                                                                    {(resolvedRecipient || recipientInput).slice(0, 10)}...{(resolvedRecipient || recipientInput).slice(-8)}
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Suggestions list */}
+                                                    {filteredSuggestions.length > 0 && (
+                                                        <div className="py-1">
+                                                            {filteredSuggestions.slice(0, 8).map((suggestion, index) => (
+                                                                <button
+                                                                    key={`${suggestion.type}-${suggestion.address}`}
+                                                                    type="button"
+                                                                    onClick={() => handleSelectSuggestion(suggestion)}
+                                                                    className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${
+                                                                        index === selectedSuggestionIndex
+                                                                            ? "bg-indigo-600/20"
+                                                                            : "hover:bg-zinc-700/50"
+                                                                    }`}
+                                                                >
+                                                                    {/* Avatar or type icon */}
+                                                                    <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                                                        {suggestion.avatar ? (
+                                                                            <img 
+                                                                                src={suggestion.avatar} 
+                                                                                alt="" 
+                                                                                className="w-full h-full object-cover"
+                                                                            />
+                                                                        ) : (
+                                                                            <span className="text-sm">{getSuggestionIcon(suggestion.type)}</span>
+                                                                        )}
+                                                                    </div>
+                                                                    
+                                                                    {/* Info */}
+                                                                    <div className="flex-1 min-w-0 text-left">
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <span className="text-xs font-medium text-white truncate">
+                                                                                {suggestion.label}
+                                                                            </span>
+                                                                            {suggestion.isFavorite && (
+                                                                                <span className="text-yellow-400 text-[10px]">★</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                                                            <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
+                                                                                {getSuggestionLabel(suggestion.type)}
+                                                                            </span>
+                                                                            {suggestion.sublabel && (
+                                                                                <span className="truncate">{suggestion.sublabel}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Address preview */}
+                                                                    <div className="text-[10px] text-zinc-500 font-mono flex-shrink-0">
+                                                                        {(suggestion.smartWalletAddress || suggestion.address).slice(0, 6)}...
+                                                                        {(suggestion.smartWalletAddress || suggestion.address).slice(-4)}
+                                                                    </div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            
+                                            {/* Save address dialog */}
+                                            {showSaveAddressDialog && (
+                                                <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3">
+                                                    <div className="text-xs font-medium text-white mb-2">
+                                                        Save to Address Book
+                                                    </div>
+                                                    <div className="text-[10px] text-zinc-400 font-mono mb-2 break-all">
+                                                        {resolvedRecipient || recipientInput}
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={saveAddressLabel}
+                                                        onChange={(e) => setSaveAddressLabel(e.target.value)}
+                                                        placeholder="Label (e.g., Mom, Work, Exchange)"
+                                                        maxLength={50}
+                                                        autoFocus
+                                                        className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 mb-2"
+                                                    />
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setShowSaveAddressDialog(false);
+                                                                setSaveAddressLabel("");
+                                                            }}
+                                                            className="flex-1 px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleSaveToAddressBook}
+                                                            disabled={!saveAddressLabel.trim()}
+                                                            className="flex-1 px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
                                             {/* Show resolved address for ENS names */}
                                             {recipientEnsName && resolvedRecipient && recipientInput.includes(".") && (
                                                 <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
@@ -1926,17 +2365,38 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 <label className="text-xs font-medium text-zinc-400">
                                                     Amount
                                                 </label>
-                                                {sendToken && (
-                                                    <button
-                                                        onClick={() => setSendAmount(sendToken.balanceFormatted)}
-                                                        className="text-xs text-purple-400 hover:text-purple-300"
-                                                    >
-                                                        MAX
-                                                    </button>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    {/* USD/Token toggle */}
+                                                    {sendToken && tokenPriceUsd > 0 && (
+                                                        <button
+                                                            onClick={toggleAmountMode}
+                                                            className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                                                            title={isUsdMode ? "Switch to token amount" : "Switch to USD amount"}
+                                                        >
+                                                            <span className={isUsdMode ? "text-emerald-400" : "text-zinc-500"}>$</span>
+                                                            <span className="text-zinc-500">/</span>
+                                                            <span className={!isUsdMode ? "text-emerald-400" : "text-zinc-500"}>{sendToken.symbol}</span>
+                                                        </button>
+                                                    )}
+                                                    {sendToken && (
+                                                        <button
+                                                            onClick={() => {
+                                                                if (isUsdMode && sendToken.balanceUsd) {
+                                                                    setSendAmount(sendToken.balanceUsd.toFixed(2));
+                                                                } else {
+                                                                    setSendAmount(sendToken.balanceFormatted);
+                                                                }
+                                                            }}
+                                                            className="text-xs text-purple-400 hover:text-purple-300"
+                                                        >
+                                                            MAX
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3">
                                                 <div className="flex items-center gap-2">
+                                                    {isUsdMode && <span className="text-zinc-400 text-xl font-medium">$</span>}
                                                     <input
                                                         type="text"
                                                         inputMode="decimal"
@@ -1951,20 +2411,28 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                         placeholder="0.00"
                                                         className="flex-1 bg-transparent text-white text-xl font-medium placeholder-zinc-500 focus:outline-none"
                                                     />
-                                                    <span className="text-zinc-400 font-medium">
-                                                        {sendToken?.symbol || "---"}
-                                                    </span>
+                                                    {!isUsdMode && (
+                                                        <span className="text-zinc-400 font-medium">
+                                                            {sendToken?.symbol || "---"}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-xs text-zinc-500 mt-1">
-                                                    ≈ {sendToken?.balanceUsd && sendAmount 
-                                                        ? formatUsd((parseFloat(sendAmount) / parseFloat(sendToken.balanceFormatted)) * sendToken.balanceUsd)
-                                                        : "$0.00"}
+                                                    {isUsdMode ? (
+                                                        // Show token equivalent when in USD mode
+                                                        <>≈ {actualSendAmount ? `${parseFloat(actualSendAmount).toFixed(6)} ${sendToken?.symbol || ""}` : `0 ${sendToken?.symbol || ""}`}</>
+                                                    ) : (
+                                                        // Show USD equivalent when in token mode
+                                                        <>≈ {sendToken?.balanceUsd && sendAmount 
+                                                            ? formatUsd((parseFloat(sendAmount) / parseFloat(sendToken.balanceFormatted)) * sendToken.balanceUsd)
+                                                            : "$0.00"}</>
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>
 
                                         {/* Gas Estimation & Summary */}
-                                        {sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0 && (
+                                        {sendToken && resolvedRecipient && actualSendAmount && parseFloat(actualSendAmount) > 0 && (
                                             <div className="bg-zinc-800/30 rounded-xl p-3 space-y-2">
                                                 <div className="flex justify-between text-xs">
                                                     <span className="text-zinc-500">Network Fee</span>
@@ -1975,12 +2443,18 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between text-xs">
-                                                    <span className="text-zinc-500">Total</span>
+                                                    <span className="text-zinc-500">You send</span>
                                                     <span className="text-zinc-300 font-medium">
-                                                        {sendAmount} {sendToken.symbol}
-                                                        {gasEstimate?.estimatedFeeUsd && sendToken.balanceUsd && sendAmount && (
-                                                            <> + {formatUsd(gasEstimate.estimatedFeeUsd)} fee</>
-                                                        )}
+                                                        {parseFloat(actualSendAmount).toFixed(6)} {sendToken.symbol}
+                                                        {isUsdMode && sendAmount && <> (${sendAmount})</>}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-zinc-500">+ Network Fee</span>
+                                                    <span className="text-zinc-300 font-medium">
+                                                        {gasEstimate?.estimatedFeeUsd 
+                                                            ? formatUsd(gasEstimate.estimatedFeeUsd)
+                                                            : "Sponsored ✨"}
                                                     </span>
                                                 </div>
                                             </div>
@@ -2034,13 +2508,13 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                 disabled={
                                                     !sendToken ||
                                                     !resolvedRecipient ||
-                                                    !sendAmount ||
-                                                    parseFloat(sendAmount) <= 0 ||
+                                                    !actualSendAmount ||
+                                                    parseFloat(actualSendAmount) <= 0 ||
                                                     effectiveIsSending ||
                                                     isResolvingEns
                                                 }
                                                 className={`w-full py-3 rounded-xl font-medium transition-colors ${
-                                                    sendToken && resolvedRecipient && sendAmount && parseFloat(sendAmount) > 0 && !effectiveIsSending && !isResolvingEns
+                                                    sendToken && resolvedRecipient && actualSendAmount && parseFloat(actualSendAmount) > 0 && !effectiveIsSending && !isResolvingEns
                                                         ? "bg-emerald-500 text-white hover:bg-emerald-600"
                                                         : "bg-emerald-500/20 text-emerald-400 opacity-50 cursor-not-allowed"
                                                 }`}
@@ -2058,10 +2532,12 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                                     "Resolving ENS..."
                                                 ) : !resolvedRecipient ? (
                                                     "Invalid Address"
-                                                ) : !sendAmount || parseFloat(sendAmount) <= 0 ? (
+                                                ) : !sendAmount || (isUsdMode ? !actualSendAmount : parseFloat(sendAmount) <= 0) ? (
                                                     "Enter Amount"
                                                 ) : (
-                                                    `Send ${sendAmount} ${sendToken.symbol}`
+                                                    isUsdMode 
+                                                        ? `Send $${sendAmount} (${parseFloat(actualSendAmount).toFixed(4)} ${sendToken.symbol})`
+                                                        : `Send ${sendAmount} ${sendToken.symbol}`
                                                 )}
                                             </button>
                                         )}
@@ -2077,7 +2553,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "history" && (
-                                <div className="flex-1 flex flex-col overflow-y-auto">
+                                <div className="flex-1 flex flex-col overflow-y-auto overscroll-contain">
                                     {/* Header with refresh */}
                                     <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
                                         <span className="text-xs text-zinc-500">
@@ -2099,7 +2575,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                     </div>
 
                                     {/* Transaction list */}
-                                    <div className="flex-1 overflow-y-auto">
+                                    <div className="flex-1 overflow-y-auto overscroll-contain">
                                         {isLoadingTx && transactions.length === 0 ? (
                                             <div className="p-8 flex flex-col items-center gap-3">
                                                 <div className="w-8 h-8 border-2 border-zinc-700 border-t-cyan-500 rounded-full animate-spin" />
@@ -2158,7 +2634,7 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                             )}
 
                             {activeTab === "security" && (
-                                <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+                                <div className="flex-1 p-4 space-y-4 overflow-y-auto overscroll-contain">
                                     {/* Multi-Chain Security - shows Safe status across all chains */}
                                     {smartWallet?.smartWalletAddress && (
                                         <MultiChainSecurity
@@ -2312,10 +2788,11 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                                 </div>
                                 
                                 {/* Vaults List */}
-                                <div className="flex-1 p-4 overflow-y-auto">
+                                <div className="flex-1 p-4 overflow-y-auto overscroll-contain">
                                     <VaultList
                                         userAddress={userAddress}
                                         onCreateNew={() => setShowCreateVaultModal(true)}
+                                        refreshKey={vaultRefreshKey}
                                     />
                                 </div>
                             </div>
@@ -2348,6 +2825,8 @@ export function WalletModal({ isOpen, onClose, userAddress, emailVerified, authM
                 onCreate={async (params) => {
                     await createVault(params);
                     setShowCreateVaultModal(false);
+                    // Trigger VaultList to refresh
+                    setVaultRefreshKey(prev => prev + 1);
                 }}
             />
 

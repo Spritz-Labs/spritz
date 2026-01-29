@@ -1,7 +1,143 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+
+// Regex to match mentions in the format @[name](address) - needs to be defined early
+const MENTION_REGEX_GLOBAL = /@\[([^\]]+)\]\(([^)]+)\)/g;
+
+// Convert raw value (with full mention format) to display value (clean @Name)
+function toDisplayValue(value: string): string {
+    return value.replace(MENTION_REGEX_GLOBAL, "@$1");
+}
+
+// Convert cursor position from display value to raw value
+function displayToRawCursorPos(displayPos: number, rawValue: string): number {
+    let displayIndex = 0;
+    let rawIndex = 0;
+    
+    while (displayIndex < displayPos && rawIndex < rawValue.length) {
+        // Check if we're at a mention start
+        const remaining = rawValue.slice(rawIndex);
+        const mentionMatch = remaining.match(/^@\[([^\]]+)\]\(([^)]+)\)/);
+        
+        if (mentionMatch) {
+            const displayMentionLen = mentionMatch[1].length + 1; // +1 for @
+            const rawMentionLen = mentionMatch[0].length;
+            
+            if (displayIndex + displayMentionLen <= displayPos) {
+                displayIndex += displayMentionLen;
+                rawIndex += rawMentionLen;
+            } else {
+                // Cursor is within the mention display text
+                rawIndex += (displayPos - displayIndex);
+                displayIndex = displayPos;
+            }
+        } else {
+            displayIndex++;
+            rawIndex++;
+        }
+    }
+    
+    return rawIndex;
+}
+
+// Convert cursor position from raw value to display value  
+function rawToDisplayCursorPos(rawPos: number, rawValue: string): number {
+    let displayIndex = 0;
+    let rawIndex = 0;
+    
+    while (rawIndex < rawPos && rawIndex < rawValue.length) {
+        const remaining = rawValue.slice(rawIndex);
+        const mentionMatch = remaining.match(/^@\[([^\]]+)\]\(([^)]+)\)/);
+        
+        if (mentionMatch) {
+            const displayMentionLen = mentionMatch[1].length + 1;
+            const rawMentionLen = mentionMatch[0].length;
+            
+            if (rawIndex + rawMentionLen <= rawPos) {
+                displayIndex += displayMentionLen;
+                rawIndex += rawMentionLen;
+            } else {
+                // Cursor is within the raw mention - put it at end of display mention
+                displayIndex += displayMentionLen;
+                rawIndex = rawPos;
+            }
+        } else {
+            displayIndex++;
+            rawIndex++;
+        }
+    }
+    
+    return displayIndex;
+}
+
+// Detect if text looks like code
+function looksLikeCode(text: string): { isCode: boolean; language: string } {
+    const lines = text.split('\n');
+    if (lines.length < 3) return { isCode: false, language: '' };
+    
+    // Check for common code patterns
+    const codePatterns = [
+        // Python
+        { pattern: /^(import |from .+ import |def |class |if __name__)/, lang: 'python' },
+        // JavaScript/TypeScript
+        { pattern: /^(import |export |const |let |var |function |async |await |require\(|module\.exports)/, lang: 'javascript' },
+        // TypeScript specific
+        { pattern: /^(interface |type |namespace |enum |declare )/, lang: 'typescript' },
+        // Shell/Bash (shebang starts with #!)
+        { pattern: /^(#!\/|if \[|for .* in|while |echo |export |source )/, lang: 'bash' },
+        // SQL
+        { pattern: /^(SELECT |INSERT |UPDATE |DELETE |CREATE |ALTER |DROP |FROM |WHERE )/i, lang: 'sql' },
+        // HTML
+        { pattern: /^(<\!DOCTYPE|<html|<head|<body|<div|<span|<p |<script)/i, lang: 'html' },
+        // CSS
+        { pattern: /^(\.|#|@media|@import|body\s*\{|html\s*\{)/, lang: 'css' },
+        // JSON
+        { pattern: /^\s*[\{\[]/, lang: 'json' },
+        // Rust
+        { pattern: /^(fn |let mut |impl |struct |enum |use |mod |pub )/, lang: 'rust' },
+        // Go
+        { pattern: /^(package |import |func |type |var |const )/, lang: 'go' },
+        // Solidity
+        { pattern: /^(pragma solidity|contract |function |mapping|uint|address|bytes)/, lang: 'solidity' },
+    ];
+    
+    // Check first few non-empty lines for patterns
+    let matchedLang = '';
+    for (const line of lines.slice(0, 10)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        
+        for (const { pattern, lang } of codePatterns) {
+            if (pattern.test(trimmed)) {
+                matchedLang = lang;
+                break;
+            }
+        }
+        if (matchedLang) break;
+    }
+    
+    // Also check for general code indicators
+    const codeIndicators = [
+        /[;{}()\[\]]+/, // Brackets and semicolons
+        /=>|->|::/, // Arrows
+        /\$\{|\$\(/, // Template strings / shell vars
+        /^\s{2,}(if|for|while|return|const|let|var|def|func|fn)\b/, // Indented keywords
+    ];
+    
+    let codeScore = 0;
+    for (const line of lines) {
+        for (const indicator of codeIndicators) {
+            if (indicator.test(line)) codeScore++;
+        }
+    }
+    
+    // If matched a language or high code score, it's probably code
+    const isCode = matchedLang !== '' || (codeScore >= lines.length * 0.3 && lines.length >= 5);
+    
+    return { isCode, language: matchedLang || 'text' };
+}
 
 // Common emoji shortcodes (name -> emoji)
 const EMOJI_SHORTCODES: Record<string, string> = {
@@ -49,6 +185,8 @@ export type MentionUser = {
     address: string;
     name: string | null;
     avatar: string | null;
+    isAgent?: boolean; // For AI agents in channels
+    avatarEmoji?: string; // Emoji fallback for agents
 };
 
 type MentionInputProps = {
@@ -59,7 +197,11 @@ type MentionInputProps = {
     disabled?: boolean;
     users: MentionUser[];
     className?: string;
-    inputRef?: React.RefObject<HTMLInputElement | null>;
+    inputRef?: React.RefObject<HTMLTextAreaElement | null>;
+    multiline?: boolean; // Enable Shift+Enter for new lines
+    maxRows?: number; // Max height in rows (default 6)
+    onSubmit?: () => void; // Called when Enter is pressed (without Shift)
+    "aria-label"?: string;
 };
 
 export function MentionInput({
@@ -71,15 +213,36 @@ export function MentionInput({
     users,
     className,
     inputRef: externalInputRef,
+    multiline = true,
+    maxRows = 6,
+    onSubmit,
+    "aria-label": ariaLabel,
 }: MentionInputProps) {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [suggestionFilter, setSuggestionFilter] = useState("");
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
     const [suggestionType, setSuggestionType] = useState<"mention" | "emoji">("mention");
-    const internalInputRef = useRef<HTMLInputElement>(null);
+    const internalInputRef = useRef<HTMLTextAreaElement>(null);
     const inputRef = externalInputRef || internalInputRef;
     const suggestionsRef = useRef<HTMLDivElement>(null);
+    
+    // Display value shows @Name instead of @[Name](address)
+    const displayValue = useMemo(() => toDisplayValue(value), [value]);
+    
+    // Auto-resize textarea based on content
+    useEffect(() => {
+        const textarea = inputRef.current;
+        if (textarea && multiline) {
+            // Reset height to get accurate scrollHeight
+            textarea.style.height = 'auto';
+            // Calculate line height (roughly 24px per line)
+            const lineHeight = 24;
+            const maxHeight = lineHeight * maxRows;
+            const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+            textarea.style.height = `${newHeight}px`;
+        }
+    }, [displayValue, multiline, maxRows, inputRef]);
 
     // Filter users based on input
     const filteredUsers = users.filter((user) => {
@@ -105,14 +268,89 @@ export function MentionInput({
         return name.startsWith("@") ? name.slice(1) : name;
     };
 
-    // Handle input change
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newValue = e.target.value;
-        const cursorPosition = e.target.selectionStart || 0;
+    // Handle paste to detect code
+    const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const pastedText = e.clipboardData.getData('text');
         
-        onChange(newValue);
+        // Check if it looks like code (multi-line with code patterns)
+        const { isCode, language } = looksLikeCode(pastedText);
+        
+        if (isCode && pastedText.includes('\n')) {
+            e.preventDefault();
+            
+            // Wrap in code block
+            const textarea = inputRef.current;
+            const cursorPos = textarea?.selectionStart || 0;
+            const beforeCursor = displayValue.slice(0, cursorPos);
+            const afterCursor = displayValue.slice(textarea?.selectionEnd || cursorPos);
+            
+            // Add newlines if not at line start/end
+            const needsNewlineBefore = beforeCursor.length > 0 && !beforeCursor.endsWith('\n');
+            const needsNewlineAfter = afterCursor.length > 0 && !afterCursor.startsWith('\n');
+            
+            const codeBlock = `${needsNewlineBefore ? '\n' : ''}\`\`\`${language}\n${pastedText}\n\`\`\`${needsNewlineAfter ? '\n' : ''}`;
+            
+            const newDisplayValue = beforeCursor + codeBlock + afterCursor;
+            
+            // Calculate raw value equivalent
+            const rawCursorPos = displayToRawCursorPos(cursorPos, value);
+            const rawEndPos = displayToRawCursorPos(textarea?.selectionEnd || cursorPos, value);
+            const newRawValue = value.slice(0, rawCursorPos) + codeBlock + value.slice(rawEndPos);
+            
+            onChange(newRawValue);
+            
+            // Set cursor after code block
+            setTimeout(() => {
+                if (textarea) {
+                    const newCursorPos = beforeCursor.length + codeBlock.length;
+                    textarea.focus();
+                    textarea.setSelectionRange(newCursorPos, newCursorPos);
+                }
+            }, 0);
+        }
+        // Otherwise, let the default paste behavior happen
+    }, [displayValue, value, onChange, inputRef]);
 
-        const textBeforeCursor = newValue.slice(0, cursorPosition);
+    // Handle input change
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const newDisplayValue = e.target.value;
+        const displayCursorPos = e.target.selectionStart || 0;
+        
+        // Calculate the diff between old and new display values
+        const oldDisplayValue = displayValue;
+        
+        // Figure out what changed
+        // Find the point where they diverge from the start
+        let commonPrefixLen = 0;
+        while (commonPrefixLen < oldDisplayValue.length && 
+               commonPrefixLen < newDisplayValue.length && 
+               oldDisplayValue[commonPrefixLen] === newDisplayValue[commonPrefixLen]) {
+            commonPrefixLen++;
+        }
+        
+        // Find common suffix
+        let commonSuffixLen = 0;
+        while (commonSuffixLen < (oldDisplayValue.length - commonPrefixLen) && 
+               commonSuffixLen < (newDisplayValue.length - commonPrefixLen) &&
+               oldDisplayValue[oldDisplayValue.length - 1 - commonSuffixLen] === 
+               newDisplayValue[newDisplayValue.length - 1 - commonSuffixLen]) {
+            commonSuffixLen++;
+        }
+        
+        // Calculate what was deleted/inserted
+        const deletedInDisplay = oldDisplayValue.slice(commonPrefixLen, oldDisplayValue.length - commonSuffixLen);
+        const insertedInDisplay = newDisplayValue.slice(commonPrefixLen, newDisplayValue.length - commonSuffixLen);
+        
+        // Map positions to raw value
+        const rawPrefixPos = displayToRawCursorPos(commonPrefixLen, value);
+        const rawSuffixPos = displayToRawCursorPos(oldDisplayValue.length - commonSuffixLen, value);
+        
+        // Build new raw value
+        const newRawValue = value.slice(0, rawPrefixPos) + insertedInDisplay + value.slice(rawSuffixPos);
+        
+        onChange(newRawValue);
+
+        const textBeforeCursor = newDisplayValue.slice(0, displayCursorPos);
 
         // Check for emoji shortcode trigger (:)
         const lastColonIndex = textBeforeCursor.lastIndexOf(":");
@@ -158,11 +396,15 @@ export function MentionInput({
         if (mentionStartIndex === null) return;
 
         const input = inputRef.current;
-        const cursorPosition = input?.selectionStart || value.length;
+        const displayCursorPos = input?.selectionStart || displayValue.length;
         
-        // Replace @filter with @[name](address)
-        const beforeMention = value.slice(0, mentionStartIndex);
-        const afterCursor = value.slice(cursorPosition);
+        // mentionStartIndex is in display coordinates - convert to raw
+        const rawMentionStart = displayToRawCursorPos(mentionStartIndex, value);
+        const rawCursorPos = displayToRawCursorPos(displayCursorPos, value);
+        
+        // Replace @filter with @[name](address) in raw value
+        const beforeMention = value.slice(0, rawMentionStart);
+        const afterCursor = value.slice(rawCursorPos);
         const mentionText = `@[${getDisplayName(user)}](${user.address}) `;
         
         const newValue = beforeMention + mentionText + afterCursor;
@@ -172,26 +414,32 @@ export function MentionInput({
         setMentionStartIndex(null);
         setSuggestionFilter("");
         
-        // Focus and set cursor position
+        // Focus and set cursor position in display coordinates
         setTimeout(() => {
             if (input) {
-                const newCursorPos = beforeMention.length + mentionText.length;
+                // Display version will show @Name (name.length + 1 for @, + 1 for space)
+                const displayMentionLen = getDisplayName(user).length + 2; // @Name + space
+                const newDisplayCursorPos = mentionStartIndex + displayMentionLen;
                 input.focus();
-                input.setSelectionRange(newCursorPos, newCursorPos);
+                input.setSelectionRange(newDisplayCursorPos, newDisplayCursorPos);
             }
         }, 0);
-    }, [mentionStartIndex, value, onChange, inputRef]);
+    }, [mentionStartIndex, value, displayValue, onChange, inputRef]);
 
     // Handle selecting an emoji
     const selectEmoji = useCallback((emoji: string) => {
         if (mentionStartIndex === null) return;
 
         const input = inputRef.current;
-        const cursorPosition = input?.selectionStart || value.length;
+        const displayCursorPos = input?.selectionStart || displayValue.length;
         
-        // Replace :filter with emoji
-        const beforeEmoji = value.slice(0, mentionStartIndex);
-        const afterCursor = value.slice(cursorPosition);
+        // mentionStartIndex is in display coordinates - convert to raw
+        const rawMentionStart = displayToRawCursorPos(mentionStartIndex, value);
+        const rawCursorPos = displayToRawCursorPos(displayCursorPos, value);
+        
+        // Replace :filter with emoji in raw value
+        const beforeEmoji = value.slice(0, rawMentionStart);
+        const afterCursor = value.slice(rawCursorPos);
         const emojiText = emoji + " ";
         
         const newValue = beforeEmoji + emojiText + afterCursor;
@@ -201,18 +449,18 @@ export function MentionInput({
         setMentionStartIndex(null);
         setSuggestionFilter("");
         
-        // Focus and set cursor position
+        // Focus and set cursor position in display coordinates
         setTimeout(() => {
             if (input) {
-                const newCursorPos = beforeEmoji.length + emojiText.length;
+                const newDisplayCursorPos = mentionStartIndex + emojiText.length;
                 input.focus();
-                input.setSelectionRange(newCursorPos, newCursorPos);
+                input.setSelectionRange(newDisplayCursorPos, newDisplayCursorPos);
             }
         }, 0);
-    }, [mentionStartIndex, value, onChange, inputRef]);
+    }, [mentionStartIndex, value, displayValue, onChange, inputRef]);
 
     // Handle keyboard navigation in suggestions
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         const items = suggestionType === "emoji" ? filteredEmojis : filteredUsers;
         
         if (showSuggestions && items.length > 0) {
@@ -246,6 +494,42 @@ export function MentionInput({
             }
         }
         
+        // Handle Shift+Enter for new line (multiline mode)
+        if (multiline && e.key === "Enter" && e.shiftKey) {
+            // Explicitly insert newline at cursor position
+            e.preventDefault();
+            const textarea = inputRef.current;
+            if (textarea) {
+                const start = textarea.selectionStart || 0;
+                const end = textarea.selectionEnd || 0;
+                const currentDisplayValue = displayValue;
+                const newDisplayValue = currentDisplayValue.slice(0, start) + "\n" + currentDisplayValue.slice(end);
+                
+                // Convert to raw value
+                const rawStart = displayToRawCursorPos(start, value);
+                const rawEnd = displayToRawCursorPos(end, value);
+                const newRawValue = value.slice(0, rawStart) + "\n" + value.slice(rawEnd);
+                
+                onChange(newRawValue);
+                
+                // Set cursor after newline
+                setTimeout(() => {
+                    textarea.selectionStart = start + 1;
+                    textarea.selectionEnd = start + 1;
+                }, 0);
+            }
+            return;
+        }
+        
+        // Handle Enter to submit (without Shift in multiline mode)
+        if (e.key === "Enter" && !e.shiftKey) {
+            if (onSubmit) {
+                e.preventDefault();
+                onSubmit();
+                return;
+            }
+        }
+        
         // Pass through to parent handler
         onKeyDown?.(e);
     };
@@ -271,20 +555,23 @@ export function MentionInput({
 
     return (
         <div className="relative flex-1 min-w-0">
-            <input
-                ref={inputRef as React.RefObject<HTMLInputElement>}
-                type="text"
+            <textarea
+                ref={inputRef as React.RefObject<HTMLTextAreaElement>}
                 inputMode="text"
                 enterKeyHint="send"
                 autoComplete="off"
                 autoCorrect="on"
                 autoCapitalize="sentences"
-                value={value}
+                value={displayValue}
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder={placeholder}
                 disabled={disabled}
-                className={`w-full ${className || ""}`}
+                rows={1}
+                aria-label={ariaLabel}
+                className={`w-full resize-none overflow-y-auto ${className || ""}`}
+                style={{ minHeight: '24px', maxHeight: `${24 * maxRows}px` }}
             />
             
             {/* Suggestions Popup (Mentions or Emojis) */}
@@ -336,7 +623,24 @@ export function MentionInput({
                                                     : "hover:bg-zinc-700 text-zinc-300"
                                             }`}
                                         >
-                                            {user.avatar ? (
+                                            {user.isAgent ? (
+                                                // Agent avatar - show image, emoji, or fallback
+                                                user.avatar ? (
+                                                    <img
+                                                        src={user.avatar}
+                                                        alt=""
+                                                        className="w-8 h-8 rounded-lg object-cover ring-1 ring-purple-500/50"
+                                                    />
+                                                ) : user.avatarEmoji ? (
+                                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-lg ring-1 ring-purple-500/50">
+                                                        {user.avatarEmoji}
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold ring-1 ring-purple-500/50">
+                                                        🤖
+                                                    </div>
+                                                )
+                                            ) : user.avatar ? (
                                                 <img
                                                     src={user.avatar}
                                                     alt=""
@@ -348,11 +652,18 @@ export function MentionInput({
                                                 </div>
                                             )}
                                             <div className="flex-1 text-left min-w-0">
-                                                <p className="font-medium truncate">
-                                                    {getDisplayName(user)}
-                                                </p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="font-medium truncate">
+                                                        {getDisplayName(user)}
+                                                    </p>
+                                                    {user.isAgent && (
+                                                        <span className="shrink-0 text-[9px] px-1 py-0.5 bg-purple-500/20 text-purple-400 rounded font-medium">
+                                                            AI
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-zinc-500 truncate">
-                                                    {formatAddress(user.address)}
+                                                    {user.isAgent ? "AI Agent" : formatAddress(user.address)}
                                                 </p>
                                             </div>
                                         </button>
@@ -369,6 +680,7 @@ export function MentionInput({
 
 // Regex to match mentions in the format @[name](address)
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
+// Note: MENTION_REGEX_GLOBAL is defined at the top of the file for toDisplayValue()
 
 // Parse mentions from text
 export function parseMentions(text: string): Array<{

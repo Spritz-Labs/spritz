@@ -107,7 +107,19 @@ export async function POST(
     try {
         const { id } = await params;
         const body = await request.json();
-        const { userAddress, url, title } = body;
+        const { 
+            userAddress, 
+            url, 
+            title,
+            // Firecrawl options (for official agents)
+            scrapeMethod,
+            crawlDepth,
+            autoSync,
+            syncIntervalHours,
+            excludePatterns,
+            infiniteScroll,
+            scrollCount,
+        } = body;
 
         if (!userAddress || !url) {
             return NextResponse.json({ error: "User address and URL are required" }, { status: 400 });
@@ -122,10 +134,10 @@ export async function POST(
 
         const normalizedAddress = userAddress.toLowerCase();
 
-        // Verify agent ownership
+        // Verify agent ownership and get agent details
         const { data: agent } = await supabase
             .from("shout_agents")
-            .select("owner_address")
+            .select("owner_address, visibility")
             .eq("id", id)
             .single();
 
@@ -133,30 +145,70 @@ export async function POST(
             return NextResponse.json({ error: "Access denied" }, { status: 403 });
         }
 
-        // Check limit (max 10 URLs per agent for now)
+        // Check if user is admin (for Firecrawl features)
+        const { data: adminData } = await supabase
+            .from("shout_admins")
+            .select("wallet_address")
+            .eq("wallet_address", normalizedAddress)
+            .single();
+        const isAdmin = !!adminData;
+
+        // Only allow Firecrawl features for official agents or admins
+        const canUseFirecrawl = isAdmin || agent.visibility === "official";
+
+        // Check limit (max 10 URLs per agent for regular users, 50 for official)
+        const maxItems = agent.visibility === "official" ? 50 : 10;
         const { count } = await supabase
             .from("shout_agent_knowledge")
             .select("*", { count: "exact", head: true })
             .eq("agent_id", id);
 
-        if ((count || 0) >= 10) {
-            return NextResponse.json({ error: "Maximum of 10 knowledge items per agent" }, { status: 400 });
+        if ((count || 0) >= maxItems) {
+            return NextResponse.json({ error: `Maximum of ${maxItems} knowledge items per agent` }, { status: 400 });
         }
 
         // Detect content type and generate title
         const contentType = detectContentType(url);
         const itemTitle = title || extractTitleFromUrl(url);
 
+        // Build insert object
+        const insertData: Record<string, unknown> = {
+            agent_id: id,
+            url: url.trim(),
+            title: itemTitle,
+            content_type: contentType,
+            status: "pending",
+        };
+
+        // Add Firecrawl options if allowed
+        if (canUseFirecrawl) {
+            if (scrapeMethod === "firecrawl") {
+                insertData.scrape_method = "firecrawl";
+            }
+            if (crawlDepth && crawlDepth > 0) {
+                insertData.crawl_depth = Math.min(crawlDepth, 5); // Max depth 5
+            }
+            if (autoSync !== undefined) {
+                insertData.auto_sync = autoSync;
+            }
+            if (syncIntervalHours && syncIntervalHours > 0) {
+                insertData.sync_interval_hours = Math.max(1, Math.min(syncIntervalHours, 168)); // 1 hour to 7 days
+            }
+            if (excludePatterns && Array.isArray(excludePatterns)) {
+                insertData.exclude_patterns = excludePatterns.slice(0, 20); // Max 20 patterns
+            }
+            if (infiniteScroll !== undefined) {
+                insertData.infinite_scroll = infiniteScroll;
+            }
+            if (scrollCount && scrollCount > 0) {
+                insertData.scroll_count = Math.min(scrollCount, 30); // Max 30 scroll iterations
+            }
+        }
+
         // Insert knowledge item
         const { data: item, error } = await supabase
             .from("shout_agent_knowledge")
-            .insert({
-                agent_id: id,
-                url: url.trim(),
-                title: itemTitle,
-                content_type: contentType,
-                status: "pending",
-            })
+            .insert(insertData)
             .select()
             .single();
 

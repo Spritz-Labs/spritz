@@ -6,6 +6,7 @@ import { checkRateLimit, getClientIdentifier } from "@/lib/ratelimit";
 import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
 import { ApiError } from "@/lib/apiErrors";
 import { RESCUE_TOKEN_EXPIRY_MINUTES, RATE_LIMIT_RESCUE_PER_ADDRESS } from "@/lib/constants";
+import { getPasskeySafeAddress } from "@/lib/safeWallet";
 import crypto from "crypto";
 
 // Generate address from credential ID (must match registration logic exactly)
@@ -352,6 +353,22 @@ export async function POST(request: NextRequest) {
             .eq("wallet_address", storedCredential.user_address)
             .maybeSingle();
         
+        // Calculate the correct Smart Wallet address from the passkey's public key
+        // IMPORTANT: This ensures users get the correct address even if they registered before the fix
+        let correctSmartWalletAddress: string | null = null;
+        if (storedCredential.public_key_x && storedCredential.public_key_y) {
+            try {
+                correctSmartWalletAddress = await getPasskeySafeAddress(
+                    storedCredential.public_key_x,
+                    storedCredential.public_key_y,
+                    8453 // Base chain
+                );
+                console.log("[Passkey] Calculated correct Smart Wallet address:", correctSmartWalletAddress.slice(0, 10) + "...");
+            } catch (err) {
+                console.error("[Passkey] Failed to calculate Smart Wallet address:", err);
+            }
+        }
+        
         if (!existingUser) {
             // Create new user
             await supabase.from("shout_users").insert({
@@ -360,8 +377,12 @@ export async function POST(request: NextRequest) {
                 first_login: new Date().toISOString(),
                 last_login: new Date().toISOString(),
                 login_count: 1,
+                smart_wallet_address: correctSmartWalletAddress,
             });
             console.log("[Passkey] Created user record with wallet_type='passkey'");
+            if (correctSmartWalletAddress) {
+                console.log("[Passkey] Set smart_wallet_address:", correctSmartWalletAddress.slice(0, 10) + "...");
+            }
         } else {
             // Update existing user
             // Also fix wallet_type if it's missing or wrong (for users created before this fix)
@@ -371,9 +392,31 @@ export async function POST(request: NextRequest) {
             };
             
             // Fix wallet_type for passkey users who don't have it set correctly
+            // IMPORTANT: Don't change wallet_type for existing "wallet" users!
+            // - "wallet" users can sign with their connected EOA - passkey is optional extra security
             if (!existingUser.wallet_type || existingUser.wallet_type === 'evm') {
                 updateData.wallet_type = 'passkey';
                 console.log("[Passkey] Fixing wallet_type to 'passkey' for user:", storedCredential.user_address.slice(0, 10));
+            } else if (existingUser.wallet_type === 'wallet') {
+                // EOA users keep their wallet type - they can still sign with their wallet!
+                console.log("[Passkey] Wallet user logging in with passkey - keeping wallet_type='wallet':", storedCredential.user_address.slice(0, 10));
+            }
+            
+            // CRITICAL FIX: Update smart_wallet_address if missing or incorrect
+            // This fixes users who registered before the address calculation was fixed
+            if (correctSmartWalletAddress) {
+                if (!existingUser.smart_wallet_address) {
+                    // User doesn't have a smart wallet address yet - set it
+                    updateData.smart_wallet_address = correctSmartWalletAddress;
+                    console.log("[Passkey] Setting missing smart_wallet_address:", correctSmartWalletAddress.slice(0, 10) + "...");
+                } else if (existingUser.smart_wallet_address.toLowerCase() !== correctSmartWalletAddress.toLowerCase()) {
+                    // User has an INCORRECT smart wallet address from before the fix
+                    // IMPORTANT: Update to correct address, but log a warning
+                    console.warn("[Passkey] FIXING incorrect smart_wallet_address!");
+                    console.warn("[Passkey] Old (wrong):", existingUser.smart_wallet_address);
+                    console.warn("[Passkey] New (correct):", correctSmartWalletAddress);
+                    updateData.smart_wallet_address = correctSmartWalletAddress;
+                }
             }
             
             await supabase

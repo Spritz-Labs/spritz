@@ -1,0 +1,3556 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { useAdmin } from "@/hooks/useAdmin";
+import { motion, AnimatePresence } from "motion/react";
+import Link from "next/link";
+import {
+    AdminLayout,
+    AdminAuthWrapper,
+    AdminLoading,
+} from "@/components/AdminLayout";
+
+interface GlobalEvent {
+    id: string;
+    name: string;
+    description: string | null;
+    event_type: string;
+    event_date: string;
+    start_time: string | null;
+    end_time: string | null;
+    venue: string | null;
+    city: string | null;
+    country: string | null;
+    is_virtual: boolean;
+    organizer: string | null;
+    event_url: string | null;
+    rsvp_url: string | null;
+    tags: string[];
+    blockchain_focus: string[] | null;
+    source: string;
+    status: string;
+    is_featured: boolean;
+    registration_enabled: boolean;
+    current_registrations: number;
+    created_at: string;
+}
+
+interface EventSource {
+    id: string;
+    name: string;
+    url: string;
+    source_type: string;
+    scrape_interval_hours: number;
+    last_scraped_at: string | null;
+    next_scrape_at: string | null;
+    is_active: boolean;
+    events_found: number;
+    last_error: string | null;
+    created_at: string;
+}
+
+const EVENT_TYPES = [
+    "conference",
+    "hackathon",
+    "meetup",
+    "workshop",
+    "summit",
+    "party",
+    "networking",
+    "other",
+];
+const EVENT_STATUSES = ["draft", "published", "cancelled", "completed"];
+
+const EVENT_TYPE_ICONS: Record<string, string> = {
+    conference: "🎤",
+    hackathon: "💻",
+    meetup: "🤝",
+    workshop: "🛠️",
+    summit: "⛰️",
+    party: "🎉",
+    networking: "🌐",
+    other: "📅",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+    draft: "bg-yellow-500/20 text-yellow-400",
+    published: "bg-green-500/20 text-green-400",
+    cancelled: "bg-red-500/20 text-red-400",
+    completed: "bg-zinc-500/20 text-zinc-400",
+};
+
+const SCRAPE_INTERVALS = [
+    { value: 6, label: "Every 6 hours" },
+    { value: 12, label: "Every 12 hours" },
+    { value: 24, label: "Daily" },
+    { value: 72, label: "Every 3 days" },
+    { value: 168, label: "Weekly" },
+];
+
+const SOURCE_TYPES = [
+    { value: "event_calendar", label: "📅 Event Calendar" },
+    { value: "conference_list", label: "🎤 Conference List" },
+    { value: "hackathon_list", label: "💻 Hackathon List" },
+    { value: "organization_page", label: "🏢 Organization Page" },
+];
+
+const CRAWL_DEPTHS = [
+    {
+        value: 1,
+        label: "Single page only",
+        description: "Just the URL you enter",
+    },
+    {
+        value: 2,
+        label: "Shallow (2 levels)",
+        description: "Main page + linked pages",
+    },
+    {
+        value: 3,
+        label: "Medium (3 levels)",
+        description: "Good for event calendars",
+    },
+    {
+        value: 4,
+        label: "Deep (4 levels)",
+        description: "Large sites with nested pages",
+    },
+];
+
+const MAX_PAGES_OPTIONS = [
+    { value: 10, label: "10" },
+    { value: 20, label: "20" },
+    { value: 50, label: "50" },
+    { value: 100, label: "100" },
+    { value: 0, label: "∞" },
+];
+
+const PAGE_SIZES = [25, 50, 100, 200];
+
+// Known infinite scroll sites - auto-suggest settings
+const INFINITE_SCROLL_SITES = [
+    { pattern: "cryptonomads.org", scrollCount: 20 }, // Main cryptonomads
+    { pattern: "SideEvents", scrollCount: 35 }, // Side events pages have many events (e.g. ETHDenverSideEvents2026)
+    { pattern: "lu.ma", scrollCount: 20 },
+    { pattern: "meetup.com", scrollCount: 20 },
+    { pattern: "eventbrite.com", scrollCount: 20 },
+];
+
+// Suggested scrape sources - one-click to add URL (side events + main)
+const SUGGESTED_SCRAPE_SOURCES = [
+    {
+        label: "ETHDenver Side Events 2026",
+        url: "https://cryptonomads.org/ETHDenverSideEvents2026",
+    },
+    { label: "Cryptonomads (main)", url: "https://cryptonomads.org/" },
+    { label: "Coinpedia Events", url: "https://events.coinpedia.org/" },
+];
+
+// Type for extracted event preview
+type ExtractedEvent = {
+    name: string;
+    type: string;
+    start_date: string;
+    end_date?: string;
+    location?: string;
+    city?: string;
+    country?: string;
+    description?: string;
+    url?: string;
+    image_url?: string;
+    latitude?: number;
+    longitude?: number;
+    is_duplicate?: boolean;
+    is_past?: boolean;
+};
+
+function formatDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    });
+}
+
+export default function AdminEventsPage() {
+    const { isAdmin, isReady, getAuthHeaders, address, signOut } = useAdmin();
+    const [events, setEvents] = useState<GlobalEvent[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [total, setTotal] = useState(0);
+    const [eventsFetchError, setEventsFetchError] = useState<string | null>(
+        null,
+    );
+
+    // Pagination
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(50);
+    const totalPages = Math.ceil(total / pageSize);
+
+    // Bulk selection
+    const [selectedEvents, setSelectedEvents] = useState<Set<string>>(
+        new Set(),
+    );
+    const [isBulkActionsOpen, setIsBulkActionsOpen] = useState(false);
+    const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
+    // Filters
+    const [statusFilter, setStatusFilter] = useState<string>("");
+    const [typeFilter, setTypeFilter] = useState<string>("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+
+    // Modal state
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [showScrapeModal, setShowScrapeModal] = useState(false);
+    const [editingEvent, setEditingEvent] = useState<GlobalEvent | null>(null);
+
+    // Form state
+    const [formData, setFormData] = useState({
+        name: "",
+        description: "",
+        event_type: "conference",
+        event_date: "",
+        start_time: "",
+        end_time: "",
+        venue: "",
+        city: "",
+        country: "",
+        is_virtual: false,
+        organizer: "",
+        event_url: "",
+        rsvp_url: "",
+        status: "draft",
+        is_featured: false,
+        registration_enabled: false,
+        blockchain_focus: "",
+        tags: "",
+    });
+
+    // Scrape form state
+    const [scrapeUrl, setScrapeUrl] = useState("");
+    const [scrapeEventTypes, setScrapeEventTypes] =
+        useState<string[]>(EVENT_TYPES); // All selected by default
+    const [saveSource, setSaveSource] = useState(true); // Enable recurring scrapes by default
+    const [scrapeInterval, setScrapeInterval] = useState(24); // Default daily
+    const [sourceType, setSourceType] = useState("event_calendar");
+    const [crawlDepth, setCrawlDepth] = useState(1); // Default 1 for infinite scroll pages (optimal for cryptonomads)
+    const [maxPages, setMaxPages] = useState(1); // Default 1 page with infinite scroll (optimal for cryptonomads)
+    const [infiniteScroll, setInfiniteScroll] = useState(true); // Default enabled for event listing pages like cryptonomads
+    const [scrollCount, setScrollCount] = useState(20); // Default 20 scrolls (optimal, respects Firecrawl limits)
+    const [skipPastEvents, setSkipPastEvents] = useState(true); // Skip events with past dates
+    const [isScraping, setIsScraping] = useState(false);
+    const [scrapeStatus, setScrapeStatus] = useState<
+        | "idle"
+        | "connecting"
+        | "scrolling"
+        | "extracting"
+        | "preview"
+        | "saving"
+    >("idle");
+    const [scrapeResult, setScrapeResult] = useState<{
+        extracted: number;
+        inserted: number;
+        skipped: number;
+        duplicates?: number;
+        pagesScraped?: number;
+    } | null>(null);
+    const [previewEvents, setPreviewEvents] = useState<
+        (ExtractedEvent & { is_duplicate?: boolean; is_past?: boolean })[]
+    >([]);
+    const [selectedPreviewEvents, setSelectedPreviewEvents] = useState<
+        Set<number>
+    >(new Set());
+
+    // Event sources state
+    const [eventSources, setEventSources] = useState<EventSource[]>([]);
+    const [showSourcesPanel, setShowSourcesPanel] = useState(false);
+    const [isLoadingSources, setIsLoadingSources] = useState(false);
+
+    const fetchEvents = useCallback(async () => {
+        if (!isReady) return;
+        setIsLoading(true);
+        setEventsFetchError(null);
+
+        try {
+            const params = new URLSearchParams();
+            if (statusFilter) params.set("status", statusFilter);
+            if (typeFilter) params.set("type", typeFilter);
+            if (searchQuery) params.set("search", searchQuery);
+            params.set("limit", pageSize.toString());
+            params.set("offset", ((page - 1) * pageSize).toString());
+
+            const headers = getAuthHeaders();
+            if (!headers) {
+                setEventsFetchError(
+                    "Connect your wallet and sign in as admin to view events.",
+                );
+                setIsLoading(false);
+                return;
+            }
+
+            const res = await fetch(`/api/admin/events?${params.toString()}`, {
+                headers,
+            });
+            const data = await res.json();
+
+            if (res.status === 401) {
+                setEventsFetchError(
+                    "Not authorized. Connect with an admin wallet and sign the message.",
+                );
+                setEvents([]);
+                setTotal(0);
+            } else if (data.events) {
+                setEvents(data.events);
+                setTotal(data.total ?? 0);
+            }
+        } catch (error) {
+            console.error("Failed to fetch events:", error);
+            setEventsFetchError("Failed to load events. Check the console.");
+        } finally {
+            setIsLoading(false);
+        }
+    }, [
+        isReady,
+        getAuthHeaders,
+        statusFilter,
+        typeFilter,
+        searchQuery,
+        page,
+        pageSize,
+    ]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setPage(1);
+        setSelectedEvents(new Set());
+    }, [statusFilter, typeFilter, searchQuery, pageSize]);
+
+    const fetchEventSources = useCallback(async () => {
+        if (!isReady) return;
+        setIsLoadingSources(true);
+
+        try {
+            const headers = getAuthHeaders();
+            if (!headers) return;
+
+            const res = await fetch("/api/admin/events/sources", {
+                headers,
+            });
+            const data = await res.json();
+
+            if (data.sources) {
+                setEventSources(data.sources);
+            }
+        } catch (error) {
+            console.error("Failed to fetch event sources:", error);
+        } finally {
+            setIsLoadingSources(false);
+        }
+    }, [isReady, getAuthHeaders]);
+
+    useEffect(() => {
+        fetchEvents();
+        fetchEventSources();
+    }, [fetchEvents, fetchEventSources]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        const eventData = {
+            ...formData,
+            blockchain_focus: formData.blockchain_focus
+                ? formData.blockchain_focus.split(",").map((s) => s.trim())
+                : null,
+            tags: formData.tags
+                ? formData.tags.split(",").map((s) => s.trim())
+                : [],
+        };
+
+        try {
+            const url = editingEvent
+                ? `/api/admin/events/${editingEvent.id}`
+                : "/api/admin/events";
+            const method = editingEvent ? "PATCH" : "POST";
+
+            const res = await fetch(url, {
+                method,
+                headers: {
+                    ...(getAuthHeaders() || {}),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(eventData),
+            });
+
+            if (res.ok) {
+                setShowAddModal(false);
+                setEditingEvent(null);
+                resetForm();
+                fetchEvents();
+            }
+        } catch (error) {
+            console.error("Failed to save event:", error);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this event?")) return;
+
+        try {
+            const deleteHeaders = getAuthHeaders();
+            if (!deleteHeaders) return;
+
+            const res = await fetch(`/api/admin/events/${id}`, {
+                method: "DELETE",
+                headers: deleteHeaders,
+            });
+
+            if (res.ok) {
+                fetchEvents();
+            }
+        } catch (error) {
+            console.error("Failed to delete event:", error);
+        }
+    };
+
+    // Auto-detect infinite scroll sites and suggest settings
+    const checkInfiniteScrollSite = useCallback((url: string) => {
+        const site = INFINITE_SCROLL_SITES.find((s) => url.includes(s.pattern));
+        if (site) {
+            console.log(
+                `[Admin Events] Auto-detected infinite scroll site: ${site.pattern}, setting scrollCount to ${site.scrollCount}`,
+            );
+            setInfiniteScroll(true);
+            setScrollCount(site.scrollCount);
+            setCrawlDepth(1); // Single page for infinite scroll
+        }
+    }, []);
+
+    // Update URL and check for known sites
+    const handleScrapeUrlChange = (url: string) => {
+        setScrapeUrl(url);
+        checkInfiniteScrollSite(url);
+    };
+
+    const handleScrape = async (
+        e: React.FormEvent,
+        previewOnly: boolean = false,
+    ) => {
+        e.preventDefault();
+        if (!scrapeUrl) return;
+
+        setIsScraping(true);
+        setScrapeResult(null);
+        setPreviewEvents([]);
+        setScrapeStatus("connecting");
+
+        try {
+            // Show scrolling status if infinite scroll enabled
+            if (infiniteScroll) {
+                setTimeout(() => {
+                    if (scrapeStatus === "connecting")
+                        setScrapeStatus("scrolling");
+                }, 2000);
+            }
+
+            const res = await fetch("/api/admin/events/scrape", {
+                method: "POST",
+                headers: {
+                    ...(getAuthHeaders() || {}),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    url: scrapeUrl,
+                    event_types:
+                        scrapeEventTypes.length === EVENT_TYPES.length
+                            ? undefined
+                            : scrapeEventTypes,
+                    save_source: saveSource && !previewOnly,
+                    scrape_interval_hours: scrapeInterval,
+                    source_type: sourceType,
+                    crawl_depth: crawlDepth,
+                    max_pages: maxPages,
+                    infinite_scroll: infiniteScroll,
+                    scroll_count: scrollCount,
+                    skip_past_events: skipPastEvents,
+                    preview_only: previewOnly,
+                }),
+            });
+
+            setScrapeStatus("extracting");
+
+            // Check if response is ok
+            if (!res.ok) {
+                const errorData = await res
+                    .json()
+                    .catch(() => ({ error: "Unknown error" }));
+                console.error("[Scrape] API Error:", errorData);
+                const errorMsg = errorData.details
+                    ? `${errorData.error}: ${errorData.details}`
+                    : errorData.error ||
+                      `HTTP ${res.status}: ${res.statusText}`;
+                alert(errorMsg);
+                setScrapeStatus("idle");
+                return;
+            }
+
+            const data = await res.json();
+
+            if (data.success) {
+                if (data.unchanged) {
+                    // Content unchanged
+                    alert(
+                        "Page content has not changed since last scrape - no new events to extract.",
+                    );
+                    setScrapeStatus("idle");
+                } else if (previewOnly && data.events) {
+                    // Show preview - auto-select only non-duplicates
+                    setPreviewEvents(data.events);
+                    const nonDuplicateIndices = new Set<number>(
+                        (data.events as ExtractedEvent[])
+                            .map((e: ExtractedEvent, i: number) =>
+                                !e.is_duplicate ? i : -1,
+                            )
+                            .filter((i: number) => i !== -1),
+                    );
+                    setSelectedPreviewEvents(nonDuplicateIndices);
+                    setScrapeStatus("preview");
+                } else {
+                    setScrapeResult({
+                        extracted: data.extracted,
+                        inserted: data.inserted,
+                        skipped: data.skipped,
+                        duplicates: data.duplicates,
+                        pagesScraped: data.pages_scraped,
+                    });
+                    fetchEvents();
+                    if (saveSource) {
+                        fetchEventSources();
+                    }
+                    setScrapeStatus("idle");
+                    // Close modal after successful scrape
+                    setTimeout(() => {
+                        setShowScrapeModal(false);
+                        setScrapeResult(null);
+                    }, 1500); // Show result for 1.5 seconds then close
+                }
+            } else {
+                console.error("[Scrape] API returned error:", data);
+                const errorMsg = data.details
+                    ? `${data.error}: ${data.details}`
+                    : data.error || "Failed to scrape events";
+                alert(errorMsg);
+                setScrapeStatus("idle");
+            }
+        } catch (error) {
+            console.error("[Scrape] Request failed:", error);
+            const message =
+                error instanceof Error ? error.message : String(error);
+            const isNetworkError =
+                message === "Failed to fetch" ||
+                message.includes("ERR_NETWORK") ||
+                message.includes("NetworkError") ||
+                message.includes("Load failed");
+            const errorMsg = isNetworkError
+                ? "The request was interrupted (often due to a network change, VPN, or Wi‑Fi switching). Check your connection and try running the scrape again."
+                : `Error: ${message}`;
+            alert(errorMsg);
+            setScrapeStatus("idle");
+        } finally {
+            if (scrapeStatus !== "preview") {
+                setIsScraping(false);
+            }
+        }
+    };
+
+    // Save selected preview events
+    const handleSavePreviewEvents = async () => {
+        if (selectedPreviewEvents.size === 0) return;
+
+        setScrapeStatus("saving");
+        const eventsToSave = previewEvents.filter((_, i) =>
+            selectedPreviewEvents.has(i),
+        );
+
+        try {
+            const res = await fetch("/api/admin/events/scrape", {
+                method: "POST",
+                headers: {
+                    ...(getAuthHeaders() || {}),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    url: scrapeUrl,
+                    save_source: saveSource,
+                    scrape_interval_hours: scrapeInterval,
+                    source_type: sourceType,
+                    events_to_save: eventsToSave,
+                }),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setScrapeResult({
+                    extracted: eventsToSave.length,
+                    inserted: data.inserted,
+                    skipped: data.skipped,
+                });
+                fetchEvents();
+                if (saveSource) fetchEventSources();
+                // Close modal after successful save
+                setTimeout(() => {
+                    setShowScrapeModal(false);
+                    setScrapeResult(null);
+                    setPreviewEvents([]);
+                    setSelectedPreviewEvents(new Set());
+                }, 1500); // Show result for 1.5 seconds then close
+            }
+        } catch (error) {
+            console.error("Failed to save events:", error);
+            alert("Failed to save events");
+        } finally {
+            setPreviewEvents([]);
+            setSelectedPreviewEvents(new Set());
+            setScrapeStatus("idle");
+            setIsScraping(false);
+        }
+    };
+
+    // Export events to CSV/JSON
+    const handleExport = (format: "csv" | "json") => {
+        const dataToExport =
+            selectedEvents.size > 0
+                ? events.filter((e) => selectedEvents.has(e.id))
+                : events;
+
+        if (format === "json") {
+            const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
+                type: "application/json",
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `events-${new Date().toISOString().split("T")[0]}.json`;
+            a.click();
+        } else {
+            // CSV export
+            const headers = [
+                "name",
+                "type",
+                "status",
+                "start_date",
+                "end_date",
+                "location",
+                "city",
+                "country",
+                "url",
+            ];
+            const csvContent = [
+                headers.join(","),
+                ...dataToExport.map((e) =>
+                    headers
+                        .map((h) => {
+                            const val = e[h as keyof typeof e];
+                            return typeof val === "string" && val.includes(",")
+                                ? `"${val}"`
+                                : val || "";
+                        })
+                        .join(","),
+                ),
+            ].join("\n");
+
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `events-${new Date().toISOString().split("T")[0]}.csv`;
+            a.click();
+        }
+    };
+
+    // Bulk actions
+    const toggleSelectAll = () => {
+        if (selectedEvents.size === events.length) {
+            setSelectedEvents(new Set());
+        } else {
+            setSelectedEvents(new Set(events.map((e) => e.id)));
+        }
+    };
+
+    const selectAllDrafts = async () => {
+        try {
+            setIsLoading(true);
+            const params = new URLSearchParams();
+            params.set("status", "draft");
+            params.set("limit", "10000"); // Get all drafts
+
+            const res = await fetch(`/api/admin/events?${params.toString()}`, {
+                headers: getAuthHeaders() || {},
+            });
+
+            const data = await res.json();
+            if (data.events && Array.isArray(data.events)) {
+                const draftIds = new Set<string>(
+                    data.events.map((e: GlobalEvent) => e.id),
+                );
+                setSelectedEvents(draftIds);
+                // Also set the status filter to draft so user can see what they selected
+                setStatusFilter("draft");
+            }
+        } catch (error) {
+            console.error("Failed to fetch all drafts:", error);
+            alert("Failed to select all drafts");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const toggleSelectEvent = (id: string) => {
+        const newSelected = new Set(selectedEvents);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedEvents(newSelected);
+    };
+
+    const handleBulkAction = async (action: "publish" | "draft" | "delete") => {
+        if (selectedEvents.size === 0) return;
+
+        const confirmMessage =
+            action === "delete"
+                ? `Delete ${selectedEvents.size} event(s)? This cannot be undone.`
+                : `Set ${selectedEvents.size} event(s) to "${action}"?`;
+
+        if (!confirm(confirmMessage)) return;
+
+        setIsBulkProcessing(true);
+
+        try {
+            const res = await fetch("/api/admin/events/bulk", {
+                method: "POST",
+                headers: {
+                    ...(getAuthHeaders() || {}),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    action,
+                    event_ids: Array.from(selectedEvents),
+                }),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                setSelectedEvents(new Set());
+                setIsBulkActionsOpen(false);
+                fetchEvents();
+            } else {
+                alert(data.error || "Bulk action failed");
+            }
+        } catch (error) {
+            console.error("Bulk action failed:", error);
+            alert("Bulk action failed");
+        } finally {
+            setIsBulkProcessing(false);
+        }
+    };
+
+    const toggleSourceActive = async (sourceId: string, isActive: boolean) => {
+        try {
+            const res = await fetch(`/api/admin/events/sources/${sourceId}`, {
+                method: "PATCH",
+                headers: {
+                    ...(getAuthHeaders() || {}),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ is_active: isActive }),
+            });
+
+            if (res.ok) {
+                fetchEventSources();
+            }
+        } catch (error) {
+            console.error("Failed to update source:", error);
+        }
+    };
+
+    const deleteSource = async (sourceId: string) => {
+        if (
+            !confirm(
+                "Delete this scrape source? This won't delete any events already scraped.",
+            )
+        )
+            return;
+
+        try {
+            const res = await fetch(`/api/admin/events/sources/${sourceId}`, {
+                method: "DELETE",
+                headers: getAuthHeaders() || {},
+            });
+
+            if (res.ok) {
+                fetchEventSources();
+            }
+        } catch (error) {
+            console.error("Failed to delete source:", error);
+        }
+    };
+
+    const triggerManualScrape = async (sourceId: string) => {
+        try {
+            const res = await fetch(
+                `/api/admin/events/sources/${sourceId}/scrape`,
+                {
+                    method: "POST",
+                    headers: getAuthHeaders() || {},
+                },
+            );
+
+            const data = await res.json();
+            if (data.success) {
+                alert(
+                    `Scraped ${data.extracted} events, inserted ${data.inserted}, skipped ${data.skipped}`,
+                );
+                fetchEvents();
+                fetchEventSources();
+            } else {
+                alert(data.error || "Scrape failed");
+            }
+        } catch (error) {
+            console.error("Failed to trigger scrape:", error);
+        }
+    };
+
+    const resetForm = () => {
+        setFormData({
+            name: "",
+            description: "",
+            event_type: "conference",
+            event_date: "",
+            start_time: "",
+            end_time: "",
+            venue: "",
+            city: "",
+            country: "",
+            is_virtual: false,
+            organizer: "",
+            event_url: "",
+            rsvp_url: "",
+            status: "draft",
+            is_featured: false,
+            registration_enabled: false,
+            blockchain_focus: "",
+            tags: "",
+        });
+    };
+
+    const isAddEventFormDirty = () => {
+        const d = formData;
+        return !!(
+            d.name?.trim() ||
+            d.description?.trim() ||
+            d.event_date ||
+            d.venue?.trim() ||
+            d.city?.trim() ||
+            d.country?.trim() ||
+            d.organizer?.trim() ||
+            d.event_url?.trim() ||
+            d.rsvp_url?.trim() ||
+            d.blockchain_focus?.trim() ||
+            d.tags?.trim()
+        );
+    };
+
+    const closeAddModal = () => {
+        if (isAddEventFormDirty()) {
+            if (!confirm("You have unsaved changes. Leave anyway?")) return;
+        }
+        setShowAddModal(false);
+        setEditingEvent(null);
+        resetForm();
+    };
+
+    const openEditModal = (event: GlobalEvent) => {
+        setEditingEvent(event);
+        setFormData({
+            name: event.name,
+            description: event.description || "",
+            event_type: event.event_type,
+            event_date: event.event_date,
+            start_time: event.start_time || "",
+            end_time: event.end_time || "",
+            venue: event.venue || "",
+            city: event.city || "",
+            country: event.country || "",
+            is_virtual: event.is_virtual,
+            organizer: event.organizer || "",
+            event_url: event.event_url || "",
+            rsvp_url: event.rsvp_url || "",
+            status: event.status,
+            is_featured: event.is_featured,
+            registration_enabled: event.registration_enabled,
+            blockchain_focus: event.blockchain_focus?.join(", ") || "",
+            tags: event.tags?.join(", ") || "",
+        });
+        setShowAddModal(true);
+    };
+
+    const toggleStatus = async (event: GlobalEvent, newStatus: string) => {
+        try {
+            const res = await fetch(`/api/admin/events/${event.id}`, {
+                method: "PATCH",
+                headers: {
+                    ...(getAuthHeaders() || {}),
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ status: newStatus }),
+            });
+
+            if (res.ok) {
+                fetchEvents();
+            }
+        } catch (error) {
+            console.error("Failed to update status:", error);
+        }
+    };
+
+    // Show loading state while checking auth
+    if (!isReady) {
+        return <AdminLoading />;
+    }
+
+    // Show auth wrapper if not admin
+    if (!isAdmin) {
+        return (
+            <AdminAuthWrapper title="Admin Access">
+                <p className="text-zinc-400">
+                    You must be an admin to access this page.
+                </p>
+            </AdminAuthWrapper>
+        );
+    }
+
+    return (
+        <AdminLayout
+            title="Events"
+            subtitle={`${total} event${total !== 1 ? "s" : ""}`}
+            address={address}
+            onSignOut={signOut}
+        >
+            <div className="h-full flex flex-col overflow-hidden px-3 sm:px-4 lg:px-6 xl:px-8 py-2 sm:py-3">
+                {/* Compact Header + Stats Row */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 shrink-0 mb-2 sm:mb-3">
+                    {/* Stats - inline on desktop */}
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-500 text-xs">Total</span>
+                            <span className="text-sm font-bold text-white">
+                                {total}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-500 text-xs">
+                                Published
+                            </span>
+                            <span className="text-sm font-bold text-green-400">
+                                {
+                                    events.filter(
+                                        (e) => e.status === "published",
+                                    ).length
+                                }
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-500 text-xs">Draft</span>
+                            <span className="text-sm font-bold text-yellow-400">
+                                {
+                                    events.filter((e) => e.status === "draft")
+                                        .length
+                                }
+                            </span>
+                        </div>
+                        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-500 text-xs">
+                                Featured
+                            </span>
+                            <span className="text-sm font-bold text-[#FF5500]">
+                                {events.filter((e) => e.is_featured).length}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => {
+                                fetchEventSources();
+                                setShowSourcesPanel(true);
+                            }}
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-medium"
+                            title="Manage scheduled scrapes"
+                        >
+                            ⏰ <span className="hidden sm:inline">Crons</span>
+                        </button>
+                        <button
+                            onClick={() => setShowScrapeModal(true)}
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-medium"
+                        >
+                            🔍 <span className="hidden sm:inline">Scrape</span>
+                        </button>
+                        <button
+                            onClick={() => {
+                                resetForm();
+                                setEditingEvent(null);
+                                setShowAddModal(true);
+                            }}
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:shadow-lg hover:shadow-[#FF5500]/20 text-white rounded-lg transition-all flex items-center gap-1.5 text-xs sm:text-sm font-medium"
+                        >
+                            ➕{" "}
+                            <span className="hidden sm:inline">Add Event</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Bulk import hint when event count is low */}
+                {total < 30 && (
+                    <div className="mb-2 sm:mb-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-200/90 text-sm">
+                        <span className="font-medium">Want more events?</span>{" "}
+                        To bulk-import from cryptonomads.org and
+                        events.coinpedia.org (main + side-event pages, 50+
+                        events), run locally:{" "}
+                        <code className="px-1.5 py-0.5 rounded bg-zinc-800 text-amber-100 font-mono text-xs">
+                            npm run update-cryptonomads
+                        </code>{" "}
+                        (takes ~5–10 min). Then refresh this page.
+                    </div>
+                )}
+
+                {/* Compact Filters & Controls */}
+                <div className="bg-zinc-900/50 rounded-lg p-2 sm:p-3 border border-zinc-800 shrink-0 mb-2 sm:mb-3">
+                    <div className="flex flex-wrap gap-2 items-center">
+                        {/* Search */}
+                        <div className="flex-1 min-w-[140px] sm:min-w-[200px]">
+                            <div className="relative">
+                                <svg
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                    />
+                                </svg>
+                                <input
+                                    type="text"
+                                    placeholder="Search..."
+                                    value={searchQuery}
+                                    onChange={(e) =>
+                                        setSearchQuery(e.target.value)
+                                    }
+                                    className="w-full pl-8 pr-3 py-1.5 text-sm bg-zinc-800/50 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]/50"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Filters */}
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="px-2.5 py-1.5 text-sm bg-zinc-800/50 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                        >
+                            <option value="">Status</option>
+                            {EVENT_STATUSES.map((status) => (
+                                <option key={status} value={status}>
+                                    {status}
+                                </option>
+                            ))}
+                        </select>
+                        <select
+                            value={typeFilter}
+                            onChange={(e) => setTypeFilter(e.target.value)}
+                            className="px-2.5 py-1.5 text-sm bg-zinc-800/50 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                        >
+                            <option value="">Type</option>
+                            {EVENT_TYPES.map((type) => (
+                                <option key={type} value={type}>
+                                    {EVENT_TYPE_ICONS[type]} {type}
+                                </option>
+                            ))}
+                        </select>
+
+                        {/* Select All / Deselect All */}
+                        {events.length > 0 && (
+                            <>
+                                <button
+                                    onClick={toggleSelectAll}
+                                    className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                        selectedEvents.size === events.length
+                                            ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
+                                            : "bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700"
+                                    }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={
+                                            selectedEvents.size ===
+                                                events.length &&
+                                            events.length > 0
+                                        }
+                                        onChange={toggleSelectAll}
+                                        className="w-3 h-3 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                    />
+                                    <span className="hidden sm:inline">
+                                        {selectedEvents.size === events.length
+                                            ? "Deselect"
+                                            : "Select All"}
+                                    </span>
+                                </button>
+                                {statusFilter === "draft" && (
+                                    <button
+                                        onClick={selectAllDrafts}
+                                        disabled={isLoading}
+                                        className="px-2 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 bg-yellow-500/20 text-yellow-400 hover:text-yellow-300 border border-yellow-500/40 disabled:opacity-50"
+                                        title="Select all drafts across all pages"
+                                    >
+                                        <span className="hidden sm:inline">
+                                            Select All Drafts
+                                        </span>
+                                        <span className="sm:hidden">
+                                            All Drafts
+                                        </span>
+                                    </button>
+                                )}
+                            </>
+                        )}
+
+                        {/* View Mode Toggle */}
+                        <div className="flex bg-zinc-800 rounded-lg p-0.5">
+                            <button
+                                onClick={() => setViewMode("grid")}
+                                className={`p-1.5 rounded transition-colors ${viewMode === "grid" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"}`}
+                                title="Grid View"
+                            >
+                                <svg
+                                    className="w-3.5 h-3.5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => setViewMode("table")}
+                                className={`p-1.5 rounded transition-colors ${viewMode === "table" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"}`}
+                                title="Table View"
+                            >
+                                <svg
+                                    className="w-3.5 h-3.5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Export Buttons */}
+                        <div className="hidden sm:flex items-center gap-0.5 bg-zinc-800 rounded-lg p-0.5">
+                            <button
+                                onClick={() => handleExport("csv")}
+                                className="px-2 py-1 text-[10px] text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                title={
+                                    selectedEvents.size > 0
+                                        ? `Export ${selectedEvents.size} selected as CSV`
+                                        : "Export all as CSV"
+                                }
+                            >
+                                CSV
+                            </button>
+                            <button
+                                onClick={() => handleExport("json")}
+                                className="px-2 py-1 text-[10px] text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                title={
+                                    selectedEvents.size > 0
+                                        ? `Export ${selectedEvents.size} selected as JSON`
+                                        : "Export all as JSON"
+                                }
+                            >
+                                JSON
+                            </button>
+                        </div>
+
+                        {/* Page Size */}
+                        <select
+                            value={pageSize}
+                            onChange={(e) =>
+                                setPageSize(Number(e.target.value))
+                            }
+                            className="px-2 py-1.5 text-xs bg-zinc-800/50 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-[#FF5500]/50 cursor-pointer"
+                        >
+                            {PAGE_SIZES.map((size) => (
+                                <option key={size} value={size}>
+                                    {size}/pg
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Bulk Actions Bar - Inline */}
+                    <AnimatePresence>
+                        {selectedEvents.size > 0 && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-zinc-700/50">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-[#FF5500] font-medium">
+                                            {selectedEvents.size} selected
+                                        </span>
+                                        <button
+                                            onClick={() =>
+                                                setSelectedEvents(new Set())
+                                            }
+                                            className="text-[10px] text-zinc-500 hover:text-white transition-colors"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() =>
+                                                handleBulkAction("publish")
+                                            }
+                                            disabled={isBulkProcessing}
+                                            className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-[10px] font-medium hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                        >
+                                            ✓ Publish
+                                        </button>
+                                        <button
+                                            onClick={() =>
+                                                handleBulkAction("draft")
+                                            }
+                                            disabled={isBulkProcessing}
+                                            className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-[10px] font-medium hover:bg-yellow-500/30 transition-colors disabled:opacity-50"
+                                        >
+                                            📝 Draft
+                                        </button>
+                                        <button
+                                            onClick={() =>
+                                                handleBulkAction("delete")
+                                            }
+                                            disabled={isBulkProcessing}
+                                            className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-[10px] font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+
+                {/* Scrollable Events Display */}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                    {isLoading ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                            {[...Array(10)].map((_, i) => (
+                                <div
+                                    key={i}
+                                    className="bg-zinc-900/50 rounded-lg h-40 animate-pulse border border-zinc-800"
+                                />
+                            ))}
+                        </div>
+                    ) : eventsFetchError ? (
+                        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-8 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <span className="text-2xl">⚠️</span>
+                            </div>
+                            <p className="text-amber-200/90 text-sm mb-3">
+                                {eventsFetchError}
+                            </p>
+                            <p className="text-zinc-500 text-xs">
+                                Make sure your wallet is in shout_admins and
+                                you’ve signed the admin message.
+                            </p>
+                        </div>
+                    ) : events.length === 0 ? (
+                        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 p-8 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-800 flex items-center justify-center">
+                                <span className="text-2xl">📅</span>
+                            </div>
+                            <p className="text-zinc-400 text-sm mb-3">
+                                No events yet. Bulk-import from Cryptonomads +
+                                Coinpedia by running locally:
+                            </p>
+                            <code className="block mb-4 px-3 py-2 rounded bg-zinc-800 text-amber-100 font-mono text-xs text-left max-w-md mx-auto">
+                                npm run update-cryptonomads
+                            </code>
+                            <p className="text-zinc-500 text-xs mb-4">
+                                Or scrape a single URL below, or add events
+                                manually.
+                            </p>
+                            <div className="flex justify-center gap-2 flex-wrap">
+                                <button
+                                    onClick={() => setShowScrapeModal(true)}
+                                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+                                >
+                                    🔍 Scrape URL
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        resetForm();
+                                        setEditingEvent(null);
+                                        setShowAddModal(true);
+                                    }}
+                                    className="px-4 py-2 bg-[#FF5500] hover:bg-[#e04d00] text-white rounded-lg transition-colors"
+                                >
+                                    ➕ Add Event
+                                </button>
+                            </div>
+                        </div>
+                    ) : viewMode === "table" ? (
+                        /* Compact Table View */
+                        <div className="bg-zinc-900/50 rounded-lg border border-zinc-800 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                                            <th className="p-2 text-left w-8">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={
+                                                        selectedEvents.size ===
+                                                            events.length &&
+                                                        events.length > 0
+                                                    }
+                                                    onChange={toggleSelectAll}
+                                                    className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                                />
+                                            </th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase">
+                                                Event
+                                            </th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase hidden md:table-cell">
+                                                Type
+                                            </th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase">
+                                                Date
+                                            </th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase hidden lg:table-cell">
+                                                Location
+                                            </th>
+                                            <th className="p-2 text-left text-[10px] font-medium text-zinc-400 uppercase">
+                                                Status
+                                            </th>
+                                            <th className="p-2 text-right text-[10px] font-medium text-zinc-400 uppercase w-16">
+                                                Act
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-800/50">
+                                        {events.map((event) => (
+                                            <tr
+                                                key={event.id}
+                                                className={`hover:bg-zinc-800/30 transition-colors ${selectedEvents.has(event.id) ? "bg-[#FF5500]/5" : ""}`}
+                                            >
+                                                <td className="p-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedEvents.has(
+                                                            event.id,
+                                                        )}
+                                                        onChange={() =>
+                                                            toggleSelectEvent(
+                                                                event.id,
+                                                            )
+                                                        }
+                                                        className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                                    />
+                                                </td>
+                                                <td className="p-2 max-w-[200px] lg:max-w-none">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-sm shrink-0">
+                                                            {
+                                                                EVENT_TYPE_ICONS[
+                                                                    event
+                                                                        .event_type
+                                                                ]
+                                                            }
+                                                        </span>
+                                                        <span className="font-medium text-white text-xs truncate">
+                                                            {event.name}
+                                                            {event.is_featured && (
+                                                                <span className="text-yellow-500 ml-1">
+                                                                    ⭐
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-2 hidden md:table-cell">
+                                                    <span className="text-xs text-zinc-400 capitalize">
+                                                        {event.event_type}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2">
+                                                    <span className="text-xs text-zinc-300 whitespace-nowrap">
+                                                        {formatDate(
+                                                            event.event_date,
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2 hidden lg:table-cell">
+                                                    <span className="text-xs text-zinc-400">
+                                                        {event.is_virtual
+                                                            ? "🌐"
+                                                            : event.city ||
+                                                              "TBA"}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2">
+                                                    <select
+                                                        value={event.status}
+                                                        onChange={(e) =>
+                                                            toggleStatus(
+                                                                event,
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer`}
+                                                    >
+                                                        {EVENT_STATUSES.map(
+                                                            (status) => (
+                                                                <option
+                                                                    key={status}
+                                                                    value={
+                                                                        status
+                                                                    }
+                                                                >
+                                                                    {status}
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                </td>
+                                                <td className="p-2">
+                                                    <div className="flex justify-end gap-0.5">
+                                                        <button
+                                                            onClick={() =>
+                                                                openEditModal(
+                                                                    event,
+                                                                )
+                                                            }
+                                                            className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                                            title="Edit"
+                                                        >
+                                                            <svg
+                                                                className="w-3.5 h-3.5"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                        <button
+                                                            onClick={() =>
+                                                                handleDelete(
+                                                                    event.id,
+                                                                )
+                                                            }
+                                                            className="p-1 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                                            title="Delete"
+                                                        >
+                                                            <svg
+                                                                className="w-3.5 h-3.5"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        /* Compact Grid View - More cards on screen - scales with screen width */
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-2 sm:gap-3 lg:gap-4">
+                            {events.map((event) => (
+                                <div
+                                    key={event.id}
+                                    className={`bg-zinc-900/50 rounded-lg border overflow-hidden hover:border-[#FF5500]/30 transition-all relative ${
+                                        event.is_featured
+                                            ? "border-[#FF5500]/40"
+                                            : "border-zinc-800"
+                                    } ${selectedEvents.has(event.id) ? "ring-2 ring-[#FF5500]" : ""}`}
+                                >
+                                    {/* Compact Card */}
+                                    <div className="p-2.5 sm:p-3">
+                                        {/* Top Row: Checkbox + Icon + Status */}
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedEvents.has(
+                                                    event.id,
+                                                )}
+                                                onChange={() =>
+                                                    toggleSelectEvent(event.id)
+                                                }
+                                                className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800/80 text-[#FF5500] focus:ring-[#FF5500]"
+                                            />
+                                            <span className="text-base">
+                                                {
+                                                    EVENT_TYPE_ICONS[
+                                                        event.event_type
+                                                    ]
+                                                }
+                                            </span>
+                                            <select
+                                                value={event.status}
+                                                onChange={(e) =>
+                                                    toggleStatus(
+                                                        event,
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_COLORS[event.status]} bg-transparent border border-current cursor-pointer`}
+                                            >
+                                                {EVENT_STATUSES.map(
+                                                    (status) => (
+                                                        <option
+                                                            key={status}
+                                                            value={status}
+                                                        >
+                                                            {status}
+                                                        </option>
+                                                    ),
+                                                )}
+                                            </select>
+                                        </div>
+
+                                        {/* Title */}
+                                        <h3 className="font-medium text-sm text-white truncate flex items-center gap-1 mb-1.5">
+                                            {event.name}
+                                            {event.is_featured && (
+                                                <span className="text-yellow-500 text-xs shrink-0">
+                                                    ⭐
+                                                </span>
+                                            )}
+                                        </h3>
+
+                                        {/* Meta */}
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-400 mb-2">
+                                            <span>
+                                                📅{" "}
+                                                {formatDate(event.event_date)}
+                                            </span>
+                                            <span>
+                                                📍{" "}
+                                                {event.city ||
+                                                    (event.is_virtual
+                                                        ? "Virtual"
+                                                        : "TBA")}
+                                            </span>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex gap-1.5">
+                                            <button
+                                                onClick={() =>
+                                                    openEditModal(event)
+                                                }
+                                                className="flex-1 px-2 py-1 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors"
+                                            >
+                                                ✏️ Edit
+                                            </button>
+                                            <button
+                                                onClick={() =>
+                                                    handleDelete(event.id)
+                                                }
+                                                className="px-2 py-1 text-[11px] bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded transition-colors"
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Compact Pagination - Inside scroll container */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between bg-zinc-900/50 rounded-lg p-2 sm:p-3 border border-zinc-800 mt-3 sticky bottom-0">
+                            <div className="text-xs text-zinc-500 hidden sm:block">
+                                {(page - 1) * pageSize + 1}-
+                                {Math.min(page * pageSize, total)} of {total}
+                            </div>
+                            <div className="flex items-center gap-1 sm:gap-1.5 mx-auto sm:mx-0">
+                                <button
+                                    onClick={() => setPage(1)}
+                                    disabled={page === 1}
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="First"
+                                >
+                                    <svg
+                                        className="w-3 h-3"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                                        />
+                                    </svg>
+                                </button>
+                                <button
+                                    onClick={() =>
+                                        setPage((p) => Math.max(1, p - 1))
+                                    }
+                                    disabled={page === 1}
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Previous"
+                                >
+                                    <svg
+                                        className="w-3 h-3"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M15 19l-7-7 7-7"
+                                        />
+                                    </svg>
+                                </button>
+
+                                <div className="flex items-center gap-0.5 px-1">
+                                    {[...Array(Math.min(5, totalPages))].map(
+                                        (_, i) => {
+                                            let pageNum: number;
+                                            if (totalPages <= 5) {
+                                                pageNum = i + 1;
+                                            } else if (page <= 3) {
+                                                pageNum = i + 1;
+                                            } else if (page >= totalPages - 2) {
+                                                pageNum = totalPages - 4 + i;
+                                            } else {
+                                                pageNum = page - 2 + i;
+                                            }
+
+                                            return (
+                                                <button
+                                                    key={pageNum}
+                                                    onClick={() =>
+                                                        setPage(pageNum)
+                                                    }
+                                                    className={`w-6 h-6 rounded text-xs font-medium transition-colors ${
+                                                        page === pageNum
+                                                            ? "bg-[#FF5500] text-white"
+                                                            : "bg-zinc-800 text-zinc-400 hover:text-white"
+                                                    }`}
+                                                >
+                                                    {pageNum}
+                                                </button>
+                                            );
+                                        },
+                                    )}
+                                </div>
+
+                                <button
+                                    onClick={() =>
+                                        setPage((p) =>
+                                            Math.min(totalPages, p + 1),
+                                        )
+                                    }
+                                    disabled={page === totalPages}
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Next"
+                                >
+                                    <svg
+                                        className="w-3 h-3"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M9 5l7 7-7 7"
+                                        />
+                                    </svg>
+                                </button>
+                                <button
+                                    onClick={() => setPage(totalPages)}
+                                    disabled={page === totalPages}
+                                    className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Last"
+                                >
+                                    <svg
+                                        className="w-3 h-3"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {/* End scrollable container */}
+            </div>
+
+            {/* Add/Edit Event Modal */}
+            <AnimatePresence>
+                {showAddModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                        onClick={closeAddModal}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+                        >
+                            <div className="p-6 border-b border-zinc-800">
+                                <h2 className="text-xl font-bold text-white">
+                                    {editingEvent
+                                        ? "Edit Event"
+                                        : "Add New Event"}
+                                </h2>
+                            </div>
+                            <form
+                                onSubmit={handleSubmit}
+                                className="p-6 space-y-4"
+                            >
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Event Name *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.name}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    name: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Event Type *
+                                        </label>
+                                        <select
+                                            required
+                                            value={formData.event_type}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    event_type: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        >
+                                            {EVENT_TYPES.map((type) => (
+                                                <option key={type} value={type}>
+                                                    {EVENT_TYPE_ICONS[type]}{" "}
+                                                    {type}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Status
+                                        </label>
+                                        <select
+                                            value={formData.status}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    status: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        >
+                                            {EVENT_STATUSES.map((status) => (
+                                                <option
+                                                    key={status}
+                                                    value={status}
+                                                >
+                                                    {status}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Date *
+                                        </label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={formData.event_date}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    event_date: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-sm text-zinc-400 mb-1">
+                                                Start Time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={formData.start_time}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        start_time:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-zinc-400 mb-1">
+                                                End Time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={formData.end_time}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        end_time:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Venue
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.venue}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    venue: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            City
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.city}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    city: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Country
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.country}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    country: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Organizer
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.organizer}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    organizer: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Event URL
+                                        </label>
+                                        <input
+                                            type="url"
+                                            value={formData.event_url}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    event_url: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            RSVP/Registration URL
+                                        </label>
+                                        <input
+                                            type="url"
+                                            value={formData.rsvp_url}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    rsvp_url: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Description
+                                        </label>
+                                        <textarea
+                                            value={formData.description}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    description: e.target.value,
+                                                })
+                                            }
+                                            rows={3}
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white resize-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Blockchain Focus (comma-separated)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="ethereum, solana, bitcoin"
+                                            value={formData.blockchain_focus}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    blockchain_focus:
+                                                        e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-zinc-400 mb-1">
+                                            Tags (comma-separated)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="defi, nft, web3"
+                                            value={formData.tags}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    tags: e.target.value,
+                                                })
+                                            }
+                                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                                        />
+                                    </div>
+                                    <div className="col-span-2 flex flex-wrap gap-4">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.is_virtual}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        is_virtual:
+                                                            e.target.checked,
+                                                    })
+                                                }
+                                                className="rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                            />
+                                            <span className="text-zinc-300">
+                                                Virtual Event
+                                            </span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.is_featured}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        is_featured:
+                                                            e.target.checked,
+                                                    })
+                                                }
+                                                className="rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                            />
+                                            <span className="text-zinc-300">
+                                                Featured ⭐
+                                            </span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={
+                                                    formData.registration_enabled
+                                                }
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        registration_enabled:
+                                                            e.target.checked,
+                                                    })
+                                                }
+                                                className="rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                            />
+                                            <span className="text-zinc-300">
+                                                Enable Spritz Registration
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
+                                    <button
+                                        type="button"
+                                        onClick={closeAddModal}
+                                        className="px-4 py-2.5 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="px-6 py-2.5 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:from-[#FF6600] hover:to-[#FF5500] text-white rounded-xl font-medium transition-all shadow-lg shadow-[#FF5500]/20"
+                                    >
+                                        {editingEvent
+                                            ? "Save Changes"
+                                            : "Add Event"}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Scrape Modal - Spritz Branded */}
+            <AnimatePresence>
+                {showScrapeModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4"
+                        onClick={() => setShowScrapeModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                            transition={{
+                                type: "spring",
+                                damping: 25,
+                                stiffness: 300,
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-xl sm:rounded-2xl border border-zinc-800 w-full h-full sm:h-[95vh] sm:max-h-[95vh] max-w-[98vw] sm:max-w-[95vw] shadow-2xl shadow-black/50 overflow-hidden flex flex-col"
+                        >
+                            {/* Header with Spritz accent - Fixed */}
+                            <div className="relative p-4 sm:p-6 border-b border-zinc-800 bg-gradient-to-r from-[#FF5500]/10 to-transparent shrink-0">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[#FF5500] to-[#FF5500]/30" />
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-[#FF5500]/20 flex items-center justify-center">
+                                        <svg
+                                            className="w-5 h-5 text-[#FF5500]"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                            />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">
+                                            Scrape Events
+                                        </h2>
+                                        <p className="text-sm text-zinc-400">
+                                            AI-powered event extraction with
+                                            Firecrawl
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Scrollable form content */}
+                            <form
+                                id="scrape-form"
+                                onSubmit={handleScrape}
+                                className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5"
+                            >
+                                {/* URL Input */}
+                                <div>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        URL to Scrape
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+                                            <svg
+                                                className="w-4 h-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                                                />
+                                            </svg>
+                                        </div>
+                                        <input
+                                            type="url"
+                                            required
+                                            value={scrapeUrl}
+                                            onChange={(e) =>
+                                                handleScrapeUrlChange(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="https://cryptonomads.org/ETHDenverSideEvents2026"
+                                            className="w-full pl-10 pr-4 py-3 bg-zinc-800/50 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]/50 transition-all"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-zinc-400 mt-1">
+                                        💡 Tip: You can scrape side events pages
+                                        (e.g., ETHDenverSideEvents2026), main
+                                        event pages, or any event listing page.
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        <span className="text-xs text-zinc-500">
+                                            Quick add:
+                                        </span>
+                                        {SUGGESTED_SCRAPE_SOURCES.map((s) => (
+                                            <button
+                                                key={s.url}
+                                                type="button"
+                                                onClick={() =>
+                                                    handleScrapeUrlChange(s.url)
+                                                }
+                                                className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-colors"
+                                            >
+                                                {s.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Event Types - All selected by default */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-medium text-zinc-300">
+                                            Event Types
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setScrapeEventTypes(
+                                                    scrapeEventTypes.length ===
+                                                        EVENT_TYPES.length
+                                                        ? []
+                                                        : EVENT_TYPES,
+                                                )
+                                            }
+                                            className="text-xs text-[#FF5500] hover:text-[#FF5500]/80 transition-colors"
+                                        >
+                                            {scrapeEventTypes.length ===
+                                            EVENT_TYPES.length
+                                                ? "Deselect All"
+                                                : "Select All"}
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                        {EVENT_TYPES.map((type) => {
+                                            const isSelected =
+                                                scrapeEventTypes.includes(type);
+                                            return (
+                                                <button
+                                                    key={type}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isSelected) {
+                                                            setScrapeEventTypes(
+                                                                scrapeEventTypes.filter(
+                                                                    (t) =>
+                                                                        t !==
+                                                                        type,
+                                                                ),
+                                                            );
+                                                        } else {
+                                                            setScrapeEventTypes(
+                                                                [
+                                                                    ...scrapeEventTypes,
+                                                                    type,
+                                                                ],
+                                                            );
+                                                        }
+                                                    }}
+                                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                                                        isSelected
+                                                            ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
+                                                            : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                                                    }`}
+                                                >
+                                                    <span>
+                                                        {EVENT_TYPE_ICONS[type]}
+                                                    </span>
+                                                    <span className="capitalize">
+                                                        {type}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-xs text-zinc-500 mt-2">
+                                        {scrapeEventTypes.length ===
+                                        EVENT_TYPES.length
+                                            ? "✨ Grabbing all event types for maximum coverage"
+                                            : `Filtering to ${scrapeEventTypes.length} type(s)`}
+                                    </p>
+                                </div>
+
+                                {/* Firecrawl Depth Settings */}
+                                <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-6 h-6 rounded-lg bg-[#FF5500]/20 flex items-center justify-center">
+                                            <svg
+                                                className="w-3.5 h-3.5 text-[#FF5500]"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+                                                />
+                                            </svg>
+                                        </div>
+                                        <span className="text-sm font-medium text-zinc-200">
+                                            Crawl Depth
+                                        </span>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-xs text-zinc-400 mb-1 block">
+                                                How deep to crawl
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {CRAWL_DEPTHS.map((depth) => (
+                                                    <button
+                                                        key={depth.value}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setCrawlDepth(
+                                                                depth.value,
+                                                            )
+                                                        }
+                                                        className={`p-3 rounded-lg text-left transition-all ${
+                                                            crawlDepth ===
+                                                            depth.value
+                                                                ? "bg-[#FF5500]/20 border border-[#FF5500]/40"
+                                                                : "bg-zinc-800/50 border border-zinc-700 hover:border-zinc-600"
+                                                        }`}
+                                                    >
+                                                        <div className="text-sm font-medium text-white">
+                                                            {depth.label}
+                                                        </div>
+                                                        <div className="text-xs text-zinc-500">
+                                                            {depth.description}
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 mb-1 block">
+                                                Max pages to scrape
+                                            </label>
+                                            <div className="flex gap-2">
+                                                {MAX_PAGES_OPTIONS.map(
+                                                    (opt) => (
+                                                        <button
+                                                            key={opt.value}
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setMaxPages(
+                                                                    opt.value,
+                                                                )
+                                                            }
+                                                            className={`flex-1 px-3 py-2 rounded-lg text-sm transition-all ${
+                                                                maxPages ===
+                                                                opt.value
+                                                                    ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
+                                                                    : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                                                            }`}
+                                                        >
+                                                            {opt.label}
+                                                        </button>
+                                                    ),
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-zinc-500">
+                                            🔥 Deeper crawls find more events
+                                            but take longer. Use
+                                            &quot;Medium&quot; or
+                                            &quot;Deep&quot; for event calendar
+                                            sites.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Infinite Scroll Option */}
+                                <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-lg bg-[#FF5500]/20 flex items-center justify-center">
+                                                <svg
+                                                    className="w-3.5 h-3.5 text-[#FF5500]"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                                                    />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <span className="text-sm font-medium text-zinc-200">
+                                                    Infinite Scroll Mode
+                                                </span>
+                                                <p className="text-xs text-zinc-500">
+                                                    For pages that load more
+                                                    content as you scroll
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setInfiniteScroll(
+                                                    !infiniteScroll,
+                                                )
+                                            }
+                                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                                                infiniteScroll
+                                                    ? "bg-[#FF5500]"
+                                                    : "bg-zinc-700"
+                                            }`}
+                                        >
+                                            <div
+                                                className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                    infiniteScroll
+                                                        ? "translate-x-6"
+                                                        : "translate-x-1"
+                                                }`}
+                                            />
+                                        </button>
+                                    </div>
+
+                                    <AnimatePresence>
+                                        {infiniteScroll && (
+                                            <motion.div
+                                                initial={{
+                                                    height: 0,
+                                                    opacity: 0,
+                                                }}
+                                                animate={{
+                                                    height: "auto",
+                                                    opacity: 1,
+                                                }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="pt-3 border-t border-zinc-700/50">
+                                                    <label className="text-xs text-zinc-400 mb-2 block">
+                                                        Scroll iterations
+                                                    </label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {[
+                                                            5, 10, 25, 50, 100,
+                                                        ].map((count) => (
+                                                            <button
+                                                                key={count}
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setScrollCount(
+                                                                        count,
+                                                                    )
+                                                                }
+                                                                className={`px-3 py-2 rounded-lg text-sm transition-all ${
+                                                                    scrollCount ===
+                                                                    count
+                                                                        ? "bg-[#FF5500]/20 text-[#FF5500] border border-[#FF5500]/40"
+                                                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                                                                }`}
+                                                            >
+                                                                {count}x
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-xs text-zinc-500 mt-2">
+                                                        📜 Will scroll{" "}
+                                                        {scrollCount}x (~
+                                                        {Math.round(
+                                                            scrollCount * 1.5,
+                                                        )}
+                                                        s). No auto-detect - use
+                                                        higher values for long
+                                                        feeds.
+                                                    </p>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+
+                                {/* Efficiency Options */}
+                                <div className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">🚫</span>
+                                        <div>
+                                            <span className="text-sm font-medium text-zinc-200">
+                                                Skip Past Events
+                                            </span>
+                                            <p className="text-xs text-zinc-500">
+                                                Ignore events with dates before
+                                                today
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setSkipPastEvents(!skipPastEvents)
+                                        }
+                                        className={`relative w-11 h-6 rounded-full transition-colors ${
+                                            skipPastEvents
+                                                ? "bg-[#FF5500]"
+                                                : "bg-zinc-700"
+                                        }`}
+                                    >
+                                        <div
+                                            className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                skipPastEvents
+                                                    ? "translate-x-6"
+                                                    : "translate-x-1"
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+
+                                {/* Recurring Scrapes Section */}
+                                <div className="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-lg bg-[#FF5500]/20 flex items-center justify-center">
+                                                <svg
+                                                    className="w-3.5 h-3.5 text-[#FF5500]"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                    />
+                                                </svg>
+                                            </div>
+                                            <span className="text-sm font-medium text-zinc-200">
+                                                Auto-Scrape Schedule
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setSaveSource(!saveSource)
+                                            }
+                                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                                                saveSource
+                                                    ? "bg-[#FF5500]"
+                                                    : "bg-zinc-700"
+                                            }`}
+                                        >
+                                            <div
+                                                className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                                                    saveSource
+                                                        ? "translate-x-6"
+                                                        : "translate-x-1"
+                                                }`}
+                                            />
+                                        </button>
+                                    </div>
+
+                                    <AnimatePresence>
+                                        {saveSource && (
+                                            <motion.div
+                                                initial={{
+                                                    height: 0,
+                                                    opacity: 0,
+                                                }}
+                                                animate={{
+                                                    height: "auto",
+                                                    opacity: 1,
+                                                }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="space-y-3 pt-3 border-t border-zinc-700/50">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="text-xs text-zinc-400 mb-1 block">
+                                                                Source Type
+                                                            </label>
+                                                            <select
+                                                                value={
+                                                                    sourceType
+                                                                }
+                                                                onChange={(e) =>
+                                                                    setSourceType(
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50"
+                                                            >
+                                                                {SOURCE_TYPES.map(
+                                                                    (st) => (
+                                                                        <option
+                                                                            key={
+                                                                                st.value
+                                                                            }
+                                                                            value={
+                                                                                st.value
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                st.label
+                                                                            }
+                                                                        </option>
+                                                                    ),
+                                                                )}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-xs text-zinc-400 mb-1 block">
+                                                                Scrape Interval
+                                                            </label>
+                                                            <select
+                                                                value={
+                                                                    scrapeInterval
+                                                                }
+                                                                onChange={(e) =>
+                                                                    setScrapeInterval(
+                                                                        Number(
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50"
+                                                            >
+                                                                {SCRAPE_INTERVALS.map(
+                                                                    (
+                                                                        interval,
+                                                                    ) => (
+                                                                        <option
+                                                                            key={
+                                                                                interval.value
+                                                                            }
+                                                                            value={
+                                                                                interval.value
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                interval.label
+                                                                            }
+                                                                        </option>
+                                                                    ),
+                                                                )}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-xs text-zinc-500">
+                                                        🔄 This source will be
+                                                        automatically re-scraped
+                                                        to discover new events
+                                                    </p>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+
+                                {/* Progress Status */}
+                                {isScraping &&
+                                    scrapeStatus !== "idle" &&
+                                    scrapeStatus !== "preview" && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="p-4 bg-[#FF5500]/10 border border-[#FF5500]/30 rounded-xl"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-[#FF5500]/20 flex items-center justify-center">
+                                                    <div className="w-4 h-4 border-2 border-[#FF5500]/30 border-t-[#FF5500] rounded-full animate-spin" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[#FF5500] font-medium">
+                                                        {scrapeStatus ===
+                                                            "connecting" &&
+                                                            "Connecting to page..."}
+                                                        {scrapeStatus ===
+                                                            "scrolling" &&
+                                                            `Scrolling page (${scrollCount}x)...`}
+                                                        {scrapeStatus ===
+                                                            "extracting" &&
+                                                            "Extracting events with AI..."}
+                                                        {scrapeStatus ===
+                                                            "saving" &&
+                                                            "Saving events to database..."}
+                                                    </p>
+                                                    <p className="text-[#FF5500]/70 text-sm">
+                                                        {scrapeStatus ===
+                                                            "scrolling" &&
+                                                            `Loading ${scrollCount * 2000}px of content`}
+                                                        {scrapeStatus ===
+                                                            "extracting" &&
+                                                            "Analyzing content for event data"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                {/* Preview Events */}
+                                {scrapeStatus === "preview" &&
+                                    previewEvents.length > 0 && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="border border-zinc-700 rounded-xl overflow-hidden"
+                                        >
+                                            <div className="p-3 bg-zinc-800/50 border-b border-zinc-700">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-sm font-medium text-zinc-300">
+                                                        📋 Preview:{" "}
+                                                        {previewEvents.length}{" "}
+                                                        events
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            // Only select non-duplicates
+                                                            const nonDuplicates =
+                                                                previewEvents
+                                                                    .map(
+                                                                        (
+                                                                            e,
+                                                                            i,
+                                                                        ) =>
+                                                                            !e.is_duplicate
+                                                                                ? i
+                                                                                : -1,
+                                                                    )
+                                                                    .filter(
+                                                                        (i) =>
+                                                                            i !==
+                                                                            -1,
+                                                                    );
+                                                            if (
+                                                                selectedPreviewEvents.size ===
+                                                                nonDuplicates.length
+                                                            ) {
+                                                                setSelectedPreviewEvents(
+                                                                    new Set(),
+                                                                );
+                                                            } else {
+                                                                setSelectedPreviewEvents(
+                                                                    new Set(
+                                                                        nonDuplicates,
+                                                                    ),
+                                                                );
+                                                            }
+                                                        }}
+                                                        className="text-xs text-[#FF5500] hover:text-[#FF5500]/80"
+                                                    >
+                                                        {selectedPreviewEvents.size >
+                                                        0
+                                                            ? "Deselect All"
+                                                            : "Select New"}
+                                                    </button>
+                                                </div>
+                                                <div className="flex gap-3 text-xs">
+                                                    <span className="text-green-400">
+                                                        ✓{" "}
+                                                        {
+                                                            previewEvents.filter(
+                                                                (e) =>
+                                                                    !e.is_duplicate,
+                                                            ).length
+                                                        }{" "}
+                                                        new
+                                                    </span>
+                                                    {previewEvents.filter(
+                                                        (e) => e.is_duplicate,
+                                                    ).length > 0 && (
+                                                        <span className="text-yellow-400">
+                                                            ⚠{" "}
+                                                            {
+                                                                previewEvents.filter(
+                                                                    (e) =>
+                                                                        e.is_duplicate,
+                                                                ).length
+                                                            }{" "}
+                                                            duplicates
+                                                        </span>
+                                                    )}
+                                                    <span className="text-zinc-500">
+                                                        {
+                                                            selectedPreviewEvents.size
+                                                        }{" "}
+                                                        selected
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="max-h-64 overflow-y-auto divide-y divide-zinc-800">
+                                                {previewEvents.map(
+                                                    (event, i) => (
+                                                        <label
+                                                            key={i}
+                                                            className={`flex items-start gap-3 p-3 cursor-pointer transition-colors ${
+                                                                event.is_duplicate
+                                                                    ? "bg-yellow-500/5 hover:bg-yellow-500/10"
+                                                                    : "hover:bg-zinc-800/30"
+                                                            }`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedPreviewEvents.has(
+                                                                    i,
+                                                                )}
+                                                                onChange={() => {
+                                                                    const newSet =
+                                                                        new Set(
+                                                                            selectedPreviewEvents,
+                                                                        );
+                                                                    if (
+                                                                        newSet.has(
+                                                                            i,
+                                                                        )
+                                                                    )
+                                                                        newSet.delete(
+                                                                            i,
+                                                                        );
+                                                                    else
+                                                                        newSet.add(
+                                                                            i,
+                                                                        );
+                                                                    setSelectedPreviewEvents(
+                                                                        newSet,
+                                                                    );
+                                                                }}
+                                                                className="mt-1 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]/50"
+                                                            />
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="text-sm text-white truncate">
+                                                                        {
+                                                                            event.name
+                                                                        }
+                                                                    </p>
+                                                                    {event.is_duplicate && (
+                                                                        <span className="px-1.5 py-0.5 text-[10px] rounded bg-yellow-500/20 text-yellow-400 shrink-0">
+                                                                            DUPLICATE
+                                                                        </span>
+                                                                    )}
+                                                                    {event.is_past && (
+                                                                        <span className="px-1.5 py-0.5 text-[10px] rounded bg-zinc-700 text-zinc-400 shrink-0">
+                                                                            PAST
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs text-zinc-400">
+                                                                    {EVENT_TYPE_ICONS[
+                                                                        event
+                                                                            .type
+                                                                    ] ||
+                                                                        "📅"}{" "}
+                                                                    {event.type}{" "}
+                                                                    •{" "}
+                                                                    {
+                                                                        event.start_date
+                                                                    }{" "}
+                                                                    •{" "}
+                                                                    {event.location ||
+                                                                        event.city ||
+                                                                        "TBA"}
+                                                                </p>
+                                                            </div>
+                                                            {event.image_url && (
+                                                                <img
+                                                                    src={
+                                                                        event.image_url
+                                                                    }
+                                                                    alt=""
+                                                                    className="w-12 h-12 rounded object-cover"
+                                                                />
+                                                            )}
+                                                        </label>
+                                                    ),
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                {/* Result */}
+                                {scrapeResult && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                <svg
+                                                    className="w-4 h-4 text-green-400"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M5 13l4 4L19 7"
+                                                    />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p className="text-green-400 font-medium">
+                                                    Scrape Complete!
+                                                </p>
+                                                <p className="text-green-400/70 text-sm">
+                                                    {scrapeResult.pagesScraped &&
+                                                        `Crawled ${scrapeResult.pagesScraped} pages • `}
+                                                    Found{" "}
+                                                    {scrapeResult.extracted} •
+                                                    Added{" "}
+                                                    {scrapeResult.inserted} new
+                                                    {scrapeResult.duplicates
+                                                        ? ` • ${scrapeResult.duplicates} duplicates`
+                                                        : ""}
+                                                    {scrapeResult.skipped >
+                                                    (scrapeResult.duplicates ||
+                                                        0)
+                                                        ? ` • ${scrapeResult.skipped - (scrapeResult.duplicates || 0)} skipped`
+                                                        : ""}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </form>
+
+                            {/* Sticky footer with buttons - always visible */}
+                            <div className="sticky bottom-0 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pt-4 pb-2 sm:pb-4 px-4 sm:px-6 border-t border-zinc-800 shrink-0">
+                                <div className="flex justify-between items-center gap-2 sm:gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            fetchEventSources();
+                                            setShowSourcesPanel(true);
+                                        }}
+                                        className="text-xs sm:text-sm text-zinc-400 hover:text-[#FF5500] transition-colors flex items-center gap-1.5"
+                                    >
+                                        <svg
+                                            className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                                            />
+                                        </svg>
+                                        <span className="hidden sm:inline">
+                                            View {eventSources.length} Saved
+                                            Source
+                                            {eventSources.length !== 1
+                                                ? "s"
+                                                : ""}
+                                        </span>
+                                        <span className="sm:hidden">
+                                            Sources
+                                        </span>
+                                    </button>
+
+                                    {scrapeStatus === "preview" ? (
+                                        <div className="flex gap-2 sm:gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setPreviewEvents([]);
+                                                    setScrapeStatus("idle");
+                                                    setIsScraping(false);
+                                                }}
+                                                className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={
+                                                    handleSavePreviewEvents
+                                                }
+                                                disabled={
+                                                    selectedPreviewEvents.size ===
+                                                    0
+                                                }
+                                                className="px-3 sm:px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white rounded-xl text-xs sm:text-base font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 sm:gap-2"
+                                            >
+                                                <svg
+                                                    className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M5 13l4 4L19 7"
+                                                    />
+                                                </svg>
+                                                <span className="hidden sm:inline">
+                                                    Save{" "}
+                                                    {selectedPreviewEvents.size}{" "}
+                                                    Events
+                                                </span>
+                                                <span className="sm:hidden">
+                                                    Save
+                                                </span>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex gap-2 sm:gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowScrapeModal(false)
+                                                }
+                                                className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) =>
+                                                    handleScrape(e, true)
+                                                }
+                                                disabled={
+                                                    isScraping || !scrapeUrl
+                                                }
+                                                className="px-3 sm:px-4 py-2 border border-[#FF5500]/50 text-[#FF5500] hover:bg-[#FF5500]/10 rounded-xl text-xs sm:text-base font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 sm:gap-2"
+                                            >
+                                                <svg
+                                                    className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                                    />
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                                    />
+                                                </svg>
+                                                <span className="hidden sm:inline">
+                                                    Preview
+                                                </span>
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                form="scrape-form"
+                                                disabled={isScraping}
+                                                className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:from-[#FF6600] hover:to-[#FF5500] text-white rounded-xl text-xs sm:text-base font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-[#FF5500]/20"
+                                            >
+                                                {isScraping ? (
+                                                    <>
+                                                        <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        <span className="hidden sm:inline">
+                                                            Scraping...
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg
+                                                            className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                                            />
+                                                        </svg>
+                                                        <span className="hidden sm:inline">
+                                                            Scrape & Save
+                                                        </span>
+                                                        <span className="sm:hidden">
+                                                            Scrape
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Saved Sources Panel */}
+            <AnimatePresence>
+                {showSourcesPanel && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                        onClick={() => setShowSourcesPanel(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                            transition={{
+                                type: "spring",
+                                damping: 25,
+                                stiffness: 300,
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 rounded-2xl border border-zinc-800 w-full max-w-5xl max-h-[80vh] shadow-2xl shadow-black/50 overflow-hidden flex flex-col"
+                        >
+                            {/* Header */}
+                            <div className="relative p-6 border-b border-zinc-800 bg-gradient-to-r from-[#FF5500]/10 to-transparent shrink-0">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[#FF5500] to-[#FF5500]/30" />
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-[#FF5500]/20 flex items-center justify-center">
+                                            <svg
+                                                className="w-5 h-5 text-[#FF5500]"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white">
+                                                Scheduled Sources
+                                            </h2>
+                                            <p className="text-sm text-zinc-400">
+                                                {eventSources.length} source
+                                                {eventSources.length !== 1
+                                                    ? "s"
+                                                    : ""}{" "}
+                                                configured for auto-scraping
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() =>
+                                            setShowSourcesPanel(false)
+                                        }
+                                        className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800"
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Sources List */}
+                            <div className="flex-1 overflow-y-auto p-4">
+                                {isLoadingSources ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <div className="w-8 h-8 border-2 border-[#FF5500]/30 border-t-[#FF5500] rounded-full animate-spin" />
+                                    </div>
+                                ) : eventSources.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center">
+                                            <svg
+                                                className="w-8 h-8 text-zinc-600"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                />
+                                            </svg>
+                                        </div>
+                                        <p className="text-zinc-400 mb-2">
+                                            No scheduled sources yet
+                                        </p>
+                                        <p className="text-zinc-500 text-sm">
+                                            Enable &quot;Auto-Scrape
+                                            Schedule&quot; when scraping to add
+                                            one
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {eventSources.map((source) => (
+                                            <div
+                                                key={source.id}
+                                                className={`p-4 rounded-xl border transition-all ${
+                                                    source.is_active
+                                                        ? "bg-zinc-800/50 border-zinc-700"
+                                                        : "bg-zinc-900/50 border-zinc-800 opacity-60"
+                                                }`}
+                                            >
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-lg">
+                                                                {SOURCE_TYPES.find(
+                                                                    (s) =>
+                                                                        s.value ===
+                                                                        source.source_type,
+                                                                )?.label.split(
+                                                                    " ",
+                                                                )[0] || "📅"}
+                                                            </span>
+                                                            <h3 className="font-medium text-white truncate">
+                                                                {source.name}
+                                                            </h3>
+                                                            {source.is_active ? (
+                                                                <span className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400">
+                                                                    Active
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 text-xs rounded-full bg-zinc-700 text-zinc-400">
+                                                                    Paused
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-sm text-zinc-500 truncate mb-2">
+                                                            {source.url}
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <svg
+                                                                    className="w-3 h-3"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                                    />
+                                                                </svg>
+                                                                {SCRAPE_INTERVALS.find(
+                                                                    (i) =>
+                                                                        i.value ===
+                                                                        source.scrape_interval_hours,
+                                                                )?.label ||
+                                                                    `${source.scrape_interval_hours}h`}
+                                                            </span>
+                                                            <span className="flex items-center gap-1">
+                                                                <svg
+                                                                    className="w-3 h-3"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                                                    />
+                                                                </svg>
+                                                                {
+                                                                    source.events_found
+                                                                }{" "}
+                                                                events
+                                                            </span>
+                                                            {source.last_scraped_at && (
+                                                                <span
+                                                                    title={new Date(
+                                                                        source.last_scraped_at,
+                                                                    ).toLocaleString()}
+                                                                >
+                                                                    Last:{" "}
+                                                                    {new Date(
+                                                                        source.last_scraped_at,
+                                                                    ).toLocaleDateString()}
+                                                                </span>
+                                                            )}
+                                                            {source.is_active &&
+                                                                source.next_scrape_at && (
+                                                                    <span
+                                                                        className={`flex items-center gap-1 ${
+                                                                            new Date(
+                                                                                source.next_scrape_at,
+                                                                            ) <=
+                                                                            new Date()
+                                                                                ? "text-[#FF5500]"
+                                                                                : "text-zinc-400"
+                                                                        }`}
+                                                                        title={new Date(
+                                                                            source.next_scrape_at,
+                                                                        ).toLocaleString()}
+                                                                    >
+                                                                        ⏰ Next:{" "}
+                                                                        {new Date(
+                                                                            source.next_scrape_at,
+                                                                        ) <=
+                                                                        new Date()
+                                                                            ? "Pending..."
+                                                                            : new Date(
+                                                                                  source.next_scrape_at,
+                                                                              ).toLocaleDateString() +
+                                                                              " " +
+                                                                              new Date(
+                                                                                  source.next_scrape_at,
+                                                                              ).toLocaleTimeString(
+                                                                                  [],
+                                                                                  {
+                                                                                      hour: "2-digit",
+                                                                                      minute: "2-digit",
+                                                                                  },
+                                                                              )}
+                                                                    </span>
+                                                                )}
+                                                        </div>
+                                                        {source.last_error && (
+                                                            <p className="text-xs text-red-400 mt-1 truncate">
+                                                                ⚠️{" "}
+                                                                {
+                                                                    source.last_error
+                                                                }
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <button
+                                                            onClick={() =>
+                                                                triggerManualScrape(
+                                                                    source.id,
+                                                                )
+                                                            }
+                                                            className="p-2 text-zinc-400 hover:text-[#FF5500] transition-colors rounded-lg hover:bg-zinc-700"
+                                                            title="Scrape Now"
+                                                        >
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                        <button
+                                                            onClick={() =>
+                                                                toggleSourceActive(
+                                                                    source.id,
+                                                                    !source.is_active,
+                                                                )
+                                                            }
+                                                            className={`p-2 rounded-lg transition-colors ${
+                                                                source.is_active
+                                                                    ? "text-green-400 hover:bg-green-500/20"
+                                                                    : "text-zinc-400 hover:bg-zinc-700"
+                                                            }`}
+                                                            title={
+                                                                source.is_active
+                                                                    ? "Pause"
+                                                                    : "Activate"
+                                                            }
+                                                        >
+                                                            {source.is_active ? (
+                                                                <svg
+                                                                    className="w-4 h-4"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                                    />
+                                                                </svg>
+                                                            ) : (
+                                                                <svg
+                                                                    className="w-4 h-4"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                                                    />
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                                    />
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            onClick={() =>
+                                                                deleteSource(
+                                                                    source.id,
+                                                                )
+                                                            }
+                                                            className="p-2 text-zinc-400 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+                                                            title="Delete"
+                                                        >
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer - Cron Status */}
+                            <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 shrink-0">
+                                <div className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-4 text-zinc-400">
+                                        <span className="flex items-center gap-1">
+                                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                            {
+                                                eventSources.filter(
+                                                    (s) => s.is_active,
+                                                ).length
+                                            }{" "}
+                                            active
+                                        </span>
+                                        <span>
+                                            {
+                                                eventSources.filter(
+                                                    (s) =>
+                                                        s.is_active &&
+                                                        s.next_scrape_at &&
+                                                        new Date(
+                                                            s.next_scrape_at,
+                                                        ) <= new Date(),
+                                                ).length
+                                            }{" "}
+                                            pending
+                                        </span>
+                                    </div>
+                                    <p className="text-zinc-500">
+                                        🔄 Cron runs every 6 hours
+                                    </p>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </AdminLayout>
+    );
+}

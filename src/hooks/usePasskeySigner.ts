@@ -3,6 +3,27 @@
 import { useState, useCallback } from "react";
 import { type Address, type Hex, keccak256, toHex } from "viem";
 
+// Client-side error logging helper
+async function logPasskeyError(
+    errorMessage: string,
+    context: Record<string, unknown>
+) {
+    try {
+        await fetch("/api/admin/error-log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                errorType: "passkey_signing",
+                errorMessage,
+                context,
+            }),
+        });
+    } catch (e) {
+        console.error("[PasskeySigner] Failed to log error:", e);
+    }
+}
+
 export interface PasskeyCredential {
     credentialId: string;
     publicKeyX: Hex;
@@ -80,6 +101,21 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
         }
     }, []);
 
+    // Get the RP ID - must match where the passkey was registered
+    // IMPORTANT: Use parent domain (spritz.chat) for all spritz.chat subdomains
+    // to match the registration and login flow
+    const getRpId = useCallback((): string => {
+        if (typeof window === 'undefined') return 'spritz.chat';
+        const hostname = window.location.hostname;
+        if (hostname.includes('spritz.chat')) {
+            return 'spritz.chat';
+        }
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'localhost';
+        }
+        return hostname;
+    }, []);
+    
     /**
      * Sign a challenge using the passkey
      * 
@@ -100,11 +136,13 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
         setError(null);
 
         try {
-            // Get the RP ID from the current domain
-            const rpId = window.location.hostname;
+            const rpId = getRpId();
             const challengeBytes = hexToBytes(challenge);
             
             // Create the assertion options
+            // For iCloud/cloud-synced passkeys, don't specify transports
+            // This lets the browser use the synced passkey directly without
+            // showing QR code for cross-device authentication
             const options: PublicKeyCredentialRequestOptions = {
                 challenge: challengeBytes.buffer.slice(
                     challengeBytes.byteOffset,
@@ -114,15 +152,23 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
                 allowCredentials: [{
                     id: base64UrlToArrayBuffer(credential.credentialId),
                     type: "public-key",
-                    transports: ["internal", "hybrid"] as AuthenticatorTransport[],
+                    // CRITICAL: Specify transports: ["internal"] to tell Safari to use
+                    // the platform authenticator (Face ID/Touch ID) directly instead of
+                    // showing the cross-device options (iPhone, iPad, Android, Security Key)
+                    // This matches the login flow which uses ["internal"] and works correctly
+                    // iCloud-synced passkeys still work with "internal" transport
+                    transports: ["internal"],
                 }],
                 userVerification: "required",
                 timeout: 60000,
             };
 
             // Request the assertion
+            // Use mediation: "optional" to match the login flow behavior
+            // This helps Safari/iOS show the passkey picker correctly
             const assertion = await navigator.credentials.get({
                 publicKey: options,
+                mediation: "optional",
             }) as PublicKeyCredential;
 
             if (!assertion) {
@@ -139,18 +185,39 @@ export function usePasskeySigner(): UsePasskeySignerReturn {
         } catch (err) {
             console.error("[PasskeySigner] Signing error:", err);
             
+            let errorMessage: string;
+            let errorCode: string | undefined;
+            
             // Handle user cancellation
             if (err instanceof DOMException && err.name === "NotAllowedError") {
-                setError("Signing cancelled");
+                errorMessage = "Signing cancelled";
+                errorCode = "WEBAUTHN_NOT_ALLOWED";
             } else {
-                setError(err instanceof Error ? err.message : "Failed to sign");
+                errorMessage = err instanceof Error ? err.message : "Failed to sign";
+                if (err instanceof DOMException) {
+                    errorCode = `WEBAUTHN_${err.name.toUpperCase()}`;
+                }
+            }
+            
+            setError(errorMessage);
+            
+            // Log error for admin visibility (but not cancellations)
+            if (errorCode !== "WEBAUTHN_NOT_ALLOWED") {
+                logPasskeyError(errorMessage, {
+                    operation: "signChallenge",
+                    credentialId: credential?.credentialId,
+                    rpId: getRpId(),
+                    errorCode,
+                    errorName: err instanceof DOMException ? err.name : undefined,
+                    stackTrace: err instanceof Error ? err.stack : undefined,
+                });
             }
             
             return null;
         } finally {
             setIsSigning(false);
         }
-    }, [credential]);
+    }, [credential, getRpId]);
 
     /**
      * Reset the signer state

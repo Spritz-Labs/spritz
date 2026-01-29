@@ -9,10 +9,12 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+import { getRpcUrl } from "@/lib/rpc";
+
 // Create public client for ENS resolution
 const publicClient = createPublicClient({
     chain: mainnet,
-    transport: http("https://eth.llamarpc.com"),
+    transport: http(getRpcUrl(1)),
 });
 
 // GET /api/public/user/[address] - Get public user profile (only if enabled)

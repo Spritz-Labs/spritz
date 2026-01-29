@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { type Friend } from "@/components/FriendsList";
 import { type CallState, type CallType } from "@/hooks/useVoiceCall";
 import { DeviceSelector } from "./DeviceSelector";
+import { getDisplayName as getBaseDisplayName } from "@/utils/address";
 
 type VoiceCallUIProps = {
     friend: Friend | null;
@@ -61,13 +62,14 @@ export function VoiceCallUI({
 
     const isVideoCall = callType === "video";
 
+    // Get display name with priority: nickname > ENS > username > address
     const getDisplayName = (friend: Friend) => {
-        return (
-            friend.nickname ||
-            (friend.reachUsername ? `@${friend.reachUsername}` : null) ||
-            friend.ensName ||
-            `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`
-        );
+        return getBaseDisplayName({
+            address: friend.address,
+            ensName: friend.ensName,
+            username: friend.reachUsername,
+            nickname: friend.nickname,
+        }, true); // includeNickname = true for friends
     };
 
     const getStatusText = () => {

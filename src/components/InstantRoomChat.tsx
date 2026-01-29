@@ -3,14 +3,24 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import protobuf from "protobufjs";
+import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
+import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
+import { ChatSkeleton } from "./ChatSkeleton";
+import { useDraftMessages } from "@/hooks/useDraftMessages";
+import { SwipeableMessage } from "./SwipeableMessage";
+import { DateDivider } from "./UnreadDivider";
+import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 // Helper to detect if a message is emoji-only (for larger display)
-const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
+const EMOJI_REGEX =
+    /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
 const isEmojiOnly = (text: string): boolean => {
     const trimmed = text.trim();
     if (!trimmed) return false;
     if (!EMOJI_REGEX.test(trimmed)) return false;
-    const emojiCount = [...trimmed].filter(char => /\p{Emoji}/u.test(char) && !/\d/u.test(char)).length;
+    const emojiCount = [...trimmed].filter(
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+    ).length;
     return emojiCount >= 1 && emojiCount <= 3;
 };
 
@@ -39,7 +49,18 @@ type MessageReaction = {
     users: string[];
 };
 
-const REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
+const REACTION_EMOJIS = [
+    "👍",
+    "❤️",
+    "🔥",
+    "😂",
+    "🤙",
+    "🤯",
+    "🙏",
+    "💯",
+    "🙌",
+    "🎉",
+];
 
 // Dynamic imports for Waku
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,7 +94,7 @@ async function loadWakuSDK(): Promise<boolean> {
 async function deriveKeyFromRoomCode(roomCode: string): Promise<Uint8Array> {
     const encoder = new TextEncoder();
     const data = encoder.encode(
-        `spritz-instant-room-${roomCode.toUpperCase()}`
+        `spritz-instant-room-${roomCode.toUpperCase()}`,
     );
 
     // Use SHA-256 to derive a 32-byte key
@@ -101,15 +122,21 @@ export function InstantRoomChat({
     onUnreadChange,
 }: InstantRoomChatProps) {
     const [messages, setMessages] = useState<Message[]>([]);
-    const [reactions, setReactions] = useState<Record<string, MessageReaction[]>>({});
+    const [reactions, setReactions] = useState<
+        Record<string, MessageReaction[]>
+    >({});
     const [inputValue, setInputValue] = useState("");
     const [isConnected, setIsConnected] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
+        null,
+    );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] =
+        useState<MessageActionConfig | null>(null);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nodeRef = useRef<any>(null);
@@ -117,10 +144,55 @@ export function InstantRoomChat({
     const encoderRef = useRef<any>(null);
     const symmetricKeyRef = useRef<Uint8Array | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const seenMessageIds = useRef<Set<string>>(new Set());
     const wasOpenRef = useRef(isOpen);
+    const draftAppliedRef = useRef(false);
+
+    // Draft messages persistence
+    const { draft, saveDraft, clearDraft } = useDraftMessages(
+        "room",
+        roomCode,
+        displayName,
+    );
+
+    // Scroll to bottom with unread badge
+    const {
+        newMessageCount,
+        isAtBottom,
+        onNewMessage,
+        resetUnreadCount,
+        scrollToBottom: scrollToBottomFn,
+    } = useScrollToBottom(messagesContainerRef);
 
     const contentTopic = `/spritz/1/instant-room/${roomCode.toUpperCase()}/proto`;
+
+    // Apply draft when chat opens
+    useEffect(() => {
+        if (!isOpen) {
+            draftAppliedRef.current = false;
+            return;
+        }
+        if (draft?.text && !draftAppliedRef.current) {
+            setInputValue(draft.text);
+            draftAppliedRef.current = true;
+        }
+    }, [isOpen, draft?.text]);
+
+    // Escape to close or cancel reply
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            if (replyingTo) {
+                setReplyingTo(null);
+                return;
+            }
+            onClose();
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose, replyingTo]);
 
     // Scroll to bottom when new messages arrive
     useEffect(() => {
@@ -128,6 +200,13 @@ export function InstantRoomChat({
             messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
         }
     }, [messages, isOpen]);
+
+    // Track new messages for unread badge when not at bottom
+    useEffect(() => {
+        if (messages.length > 0 && !isAtBottom) {
+            onNewMessage();
+        }
+    }, [messages.length, isAtBottom, onNewMessage]);
 
     // Track unread messages when chat is closed
     useEffect(() => {
@@ -194,7 +273,7 @@ export function InstantRoomChat({
             const decoder = wakuEncryption.createDecoder(
                 contentTopic,
                 routingInfo,
-                symmetricKeyRef.current
+                symmetricKeyRef.current,
             );
 
             await node.filter.subscribe(
@@ -204,7 +283,7 @@ export function InstantRoomChat({
                         if (!wakuMessage.payload) return;
 
                         const decoded = ChatMessage.decode(
-                            wakuMessage.payload
+                            wakuMessage.payload,
                         ) as unknown as {
                             timestamp: number | { low: number; high: number };
                             sender: string;
@@ -237,7 +316,7 @@ export function InstantRoomChat({
                                 return prev;
                             }
                             return [...prev, newMessage].sort(
-                                (a, b) => a.timestamp - b.timestamp
+                                (a, b) => a.timestamp - b.timestamp,
                             );
                         });
 
@@ -252,10 +331,10 @@ export function InstantRoomChat({
                     } catch (err) {
                         console.error(
                             "[InstantRoomChat] Error decoding message:",
-                            err
+                            err,
                         );
                     }
-                }
+                },
             );
 
             console.log("[InstantRoomChat] Connected and subscribed!");
@@ -282,35 +361,46 @@ export function InstantRoomChat({
     }, [initializeWaku]);
 
     // Toggle reaction
-    const toggleReaction = useCallback((messageId: string, emoji: string) => {
-        setReactions(prev => {
-            const updated = { ...prev };
-            if (!updated[messageId]) {
-                updated[messageId] = REACTION_EMOJIS.map(e => ({
-                    emoji: e,
-                    users: [],
-                }));
-            }
-            
-            const idx = updated[messageId].findIndex(r => r.emoji === emoji);
-            if (idx >= 0) {
-                const hasReacted = updated[messageId][idx].users.includes(displayName);
-                if (hasReacted) {
-                    updated[messageId][idx].users = updated[messageId][idx].users.filter(u => u !== displayName);
-                } else {
-                    updated[messageId][idx].users = [...updated[messageId][idx].users, displayName];
+    const toggleReaction = useCallback(
+        (messageId: string, emoji: string) => {
+            setReactions((prev) => {
+                const updated = { ...prev };
+                if (!updated[messageId]) {
+                    updated[messageId] = REACTION_EMOJIS.map((e) => ({
+                        emoji: e,
+                        users: [],
+                    }));
                 }
-            }
-            
-            return updated;
-        });
-        setShowReactionPicker(null);
-        setSelectedMessage(null);
-    }, [displayName]);
+
+                const idx = updated[messageId].findIndex(
+                    (r) => r.emoji === emoji,
+                );
+                if (idx >= 0) {
+                    const hasReacted =
+                        updated[messageId][idx].users.includes(displayName);
+                    if (hasReacted) {
+                        updated[messageId][idx].users = updated[messageId][
+                            idx
+                        ].users.filter((u) => u !== displayName);
+                    } else {
+                        updated[messageId][idx].users = [
+                            ...updated[messageId][idx].users,
+                            displayName,
+                        ];
+                    }
+                }
+
+                return updated;
+            });
+            setShowReactionPicker(null);
+            setSelectedMessage(null);
+        },
+        [displayName],
+    );
 
     // Toggle message selection for mobile tap actions
     const handleMessageTap = useCallback((messageId: string) => {
-        setSelectedMessage(prev => prev === messageId ? null : messageId);
+        setSelectedMessage((prev) => (prev === messageId ? null : messageId));
         setShowReactionPicker(null);
     }, []);
 
@@ -318,14 +408,18 @@ export function InstantRoomChat({
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
-            if (!target.closest('[data-message-actions]') && !target.closest('[data-message-bubble]')) {
+            if (
+                !target.closest("[data-message-actions]") &&
+                !target.closest("[data-message-bubble]")
+            ) {
                 setSelectedMessage(null);
                 setShowReactionPicker(null);
             }
         };
         if (selectedMessage) {
-            document.addEventListener('click', handleClickOutside);
-            return () => document.removeEventListener('click', handleClickOutside);
+            document.addEventListener("click", handleClickOutside);
+            return () =>
+                document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedMessage]);
 
@@ -336,14 +430,18 @@ export function InstantRoomChat({
 
         const messageId = generateMessageId();
         const timestamp = Date.now();
-        
+
         // Include reply context if replying
         let content = inputValue.trim();
-        const replyData = replyingTo ? {
-            id: replyingTo.id,
-            sender: replyingTo.sender,
-            content: replyingTo.content.slice(0, 50) + (replyingTo.content.length > 50 ? "..." : ""),
-        } : undefined;
+        const replyData = replyingTo
+            ? {
+                  id: replyingTo.id,
+                  sender: replyingTo.sender,
+                  content:
+                      replyingTo.content.slice(0, 50) +
+                      (replyingTo.content.length > 50 ? "..." : ""),
+              }
+            : undefined;
 
         // Add to seen BEFORE sending to prevent duplicate when message comes back
         seenMessageIds.current.add(messageId);
@@ -358,15 +456,18 @@ export function InstantRoomChat({
             replyTo: replyData,
         };
         setMessages((prev) => [...prev, newMessage]);
+        const sentContent = content;
+        const prevReplyingTo = replyingTo;
         setInputValue("");
         setReplyingTo(null);
+        clearDraft();
 
         try {
             // Include reply in message content for others to see
-            const sendContent = replyData 
+            const sendContent = replyData
                 ? `↩️ ${replyData.sender}: "${replyData.content}"\n\n${content}`
                 : content;
-            
+
             const messageObj = ChatMessage.create({
                 timestamp,
                 sender: displayName,
@@ -381,8 +482,10 @@ export function InstantRoomChat({
             });
         } catch (err) {
             console.error("[InstantRoomChat] Send error:", err);
+            setInputValue(sentContent);
+            setReplyingTo(prevReplyingTo);
         }
-    }, [inputValue, displayName, replyingTo]);
+    }, [inputValue, displayName, replyingTo, clearDraft]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -460,7 +563,12 @@ export function InstantRoomChat({
                     </div>
 
                     {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                    <div
+                        ref={messagesContainerRef}
+                        role="log"
+                        aria-label="Chat messages"
+                        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-3 space-y-3"
+                    >
                         {isConnecting && (
                             <div className="flex items-center justify-center py-8">
                                 <div className="flex items-center gap-2 text-zinc-400 text-sm">
@@ -496,14 +604,21 @@ export function InstantRoomChat({
 
                         {messages.map((msg) => {
                             // Parse reply from message content for incoming messages
-                            const hasInlineReply = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n");
-                            const displayContent = hasInlineReply 
-                                ? msg.content.split("\n\n").slice(1).join("\n\n")
+                            const hasInlineReply =
+                                msg.content.startsWith("↩️ ") &&
+                                msg.content.includes("\n\n");
+                            const displayContent = hasInlineReply
+                                ? msg.content
+                                      .split("\n\n")
+                                      .slice(1)
+                                      .join("\n\n")
                                 : msg.content;
-                            const inlineReplyText = hasInlineReply 
-                                ? msg.content.split("\n\n")[0].replace("↩️ ", "")
+                            const inlineReplyText = hasInlineReply
+                                ? msg.content
+                                      .split("\n\n")[0]
+                                      .replace("↩️ ", "")
                                 : null;
-                            
+
                             return (
                                 <div
                                     key={msg.id}
@@ -513,7 +628,23 @@ export function InstantRoomChat({
                                 >
                                     <div
                                         data-message-bubble
-                                        onClick={() => handleMessageTap(msg.id)}
+                                        onClick={() => {
+                                            setSelectedMessage(
+                                                selectedMessage === msg.id
+                                                    ? null
+                                                    : msg.id,
+                                            );
+                                            setSelectedMessageConfig(
+                                                selectedMessage === msg.id
+                                                    ? null
+                                                    : {
+                                                          messageId: msg.id,
+                                                          messageContent:
+                                                              msg.content,
+                                                          isOwn: msg.isMe,
+                                                      },
+                                            );
+                                        }}
                                         className={`max-w-[85%] rounded-2xl px-3 py-2 relative cursor-pointer ${
                                             msg.isMe
                                                 ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
@@ -525,111 +656,127 @@ export function InstantRoomChat({
                                                 {msg.sender}
                                             </p>
                                         )}
-                                        
+
                                         {/* Reply Preview - For messages with replyTo data or inline reply */}
                                         {(msg.replyTo || inlineReplyText) && (
-                                            <div 
+                                            <div
                                                 className={`mb-2 p-2 rounded-lg ${
-                                                    msg.isMe 
-                                                        ? "bg-white/10 border-l-2 border-white/40" 
+                                                    msg.isMe
+                                                        ? "bg-white/10 border-l-2 border-white/40"
                                                         : "bg-zinc-700/50 border-l-2 border-orange-500"
                                                 }`}
                                             >
                                                 <div className="flex items-center gap-1.5 text-xs font-medium">
-                                                    <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                    <svg
+                                                        className="w-3 h-3 flex-shrink-0"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                        />
                                                     </svg>
-                                                    <span className={msg.isMe ? "text-white/80" : "text-orange-400"}>
-                                                        {msg.replyTo?.sender || inlineReplyText?.split(":")[0] || ""}
+                                                    <span
+                                                        className={
+                                                            msg.isMe
+                                                                ? "text-white/80"
+                                                                : "text-orange-400"
+                                                        }
+                                                    >
+                                                        {msg.replyTo?.sender ||
+                                                            inlineReplyText?.split(
+                                                                ":",
+                                                            )[0] ||
+                                                            ""}
                                                     </span>
                                                 </div>
-                                                <p className={`text-xs mt-1 line-clamp-2 ${msg.isMe ? "text-white/70" : "text-zinc-400"}`}>
-                                                    {msg.replyTo?.content || inlineReplyText?.split(": \"")[1]?.replace(/\"$/, "") || ""}
+                                                <p
+                                                    className={`text-xs mt-1 line-clamp-2 ${msg.isMe ? "text-white/70" : "text-zinc-400"}`}
+                                                >
+                                                    {msg.replyTo?.content ||
+                                                        inlineReplyText
+                                                            ?.split(': "')[1]
+                                                            ?.replace(
+                                                                /\"$/,
+                                                                "",
+                                                            ) ||
+                                                        ""}
                                                 </p>
                                             </div>
                                         )}
-                                        
-                                        <p className={`break-words whitespace-pre-wrap ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : "text-sm"}`}>
+
+                                        <p
+                                            className={`break-words whitespace-pre-wrap ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : "text-sm"}`}
+                                        >
                                             {displayContent}
                                         </p>
 
-                                        {/* Reactions Display */}
-                                        {reactions[msg.id]?.some(r => r.users.length > 0) && (
-                                            <div className="flex flex-wrap gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
-                                                {reactions[msg.id]
-                                                    ?.filter(r => r.users.length > 0)
-                                                    .map(reaction => (
-                                                        <button
-                                                            key={reaction.emoji}
-                                                            onClick={() => toggleReaction(msg.id, reaction.emoji)}
-                                                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                reaction.users.includes(displayName)
-                                                                    ? msg.isMe ? "bg-white/30" : "bg-orange-500/30 text-orange-300"
-                                                                    : msg.isMe ? "bg-white/10 hover:bg-white/20" : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                            }`}
-                                                        >
-                                                            <span>{reaction.emoji}</span>
-                                                            <span className="text-[10px]">{reaction.users.length}</span>
-                                                        </button>
-                                                    ))}
-                                            </div>
-                                        )}
-
-                                        {/* Message Actions - Show on tap (mobile) or click */}
-                                        <AnimatePresence>
-                                            {selectedMessage === msg.id && (
-                                                <motion.div
-                                                    data-message-actions
-                                                    initial={{ opacity: 0, scale: 0.9 }}
-                                                    animate={{ opacity: 1, scale: 1 }}
-                                                    exit={{ opacity: 0, scale: 0.9 }}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className={`absolute ${msg.isMe ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"} top-0 flex items-center gap-1 z-10`}
-                                                >
-                                                    <button
-                                                        onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
-                                                        title="React"
-                                                    >
-                                                        😊
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setReplyingTo(msg);
-                                                            setSelectedMessage(null);
-                                                        }}
-                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
-                                                        title="Reply"
-                                                    >
-                                                        <svg className="w-4 h-4 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                        </svg>
-                                                    </button>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-
-                                        {/* Reaction Picker */}
-                                        {showReactionPicker === msg.id && (
-                                            <div 
-                                                className={`absolute ${msg.isMe ? "right-0" : "left-0"} -top-12 z-20 bg-zinc-800 border border-zinc-700 rounded-xl p-1.5 shadow-xl`}
-                                                onClick={(e) => e.stopPropagation()}
+                                        {/* Reactions Display - Mobile Friendly */}
+                                        {reactions[msg.id]?.some(
+                                            (r) => r.users.length > 0,
+                                        ) && (
+                                            <div
+                                                className="flex flex-wrap gap-1.5 mt-2"
+                                                onClick={(e) =>
+                                                    e.stopPropagation()
+                                                }
                                             >
-                                                <div className="flex gap-1">
-                                                    {REACTION_EMOJIS.map(emoji => (
-                                                        <button
-                                                            key={emoji}
-                                                            onClick={() => toggleReaction(msg.id, emoji)}
-                                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-base hover:bg-zinc-700 transition-colors ${
-                                                                reactions[msg.id]?.find(r => r.emoji === emoji)?.users.includes(displayName)
-                                                                    ? "bg-orange-500/30"
-                                                                    : ""
-                                                            }`}
-                                                        >
-                                                            {emoji}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                {reactions[msg.id]
+                                                    ?.filter(
+                                                        (r) =>
+                                                            r.users.length > 0,
+                                                    )
+                                                    .map((reaction) => {
+                                                        const hasReacted =
+                                                            reaction.users.includes(
+                                                                displayName,
+                                                            );
+                                                        return (
+                                                            <button
+                                                                key={
+                                                                    reaction.emoji
+                                                                }
+                                                                onClick={() =>
+                                                                    toggleReaction(
+                                                                        msg.id,
+                                                                        reaction.emoji,
+                                                                    )
+                                                                }
+                                                                className={`
+                                                                    flex items-center gap-1 rounded-full transition-all duration-100
+                                                                    min-w-[44px] min-h-[32px] px-2.5 py-1
+                                                                    sm:min-w-[36px] sm:min-h-[28px] sm:px-2 sm:py-0.5
+                                                                    active:scale-95
+                                                                    ${
+                                                                        hasReacted
+                                                                            ? msg.isMe
+                                                                                ? "bg-white/25 text-white"
+                                                                                : "bg-[#FF5500]/25 text-[#FF5500]"
+                                                                            : msg.isMe
+                                                                              ? "bg-white/10 hover:bg-white/20 text-white/80"
+                                                                              : "bg-zinc-700/60 hover:bg-zinc-600/60 text-zinc-300"
+                                                                    }
+                                                                `}
+                                                            >
+                                                                <span className="text-base sm:text-sm">
+                                                                    {
+                                                                        reaction.emoji
+                                                                    }
+                                                                </span>
+                                                                <span className="text-xs font-medium">
+                                                                    {
+                                                                        reaction
+                                                                            .users
+                                                                            .length
+                                                                    }
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
                                             </div>
                                         )}
                                     </div>
@@ -648,44 +795,21 @@ export function InstantRoomChat({
                             <div className="w-1 h-8 bg-orange-500 rounded-full" />
                             <div className="flex-1 min-w-0">
                                 <p className="text-xs text-orange-400 font-medium">
-                                    Replying to {replyingTo.isMe ? "yourself" : replyingTo.sender}
+                                    Replying to{" "}
+                                    {replyingTo.isMe
+                                        ? "yourself"
+                                        : replyingTo.sender}
                                 </p>
-                                <p className="text-xs text-zinc-400 truncate">{replyingTo.content}</p>
+                                <p className="text-xs text-zinc-400 truncate">
+                                    {replyingTo.content}
+                                </p>
                             </div>
                             <button
                                 onClick={() => setReplyingTo(null)}
                                 className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Input */}
-                    <div className="p-3 border-t border-zinc-800">
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="text"
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                onKeyDown={handleKeyPress}
-                                placeholder={
-                                    isConnected
-                                        ? replyingTo ? "Type your reply..." : "Type a message..."
-                                        : "Connecting..."
-                                }
-                                disabled={!isConnected}
-                                className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50"
-                            />
-                            <button
-                                onClick={sendMessage}
-                                disabled={!inputValue.trim() || !isConnected}
-                                className="p-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-orange-500/25 transition-all"
-                            >
                                 <svg
-                                    className="w-5 h-5"
+                                    className="w-4 h-4"
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
@@ -694,12 +818,104 @@ export function InstantRoomChat({
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
                                         strokeWidth={2}
-                                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                                        d="M6 18L18 6M6 6l12 12"
                                     />
                                 </svg>
                             </button>
                         </div>
+                    )}
+
+                    {/* Scroll to bottom FAB */}
+                    <ScrollToBottom
+                        containerRef={messagesContainerRef}
+                        unreadCount={newMessageCount}
+                        onScrollToBottom={resetUnreadCount}
+                    />
+                    {/* Input */}
+                    <div className="p-3 border-t border-zinc-800">
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    aria-label="Message room"
+                                    value={inputValue}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val.length > 10000) return;
+                                        setInputValue(val);
+                                        saveDraft(val);
+                                    }}
+                                    onKeyDown={handleKeyPress}
+                                    placeholder={
+                                        isConnected
+                                            ? replyingTo
+                                                ? "Type your reply..."
+                                                : "Type a message..."
+                                            : "Connecting..."
+                                    }
+                                    disabled={!isConnected}
+                                    maxLength={10000}
+                                    className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50"
+                                />
+                                {inputValue.length > 500 && (
+                                    <p className="text-xs text-zinc-500">
+                                        {inputValue.length.toLocaleString()} /
+                                        10,000
+                                    </p>
+                                )}
+                                <button
+                                    onClick={sendMessage}
+                                    disabled={
+                                        !inputValue.trim() || !isConnected
+                                    }
+                                    className="p-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-orange-500/25 transition-all"
+                                >
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
+                    {/* Message Action Bar */}
+                    <MessageActionBar
+                        isOpen={!!selectedMessage && !!selectedMessageConfig}
+                        onClose={() => {
+                            setSelectedMessage(null);
+                            setSelectedMessageConfig(null);
+                        }}
+                        config={selectedMessageConfig}
+                        callbacks={{
+                            onReaction: selectedMessageConfig
+                                ? (emoji) =>
+                                      toggleReaction(
+                                          selectedMessageConfig.messageId,
+                                          emoji,
+                                      )
+                                : undefined,
+                            onReply: selectedMessageConfig
+                                ? () => {
+                                      const msg = messages.find(
+                                          (m) =>
+                                              m.id ===
+                                              selectedMessageConfig.messageId,
+                                      );
+                                      if (msg) setReplyingTo(msg);
+                                  }
+                                : undefined,
+                            onCopy: () => {},
+                        }}
+                    />
                 </motion.div>
             )}
         </AnimatePresence>

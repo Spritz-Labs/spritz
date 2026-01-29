@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
+import { getDisplayName as getBaseDisplayName } from "@/utils/address";
 
 // Suggested emojis for group icons
 const GROUP_EMOJIS = [
@@ -93,13 +94,14 @@ export function CreateGroupModal({
         }
     };
 
+    // Get display name with priority: nickname > ENS > username > address
     const getDisplayName = (friend: Friend) => {
-        return (
-            friend.nickname ||
-            friend.reachUsername ||
-            friend.ensName ||
-            `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`
-        );
+        return getBaseDisplayName({
+            address: friend.address,
+            ensName: friend.ensName,
+            username: friend.reachUsername,
+            nickname: friend.nickname,
+        }, true); // includeNickname = true for friends
     };
 
     // Close on escape

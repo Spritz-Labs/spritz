@@ -3,7 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
-import { useXMTPContext } from "@/context/WakuProvider";
+import {
+    useXMTPContext,
+    DECRYPTION_FAILED_MARKER,
+} from "@/context/WakuProvider";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { PixelArtShare } from "./PixelArtShare";
@@ -26,6 +29,44 @@ import {
 import { MessageSearch } from "./MessageSearch";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { createLogger } from "@/lib/logger";
+import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { MentionInput } from "./MentionInput";
+import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { fetchOnlineStatuses } from "@/hooks/usePresence";
+import {
+    LocationMessage,
+    isLocationMessage,
+    parseLocationMessage,
+    formatLocationMessage,
+    type LocationData,
+} from "./LocationMessage";
+import {
+    useMutedConversations,
+    useBlockedUsers,
+    useReportUser,
+} from "@/hooks/useMuteBlockReport";
+import {
+    MuteOptionsModal,
+    BlockUserModal,
+    ReportUserModal,
+    ConversationActionsMenu,
+} from "./MuteBlockReportModals";
+import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
+import { ChatSkeleton } from "./ChatSkeleton";
+import { DateDivider } from "./UnreadDivider";
+import {
+    ImageGallery,
+    useImageGallery,
+    extractImagesFromMessages,
+} from "./ImageGallery";
+import { useDraftMessages } from "@/hooks/useDraftMessages";
+import {
+    useMessageEdit,
+    EditIndicator,
+    EditControls,
+} from "@/hooks/useMessageEdit";
+import { SwipeableMessage } from "./SwipeableMessage";
+import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 
 const log = createLogger("Chat");
 
@@ -36,7 +77,7 @@ type ChatModalProps = {
     peerAddress: string; // Can be EVM or Solana address
     peerName?: string | null;
     peerAvatar?: string | null;
-    onMessageSent?: () => void; // Callback when a message is sent
+    onMessageSent?: (messagePreview?: string) => void; // Callback when a message is sent
 };
 
 type Message = {
@@ -50,14 +91,17 @@ type Message = {
 type ChatState = "checking" | "ready" | "error" | "loading";
 
 // Helper to detect if a message is emoji-only (for larger display)
-const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
+const EMOJI_REGEX =
+    /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
 const isEmojiOnly = (text: string): boolean => {
     const trimmed = text.trim();
     if (!trimmed) return false;
     // Check if the message matches emoji-only pattern
     if (!EMOJI_REGEX.test(trimmed)) return false;
     // Count actual emoji characters (excluding spaces and modifiers)
-    const emojiCount = [...trimmed].filter(char => /\p{Emoji}/u.test(char) && !/\d/u.test(char)).length;
+    const emojiCount = [...trimmed].filter(
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+    ).length;
     // Only enlarge if 1-3 emojis
     return emojiCount >= 1 && emojiCount <= 3;
 };
@@ -81,17 +125,40 @@ export function ChatModal({
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null
+        null,
     );
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [showMsgReactions, setShowMsgReactions] = useState<string | null>(
-        null
+        null,
     );
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showSearch, setShowSearch] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
-    const [securityStatus, setSecurityStatus] = useState<{ isSecure?: boolean; isLoading: boolean }>({ isLoading: true });
+    const [selectedMessageConfig, setSelectedMessageConfig] =
+        useState<MessageActionConfig | null>(null);
+    const [securityStatus, setSecurityStatus] = useState<{
+        isSecure?: boolean;
+        isLoading: boolean;
+    }>({ isLoading: true });
+    const [peerOnline, setPeerOnline] = useState(false);
+
+    // Mute/Block/Report state
+    const [showActionsMenu, setShowActionsMenu] = useState(false);
+    const [showMuteModal, setShowMuteModal] = useState(false);
+    const [showBlockModal, setShowBlockModal] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+
+    // Fetch peer online status
+    useEffect(() => {
+        if (peerAddress) {
+            fetchOnlineStatuses([peerAddress.toLowerCase()]).then(
+                (statuses) => {
+                    setPeerOnline(statuses[peerAddress.toLowerCase()] || false);
+                },
+            );
+        }
+    }, [peerAddress]);
 
     // Generate conversation ID for this chat
     const conversationId = [userAddress, peerAddress]
@@ -106,21 +173,73 @@ export function ChatModal({
     // New chat features
     const { peerTyping, handleTyping, stopTyping } = useTypingIndicator(
         userAddress,
-        conversationId
+        conversationId,
     );
-    const { markMessagesRead, getMessageStatus, fetchReadReceipts } = useReadReceipts(
-        userAddress,
-        conversationId
-    );
+    const { markMessagesRead, getMessageStatus, fetchReadReceipts } =
+        useReadReceipts(userAddress, conversationId);
     const {
         reactions: msgReactions,
         fetchReactions: fetchMsgReactions,
         toggleReaction: toggleMsgReaction,
     } = useMessageReactions(userAddress, conversationId);
+
+    // Mute/Block/Report hooks
+    const { isMuted, muteConversation, unmuteConversation, getMuteInfo } =
+        useMutedConversations(userAddress);
+    const { isBlockedByMe, blockUser, unblockUser } =
+        useBlockedUsers(userAddress);
+    const { reportUser, isSubmitting: isReportSubmitting } =
+        useReportUser(userAddress);
+
+    const conversationMuted = isMuted("dm", peerAddress);
+    const peerBlocked = isBlockedByMe(peerAddress);
+    const muteInfo = getMuteInfo("dm", peerAddress);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const isInitialLoadRef = useRef(true);
+    const draftAppliedRef = useRef(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef = useRef<any>(null);
+
+    // Draft messages persistence
+    const { draft, saveDraft, clearDraft } = useDraftMessages(
+        "dm",
+        peerAddress,
+        userAddress,
+    );
+
+    // Image gallery for viewing multiple images
+    const {
+        isOpen: galleryOpen,
+        images: galleryImages,
+        initialIndex: galleryIndex,
+        openGallery,
+        closeGallery,
+    } = useImageGallery();
+
+    // Message edit functionality
+    const {
+        editingMessage,
+        editText,
+        setEditText,
+        canEditMessage,
+        formatEditTimeRemaining,
+        startEditing,
+        cancelEditing,
+        getEditedContent,
+        hasChanges: hasEditChanges,
+        isEditing,
+    } = useMessageEdit();
+
+    // Scroll to bottom with unread badge
+    const {
+        newMessageCount,
+        isAtBottom,
+        onNewMessage,
+        resetUnreadCount,
+        scrollToBottom: scrollToBottomFn,
+    } = useScrollToBottom(messagesContainerRef);
 
     const {
         isInitialized,
@@ -146,25 +265,31 @@ export function ChatModal({
             setSecurityStatus({ isLoading: true });
             return;
         }
-        
+
         let cancelled = false;
-        
+
         const checkSecurity = async () => {
             try {
                 const status = await getConversationSecurityStatus(peerAddress);
                 if (!cancelled) {
-                    setSecurityStatus({ isSecure: status.isSecure, isLoading: false });
+                    setSecurityStatus({
+                        isSecure: status.isSecure,
+                        isLoading: false,
+                    });
                 }
             } catch (err) {
                 log.error("[Chat] Failed to check security status:", err);
                 if (!cancelled) {
-                    setSecurityStatus({ isSecure: undefined, isLoading: false });
+                    setSecurityStatus({
+                        isSecure: undefined,
+                        isLoading: false,
+                    });
                 }
             }
         };
-        
+
         checkSecurity();
-        
+
         return () => {
             cancelled = true;
         };
@@ -176,14 +301,80 @@ export function ChatModal({
 
     const displayName = peerName || formatAddress(peerAddress);
 
-    // Scroll to bottom when messages change
+    // Apply draft when modal opens (once per open)
+    useEffect(() => {
+        if (!isOpen) {
+            draftAppliedRef.current = false;
+            return;
+        }
+        if (draft?.text && !draftAppliedRef.current) {
+            setNewMessage(draft.text);
+            draftAppliedRef.current = true;
+            if (draft.replyToId) {
+                const replyTarget = messages.find(
+                    (m) => m.id === draft.replyToId,
+                );
+                if (replyTarget) setReplyingTo(replyTarget);
+            }
+        }
+    }, [isOpen, draft?.text, draft?.replyToId, messages]);
+
+    // Escape to close modal (or cancel reply / close sub-modals first)
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            if (replyingTo) {
+                setReplyingTo(null);
+                return;
+            }
+            if (showSearch || showActionsMenu || showMuteModal || showBlockModal || showReportModal) {
+                setShowSearch(false);
+                setShowActionsMenu(false);
+                setShowMuteModal(false);
+                setShowBlockModal(false);
+                setShowReportModal(false);
+                return;
+            }
+            onClose();
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose, replyingTo, showSearch, showActionsMenu, showMuteModal, showBlockModal, showReportModal]);
+
+    // Save draft when message changes (debounced in hook)
+    useEffect(() => {
+        if (isOpen) {
+            saveDraft(
+                newMessage,
+                replyingTo?.id,
+                replyingTo?.content?.slice(0, 50),
+            );
+        }
+    }, [newMessage, replyingTo, isOpen, saveDraft]);
+
+    // Track new messages for unread badge when not at bottom
+    useEffect(() => {
+        if (messages.length > 0 && !isAtBottom) {
+            onNewMessage();
+        }
+    }, [messages.length]);
+
+    // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
     useEffect(() => {
         if (messages.length > 0) {
-            // Use instant scroll for initial load, smooth for new messages
-            const behavior = isInitialLoadRef.current ? "instant" : "smooth";
-            messagesEndRef.current?.scrollIntoView({ behavior });
-            if (isInitialLoadRef.current) {
-                isInitialLoadRef.current = false;
+            const container = document.querySelector("[data-chat-messages]");
+            if (container) {
+                // With column-reverse, scrollTop=0 is at the bottom
+                if (isInitialLoadRef.current) {
+                    container.scrollTop = 0;
+                    isInitialLoadRef.current = false;
+                } else {
+                    // Smooth scroll for new messages if near bottom
+                    if (container.scrollTop < 300) {
+                        container.scrollTop = 0;
+                    }
+                }
             }
         }
     }, [messages]);
@@ -195,6 +386,41 @@ export function ChatModal({
         }
     }, [isOpen, isInitialized, isInitializing, initialize]);
 
+    // Lock body scroll when modal is open to prevent scroll bleed
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = "hidden";
+            return () => {
+                document.body.style.overflow = "";
+            };
+        }
+    }, [isOpen]);
+
+    // Track current peer to detect changes
+    const previousPeerRef = useRef<string | null>(null);
+
+    // Clear messages when peer changes (prevent showing wrong user's messages)
+    useEffect(() => {
+        if (
+            peerAddress &&
+            previousPeerRef.current &&
+            previousPeerRef.current !== peerAddress
+        ) {
+            console.log(
+                "[Chat] Peer changed from",
+                previousPeerRef.current,
+                "to",
+                peerAddress,
+                "- clearing messages",
+            );
+            setMessages([]);
+            setChatError(null);
+            setChatState("checking");
+            isInitialLoadRef.current = true;
+        }
+        previousPeerRef.current = peerAddress;
+    }, [peerAddress]);
+
     // Reset state when modal closes
     useEffect(() => {
         if (isOpen) {
@@ -205,10 +431,11 @@ export function ChatModal({
             setActiveChatPeer(peerAddress);
             // Also explicitly mark as read to clear any existing unread count
             markAsRead(peerAddress);
+            // With column-reverse, scrollTop=0 is at bottom (no scroll needed)
             console.log(
                 "[Chat] Opened chat with",
                 peerAddress,
-                "- marking as read"
+                "- marking as read",
             );
         } else {
             setMessages([]);
@@ -235,11 +462,11 @@ export function ChatModal({
             try {
                 // Quick check in background (non-blocking)
                 if (!bypassCheck) {
-                    canMessage(peerAddress).then(canChat => {
+                    canMessage(peerAddress).then((canChat) => {
                         if (!canChat) {
                             setChatState("error");
                             setChatError(
-                                `${displayName} hasn't enabled chat yet. They need to click "Enable Chat" in Spritz first.`
+                                `${displayName} hasn't enabled chat yet. They need to click "Enable Chat" in Spritz first.`,
                             );
                         }
                     });
@@ -252,7 +479,7 @@ export function ChatModal({
                     const existingMessages = await getMessages(peerAddress);
                     console.log(
                         "[Chat] Got messages:",
-                        existingMessages.length
+                        existingMessages.length,
                     );
 
                     // Filter and format messages
@@ -276,21 +503,25 @@ export function ChatModal({
                     // Fetch read receipts for messages we sent
                     if (formattedMessages.length > 0) {
                         const myMessageIds = formattedMessages
-                            .filter((m: Message) => m.senderAddress.toLowerCase() === userAddress.toLowerCase())
+                            .filter(
+                                (m: Message) =>
+                                    m.senderAddress.toLowerCase() ===
+                                    userAddress.toLowerCase(),
+                            )
                             .map((m: Message) => m.id);
                         if (myMessageIds.length > 0) {
                             fetchReadReceipts(myMessageIds);
                         }
-                        
+
                         // Mark all loaded messages as read in the database
                         markMessagesRead(
-                            formattedMessages.map((m: Message) => m.id)
+                            formattedMessages.map((m: Message) => m.id),
                         );
                     }
                 } catch (loadErr) {
                     console.log(
                         "[Chat] Failed to load messages, continuing anyway:",
-                        loadErr
+                        loadErr,
                     );
                 }
 
@@ -306,7 +537,7 @@ export function ChatModal({
                         (message: unknown) => {
                             console.log(
                                 "[Chat] Received streamed message:",
-                                message
+                                message,
                             );
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const msg = message as any;
@@ -323,7 +554,7 @@ export function ChatModal({
                                 content: msg.content,
                                 senderAddress: msg.senderInboxId,
                                 sentAt: new Date(
-                                    Number(msg.sentAtNs) / 1000000
+                                    Number(msg.sentAtNs) / 1000000,
                                 ),
                             };
                             setMessages((prev) => {
@@ -334,14 +565,14 @@ export function ChatModal({
                             markAsRead(peerAddress);
                             // Mark the new message as read in the database
                             markMessagesRead([newMsg.id]);
-                        }
+                        },
                     );
                     log.debug("[Chat] Stream setup complete:", stream);
                     streamRef.current = stream;
                 } catch (streamErr) {
                     console.log(
                         "[Chat] Failed to setup stream, relying on polling:",
-                        streamErr
+                        streamErr,
                     );
                 }
             } catch (error) {
@@ -382,7 +613,7 @@ export function ChatModal({
                 console.log(
                     "[Chat] Polling returned",
                     newMessages.length,
-                    "messages"
+                    "messages",
                 );
 
                 if (newMessages.length > 0) {
@@ -397,7 +628,7 @@ export function ChatModal({
                                     "[Chat] Filtered out message with invalid content:",
                                     msg.id,
                                     "content type:",
-                                    typeof msg.content
+                                    typeof msg.content,
                                 );
                             }
                             return valid;
@@ -412,14 +643,14 @@ export function ChatModal({
                     console.log(
                         "[Chat] After content filter:",
                         formattedMessages.length,
-                        "messages"
+                        "messages",
                     );
 
                     setMessages((prev) => {
                         // Merge new messages, avoiding duplicates
                         const existingIds = new Set(prev.map((m) => m.id));
                         const newOnes = formattedMessages.filter(
-                            (m) => !existingIds.has(m.id)
+                            (m) => !existingIds.has(m.id),
                         );
 
                         console.log(
@@ -428,7 +659,7 @@ export function ChatModal({
                             "formatted:",
                             formattedMessages.length,
                             "new messages:",
-                            newOnes.length
+                            newOnes.length,
                         );
 
                         if (newOnes.length > 0) {
@@ -438,31 +669,39 @@ export function ChatModal({
                                 newOnes.map((m) => ({
                                     id: m.id,
                                     from: m.senderAddress?.slice(0, 10),
-                                }))
+                                })),
                             );
-                            
+
                             // Mark new messages as read immediately since chat is open
                             markMessagesRead(newOnes.map((m) => m.id));
-                            
+
                             return [...prev, ...newOnes].sort(
                                 (a, b) =>
-                                    a.sentAt.getTime() - b.sentAt.getTime()
+                                    a.sentAt.getTime() - b.sentAt.getTime(),
                             );
                         }
                         return prev;
                     });
-                    
+
                     // Also refresh read receipts for our sent messages
                     const myMsgIds = formattedMessages
-                        .filter((m) => m.senderAddress.toLowerCase() === userAddress.toLowerCase())
+                        .filter(
+                            (m) =>
+                                m.senderAddress.toLowerCase() ===
+                                userAddress.toLowerCase(),
+                        )
                         .map((m) => m.id);
                     if (myMsgIds.length > 0) {
                         fetchReadReceipts(myMsgIds);
                     }
-                    
+
                     // Mark ALL messages from peer as read (in case any were missed)
                     const peerMsgIds = formattedMessages
-                        .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
+                        .filter(
+                            (m) =>
+                                m.senderAddress.toLowerCase() !==
+                                userAddress.toLowerCase(),
+                        )
                         .map((m) => m.id);
                     if (peerMsgIds.length > 0) {
                         markMessagesRead(peerMsgIds);
@@ -476,23 +715,39 @@ export function ChatModal({
         }, 3000); // Poll every 3 seconds
 
         return () => clearInterval(pollInterval);
-    }, [isOpen, isInitialized, chatState, peerAddress, getMessages, userAddress, fetchReadReceipts, markMessagesRead, markAsRead]);
+    }, [
+        isOpen,
+        isInitialized,
+        chatState,
+        peerAddress,
+        getMessages,
+        userAddress,
+        fetchReadReceipts,
+        markMessagesRead,
+        markAsRead,
+    ]);
 
     // Reference to track sent message IDs for read receipt checking
     const sentMessageIdsRef = useRef<string[]>([]);
     // Reference to track peer message IDs for marking as read
     const peerMessageIdsRef = useRef<string[]>([]);
-    
+
     // Update message ID refs when messages change
     useEffect(() => {
         const myMsgIds = messages
-            .filter((m) => m.senderAddress.toLowerCase() === userAddress.toLowerCase())
+            .filter(
+                (m) =>
+                    m.senderAddress.toLowerCase() === userAddress.toLowerCase(),
+            )
             .filter((m) => m.status !== "pending" && m.status !== "failed")
             .map((m) => m.id);
         sentMessageIdsRef.current = myMsgIds;
-        
+
         const peerMsgIds = messages
-            .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
+            .filter(
+                (m) =>
+                    m.senderAddress.toLowerCase() !== userAddress.toLowerCase(),
+            )
             .map((m) => m.id);
         peerMessageIdsRef.current = peerMsgIds;
     }, [messages, userAddress]);
@@ -504,7 +759,11 @@ export function ChatModal({
         const checkReadReceipts = () => {
             const myMsgIds = sentMessageIdsRef.current;
             if (myMsgIds.length > 0) {
-                log.debug("[Chat] Checking read receipts for", myMsgIds.length, "sent messages");
+                log.debug(
+                    "[Chat] Checking read receipts for",
+                    myMsgIds.length,
+                    "sent messages",
+                );
                 fetchReadReceipts(myMsgIds);
             }
         };
@@ -529,7 +788,11 @@ export function ChatModal({
         const markAllAsRead = () => {
             const peerMsgIds = peerMessageIdsRef.current;
             if (peerMsgIds.length > 0) {
-                log.debug("[Chat] Marking", peerMsgIds.length, "peer messages as read");
+                log.debug(
+                    "[Chat] Marking",
+                    peerMsgIds.length,
+                    "peer messages as read",
+                );
                 markMessagesRead(peerMsgIds);
                 // Also clear unread count in Waku provider
                 markAsRead(peerAddress);
@@ -549,23 +812,36 @@ export function ChatModal({
     }, [isOpen, markMessagesRead, markAsRead, peerAddress]);
 
     // Toggle message selection for mobile tap actions
-    const handleMessageTap = useCallback((messageId: string) => {
-        setSelectedMessage(prev => prev === messageId ? null : messageId);
-        setShowMsgReactions(null);
-    }, []);
+    const handleMessageTap = useCallback(
+        (messageId: string, config: MessageActionConfig) => {
+            if (selectedMessage === messageId) {
+                setSelectedMessage(null);
+                setSelectedMessageConfig(null);
+            } else {
+                setSelectedMessage(messageId);
+                setSelectedMessageConfig(config);
+            }
+            setShowMsgReactions(null);
+        },
+        [selectedMessage],
+    );
 
     // Close selected message when clicking outside
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
-            if (!target.closest('[data-message-actions]') && !target.closest('[data-message-bubble]')) {
+            if (
+                !target.closest("[data-message-actions]") &&
+                !target.closest("[data-message-bubble]")
+            ) {
                 setSelectedMessage(null);
                 setShowMsgReactions(null);
             }
         };
         if (selectedMessage) {
-            document.addEventListener('click', handleClickOutside);
-            return () => document.removeEventListener('click', handleClickOutside);
+            document.addEventListener("click", handleClickOutside);
+            return () =>
+                document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedMessage]);
 
@@ -587,7 +863,7 @@ export function ChatModal({
         }
 
         const tempId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
+
         // Immediately add message to UI with pending status (optimistic update)
         const pendingMessage: Message = {
             id: tempId,
@@ -597,24 +873,27 @@ export function ChatModal({
             status: "pending",
         };
         setMessages((prev) => [...prev, pendingMessage]);
-        
-        // Clear input immediately so user can type next message
-        setNewMessage("");
-        setReplyingTo(null); // Clear reply state
+
         setChatError(null);
-        
-        // Stop typing indicator
+        const prevMessage = newMessage;
+        const prevReplyingTo = replyingTo;
+        setNewMessage("");
+        setReplyingTo(null);
+        clearDraft();
         stopTyping();
-        
-        // Send in background (non-blocking)
+
         try {
             const result = await sendMessage(peerAddress, messageContent);
             if (result.success) {
-                // Track message sent for analytics
                 trackMessageSent();
-                // Notify parent that a message was sent (for sorting)
-                onMessageSent?.();
-                // Update message status to sent
+                const preview = messageContent.startsWith("[GIF]")
+                    ? "🎬 GIF"
+                    : messageContent.startsWith("[PIXEL_ART]")
+                      ? "🎨 Pixel Art"
+                      : messageContent.startsWith("[LOCATION]")
+                        ? "📍 Location"
+                        : messageContent;
+                onMessageSent?.(preview);
                 setMessages((prev) =>
                     prev.map((m) =>
                         m.id === tempId
@@ -623,33 +902,35 @@ export function ChatModal({
                                   id: result.message?.id || tempId,
                                   status: "sent",
                               }
-                            : m
-                    )
+                            : m,
+                    ),
                 );
             } else {
-                // Mark as failed
                 setMessages((prev) =>
                     prev.map((m) =>
-                        m.id === tempId ? { ...m, status: "failed" } : m
-                    )
+                        m.id === tempId ? { ...m, status: "failed" } : m,
+                    ),
                 );
                 setChatError(
-                    `Failed to send: ${result.error || "Unknown error"}`
+                    `Failed to send: ${result.error || "Unknown error"}`,
                 );
+                setNewMessage(prevMessage);
+                setReplyingTo(prevReplyingTo);
             }
         } catch (error) {
             console.error("[Chat] Send error:", error);
-            // Mark as failed
             setMessages((prev) =>
                 prev.map((m) =>
-                    m.id === tempId ? { ...m, status: "failed" } : m
-                )
+                    m.id === tempId ? { ...m, status: "failed" } : m,
+                ),
             );
             setChatError(
                 `Failed to send: ${
                     error instanceof Error ? error.message : "Unknown error"
-                }`
+                }`,
             );
+            setNewMessage(prevMessage);
+            setReplyingTo(prevReplyingTo);
         }
     }, [
         newMessage,
@@ -660,6 +941,7 @@ export function ChatModal({
         stopTyping,
         replyingTo,
         peerName,
+        clearDraft,
     ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -668,6 +950,20 @@ export function ChatModal({
             handleSend();
         }
     };
+
+    // Handle sending GIF
+    const handleSendGif = useCallback(
+        async (gifUrl: string) => {
+            if (!gifUrl) return;
+
+            try {
+                await sendMessage(peerAddress, `[GIF]${gifUrl}`);
+            } catch (err) {
+                console.error("Failed to send GIF:", err);
+            }
+        },
+        [sendMessage, peerAddress],
+    );
 
     // Handle sending pixel art
     const handleSendPixelArt = useCallback(
@@ -702,8 +998,8 @@ export function ChatModal({
 
                 // Track message sent for analytics
                 trackMessageSent();
-                // Notify parent that a message was sent (for sorting)
-                onMessageSent?.();
+                // Notify parent that a message was sent (for sorting) with preview
+                onMessageSent?.("🎨 Pixel Art");
 
                 // Add the sent pixel art message to the UI immediately
                 if (result.message && userAddress) {
@@ -722,13 +1018,13 @@ export function ChatModal({
                 setChatError(
                     `Failed to send pixel art: ${
                         error instanceof Error ? error.message : "Unknown error"
-                    }`
+                    }`,
                 );
             } finally {
                 setIsUploadingPixelArt(false);
             }
         },
-        [userAddress, peerAddress, sendMessage, trackMessageSent]
+        [userAddress, peerAddress, sendMessage, trackMessageSent],
     );
 
     // Check if a message is pixel art
@@ -736,6 +1032,10 @@ export function ChatModal({
         content.startsWith("[PIXEL_ART]");
     const getPixelArtUrl = (content: string) =>
         content.replace("[PIXEL_ART]", "");
+
+    // Check if a message is a GIF
+    const isGifMessage = (content: string) => content.startsWith("[GIF]");
+    const getGifUrl = (content: string) => content.replace("[GIF]", "");
 
     // Fetch reactions for pixel art messages
     useEffect(() => {
@@ -803,7 +1103,9 @@ export function ChatModal({
                 // Check if we should show above or below
                 const spaceAbove = parentRect.top;
                 const spaceBelow = viewportHeight - parentRect.bottom;
-                const showAbove = spaceAbove >= pickerRect.height + padding || spaceBelow < spaceAbove;
+                const showAbove =
+                    spaceAbove >= pickerRect.height + padding ||
+                    spaceBelow < spaceAbove;
 
                 // Horizontal positioning
                 if (isOwn) {
@@ -872,7 +1174,7 @@ export function ChatModal({
                 <div className="flex gap-1">
                     {reactionEmojis.map((emoji) => {
                         const currentReaction = reactions?.find(
-                            (r: any) => r.emoji === emoji
+                            (r: any) => r.emoji === emoji,
                         );
                         return (
                             <button
@@ -916,140 +1218,199 @@ export function ChatModal({
                                 ? "inset-0"
                                 : "left-4 right-4 top-16 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
-                        style={isFullscreen ? { paddingTop: 'env(safe-area-inset-top)' } : undefined}
                     >
-                        <div className={`bg-zinc-900 flex flex-col h-full overflow-hidden ${
-                            isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"
-                        }`}>
-                            {/* Header */}
-                            <div className="flex items-center gap-3 p-4 border-b border-zinc-800">
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                                >
-                                    <svg
-                                        className="w-5 h-5 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M15 19l-7-7 7-7"
+                        <div
+                            className={`bg-zinc-900 flex flex-col min-h-0 h-full overflow-hidden ${
+                                isFullscreen
+                                    ? ""
+                                    : "border border-zinc-800 rounded-2xl shadow-2xl"
+                            }`}
+                            style={
+                                isFullscreen
+                                    ? {
+                                          paddingTop:
+                                              "env(safe-area-inset-top)",
+                                          paddingLeft:
+                                              "env(safe-area-inset-left)",
+                                          paddingRight:
+                                              "env(safe-area-inset-right)",
+                                      }
+                                    : undefined
+                            }
+                        >
+                            {/* Header - unified mobile-first design */}
+                            <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
+                                {/* Avatar with online status */}
+                                <div className="shrink-0 ml-1 relative">
+                                    {peerAvatar ? (
+                                        <img
+                                            src={peerAvatar}
+                                            alt={displayName}
+                                            className="w-9 h-9 rounded-full object-cover"
                                         />
-                                    </svg>
-                                </button>
-                                {peerAvatar ? (
-                                    <img
-                                        src={peerAvatar}
-                                        alt={displayName}
-                                        className="w-10 h-10 rounded-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
-                                        <span className="text-white font-bold">
-                                            {displayName[0].toUpperCase()}
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="text-white font-semibold truncate">
+                                    ) : (
+                                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
+                                            <span className="text-white font-bold text-sm">
+                                                {displayName[0].toUpperCase()}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {/* Online status dot */}
+                                    {peerOnline && (
+                                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
+                                    )}
+                                </div>
+
+                                {/* Title area - takes remaining space */}
+                                <div className="flex-1 min-w-0 pr-1">
+                                    <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                         {displayName}
                                     </h2>
                                     <p className="text-zinc-500 text-xs font-mono truncate">
                                         {formatAddress(peerAddress)}
                                     </p>
                                 </div>
-                                {/* Search Button */}
-                                <button
-                                    onClick={() => setShowSearch(true)}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
-                                    title="Search messages"
-                                >
-                                    <svg
-                                        className="w-5 h-5"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                        />
-                                    </svg>
-                                </button>
-                                {/* Fullscreen Toggle */}
-                                <button
-                                    onClick={() => setIsFullscreen(!isFullscreen)}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
-                                    title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                                >
-                                    {isFullscreen ? (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-                                        </svg>
-                                    ) : (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                                        </svg>
-                                    )}
-                                </button>
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                                >
-                                    <svg
-                                        className="w-6 h-6 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
-                            </div>
 
-                            {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                                {isInitializing && (
-                                    <div className="flex items-center justify-center h-full">
-                                        <div className="text-center">
+                                {/* Action buttons - compact on mobile */}
+                                <div className="shrink-0 flex items-center">
+                                    {/* Muted indicator */}
+                                    {conversationMuted && (
+                                        <span
+                                            className="p-2 text-zinc-500"
+                                            title="Muted"
+                                        >
                                             <svg
-                                                className="animate-spin h-8 w-8 text-[#FF5500] mx-auto mb-3"
-                                                viewBox="0 0 24 24"
+                                                className="w-4 h-4"
                                                 fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
                                             >
-                                                <circle
-                                                    className="opacity-25"
-                                                    cx="12"
-                                                    cy="12"
-                                                    r="10"
-                                                    stroke="currentColor"
-                                                    strokeWidth="4"
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
                                                 />
                                                 <path
-                                                    className="opacity-75"
-                                                    fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
                                                 />
                                             </svg>
-                                            <p className="text-zinc-400">
-                                                Initializing Waku...
+                                        </span>
+                                    )}
+                                    <button
+                                        onClick={() => setShowSearch(true)}
+                                        className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
+                                        aria-label="Search messages"
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                            />
+                                        </svg>
+                                    </button>
+                                    {/* More options button */}
+                                    <button
+                                        onClick={() => setShowActionsMenu(true)}
+                                        className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
+                                        aria-label="More options"
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                            />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            setIsFullscreen(!isFullscreen)
+                                        }
+                                        className="hidden sm:flex p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
+                                        aria-label={
+                                            isFullscreen
+                                                ? "Exit fullscreen"
+                                                : "Fullscreen"
+                                        }
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d={
+                                                    isFullscreen
+                                                        ? "M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                                                        : "M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+                                                }
+                                            />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        onClick={onClose}
+                                        className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
+                                        aria-label="Close chat"
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Messages - flex-col-reverse so newest at bottom */}
+                            <div
+                                ref={messagesContainerRef}
+                                role="log"
+                                aria-label="Chat messages"
+                                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 flex flex-col-reverse"
+                                data-chat-messages
+                            >
+                                {isInitializing && (
+                                    <div className="flex flex-col h-full">
+                                        <div className="text-center py-4">
+                                            <p className="text-zinc-400 text-sm">
+                                                Initializing secure
+                                                connection...
                                             </p>
-                                            <p className="text-zinc-500 text-sm mt-1">
+                                            <p className="text-zinc-500 text-xs mt-1">
                                                 Please sign the message in your
                                                 wallet
                                             </p>
                                         </div>
+                                        <ChatSkeleton messageCount={6} />
                                     </div>
                                 )}
 
@@ -1103,473 +1464,879 @@ export function ChatModal({
                                         </div>
                                     )}
 
-                                {/* Deduplicate messages by ID before rendering */}
-                                {Array.from(
-                                    new Map(
-                                        messages.map((m) => [m.id, m])
-                                    ).values()
-                                ).map((msg) => {
-                                    // Compare addresses case-insensitively
-                                    const isOwn = userAddress
-                                        ? msg.senderAddress?.toLowerCase() ===
-                                          userAddress.toLowerCase()
-                                        : false;
-                                    const isPixelArt = isPixelArtMessage(
-                                        msg.content
-                                    );
+                                {/* Messages container - flows bottom to top with column-reverse */}
+                                <div className="space-y-3">
+                                    {/* Deduplicate messages by ID and filter out decryption failures */}
+                                    {(() => {
+                                        const deduped = Array.from(
+                                            new Map(
+                                                messages
+                                                    .filter(
+                                                        (m) =>
+                                                            m.content !==
+                                                            DECRYPTION_FAILED_MARKER,
+                                                    )
+                                                    .map((m) => [m.id, m]),
+                                            ).values(),
+                                        );
+                                        let lastDate: string | null = null;
 
-                                    return (
-                                        <motion.div
-                                            key={msg.id}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className={`flex items-end gap-2 ${
-                                                isOwn
-                                                    ? "justify-end"
-                                                    : "justify-start"
-                                            }`}
-                                        >
-                                            {/* Peer avatar for incoming messages */}
-                                            {!isOwn && (
-                                                <div className="flex-shrink-0 mb-1">
-                                                    {peerAvatar ? (
-                                                        <img
-                                                            src={peerAvatar}
-                                                            alt=""
-                                                            className="w-7 h-7 rounded-full object-cover"
+                                        return deduped.map((msg, index) => {
+                                            // Compare addresses case-insensitively
+                                            const isOwn = userAddress
+                                                ? msg.senderAddress?.toLowerCase() ===
+                                                  userAddress.toLowerCase()
+                                                : false;
+                                            const isPixelArt =
+                                                isPixelArtMessage(msg.content);
+                                            const isGif = isGifMessage(
+                                                msg.content,
+                                            );
+                                            const isLocation =
+                                                isLocationMessage(msg.content);
+                                            const locationData = isLocation
+                                                ? parseLocationMessage(
+                                                      msg.content,
+                                                  )
+                                                : null;
+
+                                            // Check if we need a date divider
+                                            const msgDate =
+                                                msg.sentAt.toDateString();
+                                            const showDateDivider =
+                                                msgDate !== lastDate;
+                                            lastDate = msgDate;
+
+                                            return (
+                                                <div key={msg.id}>
+                                                    {/* Date Divider */}
+                                                    {showDateDivider && (
+                                                        <DateDivider
+                                                            date={msg.sentAt}
+                                                            className="my-4"
                                                         />
-                                                    ) : (
-                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-bold">
-                                                            {peerName?.[0]?.toUpperCase() || peerAddress.slice(2, 4).toUpperCase()}
-                                                        </div>
                                                     )}
-                                                </div>
-                                            )}
-                                            <div
-                                                className={`${isFullscreen ? "max-w-[85%]" : "max-w-[70%]"} rounded-2xl px-4 py-2 ${
-                                                    isOwn
-                                                        ? msg.status === "failed"
-                                                            ? "bg-red-500/80 text-white rounded-br-md"
-                                                            : msg.status === "pending"
-                                                            ? "bg-[#FF5500]/70 text-white rounded-br-md"
-                                                            : "bg-[#FF5500] text-white rounded-br-md"
-                                                        : "bg-zinc-800 text-white rounded-bl-md"
-                                                }`}
-                                            >
-                                                {isPixelArt ? (
-                                                    <div className="pixel-art-message relative group">
-                                                        <PixelArtImage
-                                                            src={getPixelArtUrl(
-                                                                msg.content
-                                                            )}
-                                                            onClick={() =>
-                                                                setViewingImage(
-                                                                    getPixelArtUrl(
-                                                                        msg.content
-                                                                    )
-                                                                )
-                                                            }
-                                                            size="md"
-                                                        />
 
-                                                        {/* Quick Share Actions - shows on hover/tap */}
-                                                        <div 
-                                                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            <PixelArtShare
-                                                                imageUrl={getPixelArtUrl(msg.content)}
-                                                                showQuickActions
-                                                            />
-                                                        </div>
-
-                                                        {/* Reactions Display */}
-                                                        {reactions[
-                                                            getPixelArtUrl(
-                                                                msg.content
-                                                            )
-                                                        ]?.some(
-                                                            (r) => r.count > 0
-                                                        ) && (
-                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                {reactions[
-                                                                    getPixelArtUrl(
-                                                                        msg.content
-                                                                    )
-                                                                ]
-                                                                    ?.filter(
-                                                                        (r) =>
-                                                                            r.count >
-                                                                            0
-                                                                    )
-                                                                    .map(
-                                                                        (
-                                                                            reaction
-                                                                        ) => (
-                                                                            <button
-                                                                                key={
-                                                                                    reaction.emoji
-                                                                                }
-                                                                                onClick={() =>
-                                                                                    handleReaction(
-                                                                                        getPixelArtUrl(
-                                                                                            msg.content
-                                                                                        ),
-                                                                                        reaction.emoji
-                                                                                    )
-                                                                                }
-                                                                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                                    reaction.hasReacted
-                                                                                        ? "bg-[#FB8D22]/30 text-[#FFF0E0]"
-                                                                                        : "bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50"
-                                                                                }`}
-                                                                            >
-                                                                                <span>
-                                                                                    {
-                                                                                        reaction.emoji
-                                                                                    }
-                                                                                </span>
-                                                                                <span className="text-[10px]">
-                                                                                    {
-                                                                                        reaction.count
-                                                                                    }
-                                                                                </span>
-                                                                            </button>
-                                                                        )
-                                                                    )}
-                                                            </div>
-                                                        )}
-
-                                                        {/* Add Reaction Button */}
-                                                        <div className="relative mt-1">
-                                                            <button
-                                                                onClick={() =>
-                                                                    setShowReactionPicker(
-                                                                        showReactionPicker ===
-                                                                            getPixelArtUrl(
-                                                                                msg.content
-                                                                            )
-                                                                            ? null
-                                                                            : getPixelArtUrl(
-                                                                                  msg.content
-                                                                              )
-                                                                    )
-                                                                }
-                                                                className={`text-xs px-2 py-1 rounded-full transition-colors ${
-                                                                    isOwn
-                                                                        ? "text-[#FFF0E0] hover:bg-[#FF5500]/30"
-                                                                        : "text-zinc-400 hover:bg-zinc-700"
-                                                                }`}
+                                                    {/* Swipeable + Unified Menu Wrapper */}
+                                                    <SwipeableMessage
+                                                        onSwipeRight={() =>
+                                                            setReplyingTo(msg)
+                                                        }
+                                                        disabled={
+                                                            typeof window !==
+                                                                "undefined" &&
+                                                            window.innerWidth >
+                                                                768
+                                                        }
+                                                        leftAction={
+                                                            <svg
+                                                                className="w-5 h-5"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
                                                             >
-                                                                + React
-                                                            </button>
-
-                                                            {/* Reaction Picker */}
-                                                            <AnimatePresence>
-                                                                {showReactionPicker ===
-                                                                    getPixelArtUrl(
-                                                                        msg.content
-                                                                    ) && (
-                                                                    <PixelArtReactionPickerWrapper
-                                                                        isOwn={isOwn}
-                                                                        onReaction={(emoji) =>
-                                                                            handleReaction(
-                                                                                getPixelArtUrl(
-                                                                                    msg.content
-                                                                                ),
-                                                                                emoji
-                                                                            )
-                                                                        }
-                                                                        reactions={
-                                                                            reactions[
-                                                                                getPixelArtUrl(
-                                                                                    msg.content
-                                                                                )
-                                                                            ]
-                                                                        }
-                                                                        reactionEmojis={REACTION_EMOJIS}
-                                                                    />
-                                                                )}
-                                                            </AnimatePresence>
-                                                        </div>
-
-                                                        <p
-                                                            className={`text-xs mt-1 ${
-                                                                isOwn
-                                                                    ? "text-[#FFF0E0]"
-                                                                    : "text-zinc-500"
-                                                            }`}
-                                                        >
-                                                            🎨 Pixel Art •{" "}
-                                                            {msg.sentAt.toLocaleTimeString(
-                                                                [],
-                                                                {
-                                                                    hour: "2-digit",
-                                                                    minute: "2-digit",
-                                                                }
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                ) : (
-                                                    <div 
-                                                        data-message-bubble
-                                                        onClick={() => handleMessageTap(msg.id)}
-                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/30 rounded-lg -m-1 p-1" : ""}`}
-                                                    >
-                                                        {/* Reply Preview - Check for reply pattern in message content */}
-                                                        {msg.content.startsWith("↩️ ") && msg.content.includes("\n\n") && (
-                                                            <div 
-                                                                className={`mb-2 p-2 rounded-lg ${
-                                                                    isOwn 
-                                                                        ? "bg-white/10 border-l-2 border-white/40" 
-                                                                        : "bg-zinc-700/50 border-l-2 border-orange-500"
-                                                                }`}
-                                                            >
-                                                                <div className="flex items-center gap-1.5 text-xs font-medium">
-                                                                    <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                    </svg>
-                                                                    <span className={isOwn ? "text-white/80" : "text-orange-400"}>
-                                                                        {msg.content.split(":")[0].replace("↩️ ", "")}
-                                                                    </span>
-                                                                </div>
-                                                                <p className={`text-xs mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}>
-                                                                    {msg.content.split("\n\n")[0].split(": \"")[1]?.replace(/\"$/, "") || ""}
-                                                                </p>
-                                                            </div>
-                                                        )}
-                                                        
-                                                        {/* Message Text */}
-                                                        {(() => {
-                                                            const displayContent = msg.content.startsWith("↩️ ") && msg.content.includes("\n\n") 
-                                                                ? msg.content.split("\n\n").slice(1).join("\n\n")
-                                                                : msg.content;
-                                                            const emojiOnly = isEmojiOnly(displayContent);
-                                                            return (
-                                                                <p className={`break-words whitespace-pre-wrap ${emojiOnly ? "text-4xl leading-tight" : ""}`}>
-                                                                    {displayContent}
-                                                                </p>
-                                                            );
-                                                        })()}
-
-                                                        {/* Link Previews */}
-                                                        {detectUrls(msg.content)
-                                                            .slice(0, 1)
-                                                            .map((url) => (
-                                                                <LinkPreview
-                                                                    key={url}
-                                                                    url={url}
-                                                                    compact
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
                                                                 />
-                                                            ))}
-
-                                                        {/* Message Reactions */}
-                                                        {msgReactions[
-                                                            msg.id
-                                                        ]?.some(
-                                                            (r) => r.count > 0
-                                                        ) && (
-                                                            <div className="flex flex-wrap gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
-                                                                {msgReactions[
-                                                                    msg.id
-                                                                ]
-                                                                    ?.filter(
-                                                                        (r) =>
-                                                                            r.count >
-                                                                            0
-                                                                    )
-                                                                    .map(
-                                                                        (
-                                                                            reaction
-                                                                        ) => (
-                                                                            <button
-                                                                                key={
-                                                                                    reaction.emoji
-                                                                                }
-                                                                                onClick={() => {
-                                                                                    toggleMsgReaction(
-                                                                                        msg.id,
-                                                                                        reaction.emoji
-                                                                                    );
-                                                                                    setSelectedMessage(null);
-                                                                                }}
-                                                                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
-                                                                                    reaction.hasReacted
-                                                                                        ? "bg-[#FB8D22]/30"
-                                                                                        : "bg-zinc-700/50 hover:bg-zinc-600/50"
-                                                                                }`}
-                                                                            >
-                                                                                <span>
-                                                                                    {
-                                                                                        reaction.emoji
-                                                                                    }
-                                                                                </span>
-                                                                                <span className="text-[10px]">
-                                                                                    {
-                                                                                        reaction.count
-                                                                                    }
-                                                                                </span>
-                                                                            </button>
-                                                                        )
-                                                                    )}
-                                                            </div>
-                                                        )}
-
-                                                        {/* Time + Read Receipt */}
-                                                        <div
-                                                            className={`flex items-center gap-1.5 mt-1 ${
+                                                            </svg>
+                                                        }
+                                                    >
+                                                        <motion.div
+                                                            initial={{
+                                                                opacity: 0,
+                                                                y: 10,
+                                                            }}
+                                                            animate={{
+                                                                opacity: 1,
+                                                                y: 0,
+                                                            }}
+                                                            className={`flex items-end gap-2 ${
                                                                 isOwn
                                                                     ? "justify-end"
-                                                                    : ""
+                                                                    : "justify-start"
                                                             }`}
                                                         >
-                                                            <p
-                                                                className={`text-xs ${
+                                                            {/* Peer avatar for incoming messages */}
+                                                            {!isOwn && (
+                                                                <div className="flex-shrink-0 mb-1">
+                                                                    {peerAvatar ? (
+                                                                        <img
+                                                                            src={
+                                                                                peerAvatar
+                                                                            }
+                                                                            alt=""
+                                                                            className="w-7 h-7 rounded-full object-cover"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-bold">
+                                                                            {peerName?.[0]?.toUpperCase() ||
+                                                                                peerAddress
+                                                                                    .slice(
+                                                                                        2,
+                                                                                        4,
+                                                                                    )
+                                                                                    .toUpperCase()}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            <div
+                                                                className={`${isFullscreen ? "max-w-[85%]" : "max-w-[70%]"} rounded-2xl px-4 py-2 ${
                                                                     isOwn
-                                                                        ? "text-[#FFF0E0]"
-                                                                        : "text-zinc-500"
+                                                                        ? msg.status ===
+                                                                          "failed"
+                                                                            ? "bg-red-500/80 text-white rounded-br-md"
+                                                                            : msg.status ===
+                                                                                "pending"
+                                                                              ? "bg-[#FF5500]/70 text-white rounded-br-md"
+                                                                              : "bg-[#FF5500] text-white rounded-br-md"
+                                                                        : "bg-zinc-800 text-white rounded-bl-md"
                                                                 }`}
                                                             >
-                                                                {msg.sentAt.toLocaleTimeString(
-                                                                    [],
-                                                                    {
-                                                                        hour: "2-digit",
-                                                                        minute: "2-digit",
-                                                                    }
-                                                                )}
-                                                            </p>
-                                                            {isOwn && (
-                                                                <MessageStatusIndicator
-                                                                    status={
-                                                                        msg.status === "pending" || msg.status === "failed"
-                                                                            ? msg.status
-                                                                            : getMessageStatus(
-                                                                                  msg.id,
-                                                                                  true,
-                                                                                  peerAddress
-                                                                              )
-                                                                    }
-                                                                />
-                                                            )}
-                                                            {/* Retry button for failed messages */}
-                                                            {isOwn && msg.status === "failed" && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        // Remove failed message and resend
-                                                                        setMessages((prev) =>
-                                                                            prev.filter((m) => m.id !== msg.id)
-                                                                        );
-                                                                        setNewMessage(msg.content);
-                                                                    }}
-                                                                    className="ml-2 text-xs text-red-400 hover:text-red-300 underline"
-                                                                >
-                                                                    Retry
-                                                                </button>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Message Actions - Show on tap (mobile) or click */}
-                                                        <AnimatePresence>
-                                                            {selectedMessage === msg.id && (
-                                                                <motion.div
-                                                                    data-message-actions
-                                                                    initial={{ opacity: 0, scale: 0.9 }}
-                                                                    animate={{ opacity: 1, scale: 1 }}
-                                                                    exit={{ opacity: 0, scale: 0.9 }}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className={`absolute ${
-                                                                        isOwn
-                                                                            ? "left-0 -translate-x-full pr-2"
-                                                                            : "right-0 translate-x-full pl-2"
-                                                                    } top-0 flex items-center gap-1 z-10`}
-                                                                >
-                                                                    {/* React Button */}
-                                                                    <button
+                                                                {isPixelArt ? (
+                                                                    <div
+                                                                        className={`pixel-art-message relative group cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl" : ""}`}
                                                                         onClick={() =>
-                                                                            setShowMsgReactions(
-                                                                                showMsgReactions ===
-                                                                                    msg.id
-                                                                                    ? null
-                                                                                    : msg.id
+                                                                            handleMessageTap(
+                                                                                msg.id,
+                                                                                {
+                                                                                    messageId:
+                                                                                        msg.id,
+                                                                                    messageContent:
+                                                                                        msg.content,
+                                                                                    isOwn,
+                                                                                    hasMedia: true,
+                                                                                    isPixelArt: true,
+                                                                                    mediaUrl:
+                                                                                        getPixelArtUrl(
+                                                                                            msg.content,
+                                                                                        ),
+                                                                                },
                                                                             )
                                                                         }
-                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
-                                                                        title="React"
                                                                     >
-                                                                        😊
-                                                                    </button>
-                                                                    {/* Reply Button */}
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setReplyingTo(msg);
-                                                                            setSelectedMessage(null);
-                                                                        }}
-                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
-                                                                        title="Reply"
-                                                                    >
-                                                                        <svg
-                                                                            className="w-4 h-4 text-zinc-300"
-                                                                            fill="none"
-                                                                            viewBox="0 0 24 24"
-                                                                            stroke="currentColor"
+                                                                        <PixelArtImage
+                                                                            src={getPixelArtUrl(
+                                                                                msg.content,
+                                                                            )}
+                                                                            onClick={() => {
+                                                                                setViewingImage(
+                                                                                    getPixelArtUrl(
+                                                                                        msg.content,
+                                                                                    ),
+                                                                                );
+                                                                            }}
+                                                                            size="md"
+                                                                        />
+
+                                                                        {/* Quick Share Actions - shows on hover/tap */}
+                                                                        <div
+                                                                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                            onClick={(
+                                                                                e,
+                                                                            ) =>
+                                                                                e.stopPropagation()
+                                                                            }
                                                                         >
-                                                                            <path
-                                                                                strokeLinecap="round"
-                                                                                strokeLinejoin="round"
-                                                                                strokeWidth={2}
-                                                                                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                            <PixelArtShare
+                                                                                imageUrl={getPixelArtUrl(
+                                                                                    msg.content,
+                                                                                )}
+                                                                                showQuickActions
                                                                             />
-                                                                        </svg>
-                                                                    </button>
-                                                                </motion.div>
-                                                            )}
-                                                        </AnimatePresence>
+                                                                        </div>
 
-                                                        {/* Quick Reaction Picker */}
-                                                        {showMsgReactions === msg.id && (
-                                                            <div
-                                                                className={`absolute ${
-                                                                    isOwn
-                                                                        ? "right-0"
-                                                                        : "left-0"
-                                                                } -top-12 z-20`}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            >
-                                                                <QuickReactionPicker
-                                                                    isOpen={true}
-                                                                    onClose={() => setShowMsgReactions(null)}
-                                                                    onSelect={async (emoji) => {
-                                                                        const success = await toggleMsgReaction(
-                                                                            msg.id,
-                                                                            emoji
-                                                                        );
-                                                                        if (success) {
-                                                                            setShowMsgReactions(null);
-                                                                            setSelectedMessage(null);
-                                                                        } else {
-                                                                            console.error("[ChatModal] Failed to save reaction");
+                                                                        {/* Reactions Display - Mobile Friendly */}
+                                                                        {reactions[
+                                                                            getPixelArtUrl(
+                                                                                msg.content,
+                                                                            )
+                                                                        ]?.some(
+                                                                            (
+                                                                                r,
+                                                                            ) =>
+                                                                                r.count >
+                                                                                0,
+                                                                        ) && (
+                                                                            <div className="flex flex-wrap gap-1.5 mt-2">
+                                                                                {reactions[
+                                                                                    getPixelArtUrl(
+                                                                                        msg.content,
+                                                                                    )
+                                                                                ]
+                                                                                    ?.filter(
+                                                                                        (
+                                                                                            r,
+                                                                                        ) =>
+                                                                                            r.count >
+                                                                                            0,
+                                                                                    )
+                                                                                    .map(
+                                                                                        (
+                                                                                            reaction,
+                                                                                        ) => (
+                                                                                            <button
+                                                                                                key={
+                                                                                                    reaction.emoji
+                                                                                                }
+                                                                                                onClick={() =>
+                                                                                                    handleReaction(
+                                                                                                        getPixelArtUrl(
+                                                                                                            msg.content,
+                                                                                                        ),
+                                                                                                        reaction.emoji,
+                                                                                                    )
+                                                                                                }
+                                                                                                className={`
+                                                                                    flex items-center gap-1 rounded-full transition-all duration-100
+                                                                                    min-w-[44px] min-h-[32px] px-2.5 py-1
+                                                                                    sm:min-w-[36px] sm:min-h-[28px] sm:px-2 sm:py-0.5
+                                                                                    active:scale-95
+                                                                                    ${
+                                                                                        reaction.hasReacted
+                                                                                            ? "bg-[#FB8D22]/30 text-[#FFF0E0]"
+                                                                                            : "bg-zinc-700/60 text-zinc-300 hover:bg-zinc-600/60"
+                                                                                    }
+                                                                                `}
+                                                                                            >
+                                                                                                <span className="text-base sm:text-sm">
+                                                                                                    {
+                                                                                                        reaction.emoji
+                                                                                                    }
+                                                                                                </span>
+                                                                                                <span className="text-xs font-medium">
+                                                                                                    {
+                                                                                                        reaction.count
+                                                                                                    }
+                                                                                                </span>
+                                                                                            </button>
+                                                                                        ),
+                                                                                    )}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* Add Reaction Button - Mobile Friendly */}
+                                                                        <div className="relative mt-1">
+                                                                            <button
+                                                                                onClick={() =>
+                                                                                    setShowReactionPicker(
+                                                                                        showReactionPicker ===
+                                                                                            getPixelArtUrl(
+                                                                                                msg.content,
+                                                                                            )
+                                                                                            ? null
+                                                                                            : getPixelArtUrl(
+                                                                                                  msg.content,
+                                                                                              ),
+                                                                                    )
+                                                                                }
+                                                                                className={`
+                                                                    flex items-center gap-1 rounded-full transition-all duration-100
+                                                                    min-h-[36px] px-3 py-1.5 text-sm
+                                                                    sm:min-h-[28px] sm:px-2 sm:py-1 sm:text-xs
+                                                                    active:scale-95
+                                                                    ${
+                                                                        isOwn
+                                                                            ? "text-[#FFF0E0] hover:bg-[#FF5500]/30 active:bg-[#FF5500]/40"
+                                                                            : "text-zinc-400 hover:bg-zinc-700 active:bg-zinc-600"
+                                                                    }
+                                                                `}
+                                                                            >
+                                                                                <span>
+                                                                                    😊
+                                                                                </span>
+                                                                                <span className="hidden sm:inline">
+                                                                                    React
+                                                                                </span>
+                                                                            </button>
+
+                                                                            {/* Reaction Picker */}
+                                                                            <AnimatePresence>
+                                                                                {showReactionPicker ===
+                                                                                    getPixelArtUrl(
+                                                                                        msg.content,
+                                                                                    ) && (
+                                                                                    <PixelArtReactionPickerWrapper
+                                                                                        isOwn={
+                                                                                            isOwn
+                                                                                        }
+                                                                                        onReaction={(
+                                                                                            emoji,
+                                                                                        ) =>
+                                                                                            handleReaction(
+                                                                                                getPixelArtUrl(
+                                                                                                    msg.content,
+                                                                                                ),
+                                                                                                emoji,
+                                                                                            )
+                                                                                        }
+                                                                                        reactions={
+                                                                                            reactions[
+                                                                                                getPixelArtUrl(
+                                                                                                    msg.content,
+                                                                                                )
+                                                                                            ]
+                                                                                        }
+                                                                                        reactionEmojis={
+                                                                                            REACTION_EMOJIS
+                                                                                        }
+                                                                                    />
+                                                                                )}
+                                                                            </AnimatePresence>
+                                                                        </div>
+
+                                                                        <p
+                                                                            className={`text-xs mt-1 ${
+                                                                                isOwn
+                                                                                    ? "text-[#FFF0E0]"
+                                                                                    : "text-zinc-500"
+                                                                            }`}
+                                                                        >
+                                                                            🎨
+                                                                            Pixel
+                                                                            Art
+                                                                            •{" "}
+                                                                            {msg.sentAt.toLocaleTimeString(
+                                                                                [],
+                                                                                {
+                                                                                    hour: "2-digit",
+                                                                                    minute: "2-digit",
+                                                                                },
+                                                                            )}
+                                                                        </p>
+                                                                    </div>
+                                                                ) : isGif ? (
+                                                                    <div
+                                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl p-1" : ""}`}
+                                                                        onClick={() =>
+                                                                            handleMessageTap(
+                                                                                msg.id,
+                                                                                {
+                                                                                    messageId:
+                                                                                        msg.id,
+                                                                                    messageContent:
+                                                                                        msg.content,
+                                                                                    isOwn,
+                                                                                    hasMedia: true,
+                                                                                    mediaUrl:
+                                                                                        getGifUrl(
+                                                                                            msg.content,
+                                                                                        ),
+                                                                                },
+                                                                            )
                                                                         }
-                                                                    }}
-                                                                    emojis={MESSAGE_REACTION_EMOJIS}
-                                                                />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </motion.div>
-                                    );
-                                })}
-                                <div ref={messagesEndRef} />
+                                                                    >
+                                                                        <img
+                                                                            src={getGifUrl(
+                                                                                msg.content,
+                                                                            )}
+                                                                            alt="GIF"
+                                                                            className="max-w-[280px] h-auto rounded-xl"
+                                                                            loading="lazy"
+                                                                        />
+                                                                        <p
+                                                                            className={`text-xs mt-1 ${
+                                                                                isOwn
+                                                                                    ? "text-[#FFF0E0]"
+                                                                                    : "text-zinc-500"
+                                                                            }`}
+                                                                        >
+                                                                            🎬
+                                                                            GIF
+                                                                            •{" "}
+                                                                            {msg.sentAt.toLocaleTimeString(
+                                                                                [],
+                                                                                {
+                                                                                    hour: "2-digit",
+                                                                                    minute: "2-digit",
+                                                                                },
+                                                                            )}
+                                                                        </p>
+                                                                    </div>
+                                                                ) : isLocation &&
+                                                                  locationData ? (
+                                                                    <LocationMessage
+                                                                        location={
+                                                                            locationData
+                                                                        }
+                                                                        isOwn={
+                                                                            isOwn
+                                                                        }
+                                                                    />
+                                                                ) : (
+                                                                    <div
+                                                                        data-message-bubble
+                                                                        onClick={() =>
+                                                                            handleMessageTap(
+                                                                                msg.id,
+                                                                                {
+                                                                                    messageId:
+                                                                                        msg.id,
+                                                                                    messageContent:
+                                                                                        msg.content,
+                                                                                    isOwn,
+                                                                                    canEdit:
+                                                                                        isOwn &&
+                                                                                        canEditMessage(
+                                                                                            msg.sentAt,
+                                                                                        ),
+                                                                                    hasMedia:
+                                                                                        isPixelArt ||
+                                                                                        isGif,
+                                                                                    isPixelArt,
+                                                                                    mediaUrl:
+                                                                                        isPixelArt
+                                                                                            ? getPixelArtUrl(
+                                                                                                  msg.content,
+                                                                                              )
+                                                                                            : isGif
+                                                                                              ? getGifUrl(
+                                                                                                    msg.content,
+                                                                                                )
+                                                                                              : undefined,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl" : ""}`}
+                                                                    >
+                                                                        {/* Reply Preview - Check for reply pattern in message content */}
+                                                                        {msg.content.startsWith(
+                                                                            "↩️ ",
+                                                                        ) &&
+                                                                            msg.content.includes(
+                                                                                "\n\n",
+                                                                            ) && (
+                                                                                <div
+                                                                                    className={`mb-2 p-2 rounded-lg ${
+                                                                                        isOwn
+                                                                                            ? "bg-white/10 border-l-2 border-white/40"
+                                                                                            : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                                                    }`}
+                                                                                >
+                                                                                    <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                                                        <svg
+                                                                                            className="w-3 h-3 flex-shrink-0"
+                                                                                            fill="none"
+                                                                                            viewBox="0 0 24 24"
+                                                                                            stroke="currentColor"
+                                                                                        >
+                                                                                            <path
+                                                                                                strokeLinecap="round"
+                                                                                                strokeLinejoin="round"
+                                                                                                strokeWidth={
+                                                                                                    2
+                                                                                                }
+                                                                                                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                                            />
+                                                                                        </svg>
+                                                                                        <span
+                                                                                            className={
+                                                                                                isOwn
+                                                                                                    ? "text-white/80"
+                                                                                                    : "text-orange-400"
+                                                                                            }
+                                                                                        >
+                                                                                            {msg.content
+                                                                                                .split(
+                                                                                                    ":",
+                                                                                                )[0]
+                                                                                                .replace(
+                                                                                                    "↩️ ",
+                                                                                                    "",
+                                                                                                )}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <p
+                                                                                        className={`text-xs mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}
+                                                                                    >
+                                                                                        {msg.content
+                                                                                            .split(
+                                                                                                "\n\n",
+                                                                                            )[0]
+                                                                                            .split(
+                                                                                                ': "',
+                                                                                            )[1]
+                                                                                            ?.replace(
+                                                                                                /\"$/,
+                                                                                                "",
+                                                                                            ) ||
+                                                                                            ""}
+                                                                                    </p>
+                                                                                </div>
+                                                                            )}
 
-                                {/* Typing Indicator */}
-                                {peerTyping && (
-                                    <TypingIndicator name={displayName} />
-                                )}
+                                                                        {/* Message Text */}
+                                                                        {(() => {
+                                                                            const displayContent =
+                                                                                msg.content.startsWith(
+                                                                                    "↩️ ",
+                                                                                ) &&
+                                                                                msg.content.includes(
+                                                                                    "\n\n",
+                                                                                )
+                                                                                    ? msg.content
+                                                                                          .split(
+                                                                                              "\n\n",
+                                                                                          )
+                                                                                          .slice(
+                                                                                              1,
+                                                                                          )
+                                                                                          .join(
+                                                                                              "\n\n",
+                                                                                          )
+                                                                                    : msg.content;
+                                                                            const emojiOnly =
+                                                                                isEmojiOnly(
+                                                                                    displayContent,
+                                                                                );
+
+                                                                            // Use ChatMarkdown for code blocks and other markdown
+                                                                            if (
+                                                                                hasMarkdown(
+                                                                                    displayContent,
+                                                                                )
+                                                                            ) {
+                                                                                return (
+                                                                                    <ChatMarkdown
+                                                                                        content={
+                                                                                            displayContent
+                                                                                        }
+                                                                                        isOwnMessage={
+                                                                                            isOwn
+                                                                                        }
+                                                                                    />
+                                                                                );
+                                                                            }
+
+                                                                            return (
+                                                                                <p
+                                                                                    className={`break-words whitespace-pre-wrap ${emojiOnly ? "text-4xl leading-tight" : ""}`}
+                                                                                >
+                                                                                    {
+                                                                                        displayContent
+                                                                                    }
+                                                                                </p>
+                                                                            );
+                                                                        })()}
+
+                                                                        {/* Link Previews */}
+                                                                        {detectUrls(
+                                                                            msg.content,
+                                                                        )
+                                                                            .slice(
+                                                                                0,
+                                                                                1,
+                                                                            )
+                                                                            .map(
+                                                                                (
+                                                                                    url,
+                                                                                ) => (
+                                                                                    <LinkPreview
+                                                                                        key={
+                                                                                            url
+                                                                                        }
+                                                                                        url={
+                                                                                            url
+                                                                                        }
+                                                                                        compact
+                                                                                    />
+                                                                                ),
+                                                                            )}
+
+                                                                        {/* Message Reactions */}
+                                                                        {msgReactions[
+                                                                            msg
+                                                                                .id
+                                                                        ]?.some(
+                                                                            (
+                                                                                r,
+                                                                            ) =>
+                                                                                r.count >
+                                                                                0,
+                                                                        ) && (
+                                                                            <div
+                                                                                className="flex flex-wrap gap-1 mt-1"
+                                                                                onClick={(
+                                                                                    e,
+                                                                                ) =>
+                                                                                    e.stopPropagation()
+                                                                                }
+                                                                            >
+                                                                                {msgReactions[
+                                                                                    msg
+                                                                                        .id
+                                                                                ]
+                                                                                    ?.filter(
+                                                                                        (
+                                                                                            r,
+                                                                                        ) =>
+                                                                                            r.count >
+                                                                                            0,
+                                                                                    )
+                                                                                    .map(
+                                                                                        (
+                                                                                            reaction,
+                                                                                        ) => (
+                                                                                            <button
+                                                                                                key={
+                                                                                                    reaction.emoji
+                                                                                                }
+                                                                                                onClick={() => {
+                                                                                                    toggleMsgReaction(
+                                                                                                        msg.id,
+                                                                                                        reaction.emoji,
+                                                                                                    );
+                                                                                                    setSelectedMessage(
+                                                                                                        null,
+                                                                                                    );
+                                                                                                }}
+                                                                                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
+                                                                                                    reaction.hasReacted
+                                                                                                        ? "bg-[#FB8D22]/30"
+                                                                                                        : "bg-zinc-700/50 hover:bg-zinc-600/50"
+                                                                                                }`}
+                                                                                            >
+                                                                                                <span>
+                                                                                                    {
+                                                                                                        reaction.emoji
+                                                                                                    }
+                                                                                                </span>
+                                                                                                <span className="text-[10px]">
+                                                                                                    {
+                                                                                                        reaction.count
+                                                                                                    }
+                                                                                                </span>
+                                                                                            </button>
+                                                                                        ),
+                                                                                    )}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* Time + Read Receipt */}
+                                                                        <div
+                                                                            className={`flex items-center gap-1.5 mt-1 ${
+                                                                                isOwn
+                                                                                    ? "justify-end"
+                                                                                    : ""
+                                                                            }`}
+                                                                        >
+                                                                            <p
+                                                                                className={`text-xs ${
+                                                                                    isOwn
+                                                                                        ? "text-[#FFF0E0]"
+                                                                                        : "text-zinc-500"
+                                                                                }`}
+                                                                            >
+                                                                                {msg.sentAt.toLocaleTimeString(
+                                                                                    [],
+                                                                                    {
+                                                                                        hour: "2-digit",
+                                                                                        minute: "2-digit",
+                                                                                    },
+                                                                                )}
+                                                                            </p>
+                                                                            {isOwn && (
+                                                                                <MessageStatusIndicator
+                                                                                    status={
+                                                                                        msg.status ===
+                                                                                            "pending" ||
+                                                                                        msg.status ===
+                                                                                            "failed"
+                                                                                            ? msg.status
+                                                                                            : getMessageStatus(
+                                                                                                  msg.id,
+                                                                                                  true,
+                                                                                                  peerAddress,
+                                                                                              )
+                                                                                    }
+                                                                                />
+                                                                            )}
+                                                                            {/* Retry button for failed messages */}
+                                                                            {isOwn &&
+                                                                                msg.status ===
+                                                                                    "failed" && (
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            // Remove failed message and resend
+                                                                                            setMessages(
+                                                                                                (
+                                                                                                    prev,
+                                                                                                ) =>
+                                                                                                    prev.filter(
+                                                                                                        (
+                                                                                                            m,
+                                                                                                        ) =>
+                                                                                                            m.id !==
+                                                                                                            msg.id,
+                                                                                                    ),
+                                                                                            );
+                                                                                            setNewMessage(
+                                                                                                msg.content,
+                                                                                            );
+                                                                                        }}
+                                                                                        className="ml-2 text-xs text-red-400 hover:text-red-300 underline"
+                                                                                    >
+                                                                                        Retry
+                                                                                    </button>
+                                                                                )}
+                                                                        </div>
+
+                                                                        {/* Message Actions - Show on tap (mobile) or click */}
+                                                                        <AnimatePresence>
+                                                                            {selectedMessage ===
+                                                                                msg.id && (
+                                                                                <motion.div
+                                                                                    data-message-actions
+                                                                                    initial={{
+                                                                                        opacity: 0,
+                                                                                        scale: 0.9,
+                                                                                    }}
+                                                                                    animate={{
+                                                                                        opacity: 1,
+                                                                                        scale: 1,
+                                                                                    }}
+                                                                                    exit={{
+                                                                                        opacity: 0,
+                                                                                        scale: 0.9,
+                                                                                    }}
+                                                                                    onClick={(
+                                                                                        e,
+                                                                                    ) =>
+                                                                                        e.stopPropagation()
+                                                                                    }
+                                                                                    className={`absolute ${
+                                                                                        isOwn
+                                                                                            ? "left-0 -translate-x-full pr-2"
+                                                                                            : "right-0 translate-x-full pl-2"
+                                                                                    } top-0 flex items-center gap-1 z-10`}
+                                                                                >
+                                                                                    {/* React Button */}
+                                                                                    <button
+                                                                                        onClick={() =>
+                                                                                            setShowMsgReactions(
+                                                                                                showMsgReactions ===
+                                                                                                    msg.id
+                                                                                                    ? null
+                                                                                                    : msg.id,
+                                                                                            )
+                                                                                        }
+                                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
+                                                                                        title="React"
+                                                                                    >
+                                                                                        😊
+                                                                                    </button>
+                                                                                    {/* Reply Button */}
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setReplyingTo(
+                                                                                                msg,
+                                                                                            );
+                                                                                            setSelectedMessage(
+                                                                                                null,
+                                                                                            );
+                                                                                        }}
+                                                                                        className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
+                                                                                        title="Reply"
+                                                                                    >
+                                                                                        <svg
+                                                                                            className="w-4 h-4 text-zinc-300"
+                                                                                            fill="none"
+                                                                                            viewBox="0 0 24 24"
+                                                                                            stroke="currentColor"
+                                                                                        >
+                                                                                            <path
+                                                                                                strokeLinecap="round"
+                                                                                                strokeLinejoin="round"
+                                                                                                strokeWidth={
+                                                                                                    2
+                                                                                                }
+                                                                                                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                                            />
+                                                                                        </svg>
+                                                                                    </button>
+                                                                                </motion.div>
+                                                                            )}
+                                                                        </AnimatePresence>
+
+                                                                        {/* Quick Reaction Picker */}
+                                                                        {showMsgReactions ===
+                                                                            msg.id && (
+                                                                            <div
+                                                                                className={`absolute ${
+                                                                                    isOwn
+                                                                                        ? "right-0"
+                                                                                        : "left-0"
+                                                                                } -top-12 z-20`}
+                                                                                onClick={(
+                                                                                    e,
+                                                                                ) =>
+                                                                                    e.stopPropagation()
+                                                                                }
+                                                                            >
+                                                                                <QuickReactionPicker
+                                                                                    isOpen={
+                                                                                        true
+                                                                                    }
+                                                                                    onClose={() =>
+                                                                                        setShowMsgReactions(
+                                                                                            null,
+                                                                                        )
+                                                                                    }
+                                                                                    onSelect={async (
+                                                                                        emoji,
+                                                                                    ) => {
+                                                                                        const success =
+                                                                                            await toggleMsgReaction(
+                                                                                                msg.id,
+                                                                                                emoji,
+                                                                                            );
+                                                                                        if (
+                                                                                            success
+                                                                                        ) {
+                                                                                            setShowMsgReactions(
+                                                                                                null,
+                                                                                            );
+                                                                                            setSelectedMessage(
+                                                                                                null,
+                                                                                            );
+                                                                                        } else {
+                                                                                            console.error(
+                                                                                                "[ChatModal] Failed to save reaction",
+                                                                                            );
+                                                                                        }
+                                                                                    }}
+                                                                                    emojis={
+                                                                                        MESSAGE_REACTION_EMOJIS
+                                                                                    }
+                                                                                />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </motion.div>
+                                                    </SwipeableMessage>
+                                                </div>
+                                            );
+                                        });
+                                    })()}
+                                </div>
                             </div>
 
+                            {/* Typing Indicator - positioned above input area */}
+                            {peerTyping && (
+                                <div className="px-4 pb-2">
+                                    <TypingIndicator name={displayName} />
+                                </div>
+                            )}
+
                             {/* E2E Encryption Notice with Security Status */}
-                            <EncryptionIndicator 
+                            <EncryptionIndicator
                                 isSecure={securityStatus.isSecure}
                                 isLoading={securityStatus.isLoading}
                             />
@@ -1611,46 +2378,48 @@ export function ChatModal({
                                 </div>
                             )}
 
-                            {/* Input */}
-                            <div className={`border-t border-zinc-800 ${isFullscreen ? "p-6 pb-8" : "p-4"}`}>
-                                <div className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}>
-                                    {/* Pixel Art Button */}
-                                    <button
-                                        onClick={() => setShowPixelArt(true)}
+                            {/* Input - with safe area padding for bottom */}
+                            <div
+                                className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
+                                style={
+                                    isFullscreen
+                                        ? {
+                                              paddingBottom:
+                                                  "max(env(safe-area-inset-bottom), 16px)",
+                                          }
+                                        : undefined
+                                }
+                            >
+                                <div
+                                    className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}
+                                >
+                                    {/* Consolidated attachment menu */}
+                                    <ChatAttachmentMenu
+                                        onPixelArt={() => setShowPixelArt(true)}
+                                        onGif={handleSendGif}
+                                        onLocation={async (location) => {
+                                            const locationMsg =
+                                                formatLocationMessage(location);
+                                            await sendMessage(
+                                                peerAddress,
+                                                locationMsg,
+                                            );
+                                            onMessageSent?.("📍 Location");
+                                        }}
+                                        showLocation={true}
+                                        isUploading={isUploadingPixelArt}
                                         disabled={!isInitialized || !!chatError}
-                                        className={`rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-[#FFBBA7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "p-4" : "p-3"}`}
-                                        title="Send Pixel Art"
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            strokeWidth={2}
-                                            stroke="currentColor"
-                                            className={isFullscreen ? "w-6 h-6" : "w-5 h-5"}
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"
-                                            />
-                                        </svg>
-                                    </button>
+                                    />
                                     <div className="flex-1 relative">
-                                        <input
-                                            type="text"
-                                            inputMode="text"
-                                            enterKeyHint="send"
-                                            autoComplete="off"
-                                            autoCorrect="on"
-                                            autoCapitalize="sentences"
+                                        <MentionInput
                                             value={newMessage}
-                                            onChange={(e) => {
-                                                setNewMessage(e.target.value);
+                                            onChange={(val) => {
+                                                if (val.length > 10000) return;
+                                                setNewMessage(val);
                                                 handleTyping();
                                             }}
-                                            onKeyDown={handleKeyPress}
-                                            onBlur={stopTyping}
+                                            onSubmit={handleSend}
+                                            aria-label={`Message ${displayName}`}
                                             placeholder={
                                                 isInitialized
                                                     ? "Type a message..."
@@ -1659,16 +2428,24 @@ export function ChatModal({
                                             disabled={
                                                 !isInitialized || !!chatError
                                             }
+                                            users={[]} // DMs don't need mention suggestions
                                             className={`w-full pr-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50 ${
-                                                isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"
+                                                isFullscreen
+                                                    ? "py-4 px-5 text-lg"
+                                                    : "py-3 px-4"
                                             }`}
                                         />
+                                        {newMessage.length > 500 && (
+                                            <p className="text-xs text-zinc-500">
+                                                {newMessage.length.toLocaleString()} / 10,000
+                                            </p>
+                                        )}
                                         {/* Emoji Picker Button */}
                                         <button
                                             type="button"
                                             onClick={() =>
                                                 setShowEmojiPicker(
-                                                    !showEmojiPicker
+                                                    !showEmojiPicker,
                                                 )
                                             }
                                             className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
@@ -1683,7 +2460,7 @@ export function ChatModal({
                                             }
                                             onSelect={(emoji) => {
                                                 setNewMessage(
-                                                    (prev) => prev + emoji
+                                                    (prev) => prev + emoji,
                                                 );
                                             }}
                                             position="top"
@@ -1721,7 +2498,11 @@ export function ChatModal({
                                             </svg>
                                         ) : (
                                             <svg
-                                                className={isFullscreen ? "w-6 h-6" : "w-5 h-5"}
+                                                className={
+                                                    isFullscreen
+                                                        ? "w-6 h-6"
+                                                        : "w-5 h-5"
+                                                }
                                                 fill="none"
                                                 viewBox="0 0 24 24"
                                                 stroke="currentColor"
@@ -1753,7 +2534,7 @@ export function ChatModal({
                         isSending={isUploadingPixelArt}
                     />
 
-                    {/* Image Lightbox */}
+                    {/* Image Lightbox with Share & Download */}
                     <AnimatePresence>
                         {viewingImage && (
                             <motion.div
@@ -1791,20 +2572,43 @@ export function ChatModal({
                                         </svg>
                                     </button>
 
-                                    {/* Full-size pixel art image */}
+                                    {/* Full-size image */}
                                     <PixelArtImage
                                         src={viewingImage}
                                         size="lg"
                                         className="!w-auto !h-auto max-w-[90vw] max-h-[80vh] min-w-[256px] min-h-[256px] shadow-2xl"
                                     />
 
-                                    {/* Action buttons */}
+                                    {/* Action buttons - Share & Download */}
                                     <div className="mt-4 flex justify-center gap-3">
+                                        <a
+                                            href={viewingImage}
+                                            download
+                                            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                strokeWidth={2}
+                                                stroke="currentColor"
+                                                className="w-4 h-4"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                                />
+                                            </svg>
+                                            Download
+                                        </a>
                                         <a
                                             href={viewingImage}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                                            onClick={(e) => e.stopPropagation()}
                                         >
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
@@ -1822,12 +2626,21 @@ export function ChatModal({
                                             </svg>
                                             Open Original
                                         </a>
-                                        <PixelArtShare imageUrl={viewingImage} />
+                                        <PixelArtShare
+                                            imageUrl={viewingImage}
+                                        />
                                     </div>
                                 </motion.div>
                             </motion.div>
                         )}
                     </AnimatePresence>
+
+                    {/* Scroll to Bottom Button */}
+                    <ScrollToBottom
+                        containerRef={messagesContainerRef}
+                        unreadCount={newMessageCount}
+                        onScrollToBottom={resetUnreadCount}
+                    />
 
                     {/* Message Search Overlay */}
                     <MessageSearch
@@ -1835,7 +2648,7 @@ export function ChatModal({
                         onSelectMessage={(msgId) => {
                             // Scroll to message (could implement smooth scrolling)
                             const element = document.getElementById(
-                                `msg-${msgId}`
+                                `msg-${msgId}`,
                             );
                             element?.scrollIntoView({
                                 behavior: "smooth",
@@ -1846,6 +2659,121 @@ export function ChatModal({
                         isOpen={showSearch}
                         userAddress={userAddress}
                         peerName={displayName}
+                    />
+
+                    {/* Conversation Actions Menu */}
+                    <ConversationActionsMenu
+                        isOpen={showActionsMenu}
+                        onClose={() => setShowActionsMenu(false)}
+                        onMute={() => setShowMuteModal(true)}
+                        onBlock={() => setShowBlockModal(true)}
+                        onReport={() => setShowReportModal(true)}
+                        isMuted={conversationMuted}
+                        isBlocked={peerBlocked}
+                        showMute={true}
+                        showBlock={true}
+                        showReport={true}
+                    />
+
+                    {/* Mute Options Modal */}
+                    <MuteOptionsModal
+                        isOpen={showMuteModal}
+                        onClose={() => setShowMuteModal(false)}
+                        onMute={async (duration) => {
+                            const success = await muteConversation(
+                                "dm",
+                                peerAddress,
+                                duration,
+                            );
+                            return success;
+                        }}
+                        onUnmute={async () => {
+                            const success = await unmuteConversation(
+                                "dm",
+                                peerAddress,
+                            );
+                            return success;
+                        }}
+                        isMuted={conversationMuted}
+                        conversationName={displayName}
+                        muteUntil={muteInfo?.muted_until}
+                    />
+
+                    {/* Block User Modal */}
+                    <BlockUserModal
+                        isOpen={showBlockModal}
+                        onClose={() => setShowBlockModal(false)}
+                        onBlock={async () => {
+                            const success = await blockUser(peerAddress);
+                            return success;
+                        }}
+                        onUnblock={async () => {
+                            const success = await unblockUser(peerAddress);
+                            return success;
+                        }}
+                        isBlocked={peerBlocked}
+                        userName={displayName}
+                        userAddress={peerAddress}
+                    />
+
+                    {/* Report User Modal */}
+                    <ReportUserModal
+                        isOpen={showReportModal}
+                        onClose={() => setShowReportModal(false)}
+                        onReport={async (params) => {
+                            return await reportUser({
+                                reportedAddress: peerAddress,
+                                reportType: params.reportType,
+                                description: params.description,
+                                conversationType: "dm",
+                                conversationId: peerAddress,
+                                alsoBlock: params.alsoBlock,
+                            });
+                        }}
+                        userName={displayName}
+                        userAddress={peerAddress}
+                    />
+
+                    {/* Message Action Bar - shows when a message is selected */}
+                    <MessageActionBar
+                        isOpen={!!selectedMessage && !!selectedMessageConfig}
+                        onClose={() => {
+                            setSelectedMessage(null);
+                            setSelectedMessageConfig(null);
+                        }}
+                        config={selectedMessageConfig}
+                        callbacks={{
+                            onReaction: selectedMessageConfig
+                                ? (emoji) =>
+                                      toggleMsgReaction(
+                                          selectedMessageConfig.messageId,
+                                          emoji,
+                                      )
+                                : undefined,
+                            onReply: selectedMessageConfig
+                                ? () => {
+                                      const msg = messages.find(
+                                          (m) =>
+                                              m.id ===
+                                              selectedMessageConfig.messageId,
+                                      );
+                                      if (msg) setReplyingTo(msg);
+                                  }
+                                : undefined,
+                            onCopy: () => {},
+                            onDelete: selectedMessageConfig?.isOwn
+                                ? () => {
+                                      setMessages((prev) =>
+                                          prev.filter(
+                                              (m) =>
+                                                  m.id !==
+                                                  selectedMessageConfig?.messageId,
+                                          ),
+                                      );
+                                  }
+                                : undefined,
+                        }}
+                        reactions={MESSAGE_REACTION_EMOJIS}
                     />
                 </>
             )}

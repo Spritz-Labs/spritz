@@ -64,13 +64,18 @@ function isReservedUsername(username: string): boolean {
 export function useUsername(userAddress: string | null) {
     const [username, setUsername] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isFetching, setIsFetching] = useState(true); // Track initial fetch
     const [error, setError] = useState<string | null>(null);
 
     // Fetch current user's username on mount
     useEffect(() => {
-        if (!userAddress) return;
+        if (!userAddress) {
+            setIsFetching(false);
+            return;
+        }
 
         const fetchUsername = async () => {
+            setIsFetching(true);
             try {
                 const response = await fetch(`/api/username?address=${encodeURIComponent(userAddress)}`, {
                     credentials: "include", // Important for PWA cookie handling
@@ -83,6 +88,8 @@ export function useUsername(userAddress: string | null) {
                 }
             } catch (err) {
                 console.error("[useUsername] Fetch error:", err);
+            } finally {
+                setIsFetching(false);
             }
         };
 
@@ -292,6 +299,7 @@ export function useUsername(userAddress: string | null) {
     return {
         username,
         isLoading,
+        isFetching, // True while initially loading username
         error,
         isConfigured: isSupabaseConfigured,
         checkAvailability,

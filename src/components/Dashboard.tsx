@@ -38,6 +38,8 @@ import { supabase, isSupabaseConfigured } from "@/config/supabase";
 import { StatusModal } from "./StatusModal";
 import { SettingsModal } from "./SettingsModal";
 import { BugReportModal } from "./BugReportModal";
+import { RegistrationPreferencesModal } from "./RegistrationPreferencesModal";
+import { GlobalSearchModal } from "./GlobalSearchModal";
 import { QRCodeModal } from "./QRCodeModal";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { SocialsModal } from "./SocialsModal";
@@ -53,8 +55,7 @@ import { useGroupInvitations } from "@/hooks/useGroupInvitations";
 import { GroupInvitations } from "./GroupInvitations";
 import { usePresence } from "@/hooks/usePresence";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
-import { useInactivityMonitor, useSessionLock } from "@/hooks/useInactivityMonitor";
-import { SessionLockScreen, InactivityWarning } from "./SessionLockScreen";
+// Session lock removed - all wallet/vault operations require signatures anyway
 import { useLoginTracking } from "@/hooks/useLoginTracking";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
@@ -76,6 +77,9 @@ import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
 import { WalletModal } from "./WalletModal";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
+import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
+import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
+import { useWakeLock } from "@/hooks/useWakeLock";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -140,19 +144,10 @@ function DashboardContent({
     const [isSocialsModalOpen, setIsSocialsModalOpen] = useState(false);
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
     const [isInvitesModalOpen, setIsInvitesModalOpen] = useState(false);
+    const [isRegistrationPrefsOpen, setIsRegistrationPrefsOpen] = useState(false);
     const [showWakuSuccess, setShowWakuSuccess] = useState(false);
     const [showSolanaBanner, setShowSolanaBanner] = useState(true);
-
-    // Session lock and inactivity monitoring (relaxed settings)
-    const { isLocked, lockReason, lock, unlock } = useSessionLock();
-    const { isWarningShown, timeRemaining, resetActivity } = useInactivityMonitor({
-        timeout: 30 * 60 * 1000, // 30 minutes of inactivity
-        backgroundTimeout: 5 * 60 * 1000, // 5 minutes when backgrounded
-        warningThreshold: 2 * 60 * 1000, // Show warning 2 minutes before lock
-        onInactive: () => lock("inactivity"),
-        onWarning: () => console.log("[Dashboard] Inactivity warning"),
-        enabled: true,
-    });
+    const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
     // Live streaming state
     const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
@@ -182,6 +177,43 @@ function DashboardContent({
     });
     const wakuAutoInitAttempted = useRef(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
+    
+    // Passkey credential ID for messaging key derivation
+    const [passkeyCredentialId, setPasskeyCredentialId] = useState<string | null>(null);
+    
+    // Fetch passkey credential ID for passkey users
+    useEffect(() => {
+        if (!isPasskeyUser || !userAddress) {
+            setPasskeyCredentialId(null);
+            return;
+        }
+        
+        const sb = supabase;
+        if (!sb) {
+            console.warn("[Dashboard] Supabase not configured, cannot fetch passkey credential");
+            return;
+        }
+        
+        const fetchCredential = async () => {
+            try {
+                const { data } = await sb
+                    .from("passkey_credentials")
+                    .select("credential_id")
+                    .eq("user_address", userAddress.toLowerCase())
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .single();
+                
+                if (data?.credential_id) {
+                    setPasskeyCredentialId(data.credential_id);
+                }
+            } catch (err) {
+                console.warn("[Dashboard] Could not fetch passkey credential:", err);
+            }
+        };
+        
+        fetchCredential();
+    }, [isPasskeyUser, userAddress]);
 
     // Group chat state
     const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
@@ -191,6 +223,7 @@ function DashboardContent({
     
     // Folder modal state
     const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+    const [isChatSearchOpen, setIsChatSearchOpen] = useState(false);
     const [selectedGroup, setSelectedGroup] = useState<XMTPGroup | null>(null);
     
     // Custom avatar cache for friends
@@ -256,7 +289,7 @@ function DashboardContent({
     }, [isProfileMenuOpen]);
 
     // Username hook - works for both EVM and Solana addresses
-    const { username: reachUsername, claimUsername } = useUsername(userAddress);
+    const { username: reachUsername, claimUsername, isFetching: isUsernameFetching } = useUsername(userAddress);
 
     // Phone verification hook - works for both EVM and Solana addresses
     const {
@@ -311,10 +344,22 @@ function DashboardContent({
     } = usePushNotifications(userAddress);
 
     // Track user login for admin analytics
-    const { dailyBonusAvailable, claimDailyBonus, isClaimingBonus } =
+    // IMPORTANT: Use the actual auth method, not the chain type
+    // walletType prop is about chain (evm/solana), but track-login expects auth method
+    const actualAuthMethod = isPasskeyUser 
+        ? "passkey" 
+        : isEmailUser 
+        ? "email" 
+        : isWorldIdUser 
+        ? "world_id" 
+        : isAlienIdUser 
+        ? "alien_id" 
+        : walletType; // Traditional wallet: evm or solana
+    
+    const { dailyBonusAvailable, claimDailyBonus, isClaimingBonus, dismissDailyBonus } =
         useLoginTracking({
             walletAddress: userAddress,
-            walletType,
+            walletType: actualAuthMethod,
             chain: isSolanaUser ? "solana" : "ethereum",
             ensName: userENS.ensName,
             username: reachUsername,
@@ -323,10 +368,12 @@ function DashboardContent({
     // State for daily bonus modal
     const [showDailyBonusModal, setShowDailyBonusModal] = useState(false);
     const [dailyBonusClaimed, setDailyBonusClaimed] = useState(false);
+    const hasShownBonusModal = useRef(false); // Prevent showing modal multiple times
 
-    // Show notification when daily bonus is available
+    // Show notification when daily bonus is available (only once per session)
     useEffect(() => {
-        if (dailyBonusAvailable && !dailyBonusClaimed) {
+        if (dailyBonusAvailable && !dailyBonusClaimed && !hasShownBonusModal.current) {
+            hasShownBonusModal.current = true;
             setShowDailyBonusModal(true);
         }
     }, [dailyBonusAvailable, dailyBonusClaimed]);
@@ -341,6 +388,12 @@ function DashboardContent({
             // Refresh points
             refreshPoints();
         }
+    };
+
+    // Handle dismissing daily bonus modal (user clicks "Maybe later")
+    const handleDismissDailyBonus = () => {
+        setShowDailyBonusModal(false);
+        dismissDailyBonus(); // Remember dismissal for today
     };
 
     // Analytics tracking
@@ -530,6 +583,22 @@ function DashboardContent({
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isBugReportModalOpen, setIsBugReportModalOpen] = useState(false);
+    const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+
+    // Global keyboard shortcut for search (Cmd+K / Ctrl+K)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault();
+                setIsGlobalSearchOpen(prev => !prev);
+            }
+            if (e.key === "Escape" && isGlobalSearchOpen) {
+                setIsGlobalSearchOpen(false);
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isGlobalSearchOpen]);
 
     // Cache for user info fetched from API
     const [userInfoCache, setUserInfoCache] = useState<
@@ -628,11 +697,12 @@ function DashboardContent({
                 .then((res) => res.json())
                 .then((data) => {
                     if (data.user) {
-                        const name = data.user.username
+                        // Display name priority: ENS > username > display_name
+                        const name = data.user.ens_name
+                            ? data.user.ens_name
+                            : data.user.username
                             ? `@${data.user.username}`
-                            : data.user.display_name ||
-                              data.user.ens_name ||
-                              null;
+                            : data.user.display_name || null;
                         const userInfo = {
                             name,
                             avatar: data.user.avatar_url || null,
@@ -806,8 +876,11 @@ function DashboardContent({
 
     // Public channels
     const { 
+        channels,
         joinedChannels, 
+        joinChannel,
         leaveChannel, 
+        fetchChannels,
         fetchJoinedChannels,
         toggleChannelNotifications,
         isNotificationsEnabled,
@@ -815,8 +888,96 @@ function DashboardContent({
         setActiveChannel,
     } = useChannels(userAddress);
     const [isBrowseChannelsOpen, setIsBrowseChannelsOpen] = useState(false);
+    const [browseChannelsInitialCreate, setBrowseChannelsInitialCreate] = useState(false);
+    const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [selectedChannel, setSelectedChannel] =
         useState<PublicChannel | null>(null);
+    
+    // Global chat icon from app settings
+    const [globalChatIconUrl, setGlobalChatIconUrl] = useState<string | null>(null);
+    
+    // Fetch global chat icon
+    useEffect(() => {
+        async function fetchGlobalChatIcon() {
+            try {
+                const res = await fetch("/api/admin/settings?key=global_chat_icon");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.settings?.value?.icon_url) {
+                        setGlobalChatIconUrl(data.settings.value.icon_url);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch global chat icon:", err);
+            }
+        }
+        fetchGlobalChatIcon();
+    }, []);
+    
+    // Handle pending channel joins from invite links
+    const hasPendingJoinHandled = useRef(false);
+    useEffect(() => {
+        if (!userAddress || hasPendingJoinHandled.current) return;
+        
+        const handlePendingJoins = async () => {
+            hasPendingJoinHandled.current = true;
+            
+            // Check for pending channel join (from invite link when not logged in)
+            const pendingChannelId = localStorage.getItem("spritz_pending_channel_join");
+            if (pendingChannelId) {
+                localStorage.removeItem("spritz_pending_channel_join");
+                try {
+                    await joinChannel(pendingChannelId);
+                    await fetchJoinedChannels();
+                    // Find the channel and open it
+                    const allChannels = await fetch(`/api/public/channels/${pendingChannelId}`).then(r => r.json());
+                    if (allChannels.channel) {
+                        setSelectedChannel(allChannels.channel);
+                    }
+                } catch (err) {
+                    console.error("[Dashboard] Error joining pending channel:", err);
+                }
+            }
+            
+            // Check for channel to open (from invite link when already logged in)
+            const openChannelId = localStorage.getItem("spritz_open_channel");
+            if (openChannelId) {
+                localStorage.removeItem("spritz_open_channel");
+                // Find the channel in joinedChannels or fetch it
+                const channel = joinedChannels.find(c => c.id === openChannelId);
+                if (channel) {
+                    setSelectedChannel(channel);
+                } else {
+                    // Fetch and set it
+                    try {
+                        const res = await fetch(`/api/public/channels/${openChannelId}`);
+                        const data = await res.json();
+                        if (data.channel) {
+                            setSelectedChannel(data.channel);
+                        }
+                    } catch (err) {
+                        console.error("[Dashboard] Error opening channel:", err);
+                    }
+                }
+            }
+        };
+        
+        handlePendingJoins();
+    }, [userAddress, joinChannel, fetchJoinedChannels, joinedChannels]);
+
+    // Screen Wake Lock - prevents screen from dimming during calls and active chats
+    // This helps maintain WebSocket connections and improves PWA experience
+    const isInActiveCall = callState === "joining" || callState === "connected" || !!currentGroupCall;
+    const isInActiveChat = !!chatFriend || !!selectedGroup || !!selectedChannel;
+    const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } = useWakeLock(isInActiveCall || isInActiveChat);
+    
+    // Log wake lock status for debugging (only once when state changes)
+    useEffect(() => {
+        if (isWakeLockSupported && (isInActiveCall || isInActiveChat)) {
+            console.log("[Dashboard] Wake lock:", isWakeLockActive ? "active" : "inactive", 
+                { isInActiveCall, isInActiveChat });
+        }
+    }, [isWakeLockActive, isWakeLockSupported, isInActiveCall, isInActiveChat]);
 
     // Waku works with both EVM and Solana addresses
     const wakuContext = useXMTPContext();
@@ -839,6 +1000,89 @@ function DashboardContent({
         }
     });
     
+    // Track last message previews for chat list display (persisted to localStorage)
+    const [lastMessagePreviews, setLastMessagePreviews] = useState<Record<string, string>>(() => {
+        if (typeof window === "undefined") return {};
+        try {
+            const stored = localStorage.getItem(`spritz_last_msg_previews_${userAddress?.toLowerCase()}`);
+            return stored ? JSON.parse(stored) : {};
+        } catch {
+            return {};
+        }
+    });
+    
+    // On initial load, scan stored messages to extract last message times for conversations
+    // without tracked times yet. This provides initial ordering based on actual messages.
+    const hasScannedMessages = useRef(false);
+    useEffect(() => {
+        if (typeof window === "undefined" || !userAddress || hasScannedMessages.current) return;
+        hasScannedMessages.current = true;
+        
+        try {
+            // Get stored messages from Waku storage
+            const messagesData = localStorage.getItem("waku_messages");
+            if (!messagesData) return;
+            
+            const allMessages = JSON.parse(messagesData);
+            const updates: Record<string, number> = {};
+            const userAddrLower = userAddress.toLowerCase();
+            
+            Object.entries(allMessages).forEach(([topic, messages]) => {
+                if (!Array.isArray(messages) || messages.length === 0) return;
+                
+                // Find the latest message timestamp
+                let latestTime = 0;
+                messages.forEach((msg: { sentAtNs?: string | bigint }) => {
+                    const timestamp = msg.sentAtNs 
+                        ? Number(BigInt(msg.sentAtNs) / BigInt(1000000)) // Convert nanoseconds to milliseconds
+                        : 0;
+                    if (timestamp > latestTime) {
+                        latestTime = timestamp;
+                    }
+                });
+                
+                if (latestTime === 0) return;
+                
+                // Extract conversation key from topic
+                // DM topics: /shout/1/dm-{addr1}-{addr2}/proto
+                // Group topics: /shout/1/group-{groupId}/proto
+                // Channel topics: handled separately
+                if (topic.includes("/dm-")) {
+                    const match = topic.match(/\/dm-([a-f0-9x-]+)\/proto$/i);
+                    if (match) {
+                        // DM topic format: dm-{addr1}-{addr2} sorted alphabetically
+                        const dmPair = match[1];
+                        const addresses = dmPair.split("-").filter(a => a.startsWith("0x"));
+                        // Find the peer address (not our address)
+                        const peerAddr = addresses.find(a => a.toLowerCase() !== userAddrLower);
+                        if (peerAddr) {
+                            const key = peerAddr.toLowerCase();
+                            if (!lastMessageTimes[key] || latestTime > lastMessageTimes[key]) {
+                                updates[key] = latestTime;
+                            }
+                        }
+                    }
+                } else if (topic.includes("/group-")) {
+                    const match = topic.match(/\/group-([^/]+)\/proto$/);
+                    if (match) {
+                        const groupId = match[1];
+                        const key = `group-${groupId}`;
+                        if (!lastMessageTimes[key] || latestTime > lastMessageTimes[key]) {
+                            updates[key] = latestTime;
+                        }
+                    }
+                }
+            });
+            
+            if (Object.keys(updates).length > 0) {
+                console.log("[Dashboard] Loaded message times from storage:", Object.keys(updates).length, "conversations");
+                setLastMessageTimes(prev => ({ ...prev, ...updates }));
+            }
+        } catch (error) {
+            console.error("[Dashboard] Failed to scan stored messages:", error);
+        }
+    }, [userAddress, lastMessageTimes]);
+    
     // Persist last message times to localStorage
     useEffect(() => {
         if (userAddress && Object.keys(lastMessageTimes).length > 0) {
@@ -852,6 +1096,20 @@ function DashboardContent({
             }
         }
     }, [lastMessageTimes, userAddress]);
+    
+    // Persist last message previews to localStorage
+    useEffect(() => {
+        if (userAddress && Object.keys(lastMessagePreviews).length > 0) {
+            try {
+                localStorage.setItem(
+                    `spritz_last_msg_previews_${userAddress.toLowerCase()}`,
+                    JSON.stringify(lastMessagePreviews)
+                );
+            } catch {
+                // Ignore storage errors
+            }
+        }
+    }, [lastMessagePreviews, userAddress]);
     
     // Update last message times when unread counts change (new message received)
     const prevUnreadCountsRef = useRef<Record<string, number>>({});
@@ -1017,19 +1275,23 @@ function DashboardContent({
     };
 
     // Get user info for Alpha chat - checks cache first for effective avatar, then friends list
+    // Display name priority: ENS > Spritz username > address
     const getAlphaUserInfo = useCallback(
         (address: string) => {
             const normalizedAddress = address.toLowerCase();
 
             // Check if it's the current user
+            // Priority: ENS > username
             if (normalizedAddress === userAddress.toLowerCase()) {
                 return {
-                    name: reachUsername || userENS?.ensName || null,
+                    name: userENS?.ensName || (reachUsername ? `@${reachUsername}` : null),
                     avatar: effectiveAvatar || null,
                 };
             }
 
             // Check cache first - has effective avatar from public API
+            // Cache stores: { name: string | null; avatar: string | null }
+            // where name is already formatted with priority (ENS > @username)
             const cached = userInfoCache.get(normalizedAddress);
             
             // Check friends list for name info
@@ -1037,11 +1299,23 @@ function DashboardContent({
                 (f) => f.friend_address.toLowerCase() === normalizedAddress
             );
 
-            // If we have cached info (with effective avatar), use it but prefer friend's nickname for name
+            // Build display name with priority: local nickname > ENS > username
+            const getDisplayNameForFriend = () => {
+                // Local nickname takes highest priority (personal override)
+                if (friend?.nickname) return friend.nickname;
+                // ENS is second priority
+                if (friend?.ensName) return friend.ensName;
+                // Spritz username is third priority
+                if (friend?.reachUsername) return `@${friend.reachUsername}`;
+                // Fallback to cached name if available (already formatted correctly)
+                if (cached?.name) return cached.name;
+                return null;
+            };
+
+            // If we have cached info (with effective avatar), use it
             if (cached) {
-                const friendName = friend?.nickname || friend?.reachUsername || friend?.ensName;
                 return {
-                    name: friendName || cached.name,
+                    name: getDisplayNameForFriend(),
                     avatar: cached.avatar, // Use cached effective avatar
                 };
             }
@@ -1049,11 +1323,7 @@ function DashboardContent({
             // Fallback to friend data if no cache (avatar may not be effective)
             if (friend) {
                 return {
-                    name:
-                        friend.nickname ||
-                        friend.reachUsername ||
-                        friend.ensName ||
-                        null,
+                    name: getDisplayNameForFriend(),
                     avatar: friend.avatar || null,
                 };
             }
@@ -1101,7 +1371,7 @@ function DashboardContent({
                     friend.ensName || 
                     `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`,
                 avatar: friend.avatar,
-                lastMessage: null, // Could be populated from message cache
+                lastMessage: lastMessagePreviews[addressLower] || null,
                 lastMessageAt,
                 unreadCount: unreadCounts[addressLower] || 0,
                 isOnline: false, // Will be updated by FriendsList logic
@@ -1119,8 +1389,8 @@ function DashboardContent({
             id: "global-spritz",
             type: "global",
             name: "Spritz Global",
-            avatar: null,
-            lastMessage: "Community chat",
+            avatar: globalChatIconUrl,
+            lastMessage: lastMessagePreviews["global-spritz"] || "Community chat",
             lastMessageAt: globalLastMsgTime ? new Date(globalLastMsgTime) : new Date(),
             unreadCount: alphaUnreadCount,
             isPinned: true,
@@ -1133,13 +1403,21 @@ function DashboardContent({
         joinedChannels.forEach((channel) => {
             const channelKey = `channel-${channel.id}`;
             const lastMsgTime = lastMessageTimes[channelKey];
+            // Use tracked last message time - channels will sort by activity
+            // If not tracked yet, use channel's updated_at as initial fallback
+            const fallbackTime = channel.updated_at || channel.created_at;
+            const lastMessageAt = lastMsgTime 
+                ? new Date(lastMsgTime) 
+                : fallbackTime 
+                ? new Date(fallbackTime) 
+                : null;
             items.push({
                 id: channelKey,
                 type: "channel",
                 name: channel.name,
-                avatar: null,
-                lastMessage: `${channel.member_count} members`,
-                lastMessageAt: lastMsgTime ? new Date(lastMsgTime) : null,
+                avatar: channel.icon_url || null,
+                lastMessage: lastMessagePreviews[channelKey] || `${channel.member_count} members`,
+                lastMessageAt,
                 unreadCount: 0,
                 metadata: {
                     memberCount: channel.member_count,
@@ -1152,13 +1430,19 @@ function DashboardContent({
         groups.forEach((group) => {
             const groupKey = `group-${group.id}`;
             const lastMsgTime = lastMessageTimes[groupKey];
+            // Use tracked last message time, or fall back to group creation time
+            const lastMessageAt = lastMsgTime 
+                ? new Date(lastMsgTime) 
+                : group.createdAt 
+                ? new Date(group.createdAt) 
+                : null;
             items.push({
                 id: groupKey,
                 type: "group",
                 name: group.name,
                 avatar: null,
-                lastMessage: `${group.memberCount || 0} members`,
-                lastMessageAt: lastMsgTime ? new Date(lastMsgTime) : null,
+                lastMessage: lastMessagePreviews[groupKey] || `${group.memberCount || 0} members`,
+                lastMessageAt,
                 unreadCount: 0,
                 metadata: {
                     memberCount: group.memberCount,
@@ -1168,14 +1452,24 @@ function DashboardContent({
         });
         
         return items;
-    }, [friendsListData, unreadCounts, lastMessageTimes, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
+    }, [friendsListData, unreadCounts, lastMessageTimes, lastMessagePreviews, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
     
-    // Function to update last message time when user sends a message
-    const updateLastMessageTime = useCallback((chatKey: string) => {
+    // Function to update last message time and preview when user sends a message
+    const updateLastMessageTime = useCallback((chatKey: string, messagePreview?: string) => {
         setLastMessageTimes(prev => ({
             ...prev,
             [chatKey]: Date.now(),
         }));
+        if (messagePreview) {
+            // Truncate long previews
+            const preview = messagePreview.length > 50 
+                ? messagePreview.slice(0, 50) + "..." 
+                : messagePreview;
+            setLastMessagePreviews(prev => ({
+                ...prev,
+                [chatKey]: preview,
+            }));
+        }
     }, []);
 
     // Open chat from URL parameter (e.g., ?chat=0x123...)
@@ -1597,13 +1891,24 @@ function DashboardContent({
         if (!isWakuInitialized) return;
 
         const unsubscribe = onNewMessage(({ senderAddress, content }) => {
+            const senderAddressLower = senderAddress.toLowerCase();
+            
+            // Always update last message time for this conversation (for sorting)
+            setLastMessageTimes(prev => ({ ...prev, [senderAddressLower]: Date.now() }));
+            
+            // Skip notification if we're already viewing this conversation
+            if (chatFriend?.address.toLowerCase() === senderAddressLower) {
+                console.log("[Dashboard] Skipping notification - chat is open for:", senderAddress);
+                return;
+            }
+
             // Pre-fetch all messages for this conversation in background
             // This way when user clicks the toast, messages are already loaded
             prefetchMessages(senderAddress);
 
             // Find friend info for the sender
             const friend = friendsListData.find(
-                (f) => f.address.toLowerCase() === senderAddress.toLowerCase()
+                (f) => f.address.toLowerCase() === senderAddressLower
             );
             // Priority: nickname > Spritz username > ENS > shortened address
             const senderName =
@@ -1638,11 +1943,22 @@ function DashboardContent({
         friendsListData,
         notifyMessage,
         userSettings.soundEnabled,
+        chatFriend,
     ]);
 
     // Listen for new channel messages and show toast + notification
     useEffect(() => {
-        const unsubscribe = onNewChannelMessage(({ channelName, senderAddress, content }) => {
+        const unsubscribe = onNewChannelMessage(({ channelId, channelName, senderAddress, content }) => {
+            // Always update last message time for this channel (for sorting)
+            const channelKey = `channel-${channelId}`;
+            setLastMessageTimes(prev => ({ ...prev, [channelKey]: Date.now() }));
+            
+            // Skip notification if we're already viewing this channel
+            if (selectedChannel?.id === channelId) {
+                console.log("[Dashboard] Skipping notification - channel chat is open:", channelName);
+                return;
+            }
+
             // Find sender info
             const senderInfo = getAlphaUserInfo(senderAddress);
             const senderName = senderInfo?.name || formatAddress(senderAddress);
@@ -1666,7 +1982,7 @@ function DashboardContent({
         });
 
         return unsubscribe;
-    }, [onNewChannelMessage, getAlphaUserInfo, notifyMessage, userSettings.soundEnabled]);
+    }, [onNewChannelMessage, getAlphaUserInfo, notifyMessage, userSettings.soundEnabled, selectedChannel]);
 
     const handleSendFriendRequest = async (
         addressOrENS: string
@@ -2107,32 +2423,29 @@ function DashboardContent({
         }
     }, [friendsListData, handleVideoCall]);
 
+    // Determine auth type for messaging key
+    const messagingAuthType = isPasskeyUser 
+        ? "passkey" 
+        : isEmailUser 
+        ? "email" 
+        : isWorldIdUser || isAlienIdUser 
+        ? "digitalid" 
+        : isSolanaUser 
+        ? "solana"
+        : "wallet";
+
     return (
         <>
-            {/* Session Lock Screen - Requires re-authentication */}
-            <SessionLockScreen
-                isLocked={isLocked}
-                lockReason={lockReason}
-                onUnlock={() => {
-                    unlock();
-                    resetActivity();
-                }}
-                walletAddress={userAddress}
-                authMethod={
-                    isPasskeyUser ? "passkey" :
-                    isEmailUser ? "email" :
-                    isWorldIdUser ? "world_id" :
-                    isAlienIdUser ? "alien_id" :
-                    isSolanaUser ? "solana" :
-                    "wallet"
-                }
+            {/* Messaging Key Restore Banner - prompts users to restore key when missing */}
+            <MessagingKeyRestoreBanner
+                userAddress={userAddress}
+                authType={messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"}
+                onOpenSettings={() => setIsSettingsModalOpen(true)}
             />
-            
-            {/* Inactivity Warning Toast */}
-            <InactivityWarning
-                isVisible={isWarningShown && !isLocked}
-                timeRemaining={timeRemaining}
-                onStayActive={resetActivity}
+            {/* Messaging Key Upgrade Banner - shows once for legacy key users */}
+            <MessagingKeyUpgradeBanner
+                userAddress={userAddress}
+                authType={messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"}
             />
             
             <div className="min-h-screen bg-zinc-950 flex flex-col">
@@ -2265,7 +2578,7 @@ function DashboardContent({
                                                         "min(calc(100dvh - 140px), 700px)",
                                                 }}
                                             >
-                                                {/* 1. My QR Code */}
+                                                {/* 1. Invite Friends */}
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
@@ -2288,16 +2601,16 @@ function DashboardContent({
                                                                 strokeLinecap="round"
                                                                 strokeLinejoin="round"
                                                                 strokeWidth={2}
-                                                                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                                                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
                                                             />
                                                         </svg>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-white text-sm font-medium">
-                                                            My QR Code
+                                                            Invite Friends
                                                         </p>
                                                         <p className="text-zinc-500 text-xs">
-                                                            Share to add friends
+                                                            Share your QR code
                                                         </p>
                                                     </div>
                                                 </button>
@@ -2347,10 +2660,14 @@ function DashboardContent({
                                                             className={`text-xs truncate ${
                                                                 reachUsername
                                                                     ? "text-emerald-400"
+                                                                    : isUsernameFetching
+                                                                    ? "text-zinc-600"
                                                                     : "text-zinc-500"
                                                             }`}
                                                         >
-                                                            {reachUsername
+                                                            {isUsernameFetching
+                                                                ? "Loading..."
+                                                                : reachUsername
                                                                 ? `@${reachUsername}`
                                                                 : "Claim a username (+10 pts)"}
                                                         </p>
@@ -2811,7 +3128,7 @@ function DashboardContent({
                             </div>
 
                             <button
-                                onClick={onLogout}
+                                onClick={() => setShowDisconnectConfirm(true)}
                                 className="py-2 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
                             >
                                 Disconnect
@@ -3562,6 +3879,33 @@ function DashboardContent({
                                             Chats
                                         </h2>
                                         <div className="flex items-center gap-1 sm:gap-2">
+                                            {/* Search Toggle Button */}
+                                            <button
+                                                onClick={() => setIsChatSearchOpen(!isChatSearchOpen)}
+                                                className={`w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl transition-all flex items-center justify-center sm:justify-start gap-2 ${
+                                                    isChatSearchOpen
+                                                        ? "bg-[#FF5500] text-white"
+                                                        : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
+                                                }`}
+                                                title="Search chats"
+                                            >
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                                    />
+                                                </svg>
+                                                <span className="hidden sm:inline text-sm font-medium">
+                                                    Search
+                                                </span>
+                                            </button>
                                             {/* Add Folder Button */}
                                             <button
                                                 onClick={() => setIsCreateFolderOpen(true)}
@@ -3585,12 +3929,14 @@ function DashboardContent({
                                                     Folder
                                                 </span>
                                             </button>
+                                            {/* Browse/Explore Channels Button */}
                                             <button
-                                                onClick={() =>
-                                                    setIsBrowseChannelsOpen(true)
-                                                }
+                                                onClick={() => {
+                                                    setBrowseChannelsInitialCreate(false);
+                                                    setIsBrowseChannelsOpen(true);
+                                                }}
                                                 className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
-                                                title="Browse channels"
+                                                title="Explore channels"
                                             >
                                                 <svg
                                                     className="w-4 h-4"
@@ -3602,21 +3948,19 @@ function DashboardContent({
                                                         strokeLinecap="round"
                                                         strokeLinejoin="round"
                                                         strokeWidth={2}
-                                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                                     />
                                                 </svg>
                                                 <span className="hidden sm:inline text-sm font-medium">
-                                                    Browse
+                                                    Explore
                                                 </span>
                                             </button>
-                                            {isWakuInitialized && (
+                                            {/* Consolidated New Chat Menu */}
+                                            <div className="relative">
                                                 <button
-                                                    onClick={() =>
-                                                        setIsCreateGroupOpen(true)
-                                                    }
-                                                    disabled={friends.length === 0}
-                                                    className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50"
-                                                    title="New group"
+                                                    onClick={() => setShowNewChatMenu(!showNewChatMenu)}
+                                                    className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2"
+                                                    title="Create new"
                                                 >
                                                     <svg
                                                         className="w-4 h-4"
@@ -3634,8 +3978,87 @@ function DashboardContent({
                                                     <span className="hidden sm:inline text-sm font-medium">
                                                         New
                                                     </span>
+                                                    <svg
+                                                        className="w-3 h-3 hidden sm:block"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M19 9l-7 7-7-7"
+                                                        />
+                                                    </svg>
                                                 </button>
-                                            )}
+                                                
+                                                {/* Dropdown Menu */}
+                                                <AnimatePresence>
+                                                    {showNewChatMenu && (
+                                                        <>
+                                                            {/* Backdrop */}
+                                                            <motion.div
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                exit={{ opacity: 0 }}
+                                                                className="fixed inset-0 z-40"
+                                                                onClick={() => setShowNewChatMenu(false)}
+                                                            />
+                                                            {/* Menu */}
+                                                            <motion.div
+                                                                initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                                exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                                className="absolute right-0 top-full mt-2 w-56 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden z-50"
+                                                            >
+                                                                <div className="p-1">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setShowNewChatMenu(false);
+                                                                            setBrowseChannelsInitialCreate(true);
+                                                                            setIsBrowseChannelsOpen(true);
+                                                                        }}
+                                                                        className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                                    >
+                                                                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                                                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                                                                            </svg>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-white text-sm font-medium">Public Channel</p>
+                                                                            <p className="text-zinc-500 text-xs">Anyone can join</p>
+                                                                        </div>
+                                                                    </button>
+                                                                    {isWakuInitialized && (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setShowNewChatMenu(false);
+                                                                                setIsCreateGroupOpen(true);
+                                                                            }}
+                                                                            disabled={friends.length === 0}
+                                                                            className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                        >
+                                                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                                                                <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                                                </svg>
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-white text-sm font-medium">Private Group</p>
+                                                                                <p className="text-zinc-500 text-xs">
+                                                                                    {friends.length === 0 ? "Add friends first" : "Encrypted, invite only"}
+                                                                                </p>
+                                                                            </div>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        </>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -3648,6 +4071,8 @@ function DashboardContent({
                                         onVideoClick={handleUnifiedVideoClick}
                                         showCreateFolderModal={isCreateFolderOpen}
                                         onCreateFolderModalClose={() => setIsCreateFolderOpen(false)}
+                                        showSearch={isChatSearchOpen}
+                                        onSearchToggle={() => setIsChatSearchOpen(!isChatSearchOpen)}
                                     />
                                 </div>
                             </div>
@@ -4202,15 +4627,16 @@ function DashboardContent({
             {/* Chat Modal */}
             {userAddress && (
                 <ChatModal
+                    key={chatFriend?.address || "no-chat"} // Force remount when peer changes
                     isOpen={!!chatFriend}
                     onClose={() => setChatFriend(null)}
                     userAddress={userAddress}
                     peerAddress={chatFriend?.address || ""}
                     peerName={chatFriend?.ensName || chatFriend?.nickname}
                     peerAvatar={chatFriend?.avatar}
-                    onMessageSent={() => {
+                    onMessageSent={(preview) => {
                         if (chatFriend) {
-                            updateLastMessageTime(chatFriend.address.toLowerCase());
+                            updateLastMessageTime(chatFriend.address.toLowerCase(), preview);
                         }
                     }}
                 />
@@ -4308,6 +4734,8 @@ function DashboardContent({
                 onEnablePush={subscribeToPush}
                 onDisablePush={unsubscribeFromPush}
                 userAddress={userAddress}
+                authType={messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"}
+                passkeyCredentialId={passkeyCredentialId}
                 onOpenStatusModal={() => setIsStatusModalOpen(true)}
                 availableInvites={availableInvites}
                 usedInvites={usedInvites}
@@ -4320,6 +4748,13 @@ function DashboardContent({
                 onSetCustomAvatar={setCustomAvatar}
             />
 
+            {/* Registration Preferences Modal */}
+            <RegistrationPreferencesModal
+                isOpen={isRegistrationPrefsOpen}
+                onClose={() => setIsRegistrationPrefsOpen(false)}
+                userAddress={userAddress}
+            />
+
             {/* First-time Push Notification Prompt */}
             <PushNotificationPrompt
                 userAddress={userAddress}
@@ -4330,14 +4765,20 @@ function DashboardContent({
                 onSkip={() => {}}
             />
 
-            {/* QR Code Modal */}
+            {/* QR Code Modal / Invite Friends */}
             <QRCodeModal
                 isOpen={isQRCodeModalOpen}
-                onClose={() => setIsQRCodeModalOpen(false)}
+                onClose={() => {
+                    setIsQRCodeModalOpen(false);
+                    clearFriendsError();
+                }}
                 address={userAddress as `0x${string}`}
                 ensName={userENS.ensName}
                 reachUsername={reachUsername || null}
                 avatar={effectiveAvatar}
+                onAddFriend={handleSendFriendRequest}
+                isAddingFriend={isFriendsLoading}
+                addFriendError={friendsError}
             />
 
             {/* New Scheduled Call Modal */}
@@ -4540,6 +4981,9 @@ function DashboardContent({
                     )
                 }
                 isAdmin={isAdmin}
+                onMessageSent={() => {
+                    updateLastMessageTime("global-spritz");
+                }}
             />
 
             {/* Create Group Modal */}
@@ -4554,6 +4998,7 @@ function DashboardContent({
             {/* Group Chat Modal */}
             {userAddress && (
                 <GroupChatModal
+                    key={selectedGroup?.id || "no-group"} // Force remount when group changes
                     isOpen={!!selectedGroup}
                     onClose={() => setSelectedGroup(null)}
                     userAddress={userAddress}
@@ -4567,6 +5012,20 @@ function DashboardContent({
                     onStartCall={handleStartGroupCall}
                     hasActiveCall={callState !== "idle" || !!currentGroupCall}
                     getUserInfo={getAlphaUserInfo}
+                    onMessageSent={() => {
+                        // Update last message time for this group (for sorting)
+                        if (selectedGroup) {
+                            const groupKey = `group-${selectedGroup.id}`;
+                            updateLastMessageTime(groupKey);
+                        }
+                    }}
+                    onMessageReceived={() => {
+                        // Update last message time when receiving messages (for sorting)
+                        if (selectedGroup) {
+                            const groupKey = `group-${selectedGroup.id}`;
+                            updateLastMessageTime(groupKey);
+                        }
+                    }}
                 />
             )}
 
@@ -4575,19 +5034,23 @@ function DashboardContent({
                 isOpen={isBrowseChannelsOpen}
                 onClose={() => {
                     setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
                     fetchJoinedChannels();
                 }}
                 userAddress={userAddress}
                 onJoinChannel={async (channel) => {
                     setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
                     await fetchJoinedChannels(); // Refresh the list immediately
                     setSelectedChannel(channel);
                 }}
+                initialShowCreate={browseChannelsInitialCreate}
             />
 
             {/* Channel Chat Modal */}
             {selectedChannel && (
                 <ChannelChatModal
+                    key={selectedChannel?.id || "no-channel"} // Force remount when channel changes
                     isOpen={!!selectedChannel}
                     onClose={() => setSelectedChannel(null)}
                     channel={selectedChannel}
@@ -4613,6 +5076,11 @@ function DashboardContent({
                     onToggleNotifications={() => toggleChannelNotifications(selectedChannel.id)}
                     onSetActiveChannel={setActiveChannel}
                     isAdmin={isAdmin}
+                    onMessageSent={() => {
+                        // Update last message time for this channel (for sorting)
+                        const channelKey = `channel-${selectedChannel.id}`;
+                        updateLastMessageTime(channelKey);
+                    }}
                 />
             )}
 
@@ -4647,7 +5115,7 @@ function DashboardContent({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                        onClick={() => setShowDailyBonusModal(false)}
+                        onClick={handleDismissDailyBonus}
                     >
                         <motion.div
                             initial={{ scale: 0.8, opacity: 0 }}
@@ -4713,7 +5181,7 @@ function DashboardContent({
                             </button>
 
                             <button
-                                onClick={() => setShowDailyBonusModal(false)}
+                                onClick={handleDismissDailyBonus}
                                 className="mt-3 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
                             >
                                 Maybe later
@@ -4814,6 +5282,17 @@ function DashboardContent({
                 isOpen={isBugReportModalOpen}
                 onClose={() => setIsBugReportModalOpen(false)}
                 userAddress={userAddress}
+            />
+
+            {/* Global Search Modal */}
+            <GlobalSearchModal
+                isOpen={isGlobalSearchOpen}
+                onClose={() => setIsGlobalSearchOpen(false)}
+                userAddress={userAddress}
+                onOpenChannel={(channelId) => {
+                    const channel = joinedChannels.find(c => c.id === channelId);
+                    if (channel) setSelectedChannel(channel);
+                }}
             />
 
             {/* Wallet Modal */}
@@ -4923,6 +5402,58 @@ function DashboardContent({
             </AnimatePresence>
 
             {/* Live Stream Player removed - now using /live/[id] page */}
+
+            {/* Disconnect Confirmation Modal */}
+            <AnimatePresence>
+                {showDisconnectConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4"
+                        onClick={() => setShowDisconnectConfirm(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                                    <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-xl font-semibold text-white mb-2">
+                                    Disconnect Wallet?
+                                </h3>
+                                <p className="text-zinc-400 text-sm">
+                                    Are you sure you want to disconnect? You&apos;ll need to reconnect to access your account.
+                                </p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowDisconnectConfirm(false)}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowDisconnectConfirm(false);
+                                        onLogout();
+                                    }}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+                                >
+                                    Disconnect
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </>
     );
 }

@@ -230,13 +230,28 @@ export function UnifiedChatList({
     onVideoClick,
     showCreateFolderModal,
     onCreateFolderModalClose,
-}: UnifiedChatListProps) {
+    showSearch = false,
+    onSearchToggle,
+}: UnifiedChatListProps & { 
+    showSearch?: boolean; 
+    onSearchToggle?: () => void;
+}) {
     const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = "All"
     const [showFolderPicker, setShowFolderPicker] = useState<string | null>(null);
     const [folderPickerPosition, setFolderPickerPosition] = useState<{ top: number; left: number; openUpward: boolean } | null>(null);
     const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
     const tabsRef = useRef<HTMLDivElement>(null);
     const folderButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    const [searchQuery, setSearchQuery] = useState("");
+    const [typeFilter, setTypeFilter] = useState<"all" | "dms" | "groups" | "channels">("all");
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    
+    // Focus search input when shown
+    useEffect(() => {
+        if (showSearch && searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, [showSearch]);
     
     // Sync external modal state with internal state
     useEffect(() => {
@@ -270,20 +285,51 @@ export function UnifiedChatList({
             if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
             if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
             
-            // Then by last message time
-            const aTime = a.lastMessageAt?.getTime() || 0;
-            const bTime = b.lastMessageAt?.getTime() || 0;
-            return bTime - aTime;
+            // Then by last message time (most recent first)
+            // Chats without messages (null) go to the bottom
+            if (!a.lastMessageAt && !b.lastMessageAt) return 0;
+            if (!a.lastMessageAt) return 1; // a goes after b
+            if (!b.lastMessageAt) return -1; // b goes after a
+            
+            const aTime = a.lastMessageAt.getTime();
+            const bTime = b.lastMessageAt.getTime();
+            return bTime - aTime; // Most recent first
         });
     }, [chats]);
 
-    // Filter chats by active folder
+    // Filter chats by active folder, search query, and type filter
     const filteredChats = useMemo(() => {
-        if (activeFolder === null) {
-            return sortedChats; // "All" folder shows everything
+        let result = sortedChats;
+        
+        // Apply folder filter
+        if (activeFolder !== null) {
+            result = result.filter(chat => getChatFolder(chat.id) === activeFolder);
         }
-        return sortedChats.filter(chat => getChatFolder(chat.id) === activeFolder);
-    }, [sortedChats, activeFolder, getChatFolder]);
+        
+        // Apply type filter
+        if (typeFilter !== "all") {
+            result = result.filter(chat => {
+                if (typeFilter === "dms") return chat.type === "dm";
+                if (typeFilter === "groups") return chat.type === "group";
+                if (typeFilter === "channels") return chat.type === "channel" || chat.type === "global";
+                return true;
+            });
+        }
+        
+        // Apply search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(chat => {
+                const name = chat.name.toLowerCase();
+                const lastMessage = chat.lastMessage?.toLowerCase() || "";
+                const address = chat.metadata?.address?.toLowerCase() || "";
+                const username = chat.metadata?.reachUsername?.toLowerCase() || "";
+                return name.includes(query) || lastMessage.includes(query) || address.includes(query) || username.includes(query);
+            });
+        }
+        
+        return result;
+    }, [sortedChats, activeFolder, getChatFolder, searchQuery, typeFilter]);
 
     // Get unread count per folder
     const folderUnreadCounts = useMemo(() => {
@@ -389,6 +435,74 @@ export function UnifiedChatList({
 
     return (
         <div className="space-y-1.5 sm:space-y-3 select-none">
+            {/* Search Section */}
+            <AnimatePresence>
+                {showSearch && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="overflow-hidden px-1 sm:px-0"
+                    >
+                        <div className="space-y-2 pb-2">
+                            {/* Search Input */}
+                            <div className="relative">
+                                <svg 
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" 
+                                    fill="none" 
+                                    viewBox="0 0 24 24" 
+                                    stroke="currentColor"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search chats, groups, channels..."
+                                    className="w-full pl-10 pr-10 py-2.5 bg-zinc-800/80 border border-zinc-700/50 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 text-sm"
+                                />
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => setSearchQuery("")}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                            
+                            {/* Type Filter Pills */}
+                            <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+                                {[
+                                    { value: "all", label: "All", icon: "✨" },
+                                    { value: "dms", label: "DMs", icon: "💬" },
+                                    { value: "groups", label: "Groups", icon: "👥" },
+                                    { value: "channels", label: "Channels", icon: "#" },
+                                ].map((filter) => (
+                                    <button
+                                        key={filter.value}
+                                        onClick={() => setTypeFilter(filter.value as typeof typeFilter)}
+                                        className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                                            typeFilter === filter.value
+                                                ? "bg-[#FF5500] text-white"
+                                                : "bg-zinc-800/50 text-zinc-400 hover:text-white"
+                                        }`}
+                                    >
+                                        <span>{filter.icon}</span>
+                                        <span>{filter.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            
             {/* Folder Tabs - Horizontal scrollable */}
             <div 
                 ref={tabsRef}

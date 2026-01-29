@@ -250,7 +250,10 @@ export async function POST(request: NextRequest) {
         const backedUp = registrationInfo.credentialBackedUp;
 
         // Get transports from the response if available
-        const transports = credential.response.transports || ["internal", "hybrid"];
+        // IMPORTANT: Don't store "hybrid" as default - it causes Safari to show
+        // cross-device options (iPhone, iPad, Android, Security Key) instead of
+        // directly prompting for the local/synced passkey
+        const transports = credential.response.transports || ["internal"];
 
         // Determine final wallet address:
         // 1. If recovery: use the recovered address (to restore access to old account)
@@ -436,11 +439,17 @@ export async function POST(request: NextRequest) {
                 login_count: (existingUser.login_count || 0) + 1,
             };
             
-            // Fix wallet_type for users who registered a passkey (upgrade to passkey user)
-            // This is important so they get the correct Smart Wallet address calculation
+            // Fix wallet_type for users who don't have one set
+            // IMPORTANT: Don't change wallet_type for existing "wallet" users!
+            // - "wallet" users can sign with their connected EOA - passkey is optional extra security
+            // - "evm" or null users should become "passkey" users
+            // - "passkey" users stay as "passkey"
             if (!existingUser.wallet_type || existingUser.wallet_type === 'evm') {
                 updateData.wallet_type = 'passkey';
                 console.log("[Passkey] Upgrading wallet_type to 'passkey' for user:", finalUserAddress.slice(0, 10));
+            } else if (existingUser.wallet_type === 'wallet') {
+                // EOA users keep their wallet type - they can still sign with their wallet!
+                console.log("[Passkey] Wallet user adding passkey - keeping wallet_type='wallet':", finalUserAddress.slice(0, 10));
             }
             
             if (smartWalletAddress && !existingUser.smart_wallet_address) {

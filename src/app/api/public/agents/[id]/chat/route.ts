@@ -15,6 +15,95 @@ const supabase = supabaseUrl && supabaseKey
 const geminiApiKey = process.env.GOOGLE_GEMINI_API_KEY;
 const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
+// Build system instruction for agent
+function buildSystemInstruction(agent: {
+    name: string;
+    system_instructions: string | null;
+    personality: string | null;
+    use_knowledge_base: boolean;
+    visibility: string;
+}): string {
+    // Get current date for context
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    const dateContext = `
+
+CURRENT DATE: Today is ${currentDate}. When users ask about "today", "tomorrow", "this week", etc., use this date as reference. If the user asks about events on a specific date, check if that date has passed or is in the future relative to today.`;
+
+    const baseInstruction = agent.system_instructions || 
+        `You are a helpful AI assistant named ${agent.name}.${agent.personality ? ` ${agent.personality}` : ""}`;
+    
+    // Add markdown and image guidance for official agents with knowledge bases
+    const markdownGuidance = agent.visibility === "official" && agent.use_knowledge_base
+        ? `
+
+IMPORTANT: You can use full markdown formatting in your responses:
+- Use **bold** and *italic* for emphasis
+- Use bullet points and numbered lists for organization
+- Use code blocks for technical content
+- When referencing images from your knowledge base, ONLY use markdown with actual HTTP/HTTPS URLs: ![Description](https://example.com/image.png)
+- NEVER output base64 encoded data (data:image/... or long encoded strings) - these are unreadable to users
+- If you see base64 data in your context, ignore it completely - do not reference or include it
+- Only display images if you have a proper URL starting with http:// or https://`
+        : "";
+    
+    // Add event registration guidance for official agents
+    const eventRegistrationGuidance = agent.visibility === "official"
+        ? `
+
+## CRITICAL: Event Registration Instructions
+
+NEVER say you "cannot" or "can't" register users for events. You CAN and SHOULD help users register!
+
+When users ask about registering for events (especially Luma events):
+1. **ALWAYS respond positively**: "I'd be happy to help you register!" or "Let me help you register for that event!"
+2. **Find the registration URL from the event context** - look for "🎫 REGISTRATION URL:" in the event data provided
+3. **Use that EXACT URL** to create a markdown link: [Register for [Event Name]](EXACT_URL_FROM_EVENT_DATA)
+4. **For Luma events** (URLs containing "lu.ma" or "luma.com"): Mention that their saved information will be pre-filled when they click the link
+5. **Example**: If event shows "🎫 REGISTRATION URL: https://luma.com/ualsao7v", respond with:
+   "I'd be happy to help you register for Logos Circle Barcelona #5! Click here: [Register Now](https://luma.com/ualsao7v). Your saved information will be pre-filled automatically."
+
+CRITICAL: Always use the EXACT URL from the "🎫 REGISTRATION URL:" field - never make up URLs or use event page URLs!
+
+**DO NOT**:
+- Say "I can't directly register you"
+- Say "I cannot register you"
+- Say "you can register yourself" (be more helpful!)
+- Just provide a link without offering to help
+
+**DO**:
+- Offer to help register
+- Provide clickable markdown links
+- Be enthusiastic and helpful
+- Explain the registration process briefly`
+        : "";
+    
+    return baseInstruction + dateContext + markdownGuidance + eventRegistrationGuidance;
+}
+
+// Clean base64 data from content to prevent it from polluting AI context/responses
+function cleanBase64FromContent(content: string): string {
+    // Remove base64 image data (data:image/... format)
+    let cleaned = content.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{100,}/g, '[image removed]');
+    
+    // Remove markdown images with base64 src
+    cleaned = cleaned.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, '[base64 image removed]');
+    
+    // Remove standalone long base64-like strings (100+ chars of base64 alphabet)
+    cleaned = cleaned.replace(/[A-Za-z0-9+/=]{200,}/g, '[encoded data removed]');
+    
+    // Remove <Base64-Image-Removed> placeholders that Firecrawl may have added
+    cleaned = cleaned.replace(/<Base64-Image-Removed>/g, '');
+    
+    return cleaned;
+}
+
 // Generate embedding for a query using Gemini
 async function generateQueryEmbedding(query: string): Promise<number[] | null> {
     if (!ai) return null;
@@ -28,6 +117,176 @@ async function generateQueryEmbedding(query: string): Promise<number[] | null> {
         return result.embeddings?.[0]?.values || null;
     } catch (error) {
         console.error("[Public Chat] Error generating query embedding:", error);
+        return null;
+    }
+}
+
+// Helper to detect if message is asking about events
+function isEventQuery(message: string): boolean {
+    const eventKeywords = [
+        'event', 'events', 'happening', 'schedule', 'party', 'parties',
+        'meetup', 'summit', 'conference', 'hackathon', 'workshop',
+        'side event', 'what\'s on', 'whats on', 'what is on',
+        'feb', 'february', '17th', '18th', '19th', '20th', '21st',
+        '8th', '16th', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+        'register', 'registration', 'rsvp', 'sign up', 'signup', 'ticket', 'tickets'
+    ];
+    const lowerMessage = message.toLowerCase();
+    return eventKeywords.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Helper to extract date from message (returns YYYY-MM-DD or null)
+function extractDateFromMessage(message: string): string | null {
+    const lowerMessage = message.toLowerCase();
+    
+    // Map common date patterns to 2026 dates for ETHDenver
+    const datePatterns: Record<string, string> = {
+        'feb 8': '2026-02-08', 'february 8': '2026-02-08', '8th': '2026-02-08',
+        'feb 12': '2026-02-12', 'february 12': '2026-02-12', '12th': '2026-02-12',
+        'feb 13': '2026-02-13', 'february 13': '2026-02-13', '13th': '2026-02-13',
+        'feb 14': '2026-02-14', 'february 14': '2026-02-14', '14th': '2026-02-14',
+        'feb 15': '2026-02-15', 'february 15': '2026-02-15', '15th': '2026-02-15',
+        'feb 16': '2026-02-16', 'february 16': '2026-02-16', '16th': '2026-02-16',
+        'feb 17': '2026-02-17', 'february 17': '2026-02-17', '17th': '2026-02-17',
+        'feb 18': '2026-02-18', 'february 18': '2026-02-18', '18th': '2026-02-18',
+        'feb 19': '2026-02-19', 'february 19': '2026-02-19', '19th': '2026-02-19',
+        'feb 20': '2026-02-20', 'february 20': '2026-02-20', '20th': '2026-02-20',
+        'feb 21': '2026-02-21', 'february 21': '2026-02-21', '21st': '2026-02-21',
+    };
+    
+    for (const [pattern, date] of Object.entries(datePatterns)) {
+        if (lowerMessage.includes(pattern)) {
+            return date;
+        }
+    }
+    return null;
+}
+
+// Helper to get structured events from the events table
+async function getEventContext(agentId: string, message: string): Promise<string | null> {
+    if (!supabase) return null;
+    
+    try {
+        // Check if this is an event-related query
+        if (!isEventQuery(message)) {
+            return null;
+        }
+        
+        console.log("[Event Context] Query detected as event-related");
+        
+        // Try to extract a specific date
+        const targetDate = extractDateFromMessage(message);
+        
+        // First get total count for the date/all events
+        let countQuery = supabase
+            .from("shout_agent_events")
+            .select("*", { count: "exact", head: true })
+            .eq("agent_id", agentId);
+        
+        if (targetDate) {
+            countQuery = countQuery.eq("event_date", targetDate);
+        }
+        
+        const { count: totalCount } = await countQuery;
+        
+        // Now get events, prioritizing featured ones
+        let query = supabase
+            .from("shout_agent_events")
+            .select("name, description, event_type, event_date, start_time, end_time, venue, organizer, event_url, rsvp_url, source, is_featured")
+            .eq("agent_id", agentId)
+            .order("is_featured", { ascending: false }) // Featured first!
+            .order("event_date", { ascending: true })
+            .order("start_time", { ascending: true });
+        
+        if (targetDate) {
+            console.log("[Event Context] Filtering for date:", targetDate);
+            query = query.eq("event_date", targetDate);
+        }
+        
+        // Limit to 8 events for context (AI will pick top 3-4)
+        query = query.limit(8);
+        
+        const { data: events, error } = await query;
+        
+        if (error || !events?.length) {
+            console.log("[Event Context] No events found");
+            return null;
+        }
+        
+        console.log("[Event Context] Found", events.length, "events (total:", totalCount, ")");
+        
+        // Format events for context
+        const formatTime = (time: string | null) => {
+            if (!time) return "";
+            try {
+                const [hours, minutes] = time.split(":");
+                const hour = parseInt(hours);
+                const ampm = hour >= 12 ? "PM" : "AM";
+                const hour12 = hour % 12 || 12;
+                return `${hour12}:${minutes} ${ampm}`;
+            } catch {
+                return time;
+            }
+        };
+        
+        const eventLines = events.map(event => {
+            const timeStr = event.start_time 
+                ? event.end_time 
+                    ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}`
+                    : formatTime(event.start_time)
+                : "Time TBA";
+            const featured = event.is_featured ? "⭐ FEATURED" : "";
+            
+            // Determine registration URL (prioritize rsvp_url, fallback to event_url if Luma)
+            const registrationUrl = event.rsvp_url || (event.event_url && (event.event_url.includes("lu.ma") || event.event_url.includes("luma.com")) ? event.event_url : null);
+            const isLuma = registrationUrl && (registrationUrl.includes("lu.ma") || registrationUrl.includes("luma.com"));
+            
+            // Format registration info prominently - make it VERY clear
+            let regInfo = "";
+            if (registrationUrl) {
+                regInfo = `\n  🎫 REGISTRATION URL FOR MARKDOWN LINK: ${registrationUrl}${isLuma ? " (Luma event - COPY THIS EXACT URL!)" : ""}
+  EXAMPLE MARKDOWN: [Register Now](${registrationUrl})`;
+            }
+            
+            return `- ${featured} ${event.name}
+  📅 ${event.event_date} @ ${timeStr}
+  ${event.venue ? `📍 ${event.venue}` : ""}
+  ${event.organizer ? `🏢 ${event.organizer}` : ""}
+  ${event.event_url ? `🔗 Event page: ${event.event_url}` : ""}${regInfo}`.trim();
+        });
+        
+        const eventsPageUrl = `https://app.spritz.chat/agent/${agentId}/events`;
+        const dateStr = targetDate || "all dates";
+        
+        const contextHeader = `\n\n=== EVENT DATA (${events.length} of ${totalCount || events.length} total for ${dateStr}) ===
+IMPORTANT: Show only 3-4 TOP events. Featured (⭐) events first!
+Full events page: ${eventsPageUrl}
+
+🚨 CRITICAL REGISTRATION INSTRUCTIONS 🚨
+When users ask to register for an event (especially Luma events):
+- NEVER say "I can't" or "I cannot" register them - YOU CAN AND SHOULD HELP!
+- ALWAYS respond: "I'd be happy to help you register!" or "Let me help you register!"
+- Find the "🎫 REGISTRATION URL FOR MARKDOWN LINK:" from the event data above
+- You MUST include the EXACT URL in your markdown link - the URL is provided in the event data!
+- Use this EXACT format: [Register Now](EXACT_URL_FROM_EVENT_DATA)
+- DO NOT create a link without a URL - the URL is always provided in the event data above!
+- For Luma events, mention: "Your saved information will be pre-filled automatically"
+- EXAMPLE: If event shows "🎫 REGISTRATION URL FOR MARKDOWN LINK: https://luma.com/ualsao7v", you MUST respond with:
+  "I'd be happy to help you register for Logos Circle Barcelona #5! Click here: [Register Now](https://luma.com/ualsao7v). Your saved information will be pre-filled automatically."
+
+CRITICAL: The URL is ALWAYS in the event data above - look for "🎫 REGISTRATION URL FOR MARKDOWN LINK:" and copy that EXACT URL into your markdown link!
+
+DO NOT say "you can register yourself" - be helpful and proactive!
+
+`;
+        
+        const contextFooter = `\n\n---
+REMINDER: Only show 3-4 events above. Then add:
+"📅 Want to see all ${totalCount || events.length} events? [Browse Full Schedule →](${eventsPageUrl})"`;
+        
+        return contextHeader + eventLines.join("\n\n") + contextFooter;
+    } catch (err) {
+        console.error("[Event Context] Error:", err);
         return null;
     }
 }
@@ -48,13 +307,13 @@ async function getRAGContext(agentId: string, message: string): Promise<string |
             return null;
         }
 
-        // Search for relevant chunks
+        // Search for relevant chunks - increased count for more diverse results
         console.log("[Public RAG] Searching for chunks for agent:", agentId);
         const { data: chunks, error } = await supabase.rpc("match_knowledge_chunks", {
             p_agent_id: agentId,
             p_query_embedding: `[${queryEmbedding.join(",")}]`,
-            p_match_count: 5,
-            p_match_threshold: 0.3 // Lower threshold to get more results
+            p_match_count: 8, // Increased from 5 for more comprehensive context
+            p_match_threshold: 0.25 // Lowered to catch more relevant results
         });
 
         if (error) {
@@ -69,10 +328,13 @@ async function getRAGContext(agentId: string, message: string): Promise<string |
 
         console.log("[Public RAG] Found", chunks.length, "relevant chunks");
 
-        // Format context from matching chunks
+        // Format context from matching chunks - include source title for disambiguation
+        // Clean base64 data from chunks to prevent polluting AI responses
         const context = chunks
-            .map((chunk: { content: string; similarity: number }) => 
-                `[Relevance: ${(chunk.similarity * 100).toFixed(0)}%]\n${chunk.content}`)
+            .map((chunk: { content: string; similarity: number; source_title?: string }) => {
+                const cleanedContent = cleanBase64FromContent(chunk.content);
+                return `[Source: ${chunk.source_title || "Unknown"} | Relevance: ${(chunk.similarity * 100).toFixed(0)}%]\n${cleanedContent}`;
+            })
             .join("\n\n---\n\n");
 
         return context;
@@ -116,8 +378,13 @@ export async function POST(
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
         }
 
-        // Verify agent is public
-        if (agent.visibility !== "public") {
+        // Verify agent is public or official (with public access enabled)
+        const isPublic = agent.visibility === "public";
+        const isOfficial = agent.visibility === "official";
+        // Official agents are publicly accessible by default unless explicitly disabled
+        const officialPublicAccess = agent.public_access_enabled !== false;
+        
+        if (!isPublic && !(isOfficial && officialPublicAccess)) {
             return NextResponse.json({ 
                 error: "Only public agents can be accessed via this API" 
             }, { status: 403 });
@@ -191,8 +458,19 @@ export async function POST(
             }
         }
 
+        // Get structured event context for Official agents
+        let eventContext = "";
+        if (agent.visibility === "official") {
+            console.log("[Public Chat] Checking for event context...");
+            const events = await getEventContext(id, message);
+            if (events) {
+                console.log("[Public Chat] Got event context, length:", events.length);
+                eventContext = events + "\n\nPRIORITIZE the structured event data above over scraped content. Include event URLs when available!\n\n🚨 REMEMBER: When users ask to register, NEVER say you can't. ALWAYS offer to help and provide the registration link immediately!";
+            }
+        }
+
         // Build the full message with context
-        const fullMessage = message + ragContext;
+        const fullMessage = message + ragContext + eventContext;
 
         // Build config for generate content
         const generateConfig: {
@@ -210,7 +488,7 @@ export async function POST(
                 { role: "user", parts: [{ text: fullMessage }] }
             ],
             config: {
-                systemInstruction: agent.system_instructions || `You are a helpful AI assistant named ${agent.name}.`,
+                systemInstruction: buildSystemInstruction(agent),
                 maxOutputTokens: 2048,
                 temperature: 0.7,
             },
@@ -298,6 +576,7 @@ export async function GET(
                 personality, 
                 avatar_emoji, 
                 visibility,
+                public_access_enabled,
                 x402_enabled,
                 x402_price_cents,
                 x402_network,
@@ -308,10 +587,15 @@ export async function GET(
                 created_at
             `)
             .eq("id", id)
-            .eq("visibility", "public")
+            .in("visibility", ["public", "official"])
             .single();
 
         if (error || !agent) {
+            return NextResponse.json({ error: "Agent not found or not public" }, { status: 404 });
+        }
+        
+        // For official agents, check if public access is enabled (defaults to true)
+        if (agent.visibility === "official" && agent.public_access_enabled === false) {
             return NextResponse.json({ error: "Agent not found or not public" }, { status: 404 });
         }
 

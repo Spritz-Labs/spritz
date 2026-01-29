@@ -141,7 +141,48 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
-            // Check for stored session token (new system matching passkey)
+            // FIRST: Check if server session is valid (HttpOnly cookie)
+            // This is the PRIMARY auth mechanism
+            try {
+                console.log("[EmailAuthProvider] Checking server session first...");
+                const res = await fetch("/api/auth/session", {
+                    method: "GET",
+                    credentials: "include", // Send HttpOnly cookie
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.authenticated && data.session?.userAddress && data.session?.authMethod === "email") {
+                        console.log("[EmailAuthProvider] Valid server session found for:", data.session.userAddress?.slice(0, 10) + "...");
+                        
+                        // Get email from localStorage if available
+                        const stored = localStorage.getItem(EMAIL_STORAGE_KEY);
+                        let email = null;
+                        if (stored) {
+                            try {
+                                const parsed = JSON.parse(stored);
+                                email = parsed.email;
+                            } catch {}
+                        }
+                        
+                        setState({
+                            isLoading: false,
+                            isAuthenticated: true,
+                            email,
+                            smartAccountAddress: data.session.userAddress as Address,
+                            error: null,
+                            hasStoredEmail: true,
+                            step: "email",
+                        });
+                        return;
+                    }
+                }
+                console.log("[EmailAuthProvider] No valid email server session");
+            } catch (e) {
+                console.log("[EmailAuthProvider] Server session check failed:", e);
+            }
+
+            // FALLBACK: Check for stored session token (new system matching passkey)
             const storedSession = localStorage.getItem(EMAIL_SESSION_KEY);
             const stored = localStorage.getItem(EMAIL_STORAGE_KEY);
             console.log("[EmailAuthProvider] Checking stored auth:", { 
@@ -153,7 +194,7 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
             if (storedSession && stored) {
                 const session = validateSession(storedSession);
                 if (session) {
-                    console.log("[EmailAuthProvider] Restored valid session, expires:", 
+                    console.log("[EmailAuthProvider] Restored valid localStorage session, expires:", 
                         new Date(session.exp).toLocaleDateString());
                     
                     const parsed = JSON.parse(stored);
@@ -171,6 +212,14 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
                         });
                         if (res.ok) {
                             console.log("[EmailAuthProvider] Server session refreshed");
+                        } else if (res.status === 401) {
+                            // Server session expired
+                            console.log("[EmailAuthProvider] Server session expired, re-auth required");
+                            localStorage.removeItem(EMAIL_STORAGE_KEY);
+                            localStorage.removeItem(EMAIL_ADDRESS_STORAGE_KEY);
+                            localStorage.removeItem(EMAIL_SESSION_KEY);
+                            setState((prev) => ({ ...prev, hasStoredEmail: false }));
+                            return;
                         } else {
                             console.warn("[EmailAuthProvider] Failed to refresh server session");
                         }
@@ -255,6 +304,48 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
 
         restoreSession();
     }, []);
+    
+    // Auto-refresh session when app becomes visible (user returns to app)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === "visible" && state.isAuthenticated) {
+                console.log("[EmailAuthProvider] App became visible, refreshing session...");
+                // Try to extend the session
+                try {
+                    const res = await fetch("/api/auth/session", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                    });
+                    if (res.ok) {
+                        console.log("[EmailAuthProvider] Session refreshed on visibility change");
+                    } else if (res.status === 401) {
+                        // Session expired - user needs to re-authenticate
+                        console.log("[EmailAuthProvider] Session expired, user needs to re-authenticate");
+                        localStorage.removeItem(EMAIL_STORAGE_KEY);
+                        localStorage.removeItem(EMAIL_ADDRESS_STORAGE_KEY);
+                        localStorage.removeItem(EMAIL_SESSION_KEY);
+                        setState({
+                            isLoading: false,
+                            isAuthenticated: false,
+                            email: null,
+                            smartAccountAddress: null,
+                            error: "Session expired. Please sign in again.",
+                            hasStoredEmail: false,
+                            step: "email",
+                        });
+                    }
+                } catch (e) {
+                    console.warn("[EmailAuthProvider] Failed to refresh session on visibility change:", e);
+                }
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, [state.isAuthenticated]);
 
     const clearError = useCallback(() => {
         setState((prev) => ({ ...prev, error: null }));

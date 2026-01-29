@@ -35,7 +35,7 @@ export type AlphaMessageReaction = {
     users: string[];
 };
 
-export const ALPHA_REACTION_EMOJIS = ["👍", "❤️", "🤙🏼", "😂", "😮", "🔥"];
+export const ALPHA_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "🙏", "💯", "🙌", "🎉"];
 
 export type AlphaMembership = {
     user_address: string;
@@ -496,6 +496,21 @@ export function useAlphaChat(userAddress: string | null) {
                         m.id === tempId ? { ...data, reply_to: optimisticMessage.reply_to } : m
                     ),
                 }));
+                
+                // Check for agent mentions and trigger responses (fire and forget)
+                if (content.includes("@[") && content.includes("](")) {
+                    fetch("/api/channels/agent-response", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            messageContent: content,
+                            senderAddress: userAddress,
+                            channelType: "global",
+                            channelId: null,
+                            originalMessageId: data.id,
+                        }),
+                    }).catch(err => console.error("[AlphaChat] Agent response error:", err));
+                }
             }
             
             return true;

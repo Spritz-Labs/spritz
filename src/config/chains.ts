@@ -1,4 +1,5 @@
 // Supported chains for wallet balance display
+// RPC URLs are managed centrally in src/lib/rpc.ts (uses dRPC if configured)
 export type SupportedChain = {
     id: number;
     name: string;
@@ -7,7 +8,6 @@ export type SupportedChain = {
     icon: string;
     color: string;
     explorerUrl: string;
-    rpcUrl?: string;
 };
 
 export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
@@ -19,7 +19,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🔷",
         color: "#627EEA",
         explorerUrl: "https://etherscan.io",
-        rpcUrl: "https://eth.llamarpc.com",
     },
     bsc: {
         id: 56,
@@ -29,7 +28,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🔶",
         color: "#F3BA2F",
         explorerUrl: "https://bscscan.com",
-        rpcUrl: "https://bsc-dataseed.binance.org",
     },
     base: {
         id: 8453,
@@ -39,7 +37,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🔵",
         color: "#0052FF",
         explorerUrl: "https://basescan.org",
-        rpcUrl: "https://mainnet.base.org",
     },
     unichain: {
         id: 130,
@@ -49,7 +46,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🦄",
         color: "#FF007A",
         explorerUrl: "https://unichain.blockscout.com",
-        rpcUrl: "https://mainnet.unichain.org",
     },
     arbitrum: {
         id: 42161,
@@ -59,7 +55,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "⬡",
         color: "#28A0F0",
         explorerUrl: "https://arbiscan.io",
-        rpcUrl: "https://arb1.arbitrum.io/rpc",
     },
     optimism: {
         id: 10,
@@ -69,7 +64,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🔴",
         color: "#FF0420",
         explorerUrl: "https://optimistic.etherscan.io",
-        rpcUrl: "https://mainnet.optimism.io",
     },
     polygon: {
         id: 137,
@@ -79,7 +73,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🟣",
         color: "#8247E5",
         explorerUrl: "https://polygonscan.com",
-        rpcUrl: "https://polygon-rpc.com",
     },
     avalanche: {
         id: 43114,
@@ -89,7 +82,6 @@ export const SUPPORTED_CHAINS: Record<string, SupportedChain> = {
         icon: "🔺",
         color: "#E84142",
         explorerUrl: "https://snowtrace.io",
-        rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
     },
 };
 

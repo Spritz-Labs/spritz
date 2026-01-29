@@ -255,6 +255,9 @@ export function createSigningOptions(
     rpId: string
 ): PublicKeyCredentialRequestOptions {
     const challengeBytes = hexToBytes(challenge);
+    // Don't specify transports - let browser decide
+    // This is critical for iCloud-synced passkeys to work correctly
+    // Specifying transports causes Safari to show cross-device options
     return {
         challenge: challengeBytes.buffer.slice(
             challengeBytes.byteOffset, 
@@ -264,7 +267,7 @@ export function createSigningOptions(
         allowCredentials: [{
             id: Buffer.from(credentialId, "base64url"),
             type: "public-key",
-            transports: ["internal", "hybrid"] as AuthenticatorTransport[],
+            // Don't specify transports - browser will use appropriate method
         }],
         userVerification: "required",
         timeout: 60000,

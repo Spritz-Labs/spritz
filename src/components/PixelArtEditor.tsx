@@ -148,6 +148,7 @@ export function PixelArtEditor({
     const [customColor, setCustomColor] = useState("#ff0000");
     const [showShareMenu, setShowShareMenu] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
     const [hue, setHue] = useState(0);
     const [saturation, setSaturation] = useState(100);
     const [brightness, setBrightness] = useState(100);
@@ -458,16 +459,38 @@ export function PixelArtEditor({
         setShowShareMenu(false);
     };
 
+    // Check if canvas has been modified
+    const isCanvasDirty = useCallback(() => {
+        // Check if any pixel is not white, or if there's undo history
+        if (history.length > 0) return true;
+        return pixels.some(row => row.some(color => color !== "#ffffff"));
+    }, [pixels, history]);
+
+    // Handle close with confirmation if dirty
+    const handleClose = useCallback(() => {
+        if (isCanvasDirty()) {
+            setShowCloseConfirm(true);
+        } else {
+            onClose();
+        }
+    }, [isCanvasDirty, onClose]);
+
     // Close on escape
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
+            if (e.key === "Escape") {
+                if (showCloseConfirm) {
+                    setShowCloseConfirm(false);
+                } else {
+                    handleClose();
+                }
+            }
         };
         if (isOpen) {
             document.addEventListener("keydown", handleEscape);
         }
         return () => document.removeEventListener("keydown", handleEscape);
-    }, [isOpen, onClose]);
+    }, [isOpen, handleClose, showCloseConfirm]);
 
     // Reset canvas when opening
     useEffect(() => {
@@ -584,7 +607,7 @@ export function PixelArtEditor({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 select-none"
-                    onClick={onClose}
+                    onClick={handleClose}
                 >
                     <motion.div
                         initial={{ scale: 0.9, opacity: 0 }}
@@ -604,7 +627,7 @@ export function PixelArtEditor({
                                 </p>
                             </div>
                             <button
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
                             >
                                 <svg
@@ -987,7 +1010,7 @@ export function PixelArtEditor({
                         {/* Actions */}
                         <div className="flex gap-3">
                             <button
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors"
                             >
                                 Cancel
@@ -1128,6 +1151,55 @@ export function PixelArtEditor({
                                 )}
                             </button>
                         </div>
+
+                        {/* Close Confirmation Dialog */}
+                        <AnimatePresence>
+                            {showCloseConfirm && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <motion.div
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        exit={{ scale: 0.9, opacity: 0 }}
+                                        className="bg-zinc-800 border border-zinc-700 rounded-xl p-5 max-w-xs mx-4 text-center"
+                                    >
+                                        <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-3">
+                                            <svg className="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-white mb-2">
+                                            Discard your art?
+                                        </h3>
+                                        <p className="text-sm text-zinc-400 mb-4">
+                                            You have unsaved changes that will be lost if you close now.
+                                        </p>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => setShowCloseConfirm(false)}
+                                                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white font-medium transition-colors"
+                                            >
+                                                Keep Editing
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setShowCloseConfirm(false);
+                                                    onClose();
+                                                }}
+                                                className="flex-1 py-2.5 px-4 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 font-medium transition-colors"
+                                            >
+                                                Discard
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </motion.div>
                 </motion.div>
             )}

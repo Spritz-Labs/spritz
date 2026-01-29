@@ -19,12 +19,34 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import { useAccount, useWalletClient, usePublicClient } from "wagmi";
+import { useAccount, useWalletClient, usePublicClient, useSwitchChain } from "wagmi";
 import { type Address, type Hex, type Chain, encodeFunctionData, parseUnits, formatEther, concat, toHex, pad, encodeAbiParameters, createPublicClient, http } from "viem";
 import { mainnet, base, arbitrum, optimism, polygon, bsc } from "viem/chains";
 import { getChainById } from "@/config/chains";
 import { getSafeMessageHashAsync, executeVaultViaPasskey, type PasskeyCredential } from "@/lib/safeWallet";
 import { usePasskeySigner } from "@/hooks/usePasskeySigner";
+import { getRpcUrl } from "@/lib/rpc";
+
+// Client-side error logging helper
+async function logVaultError(
+    errorMessage: string,
+    context: Record<string, unknown>
+) {
+    try {
+        await fetch("/api/admin/error-log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                errorType: "vault_transaction",
+                errorMessage,
+                context,
+            }),
+        });
+    } catch (e) {
+        console.error("[VaultExecution] Failed to log error:", e);
+    }
+}
 
 // Map chain IDs to viem chain objects
 const VIEM_CHAINS: Record<number, Chain> = {
@@ -113,6 +135,9 @@ const ERC20_TRANSFER_ABI = [
 
 export type VaultExecutionStatus = "idle" | "checking" | "signing" | "executing" | "success" | "error";
 
+// SafeWebAuthnSharedSigner address - used as the "owner" in Safe's checkNSignatures for WebAuthn
+const SAFE_WEBAUTHN_SHARED_SIGNER = "0x94a4F6affBd8975951142c3999aEAB7ecee555c2" as Address;
+
 /**
  * Build an EIP-1271 contract signature for Safe
  * 
@@ -156,32 +181,207 @@ function buildContractSignature(
     return { staticPart, dynamicPart, dynamicLength };
 }
 
+/**
+ * Build a NESTED contract signature for passkey/Smart Wallet owners of a vault.
+ * 
+ * When a vault has a Smart Wallet as owner, and that Smart Wallet has a WebAuthn owner,
+ * we need TWO levels of contract signatures:
+ * 
+ * 1. INNER: For Smart Wallet's checkNSignatures
+ *    - r = SafeWebAuthnSharedSigner address
+ *    - s = 65 (offset to WebAuthn data)
+ *    - v = 0
+ *    - dynamic = WebAuthn ABI-encoded signature
+ * 
+ * 2. OUTER: For Vault's checkNSignatures
+ *    - r = Smart Wallet address
+ *    - s = offset to inner signature
+ *    - v = 0
+ *    - dynamic = the complete INNER signature
+ */
+function buildNestedContractSignature(
+    smartWalletAddress: Address,
+    webAuthnSignature: string,
+    dynamicOffset: number
+): { staticPart: string; dynamicPart: string; dynamicLength: number } {
+    // First, build the INNER signature (for Smart Wallet's checkNSignatures)
+    // This points to SafeWebAuthnSharedSigner and contains the WebAuthn data
+    const innerStaticOffset = 65; // Offset within inner signature to its dynamic part
+    
+    // Inner static part: r = SafeWebAuthnSharedSigner, s = 65, v = 0
+    const innerR = SAFE_WEBAUTHN_SHARED_SIGNER.slice(2).toLowerCase().padStart(64, "0");
+    const innerS = innerStaticOffset.toString(16).padStart(64, "0");
+    const innerV = "00";
+    const innerStaticPart = innerR + innerS + innerV; // 65 bytes = 130 hex chars
+    
+    // Inner dynamic part: length + WebAuthn signature
+    const webAuthnHex = webAuthnSignature.startsWith("0x") ? webAuthnSignature.slice(2) : webAuthnSignature;
+    const webAuthnLength = webAuthnHex.length / 2;
+    const innerDynamicLengthHex = webAuthnLength.toString(16).padStart(64, "0");
+    const innerDynamicPart = innerDynamicLengthHex + webAuthnHex;
+    
+    // Complete inner signature
+    const innerSignature = innerStaticPart + innerDynamicPart;
+    const innerSignatureLength = innerSignature.length / 2; // in bytes
+    
+    console.log(`[VaultExecution] Inner signature: static=${innerStaticPart.length/2}B, dynamic=${innerDynamicPart.length/2}B, total=${innerSignatureLength}B`);
+    
+    // Now build the OUTER signature (for Vault's checkNSignatures)
+    // This points to Smart Wallet and contains the complete inner signature
+    const outerR = smartWalletAddress.slice(2).toLowerCase().padStart(64, "0");
+    const outerS = dynamicOffset.toString(16).padStart(64, "0");
+    const outerV = "00";
+    const outerStaticPart = outerR + outerS + outerV; // 65 bytes = 130 hex chars
+    
+    // Outer dynamic part: length of inner signature + inner signature
+    const outerDynamicLengthHex = innerSignatureLength.toString(16).padStart(64, "0");
+    const outerDynamicPart = outerDynamicLengthHex + innerSignature;
+    
+    console.log(`[VaultExecution] Outer signature: staticPart=${outerStaticPart.length/2}B, dynamicPart=${outerDynamicPart.length/2}B`);
+    
+    return {
+        staticPart: outerStaticPart,
+        dynamicPart: outerDynamicPart,
+        dynamicLength: 32 + innerSignatureLength, // length field + inner signature
+    };
+}
+
 // Create a public client for a specific chain (used when wagmi publicClient isn't available)
 function getPublicClientForChain(chainId: number) {
     const chain = VIEM_CHAINS[chainId];
-    if (!chain) return null;
+    if (!chain) {
+        console.warn("[VaultExecution] Unknown chain:", chainId);
+        return null;
+    }
     
-    // Use public RPCs - these are sufficient for read operations
-    const rpcUrls: Record<number, string> = {
-        1: "https://eth.llamarpc.com",
-        8453: "https://base.llamarpc.com",
-        42161: "https://arbitrum.llamarpc.com",
-        10: "https://optimism.llamarpc.com",
-        137: "https://polygon.llamarpc.com",
-        56: "https://bsc.llamarpc.com",
-    };
+    // Use reliable public RPCs for read operations
+    // Use centralized RPC config (dRPC if configured, otherwise fallback)
+    const rpcUrl = getRpcUrl(chainId);
+    if (!rpcUrl) {
+        console.warn("[VaultExecution] No RPC URL for chain:", chainId);
+        return null;
+    }
+    
+    console.log("[VaultExecution] Creating public client for chain:", chainId, "RPC:", rpcUrl);
     
     return createPublicClient({
         chain,
-        transport: http(rpcUrls[chainId]),
+        transport: http(rpcUrl),
     });
 }
 
+/**
+ * Extract r and s components from a DER-encoded ECDSA signature
+ * WebAuthn signatures are DER-encoded, but Safe's WebAuthn verifier expects r and s as uint256
+ */
+function extractRSFromDER(derSignature: Uint8Array): { r: bigint; s: bigint } {
+    // DER format: 0x30 [total length] 0x02 [r length] [r] 0x02 [s length] [s]
+    let offset = 0;
+    
+    // Check sequence tag
+    if (derSignature[offset++] !== 0x30) {
+        throw new Error("Invalid DER signature: expected sequence tag");
+    }
+    
+    // Skip sequence length
+    let seqLen = derSignature[offset++];
+    if (seqLen & 0x80) {
+        // Long form length
+        const lenBytes = seqLen & 0x7f;
+        offset += lenBytes;
+    }
+    
+    // Read r
+    if (derSignature[offset++] !== 0x02) {
+        throw new Error("Invalid DER signature: expected integer tag for r");
+    }
+    const rLen = derSignature[offset++];
+    let rBytes = derSignature.slice(offset, offset + rLen);
+    offset += rLen;
+    
+    // Remove leading zero if present (DER uses it to indicate positive number)
+    if (rBytes[0] === 0x00 && rBytes.length > 32) {
+        rBytes = rBytes.slice(1);
+    }
+    
+    // Read s
+    if (derSignature[offset++] !== 0x02) {
+        throw new Error("Invalid DER signature: expected integer tag for s");
+    }
+    const sLen = derSignature[offset++];
+    let sBytes = derSignature.slice(offset, offset + sLen);
+    
+    // Remove leading zero if present
+    if (sBytes[0] === 0x00 && sBytes.length > 32) {
+        sBytes = sBytes.slice(1);
+    }
+    
+    // Pad to 32 bytes if needed
+    const rPadded = new Uint8Array(32);
+    const sPadded = new Uint8Array(32);
+    rPadded.set(rBytes, 32 - rBytes.length);
+    sPadded.set(sBytes, 32 - sBytes.length);
+    
+    // Convert to bigint
+    const r = BigInt("0x" + Array.from(rPadded).map(b => b.toString(16).padStart(2, "0")).join(""));
+    const s = BigInt("0x" + Array.from(sPadded).map(b => b.toString(16).padStart(2, "0")).join(""));
+    
+    return { r, s };
+}
+
+/**
+ * Extract the clientDataFields from clientDataJSON
+ * 
+ * Safe's WebAuthn verifier expects the fields AFTER the challenge, formatted as a STRING.
+ * Based on permissionless.js reference implementation, the format is:
+ * 
+ * Input: {"type":"webauthn.get","challenge":"<base64>","origin":"...","crossOrigin":false}
+ * Output: "origin":"...","crossOrigin":false
+ * 
+ * NOTE: 
+ * - Does NOT include the leading comma after challenge
+ * - Does NOT include the trailing closing brace
+ * - This is passed as a STRING type, not bytes!
+ */
+function extractClientDataFields(clientDataJSON: string): string {
+    // Use the same regex as permissionless.js for consistency
+    // Matches the full JSON structure and captures everything between "," after challenge and "}" at end
+    const match = clientDataJSON.match(/^\{"type":"webauthn\.get","challenge":"[A-Za-z0-9\-_]{43}",(.*)\}$/);
+    
+    if (!match) {
+        // Fallback: try to extract manually if regex doesn't match
+        // (e.g., if challenge length varies)
+        const challengeStart = clientDataJSON.indexOf('"challenge":"');
+        if (challengeStart === -1) {
+            throw new Error("Invalid clientDataJSON: could not find challenge");
+        }
+        
+        // Find the closing quote of the challenge value
+        const challengeValueStart = challengeStart + '"challenge":"'.length;
+        const challengeEndQuote = clientDataJSON.indexOf('"', challengeValueStart);
+        if (challengeEndQuote === -1) {
+            throw new Error("Invalid clientDataJSON: could not find challenge end quote");
+        }
+        
+        // Get everything after the quote and comma, up to but not including the closing brace
+        let fields = clientDataJSON.slice(challengeEndQuote + 2); // Skip ,"
+        if (fields.endsWith("}")) {
+            fields = fields.slice(0, -1);
+        }
+        
+        return fields;
+    }
+    
+    // Return the captured group (everything between "," and "}")
+    return match[1];
+}
+
 export function useVaultExecution(passkeyUserAddress?: Address) {
-    const { address: wagmiAddress } = useAccount();
+    const { address: wagmiAddress, chainId: currentChainId } = useAccount();
     const { data: walletClient } = useWalletClient();
     const wagmiPublicClient = usePublicClient();
     const passkeySigner = usePasskeySigner();
+    const { switchChainAsync } = useSwitchChain();
     
     // Use wagmi address if connected, otherwise use passkey address
     const userAddress = wagmiAddress || passkeyUserAddress;
@@ -202,13 +402,62 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         }
     }, [isPasskeyOnly, passkeyUserAddress, passkeySigner]);
     
-    // Get public client - prefer wagmi, fall back to chain-specific
+    // Get public client for a specific chain
+    // IMPORTANT: If chainId is provided, ALWAYS use chain-specific client
+    // because wagmiPublicClient might be on a different chain!
     const getPublicClient = useCallback((chainId?: number) => {
+        // If a specific chain is requested, use chain-specific client
+        if (chainId) {
+            // Only use wagmi client if it's on the same chain
+            if (wagmiPublicClient && wagmiPublicClient.chain?.id === chainId) {
+                return wagmiPublicClient;
+            }
+            return getPublicClientForChain(chainId);
+        }
+        // No chain specified - use wagmi if available, otherwise default to Base
         if (wagmiPublicClient) return wagmiPublicClient;
-        if (chainId) return getPublicClientForChain(chainId);
-        // Default to Base if no chain specified
         return getPublicClientForChain(8453);
     }, [wagmiPublicClient]);
+    
+    /**
+     * Ensure wallet is connected to the correct chain for the vault
+     * Automatically switches if needed
+     */
+    const ensureCorrectChain = useCallback(async (targetChainId: number): Promise<{ success: boolean; error?: string }> => {
+        // Passkey users don't need chain switching - they execute via bundler
+        if (isPasskeyOnly) {
+            return { success: true };
+        }
+        
+        // Check if already on correct chain
+        if (currentChainId === targetChainId) {
+            return { success: true };
+        }
+        
+        // Try to switch chains
+        if (!switchChainAsync) {
+            const targetChain = getChainById(targetChainId);
+            return { 
+                success: false, 
+                error: `Please switch your wallet to ${targetChain?.name || `chain ${targetChainId}`} to continue` 
+            };
+        }
+        
+        try {
+            const targetChain = getChainById(targetChainId);
+            console.log(`[VaultExecution] Switching from chain ${currentChainId} to ${targetChainId} (${targetChain?.name})`);
+            await switchChainAsync({ chainId: targetChainId });
+            console.log(`[VaultExecution] Successfully switched to chain ${targetChainId}`);
+            return { success: true };
+        } catch (err) {
+            const targetChain = getChainById(targetChainId);
+            console.error("[VaultExecution] Chain switch failed:", err);
+            return { 
+                success: false, 
+                error: `Failed to switch to ${targetChain?.name || `chain ${targetChainId}`}. Please switch manually.` 
+            };
+        }
+    }, [currentChainId, isPasskeyOnly, switchChainAsync]);
 
     /**
      * Check if the user can sign for a vault
@@ -363,6 +612,14 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         try {
             const { safeAddress, to, value, data, nonce, smartWalletAddress } = params;
             
+            // Ensure we're on the correct chain before signing
+            const chainSwitchResult = await ensureCorrectChain(params.chainId);
+            if (!chainSwitchResult.success) {
+                setError(chainSwitchResult.error || "Failed to switch chain");
+                setStatus("error");
+                return { success: false, error: chainSwitchResult.error };
+            }
+            
             console.log("[VaultExecution] Signing transaction...");
             console.log("[VaultExecution] Using passkey:", canUsePasskey && !hasWalletClient);
             if (smartWalletAddress) {
@@ -430,25 +687,58 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                     throw new Error(passkeySigner.error || "Passkey signing cancelled");
                 }
                 
-                // Convert passkey signature to hex format
-                // Note: This is a simplified conversion - passkey signatures have a different format
-                // For now, we convert the signature bytes to hex
-                const sigBytes = passkeyResult.signature;
-                signature = "0x" + Array.from(sigBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+                // For WebAuthn/passkey signatures with Safe Smart Wallet:
+                // The signature must be ABI-encoded with all WebAuthn assertion components
+                // Safe's WebAuthn verification expects: (bytes authenticatorData, bytes clientDataFields, uint256[2] rs)
+                // NOTE: r and s MUST be encoded as uint256[2] array, NOT as separate values!
+                
+                // 1. Extract r and s from the DER-encoded signature
+                const { r, s } = extractRSFromDER(passkeyResult.signature);
+                
+                // 2. Extract the "clientDataFields" from clientDataJSON
+                // This is everything after the challenge in the JSON (origin, type, etc.)
+                const clientDataFields = extractClientDataFields(passkeyResult.clientDataJSON);
+                
+                // 3. ABI-encode the full WebAuthn signature for Safe verification
+                // CRITICAL: Safe expects (bytes, string, uint256[2]) format
+                // - authenticatorData: raw bytes
+                // - clientDataFields: STRING type (not bytes!)
+                // - signature: uint256[2] array for r and s
+                signature = encodeAbiParameters(
+                    [
+                        { name: "authenticatorData", type: "bytes" },
+                        { name: "clientDataFields", type: "string" },
+                        { name: "rs", type: "uint256[2]" },
+                    ],
+                    [
+                        toHex(passkeyResult.authenticatorData),
+                        clientDataFields, // Pass as string directly, NOT encoded to bytes
+                        [r, s] as [bigint, bigint],
+                    ]
+                );
+                
+                console.log("[VaultExecution] WebAuthn signature encoded for Safe verification (uint256[2] format)");
             } else {
                 throw new Error("No signing method available");
             }
 
-            // Adjust v value for Safe's signature format
-            // For eth_sign, v should be 27 or 28, and we add 4 for eth_sign type
-            let v = parseInt(signature.slice(-2), 16);
-            if (v < 27) {
-                v += 27;
+            let adjustedSignature: string;
+            
+            if (canUsePasskey && !hasWalletClient) {
+                // For WebAuthn signatures, don't adjust v - the signature is already properly encoded
+                adjustedSignature = signature;
+                console.log("[VaultExecution] Using WebAuthn signature format");
+            } else {
+                // Adjust v value for Safe's signature format (EOA signatures)
+                // For eth_sign, v should be 27 or 28, and we add 4 for eth_sign type
+                let v = parseInt(signature.slice(-2), 16);
+                if (v < 27) {
+                    v += 27;
+                }
+                v += 4; // Safe adds 4 for eth_sign signatures
+                adjustedSignature = signature.slice(0, -2) + v.toString(16).padStart(2, "0");
+                console.log("[VaultExecution] EOA signature adjusted (v=" + v + ")");
             }
-            v += 4; // Safe adds 4 for eth_sign signatures
-            const adjustedSignature = signature.slice(0, -2) + v.toString(16).padStart(2, "0");
-
-            console.log("[VaultExecution] Signature generated (eth_sign format, v=" + v + ")");
             setStatus("idle");
 
             // Return the Smart Wallet address as signer if provided (for ERC-1271 contract signatures)
@@ -467,9 +757,21 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Failed to sign";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility
+            logVaultError(errorMessage, {
+                operation: "sign",
+                safeAddress: params.safeAddress,
+                chainId: params.chainId,
+                userAddress,
+                smartWalletAddress: params.smartWalletAddress,
+                isPasskeyOnly,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, getSafeTxHash, getPublicClient, isPasskeyOnly, passkeySigner]);
+    }, [walletClient, userAddress, getSafeTxHash, getPublicClient, isPasskeyOnly, passkeySigner, ensureCorrectChain]);
 
     /**
      * Execute vault transaction via passkey Smart Wallet
@@ -506,22 +808,32 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
 
         try {
             const { safeAddress, chainId, to, value, data, signatures } = params;
-            const publicClient = getPublicClient(chainId);
-            
-            if (!publicClient) {
-                throw new Error(`No public client available for chain ${chainId}`);
-            }
             
             console.log("[VaultExecution] Executing via Passkey Smart Wallet with", signatures.length, "signatures");
+            console.log("[VaultExecution] Chain:", chainId, "Vault:", safeAddress);
 
-            // Get Safe owners to build proper signatures
-            const owners = await publicClient.readContract({
-                address: safeAddress,
-                abi: SAFE_ABI,
-                functionName: "getOwners",
-            }) as Address[];
+            // Use server-side API to read vault data (bypasses CORS issues)
+            console.log("[VaultExecution] Reading vault data via server API...");
+            const vaultReadResponse = await fetch(
+                `/api/vault/${safeAddress}/read?safeAddress=${safeAddress}&chainId=${chainId}`,
+                { credentials: "include" }
+            );
+            
+            if (!vaultReadResponse.ok) {
+                const errorData = await vaultReadResponse.json().catch(() => ({}));
+                throw new Error(errorData.error || `Failed to read vault (status ${vaultReadResponse.status})`);
+            }
+            
+            const vaultData = await vaultReadResponse.json();
+            const owners = vaultData.owners as Address[];
+            
+            if (!owners || owners.length === 0) {
+                throw new Error("Failed to read vault owners");
+            }
             
             console.log("[VaultExecution] Vault owners:", owners);
+            
+            console.log("[VaultExecution] Signature signer addresses:", signatures.map(s => s.signerAddress));
 
             // Sort signatures by signer address (Safe requires ascending order)
             const sortedSigs = [...signatures].sort((a, b) => 
@@ -535,13 +847,29 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 isContract: boolean;
                 isOwner: boolean;
             }> = [];
+            
+            // Track non-owner signers for error message
+            const nonOwnerSigners: string[] = [];
 
+            // Create a fresh client for checking signer types
+            const freshClient = getPublicClientForChain(chainId);
+            
             for (const sig of sortedSigs) {
                 const signerAddr = sig.signerAddress.toLowerCase() as Address;
                 const isOwner = owners.some(o => o.toLowerCase() === signerAddr);
                 
-                const signerCode = await publicClient.getCode({ address: signerAddr });
-                const isContract = signerCode !== undefined && signerCode !== "0x" && signerCode.length > 2;
+                // Check if signer is a contract - if client unavailable, assume contract for Smart Wallets
+                let isContract = true; // Default to true for Smart Wallets
+                if (freshClient) {
+                    try {
+                        const signerCode = await freshClient.getCode({ address: signerAddr });
+                        isContract = signerCode !== undefined && signerCode !== "0x" && signerCode.length > 2;
+                    } catch (codeErr) {
+                        console.warn(`[VaultExecution] Could not check if signer is contract, assuming true:`, codeErr);
+                    }
+                }
+                
+                console.log(`[VaultExecution] Signer ${signerAddr.slice(0, 10)}... isOwner=${isOwner}, isContract=${isContract}`);
                 
                 if (isOwner) {
                     signerInfo.push({
@@ -550,30 +878,45 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                         isContract,
                         isOwner,
                     });
+                } else {
+                    nonOwnerSigners.push(signerAddr);
                 }
             }
 
             if (signerInfo.length === 0) {
-                throw new Error("No valid owner signatures found");
+                // Provide a more helpful error message
+                const ownersShort = owners.map(o => `${o.slice(0, 6)}...${o.slice(-4)}`).join(", ");
+                const signersShort = nonOwnerSigners.map(s => `${s.slice(0, 6)}...${s.slice(-4)}`).join(", ");
+                console.error("[VaultExecution] Owner mismatch! Vault owners:", owners);
+                console.error("[VaultExecution] Signature signers:", signatures.map(s => s.signerAddress));
+                throw new Error(
+                    `Vault ownership mismatch: Your Smart Wallet (${signersShort}) is not an owner of this vault. ` +
+                    `Vault owners: ${ownersShort}. This vault may have been created with an outdated Smart Wallet address. ` +
+                    `Please create a new vault to use with your current passkey.`
+                );
             }
 
             // Build the final signatures bytes for Safe
-            // Contract signatures use special format with v=0
+            // For passkey/Smart Wallet owners, we need NESTED contract signatures:
+            // - Outer: points to Smart Wallet
+            // - Inner: points to SafeWebAuthnSharedSigner with WebAuthn data
             const staticParts: string[] = [];
             const dynamicParts: string[] = [];
             let dynamicOffset = signerInfo.length * 65; // 65 bytes per static signature
 
             for (const info of signerInfo) {
                 if (info.isContract) {
-                    // Build contract signature
-                    const contractSig = buildContractSignature(
+                    // This is a passkey user with Smart Wallet
+                    // Build NESTED contract signature (outer -> inner -> WebAuthn)
+                    console.log("[VaultExecution] Building nested signature for Smart Wallet:", info.signerAddress);
+                    const nestedSig = buildNestedContractSignature(
                         info.signerAddress as Address,
-                        info.signature,
+                        info.signature, // This is the WebAuthn ABI-encoded signature
                         dynamicOffset
                     );
-                    staticParts.push(contractSig.staticPart);
-                    dynamicParts.push(contractSig.dynamicPart);
-                    dynamicOffset += contractSig.dynamicLength;
+                    staticParts.push(nestedSig.staticPart);
+                    dynamicParts.push(nestedSig.dynamicPart);
+                    dynamicOffset += nestedSig.dynamicLength;
                 } else {
                     // Regular EOA signature (65 bytes, no padding needed)
                     const sigHex = info.signature.startsWith("0x") 
@@ -616,9 +959,23 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Execution failed";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility with full passkey context
+            logVaultError(errorMessage, {
+                operation: "passkey_execute",
+                safeAddress: params.safeAddress,
+                chainId: params.chainId,
+                userAddress: passkeyUserAddress,
+                credentialId: passkeySigner.credential?.credentialId,
+                publicKeyX: passkeySigner.credential?.publicKeyX,
+                publicKeyY: passkeySigner.credential?.publicKeyY,
+                signatureCount: params.signatures?.length,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
-    }, [passkeySigner, getPublicClient]);
+    }, [passkeySigner, getPublicClient, passkeyUserAddress]);
 
     /**
      * Execute with multiple signatures (for multi-sig)
@@ -670,6 +1027,14 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         try {
             const { safeAddress, chainId, to, value, data, signatures } = params;
             
+            // Ensure we're on the correct chain before executing
+            const chainSwitchResult = await ensureCorrectChain(chainId);
+            if (!chainSwitchResult.success) {
+                setError(chainSwitchResult.error || "Failed to switch chain");
+                setStatus("error");
+                return { success: false, error: chainSwitchResult.error };
+            }
+            
             console.log("[VaultExecution] Executing with", signatures.length, "signatures");
 
             // Verify Safe is deployed by trying to read nonce
@@ -708,6 +1073,9 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 isContract: boolean;
                 isOwner: boolean;
             }> = [];
+            
+            // Track non-owner signers for error message
+            const nonOwnerSigners: string[] = [];
 
             for (const sig of sortedSigs) {
                 const signerAddr = sig.signerAddress.toLowerCase() as Address;
@@ -728,7 +1096,21 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                     });
                 } else {
                     console.warn(`[VaultExecution] Skipping signer ${signerAddr} - not an owner`);
+                    nonOwnerSigners.push(signerAddr);
                 }
+            }
+            
+            // Check if we have any valid signatures
+            if (signerInfo.length === 0) {
+                const ownersShort = owners.map(o => `${o.slice(0, 6)}...${o.slice(-4)}`).join(", ");
+                const signersShort = nonOwnerSigners.map(s => `${s.slice(0, 6)}...${s.slice(-4)}`).join(", ");
+                console.error("[VaultExecution] Owner mismatch! Vault owners:", owners);
+                console.error("[VaultExecution] Signature signers:", signatures.map(s => s.signerAddress));
+                throw new Error(
+                    `Vault ownership mismatch: Your Smart Wallet (${signersShort}) is not an owner of this vault. ` +
+                    `Vault owners: ${ownersShort}. This vault may have been created with an outdated Smart Wallet address. ` +
+                    `Please create a new vault to use with your current passkey.`
+                );
             }
 
             // Build the signature bytes
@@ -852,9 +1234,20 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Transaction failed";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility
+            logVaultError(errorMessage, {
+                operation: "execute_with_signatures",
+                safeAddress: params.safeAddress,
+                chainId: params.chainId,
+                userAddress,
+                signatureCount: params.signatures?.length,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, getPublicClient, isPasskeyOnly, executeWithSignaturesViaPasskey, passkeySigner, passkeyUserAddress]);
+    }, [walletClient, userAddress, getPublicClient, isPasskeyOnly, executeWithSignaturesViaPasskey, passkeySigner, passkeyUserAddress, ensureCorrectChain]);
 
     /**
      * Execute a vault transaction (for threshold=1 or with pre-collected signatures)
@@ -885,7 +1278,21 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
             
-            // If we have enough signatures, execute via passkey
+            if (!passkeySigner.isReady) {
+                return { 
+                    success: false, 
+                    error: "Unable to load passkey. Please refresh the page and try again." 
+                };
+            }
+            
+            // For passkey users, we need to sign and execute via passkey Smart Wallet
+            // This handles both pre-collected signatures AND threshold=1 (sign on demand)
+            const credential = passkeySigner.credential;
+            if (!credential) {
+                return { success: false, error: "Passkey credential not available" };
+            }
+            
+            // If we have pre-collected signatures, use them
             if (signatures && signatures.length > 0) {
                 return executeWithSignaturesViaPasskey({
                     safeAddress,
@@ -897,12 +1304,62 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
                 });
             }
             
-            if (!passkeySigner.isReady) {
+            // For threshold=1 vaults without pre-collected signatures, 
+            // we need to sign with the passkey and execute
+            console.log("[VaultExecution] Passkey user executing threshold=1 vault transaction");
+            
+            // Get current nonce for the vault via server-side API (bypasses CORS)
+            console.log("[VaultExecution] Reading vault nonce via server API...");
+            const vaultReadResponse = await fetch(
+                `/api/vault/${safeAddress}/read?safeAddress=${safeAddress}&chainId=${chainId}`,
+                { credentials: "include" }
+            );
+            
+            if (!vaultReadResponse.ok) {
+                const errorData = await vaultReadResponse.json().catch(() => ({}));
                 return { 
                     success: false, 
-                    error: "Unable to load passkey. Please refresh the page and try again." 
+                    error: errorData.error || `Failed to read vault (status ${vaultReadResponse.status})` 
                 };
             }
+            
+            const vaultData = await vaultReadResponse.json();
+            const nonce = vaultData.nonce as number;
+            
+            console.log("[VaultExecution] Vault nonce:", nonce);
+            
+            // Sign the transaction with the passkey first
+            // CRITICAL: Pass smartWalletAddress so the signature is recorded under the Safe owner
+            const signResult = await signTransaction({
+                safeAddress,
+                chainId,
+                to,
+                value,
+                data,
+                nonce,
+                smartWalletAddress, // Pass the Smart Wallet address for EIP-1271 signing
+            });
+            
+            if (!signResult.success || !signResult.signature) {
+                return { 
+                    success: false, 
+                    error: signResult.error || "Failed to sign transaction with passkey" 
+                };
+            }
+            
+            // Execute with the signature
+            // Use the signer address returned from signTransaction (which will be the Smart Wallet)
+            return executeWithSignaturesViaPasskey({
+                safeAddress,
+                chainId,
+                to,
+                value,
+                data,
+                signatures: [{
+                    signerAddress: signResult.signerAddress || smartWalletAddress || userAddress || passkeyUserAddress!,
+                    signature: signResult.signature,
+                }],
+            });
         }
 
         // Execution requires a wallet client to send the transaction and pay gas
@@ -915,6 +1372,14 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
         setTxHash(null);
 
         try {
+            // Ensure we're on the correct chain before executing
+            const chainSwitchResult = await ensureCorrectChain(chainId);
+            if (!chainSwitchResult.success) {
+                setError(chainSwitchResult.error || "Failed to switch chain");
+                setStatus("error");
+                return { success: false, error: chainSwitchResult.error };
+            }
+            
             console.log("[VaultExecution] Starting execution...");
             console.log("[VaultExecution] Safe address:", safeAddress);
             console.log("[VaultExecution] User EOA:", userAddress);
@@ -1057,9 +1522,22 @@ export function useVaultExecution(passkeyUserAddress?: Address) {
             const errorMessage = err instanceof Error ? err.message : "Transaction failed";
             setStatus("error");
             setError(errorMessage);
+            
+            // Log error for admin visibility
+            logVaultError(errorMessage, {
+                operation: "execute",
+                safeAddress,
+                chainId,
+                userAddress,
+                smartWalletAddress,
+                isPasskeyOnly,
+                hasSignatures: !!signatures && signatures.length > 0,
+                stackTrace: err instanceof Error ? err.stack : undefined,
+            });
+            
             return { success: false, error: errorMessage };
         }
-    }, [walletClient, userAddress, signTransaction, executeWithSignatures, executeWithSignaturesViaPasskey, getPublicClient, isPasskeyOnly, passkeySigner, passkeyUserAddress]);
+    }, [walletClient, userAddress, signTransaction, executeWithSignatures, executeWithSignaturesViaPasskey, getPublicClient, isPasskeyOnly, passkeySigner, passkeyUserAddress, ensureCorrectChain]);
 
     const reset = useCallback(() => {
         setStatus("idle");
