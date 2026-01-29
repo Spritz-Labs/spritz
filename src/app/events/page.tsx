@@ -128,6 +128,21 @@ function formatDateRange(event: Event): string {
     }
 }
 
+/** Short label for list scanning: "Today", "Tomorrow", or "Jan 29" */
+function formatDatePill(dateStr: string): string {
+    const d = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventDay = new Date(d);
+    eventDay.setHours(0, 0, 0, 0);
+    const diffDays = Math.round(
+        (eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Tomorrow";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 // Determine if an event is a main event (conference) or side event
 function isMainEvent(event: Event): boolean {
     // Main events are typically conferences or summits
@@ -422,380 +437,398 @@ function EventCard({
         setShowCalendarMenu(false);
     };
 
+    const eventHref = event.slug
+        ? `/event/${event.slug}`
+        : `/events/${event.id}`;
+
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`relative bg-zinc-900/60 backdrop-blur-sm rounded-2xl border overflow-hidden hover:border-[#FF5500]/50 transition-all group flex flex-col h-full ${
-                event.is_featured
-                    ? "border-[#FF5500]/40 ring-1 ring-[#FF5500]/20"
-                    : isMain
-                      ? "border-blue-500/30 ring-1 ring-blue-500/10"
-                      : isSide
-                        ? "border-purple-500/20"
-                        : "border-zinc-800"
-            }`}
-        >
-            {/* Admin Edit Button */}
-            {isAdmin && onEdit && (
-                <button
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onEdit(event);
-                    }}
-                    className="absolute top-3 right-3 z-10 bg-zinc-800/90 hover:bg-zinc-700 text-white p-2 rounded-lg shadow-lg transition-all flex items-center gap-1.5 border border-zinc-700 hover:border-[#FF5500]/50"
-                    title="Edit Event"
-                >
-                    <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+        <Link href={eventHref} className="block h-full">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`relative bg-zinc-900/60 backdrop-blur-sm rounded-2xl border overflow-hidden hover:border-[#FF5500]/50 hover:shadow-lg hover:shadow-[#FF5500]/5 transition-all duration-200 group flex flex-col h-full cursor-pointer ${
+                    event.is_featured
+                        ? "border-[#FF5500]/40 ring-1 ring-[#FF5500]/20"
+                        : isMain
+                          ? "border-blue-500/30 ring-1 ring-blue-500/10"
+                          : isSide
+                            ? "border-purple-500/20"
+                            : "border-zinc-800"
+                }`}
+            >
+                {/* Admin Edit Button */}
+                {isAdmin && onEdit && (
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onEdit(event);
+                        }}
+                        className="absolute top-3 right-3 z-10 bg-zinc-800/90 hover:bg-zinc-700 text-white p-2 rounded-lg shadow-lg transition-all flex items-center gap-1.5 border border-zinc-700 hover:border-[#FF5500]/50"
+                        title="Edit Event"
                     >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                    </svg>
-                </button>
-            )}
-
-            {/* Registered badge – show on list when user is registered */}
-            {isRegistered && (
-                <div
-                    className={`absolute ${isAdmin && onEdit ? "top-12" : "top-3"} right-3 z-10 bg-green-500/90 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1`}
-                    title="You're registered"
-                >
-                    ✓ Registered
-                </div>
-            )}
-            {/* Featured Badge (below Registered when both) */}
-            {event.is_featured && (
-                <div
-                    className={`absolute ${isRegistered || (isAdmin && onEdit) ? "top-12" : "top-3"} right-3 z-10 bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg`}
-                >
-                    ⭐ Featured
-                </div>
-            )}
-
-            {/* Main Event / Side Event Badge */}
-            {isMain && (
-                <div className="absolute top-3 left-3 z-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1">
-                    🎯 Main Event
-                </div>
-            )}
-            {isSide && !isMain && (
-                <div className="absolute top-3 left-3 z-10 bg-gradient-to-r from-purple-600 to-purple-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1">
-                    🎪 Side Event
-                </div>
-            )}
-
-            {/* Banner Image or Gradient Header */}
-            {event.banner_image_url ? (
-                <div className="h-36 bg-zinc-800 overflow-hidden flex-shrink-0 relative">
-                    <img
-                        src={event.banner_image_url}
-                        alt={event.name}
-                        className="w-full h-full max-h-36 object-cover group-hover:scale-105 transition-transform duration-500"
-                        style={{ maxHeight: "144px", objectFit: "cover" }}
-                        loading="lazy"
-                    />
-                </div>
-            ) : (
-                <div className="h-20 bg-gradient-to-br from-[#FF5500]/20 via-zinc-900 to-zinc-900 flex items-center justify-center border-b border-zinc-800 flex-shrink-0">
-                    <span className="text-3xl opacity-50">{typeIcon}</span>
-                </div>
-            )}
-
-            <div className="p-5 flex flex-col flex-1 min-h-0">
-                {/* Event Type & Virtual Badge */}
-                <div className="flex items-center gap-2 mb-3">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-[#FF5500]/10 text-[#FF5500] border border-[#FF5500]/20">
-                        {typeIcon} {event.event_type}
-                    </span>
-                    {event.is_virtual && (
-                        <span className="px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                            🌐 Virtual
-                        </span>
-                    )}
-                </div>
-
-                {/* Title */}
-                <h3 className="text-lg font-bold text-white mb-3 line-clamp-2 group-hover:text-[#FF5500] transition-colors">
-                    {event.name}
-                </h3>
-
-                {/* Description Preview */}
-                {event.description && (
-                    <p className="text-sm text-zinc-400 mb-3 line-clamp-2">
-                        {event.description}
-                    </p>
-                )}
-
-                {/* Date Range */}
-                <div className="flex items-center gap-2 text-sm text-zinc-300 mb-2">
-                    <span className="text-[#FF5500]">📅</span>
-                    <span className="font-medium">
-                        {formatDateRange(event)}
-                    </span>
-                    {event.start_time && (
-                        <>
-                            <span className="text-zinc-600">•</span>
-                            <span>{formatTime(event.start_time)}</span>
-                            {event.end_time && (
-                                <span> - {formatTime(event.end_time)}</span>
-                            )}
-                        </>
-                    )}
-                </div>
-
-                {/* Location */}
-                {locationStr && (
-                    <div className="flex items-start gap-2 text-sm text-zinc-400 mb-3">
-                        <span className="text-[#FF5500] mt-0.5">📍</span>
-                        <span className="flex-1">{locationStr}</span>
-                    </div>
-                )}
-
-                {/* Virtual URL */}
-                {event.is_virtual && event.virtual_url && (
-                    <div className="flex items-center gap-2 text-sm text-blue-400 mb-3">
-                        <span>🔗</span>
-                        <a
-                            href={event.virtual_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:underline truncate"
+                        <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
                         >
-                            {event.virtual_url}
-                        </a>
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                        </svg>
+                    </button>
+                )}
+
+                {/* Registered badge – show on list when user is registered */}
+                {isRegistered && (
+                    <div
+                        className={`absolute ${isAdmin && onEdit ? "top-12" : "top-3"} right-3 z-10 bg-green-500/90 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1`}
+                        title="You're registered"
+                    >
+                        ✓ Registered
+                    </div>
+                )}
+                {/* Featured Badge (below Registered when both) */}
+                {event.is_featured && (
+                    <div
+                        className={`absolute ${isRegistered || (isAdmin && onEdit) ? "top-12" : "top-3"} right-3 z-10 bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg`}
+                    >
+                        ⭐ Featured
                     </div>
                 )}
 
-                {/* Organizer with Website */}
-                {event.organizer && (
-                    <div className="flex items-center gap-2 text-sm text-zinc-400 mb-3">
-                        <span className="text-[#FF5500]">🏢</span>
-                        <span className="truncate">{event.organizer}</span>
-                        {event.organizer_website && (
-                            <a
-                                href={event.organizer_website}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[#FF5500] hover:underline ml-1"
-                                title="Organizer Website"
-                            >
-                                🔗
-                            </a>
+                {/* Main Event / Side Event Badge */}
+                {isMain && (
+                    <div className="absolute top-3 left-3 z-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1">
+                        🎯 Main Event
+                    </div>
+                )}
+                {isSide && !isMain && (
+                    <div className="absolute top-3 left-3 z-10 bg-gradient-to-r from-purple-600 to-purple-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1">
+                        🎪 Side Event
+                    </div>
+                )}
+
+                {/* Square banner thumbnail (Luma-style) */}
+                {event.banner_image_url ? (
+                    <div className="aspect-square max-h-44 w-full bg-zinc-800 overflow-hidden flex-shrink-0 relative">
+                        <img
+                            src={event.banner_image_url}
+                            alt={event.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            loading="lazy"
+                        />
+                    </div>
+                ) : (
+                    <div className="aspect-square max-h-44 w-full bg-gradient-to-br from-[#FF5500]/20 via-zinc-900 to-zinc-900 flex items-center justify-center border-b border-zinc-800 flex-shrink-0">
+                        <span className="text-4xl opacity-50">{typeIcon}</span>
+                    </div>
+                )}
+
+                <div className="p-5 flex flex-col flex-1 min-h-0">
+                    {/* Date pill + Event type */}
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/10 text-zinc-200 border border-zinc-600/50">
+                            {formatDatePill(event.event_date)}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-[#FF5500]/10 text-[#FF5500] border border-[#FF5500]/20">
+                            {typeIcon} {event.event_type}
+                        </span>
+                        {event.is_virtual && (
+                            <span className="px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                🌐 Virtual
+                            </span>
                         )}
                     </div>
-                )}
 
-                {/* Blockchain Focus Tags */}
-                {event.blockchain_focus &&
-                    event.blockchain_focus.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-4">
-                            {event.blockchain_focus.map((chain) => (
-                                <span
-                                    key={chain}
-                                    className="px-2 py-1 text-xs rounded-md bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 capitalize"
-                                >
-                                    {chain}
-                                </span>
-                            ))}
+                    {/* Title */}
+                    <h3 className="text-lg font-bold text-white mb-3 line-clamp-2 group-hover:text-[#FF5500] transition-colors">
+                        {event.name}
+                    </h3>
+
+                    {/* Description Preview */}
+                    {event.description && (
+                        <p className="text-sm text-zinc-400 mb-3 line-clamp-2">
+                            {event.description}
+                        </p>
+                    )}
+
+                    {/* Date Range */}
+                    <div className="flex items-center gap-2 text-sm text-zinc-300 mb-2">
+                        <span className="text-[#FF5500]">📅</span>
+                        <span className="font-medium">
+                            {formatDateRange(event)}
+                        </span>
+                        {event.start_time && (
+                            <>
+                                <span className="text-zinc-600">•</span>
+                                <span>{formatTime(event.start_time)}</span>
+                                {event.end_time && (
+                                    <span> - {formatTime(event.end_time)}</span>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Location */}
+                    {locationStr && (
+                        <div className="flex items-start gap-2 text-sm text-zinc-400 mb-3">
+                            <span className="text-[#FF5500] mt-0.5">📍</span>
+                            <span className="flex-1">{locationStr}</span>
                         </div>
                     )}
 
-                {/* Actions */}
-                <div className="flex flex-col gap-2 mt-auto pt-3 border-t border-zinc-800">
-                    {/* Primary Actions Row: RSVP first when available, then Website/Tickets */}
-                    <div className="flex gap-2">
-                        {/* RSVP: explicit rsvp_url, or event_url that looks like registration */}
-                        {(event.rsvp_url ||
-                            (event.event_url &&
-                                isRegistrationUrl(event.event_url))) && (
+                    {/* Virtual URL */}
+                    {event.is_virtual && event.virtual_url && (
+                        <div className="flex items-center gap-2 text-sm text-blue-400 mb-3">
+                            <span>🔗</span>
                             <a
-                                href={event.rsvp_url || event.event_url || "#"}
+                                href={event.virtual_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex-1 text-center py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
+                                className="hover:underline truncate"
                             >
-                                RSVP
+                                {event.virtual_url}
                             </a>
-                        )}
-                        {event.registration_enabled &&
-                            !event.rsvp_url &&
-                            !(
-                                event.event_url &&
-                                isRegistrationUrl(event.event_url)
-                            ) && (
-                                <Link
-                                    href={
-                                        event.slug
-                                            ? `/event/${event.slug}`
-                                            : `/events/${event.id}`
-                                    }
-                                    className="flex-1 text-center py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
-                                >
-                                    Register
-                                </Link>
-                            )}
-                        {/* Website: event_url only if not already shown as RSVP and not same as rsvp_url */}
-                        {event.event_url &&
-                            !(
-                                event.rsvp_url &&
-                                event.event_url === event.rsvp_url
-                            ) &&
-                            !(
-                                isRegistrationUrl(event.event_url) &&
-                                !event.rsvp_url
-                            ) && (
+                        </div>
+                    )}
+
+                    {/* Organizer with Website */}
+                    {event.organizer && (
+                        <div className="flex items-center gap-2 text-sm text-zinc-400 mb-3">
+                            <span className="text-[#FF5500]">🏢</span>
+                            <span className="truncate">{event.organizer}</span>
+                            {event.organizer_website && (
                                 <a
-                                    href={event.event_url}
+                                    href={event.organizer_website}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex-1 text-center py-2.5 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                                    className="text-[#FF5500] hover:underline ml-1"
+                                    title="Organizer Website"
                                 >
-                                    Website
+                                    🔗
                                 </a>
                             )}
-                        {event.ticket_url &&
-                            !event.rsvp_url &&
-                            !(
-                                event.event_url &&
-                                isRegistrationUrl(event.event_url)
-                            ) && (
-                                <a
-                                    href={event.ticket_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex-1 text-center py-2.5 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all"
-                                >
-                                    Tickets
-                                </a>
-                            )}
-                    </div>
+                        </div>
+                    )}
 
-                    {/* Interest & Going Buttons */}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => handleInterest("interested")}
-                            disabled={isLoadingInterest}
-                            className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
-                                userInterest === "interested"
-                                    ? "bg-amber-500/30 text-amber-300 border-2 border-amber-400/60 shadow-[0_0_12px_rgba(251,191,36,0.25)]"
-                                    : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
-                            } disabled:opacity-50`}
-                        >
-                            <span>★</span>
-                            <span>Interested</span>
-                            {interestedCount > 0 && (
-                                <span className="text-xs opacity-75">
-                                    ({interestedCount})
-                                </span>
-                            )}
-                        </button>
-                        <button
-                            onClick={() => handleInterest("going")}
-                            disabled={isLoadingInterest}
-                            className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
-                                showAsGoing
-                                    ? "bg-green-500/20 text-green-400 border border-green-500/40"
-                                    : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
-                            } disabled:opacity-50`}
-                        >
-                            <span>✓</span>
-                            <span>{showAsGoing ? "Going ✓" : "Going"}</span>
-                            {goingCount > 0 && (
-                                <span className="text-xs opacity-75">
-                                    ({goingCount})
-                                </span>
-                            )}
-                        </button>
-                    </div>
-
-                    {/* Add to Calendar Button */}
-                    <div className="relative">
-                        <button
-                            onClick={() =>
-                                setShowCalendarMenu(!showCalendarMenu)
-                            }
-                            className="w-full py-2 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all flex items-center justify-center gap-2"
-                        >
-                            <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                />
-                            </svg>
-                            Add to Calendar
-                            <svg
-                                className={`w-4 h-4 transition-transform ${showCalendarMenu ? "rotate-180" : ""}`}
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 9l-7 7-7-7"
-                                />
-                            </svg>
-                        </button>
-
-                        {/* Calendar Menu Dropdown */}
-                        {showCalendarMenu && (
-                            <div className="absolute bottom-full left-0 right-0 mb-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-10">
-                                <button
-                                    onClick={() =>
-                                        handleAddToCalendar("google")
-                                    }
-                                    className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2"
-                                >
-                                    <span>📅</span>
-                                    Google Calendar
-                                </button>
-                                <button
-                                    onClick={() =>
-                                        handleAddToCalendar("outlook")
-                                    }
-                                    className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2"
-                                >
-                                    <span>📅</span>
-                                    Outlook Calendar
-                                </button>
-                                <button
-                                    onClick={() => handleAddToCalendar("ics")}
-                                    className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2"
-                                >
-                                    <span>📥</span>
-                                    Download .ics file
-                                </button>
+                    {/* Blockchain Focus Tags */}
+                    {event.blockchain_focus &&
+                        event.blockchain_focus.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-4">
+                                {event.blockchain_focus.map((chain) => (
+                                    <span
+                                        key={chain}
+                                        className="px-2 py-1 text-xs rounded-md bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 capitalize"
+                                    >
+                                        {chain}
+                                    </span>
+                                ))}
                             </div>
                         )}
+
+                    {/* Actions – stop propagation so clicking buttons/links doesn’t navigate the card */}
+                    <div
+                        className="flex flex-col gap-2 mt-auto pt-3 border-t border-zinc-800"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Primary Actions Row: RSVP first when available, then Website/Tickets */}
+                        <div className="flex gap-2">
+                            {/* RSVP: explicit rsvp_url, or event_url that looks like registration */}
+                            {(event.rsvp_url ||
+                                (event.event_url &&
+                                    isRegistrationUrl(event.event_url))) && (
+                                <a
+                                    href={
+                                        event.rsvp_url || event.event_url || "#"
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex-1 text-center py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
+                                >
+                                    RSVP
+                                </a>
+                            )}
+                            {!event.rsvp_url &&
+                                !(
+                                    event.event_url &&
+                                    isRegistrationUrl(event.event_url)
+                                ) && (
+                                    <Link
+                                        href={
+                                            event.slug
+                                                ? `/event/${event.slug}`
+                                                : `/events/${event.id}`
+                                        }
+                                        className="flex-1 text-center py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
+                                    >
+                                        Register
+                                    </Link>
+                                )}
+                            {/* Website: event_url only if not already shown as RSVP and not same as rsvp_url */}
+                            {event.event_url &&
+                                !(
+                                    event.rsvp_url &&
+                                    event.event_url === event.rsvp_url
+                                ) &&
+                                !(
+                                    isRegistrationUrl(event.event_url) &&
+                                    !event.rsvp_url
+                                ) && (
+                                    <a
+                                        href={event.event_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-1 text-center py-2.5 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                                    >
+                                        Website
+                                    </a>
+                                )}
+                            {event.ticket_url &&
+                                !event.rsvp_url &&
+                                !(
+                                    event.event_url &&
+                                    isRegistrationUrl(event.event_url)
+                                ) && (
+                                    <a
+                                        href={event.ticket_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-1 text-center py-2.5 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                                    >
+                                        Tickets
+                                    </a>
+                                )}
+                        </div>
+
+                        {/* Interest & Going Buttons */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handleInterest("interested")}
+                                disabled={isLoadingInterest}
+                                className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                                    userInterest === "interested"
+                                        ? "bg-amber-500/30 text-amber-300 border-2 border-amber-400/60 shadow-[0_0_12px_rgba(251,191,36,0.25)]"
+                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+                                } disabled:opacity-50`}
+                            >
+                                <span>★</span>
+                                <span>Interested</span>
+                                {interestedCount > 0 && (
+                                    <span className="text-xs opacity-75">
+                                        ({interestedCount})
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => handleInterest("going")}
+                                disabled={isLoadingInterest}
+                                className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                                    showAsGoing
+                                        ? "bg-green-500/20 text-green-400 border border-green-500/40"
+                                        : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+                                } disabled:opacity-50`}
+                            >
+                                <span>✓</span>
+                                <span>{showAsGoing ? "Going ✓" : "Going"}</span>
+                                {goingCount > 0 && (
+                                    <span className="text-xs opacity-75">
+                                        ({goingCount})
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Add to Calendar Button */}
+                        <div className="relative">
+                            <button
+                                onClick={() =>
+                                    setShowCalendarMenu(!showCalendarMenu)
+                                }
+                                className="w-full py-2 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all flex items-center justify-center gap-2"
+                            >
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                    />
+                                </svg>
+                                Add to Calendar
+                                <svg
+                                    className={`w-4 h-4 transition-transform ${showCalendarMenu ? "rotate-180" : ""}`}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 9l-7 7-7-7"
+                                    />
+                                </svg>
+                            </button>
+
+                            {/* Calendar Menu Dropdown */}
+                            {showCalendarMenu && (
+                                <div className="absolute bottom-full left-0 right-0 mb-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-10">
+                                    <button
+                                        onClick={() =>
+                                            handleAddToCalendar("google")
+                                        }
+                                        className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                                    >
+                                        <span>📅</span>
+                                        Google Calendar
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            handleAddToCalendar("outlook")
+                                        }
+                                        className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                                    >
+                                        <span>📅</span>
+                                        Outlook Calendar
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            handleAddToCalendar("ics")
+                                        }
+                                        className="w-full px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                                    >
+                                        <span>📥</span>
+                                        Download .ics file
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Click outside to close calendar menu */}
-            {showCalendarMenu && (
-                <div
-                    className="fixed inset-0 z-0"
-                    onClick={() => setShowCalendarMenu(false)}
-                />
-            )}
-        </motion.div>
+                {/* Click outside to close calendar menu */}
+                {showCalendarMenu && (
+                    <div
+                        className="fixed inset-0 z-0"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowCalendarMenu(false);
+                        }}
+                    />
+                )}
+            </motion.div>
+        </Link>
     );
 }
 
