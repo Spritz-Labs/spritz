@@ -2,7 +2,10 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useChannelMessages, CHANNEL_REACTION_EMOJIS } from "@/hooks/useChannels";
+import {
+    useChannelMessages,
+    CHANNEL_REACTION_EMOJIS,
+} from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
 import type { ChannelMessage } from "@/app/api/channels/[id]/messages/route";
 import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
@@ -19,14 +22,23 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChannelIcon } from "./ChannelIcon";
-import { useWakuChannel, type WakuChannelMessage } from "@/hooks/useWakuChannel";
+import {
+    useWakuChannel,
+    type WakuChannelMessage,
+} from "@/hooks/useWakuChannel";
 import { TypingIndicator } from "./TypingIndicator";
 import { LongPressReactions } from "./LongPressReactions";
 import { AvatarWithStatus } from "./OnlineStatus";
 import { UnreadDivider, DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses, isUserOnline } from "@/hooks/usePresence";
-import { LocationMessage, isLocationMessage, parseLocationMessage, formatLocationMessage, type LocationData } from "./LocationMessage";
+import {
+    LocationMessage,
+    isLocationMessage,
+    parseLocationMessage,
+    formatLocationMessage,
+    type LocationData,
+} from "./LocationMessage";
 import { useStarredMessages } from "@/hooks/useStarredMessages";
 import { ForwardMessageModal } from "./ForwardMessageModal";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
@@ -37,12 +49,15 @@ import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { ChatMembersList } from "./ChatMembersList";
 
 // Helper to detect if a message is emoji-only (for larger display)
-const EMOJI_REGEX = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
+const EMOJI_REGEX =
+    /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\u200d\ufe0f\s]+$/u;
 const isEmojiOnly = (text: string): boolean => {
     const trimmed = text.trim();
     if (!trimmed) return false;
     if (!EMOJI_REGEX.test(trimmed)) return false;
-    const emojiCount = [...trimmed].filter(char => /\p{Emoji}/u.test(char) && !/\d/u.test(char)).length;
+    const emojiCount = [...trimmed].filter(
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+    ).length;
     return emojiCount >= 1 && emojiCount <= 3;
 };
 
@@ -88,10 +103,10 @@ export function ChannelChatModal({
 }: ChannelChatModalProps) {
     // Determine if this is a Waku channel
     const isWakuChannel = channel.messaging_type === "waku";
-    
+
     // Standard channel messaging (Supabase)
     const standardMessages = useChannelMessages(channel.id, userAddress);
-    
+
     // Waku channel messaging (decentralized)
     const wakuMessages = useWakuChannel({
         channelId: channel.id,
@@ -100,141 +115,170 @@ export function ChannelChatModal({
         userAddress,
         onNewMessage: onMessageSent,
     });
-    
-    // Normalize message interface based on channel type
-    const messages = isWakuChannel 
-        ? wakuMessages.messages.map(m => ({
-            id: m.id,
-            channel_id: channel.id,
-            content: m.content,
-            sender_address: m.senderAddress,
-            created_at: m.timestamp.toISOString(),
-            message_type: m.messageType,
-            is_edited: false,
-            edited_at: null,
-            is_deleted: false,
-            is_pinned: false,
-            pinned_by: null,
-            pinned_at: null,
-            reply_to_id: null,
-            reply_to: null,
-        }))
+
+    // Normalize message interface based on channel type (memoize for Waku to avoid re-render flash)
+    const messages = isWakuChannel
+        ? useMemo(
+              () =>
+                  wakuMessages.messages.map((m) => ({
+                      id: m.id,
+                      channel_id: channel.id,
+                      content: m.content,
+                      sender_address: m.senderAddress,
+                      created_at: m.timestamp.toISOString(),
+                      message_type: m.messageType,
+                      is_edited: false,
+                      edited_at: null,
+                      is_deleted: false,
+                      is_pinned: false,
+                      pinned_by: null,
+                      pinned_at: null,
+                      reply_to_id: null,
+                      reply_to: null,
+                  })),
+              [wakuMessages.messages, channel.id],
+          )
         : standardMessages.messages;
-    
+
     const pinnedMessages = isWakuChannel ? [] : standardMessages.pinnedMessages;
     const reactions = isWakuChannel ? {} : standardMessages.reactions;
-    const isLoading = isWakuChannel ? wakuMessages.isLoading : standardMessages.isLoading;
-    const isLoadingMore = isWakuChannel ? false : standardMessages.isLoadingMore;
+    const isLoading = isWakuChannel
+        ? wakuMessages.isLoading
+        : standardMessages.isLoading;
+    const isLoadingMore = isWakuChannel
+        ? false
+        : standardMessages.isLoadingMore;
     const hasMore = isWakuChannel ? false : standardMessages.hasMore;
-    
-    const sendMessage = isWakuChannel 
-        ? async (content: string, messageType: "text" | "image" | "pixel_art" | "gif" | "location" = "text") => {
-            const success = await wakuMessages.sendMessage(content, messageType);
-            return success ? { id: crypto.randomUUID() } : null;
+
+    const sendMessage = isWakuChannel
+        ? async (
+              content: string,
+              messageType:
+                  | "text"
+                  | "image"
+                  | "pixel_art"
+                  | "gif"
+                  | "location" = "text",
+          ) => {
+              const success = await wakuMessages.sendMessage(
+                  content,
+                  messageType,
+              );
+              return success ? { id: crypto.randomUUID() } : null;
           }
         : standardMessages.sendMessage;
-    
-    const editMessage = isWakuChannel 
+
+    const editMessage = isWakuChannel
         ? async () => false // Not supported yet for Waku
         : standardMessages.editMessage;
-    
-    const deleteMessage = isWakuChannel 
+
+    const deleteMessage = isWakuChannel
         ? async () => false // Not supported yet for Waku
         : standardMessages.deleteMessage;
-    
-    const toggleReaction = isWakuChannel 
+
+    const toggleReaction = isWakuChannel
         ? async () => {} // Not supported yet for Waku
         : standardMessages.toggleReaction;
-    
-    const togglePinMessage = isWakuChannel 
+
+    const togglePinMessage = isWakuChannel
         ? async () => {} // Not supported yet for Waku
         : standardMessages.togglePinMessage;
-    
-    const loadMoreMessages = isWakuChannel 
+
+    const loadMoreMessages = isWakuChannel
         ? async () => {} // Not supported yet for Waku
         : standardMessages.loadMoreMessages;
-    
+
     const replyingTo = isWakuChannel ? null : standardMessages.replyingTo;
-    const setReplyingTo = isWakuChannel 
-        ? () => {} 
+    const setReplyingTo = isWakuChannel
+        ? () => {}
         : standardMessages.setReplyingTo;
-    
+
     // Polls
-    const { polls, canCreatePoll, fetchPolls, createPoll, vote } = usePolls(channel.id, userAddress);
+    const { polls, canCreatePoll, fetchPolls, createPoll, vote } = usePolls(
+        channel.id,
+        userAddress,
+    );
     const [inputValue, setInputValue] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-    
+
     // Typing indicator
     const { typingUsers, setTyping, stopTyping } = useTypingIndicator(
         channel.id,
         "channel",
         userAddress,
-        getUserInfo?.(userAddress)?.name || undefined
+        getUserInfo?.(userAddress)?.name || undefined,
     );
-    
+
     // Online statuses for channel members
-    const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
-    
+    const [onlineStatuses, setOnlineStatuses] = useState<
+        Record<string, boolean>
+    >({});
+
     // Members list panel
     const [showMembersList, setShowMembersList] = useState(false);
-    
+
     // Channel icon management
     const [canEditIcon, setCanEditIcon] = useState(false);
-    const [channelIcon, setChannelIcon] = useState<string | null>(channel.icon_url || null);
+    const [channelIcon, setChannelIcon] = useState<string | null>(
+        channel.icon_url || null,
+    );
     const [isUploadingIcon, setIsUploadingIcon] = useState(false);
     const iconFileInputRef = useRef<HTMLInputElement>(null);
-    
+
     // Check if user can edit channel icon (admin, owner, or moderator)
     useEffect(() => {
         if (!userAddress) return;
-        
+
         // Admins can always edit
         if (isAdmin) {
             setCanEditIcon(true);
             return;
         }
-        
+
         // Check if channel owner
-        if (channel.creator_address?.toLowerCase() === userAddress.toLowerCase()) {
+        if (
+            channel.creator_address?.toLowerCase() === userAddress.toLowerCase()
+        ) {
             setCanEditIcon(true);
             return;
         }
-        
+
         // Check if moderator (would need API call, simplify by using canCreatePoll which has same permissions)
         setCanEditIcon(canCreatePoll);
     }, [userAddress, isAdmin, channel.creator_address, canCreatePoll]);
-    
+
     const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        
+
         setIsUploadingIcon(true);
         try {
             const formData = new FormData();
             formData.append("file", file);
             formData.append("userAddress", userAddress);
-            
+
             const res = await fetch(`/api/channels/${channel.id}/icon`, {
                 method: "POST",
                 body: formData,
             });
-            
+
             const data = await res.json();
-            
+
             if (!res.ok) {
                 throw new Error(data.error || "Failed to upload icon");
             }
-            
+
             setChannelIcon(data.icon_url);
             // Update channel object if possible
             if (channel) {
                 channel.icon_url = data.icon_url;
             }
-            
+
             // Show success toast
             const toast = document.createElement("div");
-            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.className =
+                "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
             toast.textContent = "✓ Channel icon updated!";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2000);
@@ -242,8 +286,10 @@ export function ChannelChatModal({
             console.error("Failed to upload icon:", err);
             // Show error toast
             const toast = document.createElement("div");
-            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
-            toast.textContent = err instanceof Error ? err.message : "Failed to upload icon";
+            toast.className =
+                "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.textContent =
+                err instanceof Error ? err.message : "Failed to upload icon";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 3000);
         } finally {
@@ -252,27 +298,31 @@ export function ChannelChatModal({
             e.target.value = "";
         }
     };
-    
+
     const handleRemoveIcon = async () => {
         setIsUploadingIcon(true);
         try {
-            const res = await fetch(`/api/channels/${channel.id}/icon?userAddress=${userAddress}`, {
-                method: "DELETE",
-            });
-            
+            const res = await fetch(
+                `/api/channels/${channel.id}/icon?userAddress=${userAddress}`,
+                {
+                    method: "DELETE",
+                },
+            );
+
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.error || "Failed to remove icon");
             }
-            
+
             setChannelIcon(null);
             if (channel) {
                 channel.icon_url = null;
             }
-            
+
             // Show success toast
             const toast = document.createElement("div");
-            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+            toast.className =
+                "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
             toast.textContent = "✓ Channel icon removed!";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2000);
@@ -287,11 +337,17 @@ export function ChannelChatModal({
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
-    const [userPopupPosition, setUserPopupPosition] = useState<{ x: number; y: number } | null>(null);
+    const [userPopupPosition, setUserPopupPosition] = useState<{
+        x: number;
+        y: number;
+    } | null>(null);
     const [addingFriend, setAddingFriend] = useState<string | null>(null);
-    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
+        null,
+    );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
-    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] =
+        useState<MessageActionConfig | null>(null);
     const [editingMessage, setEditingMessage] = useState<string | null>(null);
     const [editContent, setEditContent] = useState("");
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -299,25 +355,30 @@ export function ChannelChatModal({
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
-    const [forwardingMessage, setForwardingMessage] = useState<ChannelMessage | null>(null);
+    const [forwardingMessage, setForwardingMessage] =
+        useState<ChannelMessage | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    
+
     // Starred messages hook
     const { isStarred, toggleStar } = useStarredMessages(userAddress);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
-    
+
     // Draft messages persistence
-    const { draft, saveDraft, clearDraft } = useDraftMessages("channel", channel.id, userAddress);
-    
+    const { draft, saveDraft, clearDraft } = useDraftMessages(
+        "channel",
+        channel.id,
+        userAddress,
+    );
+
     // Scroll to bottom with unread badge
-    const { 
-        newMessageCount, 
-        isAtBottom, 
-        onNewMessage, 
+    const {
+        newMessageCount,
+        isAtBottom,
+        onNewMessage,
         resetUnreadCount,
-        scrollToBottom: scrollToBottomFn 
+        scrollToBottom: scrollToBottomFn,
     } = useScrollToBottom(messagesContainerRef);
-    
+
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const previousScrollHeightRef = useRef<number>(0);
@@ -330,13 +391,16 @@ export function ChannelChatModal({
     >(new Map());
 
     // Combined getUserInfo that checks local cache first, then falls back to prop
-    const getEffectiveUserInfo = useCallback((address: string) => {
-        // Check prop first
-        const propInfo = getUserInfo?.(address);
-        if (propInfo) return propInfo;
-        // Check local cache
-        return localUserInfoCache.get(address.toLowerCase()) || null;
-    }, [getUserInfo, localUserInfoCache]);
+    const getEffectiveUserInfo = useCallback(
+        (address: string) => {
+            // Check prop first
+            const propInfo = getUserInfo?.(address);
+            if (propInfo) return propInfo;
+            // Check local cache
+            return localUserInfoCache.get(address.toLowerCase()) || null;
+        },
+        [getUserInfo, localUserInfoCache],
+    );
 
     // Fetch AI agents in this channel
     const [channelAgents, setChannelAgents] = useState<MentionUser[]>([]);
@@ -346,17 +410,22 @@ export function ChannelChatModal({
                 const res = await fetch(`/api/channels/${channel.id}/agents`);
                 if (res.ok) {
                     const data = await res.json();
-                    const agents: MentionUser[] = (data.agents || []).map((agent: any) => ({
-                        address: agent.id, // Use agent ID as "address" for mentions
-                        name: agent.name,
-                        avatar: agent.avatar_url || null,
-                        avatarEmoji: agent.avatar_emoji,
-                        isAgent: true,
-                    }));
+                    const agents: MentionUser[] = (data.agents || []).map(
+                        (agent: any) => ({
+                            address: agent.id, // Use agent ID as "address" for mentions
+                            name: agent.name,
+                            avatar: agent.avatar_url || null,
+                            avatarEmoji: agent.avatar_emoji,
+                            isAgent: true,
+                        }),
+                    );
                     setChannelAgents(agents);
                 }
             } catch (err) {
-                console.error("[ChannelChat] Error fetching channel agents:", err);
+                console.error(
+                    "[ChannelChat] Error fetching channel agents:",
+                    err,
+                );
             }
         }
         if (isOpen && channel.id) {
@@ -374,15 +443,18 @@ export function ChannelChatModal({
     // Build list of mentionable users from message senders + channel agents
     const mentionableUsers: MentionUser[] = useMemo(() => {
         const userMap = new Map<string, MentionUser>();
-        
+
         // Add channel agents first (so they appear at the top)
         channelAgents.forEach((agent) => {
             userMap.set(agent.address, agent);
         });
-        
+
         messages.forEach((msg) => {
             const address = msg.sender_address.toLowerCase();
-            if (!userMap.has(address) && address !== userAddress.toLowerCase()) {
+            if (
+                !userMap.has(address) &&
+                address !== userAddress.toLowerCase()
+            ) {
                 const info = getEffectiveUserInfo(msg.sender_address);
                 userMap.set(address, {
                     address: msg.sender_address,
@@ -391,36 +463,54 @@ export function ChannelChatModal({
                 });
             }
         });
-        
+
         return Array.from(userMap.values());
     }, [messages, userAddress, getEffectiveUserInfo, channelAgents]);
 
     // Handle mention click
-    const handleMentionClick = useCallback((address: string, event?: React.MouseEvent) => {
-        if (event) {
-            const rect = (event.target as HTMLElement).getBoundingClientRect();
-            setUserPopupPosition({ x: rect.left, y: rect.bottom + 8 });
-        }
-        setSelectedUser(address);
-    }, []);
-    
+    const handleMentionClick = useCallback(
+        (address: string, event?: React.MouseEvent) => {
+            if (event) {
+                const rect = (
+                    event.target as HTMLElement
+                ).getBoundingClientRect();
+                setUserPopupPosition({ x: rect.left, y: rect.bottom + 8 });
+            }
+            setSelectedUser(address);
+        },
+        [],
+    );
+
     // Handle user click with position tracking
-    const handleUserClick = useCallback((address: string, event: React.MouseEvent) => {
-        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        const viewportHeight = window.innerHeight;
-        const popupHeight = 250;
-        const y = rect.bottom + 8;
-        const adjustedY = y + popupHeight > viewportHeight ? rect.top - popupHeight - 8 : y;
-        setUserPopupPosition({ x: Math.max(8, rect.left), y: Math.max(8, adjustedY) });
-        setSelectedUser(address);
-    }, []);
+    const handleUserClick = useCallback(
+        (address: string, event: React.MouseEvent) => {
+            const rect = (
+                event.currentTarget as HTMLElement
+            ).getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const popupHeight = 250;
+            const y = rect.bottom + 8;
+            const adjustedY =
+                y + popupHeight > viewportHeight
+                    ? rect.top - popupHeight - 8
+                    : y;
+            setUserPopupPosition({
+                x: Math.max(8, rect.left),
+                y: Math.max(8, adjustedY),
+            });
+            setSelectedUser(address);
+        },
+        [],
+    );
 
     // Fetch online statuses for message senders
     useEffect(() => {
-        const uniqueSenders = [...new Set(messages.map(m => m.sender_address.toLowerCase()))];
+        const uniqueSenders = [
+            ...new Set(messages.map((m) => m.sender_address.toLowerCase())),
+        ];
         if (uniqueSenders.length === 0) return;
 
-        fetchOnlineStatuses(uniqueSenders).then(statuses => {
+        fetchOnlineStatuses(uniqueSenders).then((statuses) => {
             setOnlineStatuses(statuses);
         });
     }, [messages]);
@@ -434,7 +524,7 @@ export function ChannelChatModal({
             if (lastMessage.id !== lastMessageIdRef.current) {
                 lastMessageIdRef.current = lastMessage.id;
                 const container = messagesContainerRef.current;
-                
+
                 // Always scroll if user just sent a message
                 if (justSentMessageRef.current) {
                     justSentMessageRef.current = false;
@@ -442,10 +532,14 @@ export function ChannelChatModal({
                     if (container) container.scrollTop = 0; // Bottom with column-reverse
                     return;
                 }
-                
+
                 // Auto-scroll if user hasn't scrolled up to read history
                 // With column-reverse, "near bottom" = scrollTop near 0
-                if (container && !userScrolledUpRef.current && container.scrollTop < 300) {
+                if (
+                    container &&
+                    !userScrolledUpRef.current &&
+                    container.scrollTop < 300
+                ) {
                     container.scrollTop = 0;
                 }
             }
@@ -460,7 +554,8 @@ export function ChannelChatModal({
         if (container && previousScrollHeightRef.current > 0) {
             // With column-reverse, new content adds at top, so we need to add the diff to scrollTop
             const newScrollHeight = container.scrollHeight;
-            const scrollDiff = newScrollHeight - previousScrollHeightRef.current;
+            const scrollDiff =
+                newScrollHeight - previousScrollHeightRef.current;
             if (scrollDiff > 0) {
                 container.scrollTop += scrollDiff;
             }
@@ -479,7 +574,11 @@ export function ChannelChatModal({
 
         // Load more when scrolled near the TOP (older messages) - scrollTop approaches max
         const scrollMax = container.scrollHeight - container.clientHeight;
-        if (!isLoadingMore && hasMore && scrollMax - container.scrollTop < 100) {
+        if (
+            !isLoadingMore &&
+            hasMore &&
+            scrollMax - container.scrollTop < 100
+        ) {
             previousScrollHeightRef.current = container.scrollHeight;
             loadMoreMessages();
         }
@@ -500,9 +599,9 @@ export function ChannelChatModal({
     // Lock body scroll when modal is open to prevent scroll bleed
     useEffect(() => {
         if (isOpen) {
-            document.body.style.overflow = 'hidden';
+            document.body.style.overflow = "hidden";
             return () => {
-                document.body.style.overflow = '';
+                document.body.style.overflow = "";
             };
         }
     }, [isOpen]);
@@ -522,7 +621,8 @@ export function ChannelChatModal({
 
         // Only fetch for senders not in cache (check both getUserInfo and local cache)
         const sendersToFetch = Array.from(uniqueSenders).filter(
-            (address) => !getUserInfo?.(address) && !localUserInfoCache.has(address)
+            (address) =>
+                !getUserInfo?.(address) && !localUserInfoCache.has(address),
         );
 
         // Fetch user info for all unique senders not in cache
@@ -544,12 +644,19 @@ export function ChannelChatModal({
                             if (prev.has(address.toLowerCase())) {
                                 return prev;
                             }
-                            return new Map(prev).set(address.toLowerCase(), userInfo);
+                            return new Map(prev).set(
+                                address.toLowerCase(),
+                                userInfo,
+                            );
                         });
                     }
                 })
                 .catch((err) => {
-                    console.error("[ChannelChat] Error fetching user info for", address, err);
+                    console.error(
+                        "[ChannelChat] Error fetching user info for",
+                        address,
+                        err,
+                    );
                 });
         });
     }, [messages, userAddress, getUserInfo, localUserInfoCache]);
@@ -578,7 +685,8 @@ export function ChannelChatModal({
         const handleClickOutside = () => setSelectedUser(null);
         if (selectedUser) {
             document.addEventListener("click", handleClickOutside);
-            return () => document.removeEventListener("click", handleClickOutside);
+            return () =>
+                document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedUser]);
 
@@ -596,15 +704,17 @@ export function ChannelChatModal({
         stopTyping(); // Stop typing indicator when message is sent
         const content = inputValue.trim();
         setInputValue("");
-        
+
         // Mark that user just sent a message (for auto-scroll)
         justSentMessageRef.current = true;
 
-        await sendMessage(content, "text", replyingTo?.id);
+        const result = await sendMessage(content, "text", replyingTo?.id);
         setIsSending(false);
-        
-        // Notify parent that message was sent (for updating chat order)
-        onMessageSent?.();
+
+        // For Waku channels, keep failed-send content so user can retry (e.g. after joining)
+        if (isWakuChannel && !result) setInputValue(content);
+
+        if (result) onMessageSent?.();
     };
 
     // Handle sending GIF
@@ -628,22 +738,24 @@ export function ChannelChatModal({
             // Convert base64 to blob
             const response = await fetch(imageData);
             const blob = await response.blob();
-            const file = new File([blob], "pixel-art.png", { type: "image/png" });
-            
+            const file = new File([blob], "pixel-art.png", {
+                type: "image/png",
+            });
+
             // Upload to storage
             const formData = new FormData();
             formData.append("file", file);
             formData.append("userAddress", userAddress);
-            
+
             const uploadRes = await fetch("/api/upload", {
                 method: "POST",
                 body: formData,
             });
-            
+
             if (!uploadRes.ok) throw new Error("Upload failed");
-            
+
             const { url } = await uploadRes.json();
-            
+
             // Send as pixel art message
             await sendMessage(url, "pixel_art");
             setShowPixelArt(false);
@@ -667,9 +779,12 @@ export function ChannelChatModal({
         }
     };
 
-    const handlePinMessage = async (messageId: string, currentlyPinned: boolean) => {
+    const handlePinMessage = async (
+        messageId: string,
+        currentlyPinned: boolean,
+    ) => {
         if (!isAdmin || pinningMessage) return;
-        
+
         setPinningMessage(messageId);
         try {
             await togglePinMessage(messageId, !currentlyPinned);
@@ -689,14 +804,18 @@ export function ChannelChatModal({
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
-            if (!target.closest('[data-message-actions]') && !target.closest('[data-message-bubble]')) {
+            if (
+                !target.closest("[data-message-actions]") &&
+                !target.closest("[data-message-bubble]")
+            ) {
                 setSelectedMessage(null);
                 setShowReactionPicker(null);
             }
         };
         if (selectedMessage) {
-            document.addEventListener('click', handleClickOutside);
-            return () => document.removeEventListener('click', handleClickOutside);
+            document.addEventListener("click", handleClickOutside);
+            return () =>
+                document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedMessage]);
 
@@ -713,12 +832,12 @@ export function ChannelChatModal({
         const createdAt = new Date(msg.created_at);
         const now = new Date();
         const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
-        
+
         if (diffMinutes > 15) {
             alert("Messages can only be edited within 15 minutes");
             return;
         }
-        
+
         setEditingMessage(msg.id);
         setEditContent(msg.content);
         setSelectedMessage(null);
@@ -726,7 +845,7 @@ export function ChannelChatModal({
 
     const handleSaveEdit = async () => {
         if (!editingMessage || !editContent.trim()) return;
-        
+
         const success = await editMessage(editingMessage, editContent.trim());
         if (success) {
             setEditingMessage(null);
@@ -742,7 +861,7 @@ export function ChannelChatModal({
     // Handle delete message
     const handleDeleteMessage = async (messageId: string) => {
         if (!confirm("Delete this message? This cannot be undone.")) return;
-        
+
         setIsDeleting(messageId);
         await deleteMessage(messageId);
         setIsDeleting(null);
@@ -756,12 +875,18 @@ export function ChannelChatModal({
         return (now.getTime() - created.getTime()) / (1000 * 60) <= 15;
     };
 
-    const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageSelect = async (
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         // Validate file type
-        if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
+        if (
+            !["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
+                file.type,
+            )
+        ) {
             alert("Only JPEG, PNG, GIF, and WebP images are allowed");
             return;
         }
@@ -820,7 +945,10 @@ export function ChannelChatModal({
 
     const formatTime = (dateString: string) => {
         const date = new Date(dateString);
-        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
     };
 
     const formatAddress = (address: string) => {
@@ -828,35 +956,39 @@ export function ChannelChatModal({
     };
 
     // Agent info cache for displaying agent messages
-    const [agentInfoCache, setAgentInfoCache] = useState<Map<string, { name: string; avatar_url?: string; avatar_emoji: string }>>(new Map());
-    
+    const [agentInfoCache, setAgentInfoCache] = useState<
+        Map<string, { name: string; avatar_url?: string; avatar_emoji: string }>
+    >(new Map());
+
     // Fetch agent info when we see agent messages
     useEffect(() => {
         const agentIds = messages
-            .filter(m => m.sender_address.startsWith("agent:"))
-            .map(m => m.sender_address.replace("agent:", ""))
-            .filter(id => !agentInfoCache.has(id));
-        
+            .filter((m) => m.sender_address.startsWith("agent:"))
+            .map((m) => m.sender_address.replace("agent:", ""))
+            .filter((id) => !agentInfoCache.has(id));
+
         if (agentIds.length === 0) return;
-        
+
         const uniqueIds = [...new Set(agentIds)];
         uniqueIds.forEach(async (agentId) => {
             try {
                 const res = await fetch(`/api/public/agents/${agentId}`);
                 if (res.ok) {
                     const agent = await res.json();
-                    setAgentInfoCache(prev => new Map(prev).set(agentId, {
-                        name: agent.name,
-                        avatar_url: agent.avatar_url,
-                        avatar_emoji: agent.avatar_emoji || "🤖",
-                    }));
+                    setAgentInfoCache((prev) =>
+                        new Map(prev).set(agentId, {
+                            name: agent.name,
+                            avatar_url: agent.avatar_url,
+                            avatar_emoji: agent.avatar_emoji || "🤖",
+                        }),
+                    );
                 }
             } catch (err) {
                 console.error("[ChannelChat] Error fetching agent info:", err);
             }
         });
     }, [messages, agentInfoCache]);
-    
+
     // Check if sender is an agent
     const isAgentMessage = (address: string) => address.startsWith("agent:");
     const getAgentId = (address: string) => address.replace("agent:", "");
@@ -881,7 +1013,7 @@ export function ChannelChatModal({
         }
         return getEffectiveUserInfo(address)?.avatar || null;
     };
-    
+
     const getSenderAvatarEmoji = (address: string) => {
         if (address.startsWith("agent:")) {
             const agentId = address.replace("agent:", "");
@@ -892,27 +1024,36 @@ export function ChannelChatModal({
     };
 
     const isImageUrl = (content: string) => {
-        return content.match(/\.(jpeg|jpg|gif|png|webp)$/i) || 
-               content.includes("/storage/v1/object/public/chat-images/");
+        return (
+            content.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+            content.includes("/storage/v1/object/public/chat-images/")
+        );
     };
 
     if (!isOpen) return null;
 
     return (
         <AnimatePresence>
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? "" : "p-4"}`}
-                    style={isFullscreen ? {} : { paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 100px, 120px)' }}
-                    onClick={(e) => {
-                        // Only close if clicking directly on the backdrop, not on child elements
-                        if (e.target === e.currentTarget) {
-                            onClose();
-                        }
-                    }}
-                >
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center ${isFullscreen ? "" : "p-4"}`}
+                style={
+                    isFullscreen
+                        ? {}
+                        : {
+                              paddingBottom:
+                                  "max(env(safe-area-inset-bottom, 0px) + 100px, 120px)",
+                          }
+                }
+                onClick={(e) => {
+                    // Only close if clicking directly on the backdrop, not on child elements
+                    if (e.target === e.currentTarget) {
+                        onClose();
+                    }
+                }}
+            >
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -922,11 +1063,15 @@ export function ChannelChatModal({
                             ? "w-full h-full max-w-none max-h-none"
                             : "w-full max-w-2xl max-h-[70vh] h-[600px] border border-zinc-800 rounded-2xl"
                     }`}
-                    style={isFullscreen ? {
-                        paddingTop: 'env(safe-area-inset-top)',
-                        paddingLeft: 'env(safe-area-inset-left)',
-                        paddingRight: 'env(safe-area-inset-right)',
-                    } : undefined}
+                    style={
+                        isFullscreen
+                            ? {
+                                  paddingTop: "env(safe-area-inset-top)",
+                                  paddingLeft: "env(safe-area-inset-left)",
+                                  paddingRight: "env(safe-area-inset-right)",
+                              }
+                            : undefined
+                    }
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* Header - unified mobile-first design */}
@@ -946,34 +1091,49 @@ export function ChannelChatModal({
                                 <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                     {channel.name}
                                 </h2>
-                                    {channel.is_official && (
+                                {channel.is_official && (
                                     <span className="shrink-0 px-1 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] rounded font-medium">
                                         ✓
-                                        </span>
-                                    )}
-                                    {isWakuChannel && (
+                                    </span>
+                                )}
+                                {isWakuChannel && (
                                     <span className="shrink-0 px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[10px] rounded font-medium flex items-center gap-0.5">
                                         🌐
-                                        </span>
-                                    )}
-                                </div>
-                                <button
-                                    onClick={() => setShowMembersList(true)}
-                                    className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1"
-                                >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                    </svg>
-                                    {channel.member_count} members{isWakuChannel && " • Decentralized"}
-                                </button>
+                                    </span>
+                                )}
                             </div>
+                            <button
+                                onClick={() => setShowMembersList(true)}
+                                className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1"
+                            >
+                                <svg
+                                    className="w-3.5 h-3.5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                    />
+                                </svg>
+                                {channel.member_count} members
+                                {isWakuChannel && " • Decentralized"}
+                            </button>
+                        </div>
 
                         {/* Action buttons */}
                         <div className="shrink-0 flex items-center">
                             {/* Pinned Messages - icon only */}
                             {pinnedMessages.length > 0 && (
                                 <button
-                                    onClick={() => setShowPinnedMessages(!showPinnedMessages)}
+                                    onClick={() =>
+                                        setShowPinnedMessages(
+                                            !showPinnedMessages,
+                                        )
+                                    }
                                     className={`p-2.5 rounded-xl flex items-center gap-1 transition-colors ${
                                         showPinnedMessages
                                             ? "bg-amber-500/20 text-amber-400"
@@ -981,13 +1141,19 @@ export function ChannelChatModal({
                                     }`}
                                     aria-label="View pinned messages"
                                 >
-                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                                     </svg>
-                                    <span className="hidden sm:inline text-xs font-medium">{pinnedMessages.length}</span>
+                                    <span className="hidden sm:inline text-xs font-medium">
+                                        {pinnedMessages.length}
+                                    </span>
                                 </button>
                             )}
-                            
+
                             {/* Notification Toggle - hidden on small mobile */}
                             {onToggleNotifications && (
                                 <button
@@ -997,13 +1163,32 @@ export function ChannelChatModal({
                                             ? "text-[#FF5500] bg-[#FF5500]/10"
                                             : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
                                     }`}
-                                    aria-label={notificationsEnabled ? "Mute notifications" : "Enable notifications"}
+                                    aria-label={
+                                        notificationsEnabled
+                                            ? "Mute notifications"
+                                            : "Enable notifications"
+                                    }
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    {notificationsEnabled ? (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        {notificationsEnabled ? (
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                                            />
                                         ) : (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                                            />
                                         )}
                                     </svg>
                                 </button>
@@ -1012,39 +1197,85 @@ export function ChannelChatModal({
                             {/* Settings Menu (... icon) */}
                             <div className="relative">
                                 <button
-                                    onClick={() => setShowSettings(!showSettings)}
+                                    onClick={() =>
+                                        setShowSettings(!showSettings)
+                                    }
                                     className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
                                     aria-label="More options"
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                        />
                                     </svg>
                                 </button>
                                 <AnimatePresence>
                                     {showSettings && (
                                         <motion.div
-                                            initial={{ opacity: 0, scale: 0.95, y: -5 }}
-                                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                                            initial={{
+                                                opacity: 0,
+                                                scale: 0.95,
+                                                y: -5,
+                                            }}
+                                            animate={{
+                                                opacity: 1,
+                                                scale: 1,
+                                                y: 0,
+                                            }}
+                                            exit={{
+                                                opacity: 0,
+                                                scale: 0.95,
+                                                y: -5,
+                                            }}
                                             className="absolute right-0 top-full mt-1 w-52 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
                                         >
                                             {/* Copy Invite Link */}
                                             <button
                                                 onClick={() => {
                                                     const inviteUrl = `${window.location.origin}/channel/${channel.id}`;
-                                                    navigator.clipboard.writeText(inviteUrl);
+                                                    navigator.clipboard.writeText(
+                                                        inviteUrl,
+                                                    );
                                                     setShowSettings(false);
                                                     // Show toast notification
-                                                    const toast = document.createElement("div");
-                                                    toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
-                                                    toast.textContent = "✓ Invite link copied!";
-                                                    document.body.appendChild(toast);
-                                                    setTimeout(() => toast.remove(), 2000);
+                                                    const toast =
+                                                        document.createElement(
+                                                            "div",
+                                                        );
+                                                    toast.className =
+                                                        "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+                                                    toast.textContent =
+                                                        "✓ Invite link copied!";
+                                                    document.body.appendChild(
+                                                        toast,
+                                                    );
+                                                    setTimeout(
+                                                        () => toast.remove(),
+                                                        2000,
+                                                    );
                                                 }}
                                                 className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
                                             >
-                                                <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                <svg
+                                                    className="w-5 h-5 text-zinc-400"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                                    />
                                                 </svg>
                                                 Copy Invite Link
                                             </button>
@@ -1052,30 +1283,64 @@ export function ChannelChatModal({
                                             {canEditIcon && (
                                                 <>
                                                     <button
-                                                        onClick={() => iconFileInputRef.current?.click()}
-                                                        disabled={isUploadingIcon}
+                                                        onClick={() =>
+                                                            iconFileInputRef.current?.click()
+                                                        }
+                                                        disabled={
+                                                            isUploadingIcon
+                                                        }
                                                         className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
                                                     >
                                                         {isUploadingIcon ? (
                                                             <div className="w-5 h-5 border-2 border-zinc-400 border-t-white rounded-full animate-spin" />
                                                         ) : (
-                                                            <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                            <svg
+                                                                className="w-5 h-5 text-zinc-400"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                                                />
                                                             </svg>
                                                         )}
-                                                        {channelIcon ? "Change Channel Icon" : "Upload Channel Icon"}
+                                                        {channelIcon
+                                                            ? "Change Channel Icon"
+                                                            : "Upload Channel Icon"}
                                                     </button>
                                                     {channelIcon && (
                                                         <button
                                                             onClick={() => {
                                                                 handleRemoveIcon();
-                                                                setShowSettings(false);
+                                                                setShowSettings(
+                                                                    false,
+                                                                );
                                                             }}
-                                                            disabled={isUploadingIcon}
+                                                            disabled={
+                                                                isUploadingIcon
+                                                            }
                                                             className="w-full px-4 py-3 text-left text-sm text-zinc-400 hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
                                                         >
-                                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            <svg
+                                                                className="w-5 h-5"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                                />
                                                             </svg>
                                                             Remove Custom Icon
                                                         </button>
@@ -1084,7 +1349,9 @@ export function ChannelChatModal({
                                                         ref={iconFileInputRef}
                                                         type="file"
                                                         accept="image/jpeg,image/png,image/gif,image/webp"
-                                                        onChange={handleIconUpload}
+                                                        onChange={
+                                                            handleIconUpload
+                                                        }
                                                         className="hidden"
                                                     />
                                                 </>
@@ -1098,14 +1365,31 @@ export function ChannelChatModal({
                                                     }}
                                                     className="sm:hidden w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
                                                 >
-                                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <svg
+                                                        className="w-5 h-5 text-zinc-400"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
                                                         {notificationsEnabled ? (
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                                                            />
                                                         ) : (
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                                                            />
                                                         )}
                                                     </svg>
-                                                    {notificationsEnabled ? "Mute Notifications" : "Enable Notifications"}
+                                                    {notificationsEnabled
+                                                        ? "Mute Notifications"
+                                                        : "Enable Notifications"}
                                                 </button>
                                             )}
                                             <button
@@ -1115,8 +1399,18 @@ export function ChannelChatModal({
                                                 }}
                                                 className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-3"
                                             >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                <svg
+                                                    className="w-5 h-5"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                                                    />
                                                 </svg>
                                                 Leave Channel
                                             </button>
@@ -1131,13 +1425,22 @@ export function ChannelChatModal({
                                 className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
                                 aria-label="Close chat"
                             >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
                                 </svg>
                             </button>
                         </div>
                     </div>
-
 
                     {/* Pinned Messages Panel */}
                     <AnimatePresence>
@@ -1150,10 +1453,16 @@ export function ChannelChatModal({
                             >
                                 <div className="p-3 bg-amber-500/5 max-h-48 overflow-y-auto">
                                     <div className="flex items-center gap-2 mb-2 text-amber-400">
-                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20"
+                                        >
                                             <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
                                         </svg>
-                                        <span className="text-sm font-medium">Pinned Messages</span>
+                                        <span className="text-sm font-medium">
+                                            Pinned Messages
+                                        </span>
                                     </div>
                                     <div className="space-y-2">
                                         {pinnedMessages.map((msg) => (
@@ -1163,7 +1472,9 @@ export function ChannelChatModal({
                                             >
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-xs text-zinc-400 mb-0.5">
-                                                        {formatSender(msg.sender_address)}
+                                                        {formatSender(
+                                                            msg.sender_address,
+                                                        )}
                                                     </p>
                                                     <p className="text-sm text-white truncate">
                                                         {msg.content}
@@ -1171,16 +1482,37 @@ export function ChannelChatModal({
                                                 </div>
                                                 {isAdmin && (
                                                     <button
-                                                        onClick={() => handlePinMessage(msg.id, true)}
-                                                        disabled={pinningMessage === msg.id}
+                                                        onClick={() =>
+                                                            handlePinMessage(
+                                                                msg.id,
+                                                                true,
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            pinningMessage ===
+                                                            msg.id
+                                                        }
                                                         className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                                                         title="Unpin message"
                                                     >
-                                                        {pinningMessage === msg.id ? (
+                                                        {pinningMessage ===
+                                                        msg.id ? (
                                                             <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
                                                         ) : (
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M6 18L18 6M6 6l12 12"
+                                                                />
                                                             </svg>
                                                         )}
                                                     </button>
@@ -1197,14 +1529,21 @@ export function ChannelChatModal({
                     {polls.length > 0 && (
                         <div className="border-b border-zinc-800 p-3 space-y-2 max-h-[200px] overflow-y-auto overscroll-contain">
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Active Polls</span>
-                                <span className="text-xs text-zinc-600">{polls.length} poll{polls.length !== 1 ? "s" : ""}</span>
+                                <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                                    Active Polls
+                                </span>
+                                <span className="text-xs text-zinc-600">
+                                    {polls.length} poll
+                                    {polls.length !== 1 ? "s" : ""}
+                                </span>
                             </div>
                             {polls.slice(0, 2).map((poll) => (
                                 <PollDisplay
                                     key={poll.id}
                                     poll={poll}
-                                    onVote={(optionIndex) => vote(poll.id, optionIndex)}
+                                    onVote={(optionIndex) =>
+                                        vote(poll.id, optionIndex)
+                                    }
                                     compact
                                 />
                             ))}
@@ -1217,7 +1556,7 @@ export function ChannelChatModal({
                     )}
 
                     {/* Messages - flex-col-reverse so newest at bottom, no scroll needed on open */}
-                    <div 
+                    <div
                         ref={messagesContainerRef}
                         onScroll={handleScroll}
                         className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col-reverse"
@@ -1231,7 +1570,9 @@ export function ChannelChatModal({
                                 <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center text-3xl mb-4">
                                     {channel.emoji}
                                 </div>
-                                <p className="text-zinc-400 mb-2">No messages yet</p>
+                                <p className="text-zinc-400 mb-2">
+                                    No messages yet
+                                </p>
                                 <p className="text-zinc-600 text-sm">
                                     Be the first to say something!
                                 </p>
@@ -1241,284 +1582,522 @@ export function ChannelChatModal({
                                 {/* Messages container - content flows bottom to top with column-reverse */}
                                 <div className="space-y-3">
                                     {messages.map((msg, index) => {
-                                    const isOwn =
-                                        msg.sender_address.toLowerCase() ===
-                                        userAddress.toLowerCase();
-                                    const isAgent = isAgentMessage(msg.sender_address);
-                                    const showSender =
-                                        index === 0 ||
-                                        messages[index - 1].sender_address !== msg.sender_address;
-                                    const isPixelArt = msg.message_type === "pixel_art";
-                                    const isGif = msg.content.startsWith("[GIF]");
-                                    const isImage = !isPixelArt && !isGif && (msg.message_type === "image" || isImageUrl(msg.content));
-                                    const isLocation = msg.message_type === "location" || isLocationMessage(msg.content);
-                                    const locationData = isLocation ? parseLocationMessage(msg.content) : null;
-                                    const senderAvatar = getSenderAvatar(msg.sender_address);
-                                    const senderAvatarEmoji = getSenderAvatarEmoji(msg.sender_address);
-                                    const isAlreadyFriend = !isAgent && (isFriend?.(msg.sender_address) ?? false);
-                                    // Only show user popup on the FIRST message from this sender to avoid duplicates
-                                    const isFirstMessageFromSender = messages.findIndex(
-                                        m => m.sender_address.toLowerCase() === msg.sender_address.toLowerCase()
-                                    ) === index;
-                                    
-                                    // Check if we need a date divider (comparing to previous message)
-                                    const msgDate = new Date(msg.created_at);
-                                    const prevMsg = index > 0 ? messages[index - 1] : null;
-                                    const prevMsgDate = prevMsg ? new Date(prevMsg.created_at) : null;
-                                    const showDateDivider = !prevMsgDate || 
-                                        msgDate.toDateString() !== prevMsgDate.toDateString();
+                                        const isOwn =
+                                            msg.sender_address.toLowerCase() ===
+                                            userAddress.toLowerCase();
+                                        const isAgent = isAgentMessage(
+                                            msg.sender_address,
+                                        );
+                                        const showSender =
+                                            index === 0 ||
+                                            messages[index - 1]
+                                                .sender_address !==
+                                                msg.sender_address;
+                                        const isPixelArt =
+                                            msg.message_type === "pixel_art";
+                                        const isGif =
+                                            msg.content.startsWith("[GIF]");
+                                        const isImage =
+                                            !isPixelArt &&
+                                            !isGif &&
+                                            (msg.message_type === "image" ||
+                                                isImageUrl(msg.content));
+                                        const isLocation =
+                                            msg.message_type === "location" ||
+                                            isLocationMessage(msg.content);
+                                        const locationData = isLocation
+                                            ? parseLocationMessage(msg.content)
+                                            : null;
+                                        const senderAvatar = getSenderAvatar(
+                                            msg.sender_address,
+                                        );
+                                        const senderAvatarEmoji =
+                                            getSenderAvatarEmoji(
+                                                msg.sender_address,
+                                            );
+                                        const isAlreadyFriend =
+                                            !isAgent &&
+                                            (isFriend?.(msg.sender_address) ??
+                                                false);
+                                        // Only show user popup on the FIRST message from this sender to avoid duplicates
+                                        const isFirstMessageFromSender =
+                                            messages.findIndex(
+                                                (m) =>
+                                                    m.sender_address.toLowerCase() ===
+                                                    msg.sender_address.toLowerCase(),
+                                            ) === index;
 
-                                    return (
-                                        <div key={msg.id}>
-                                            {/* Date divider when day changes */}
-                                            {showDateDivider && (
-                                                <DateDivider date={msgDate} className="mb-2" />
-                                            )}
-                                            <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""}`}
-                                        >
-                                            {/* Avatar - clickable for non-own, non-agent messages */}
-                                            {!isOwn && (
-                                                <div className="flex-shrink-0 relative">
-                                                    {isAgent ? (
-                                                        // Agent avatar (not clickable)
-                                                        <div className="relative">
-                                                            {senderAvatar ? (
-                                                                <img
-                                                                    src={senderAvatar}
-                                                                    alt=""
-                                                                    className="w-8 h-8 rounded-lg object-cover ring-1 ring-purple-500/50"
-                                                                />
-                                                            ) : senderAvatarEmoji ? (
-                                                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-lg ring-1 ring-purple-500/50">
-                                                                    {senderAvatarEmoji}
+                                        // Check if we need a date divider (comparing to previous message)
+                                        const msgDate = new Date(
+                                            msg.created_at,
+                                        );
+                                        const prevMsg =
+                                            index > 0
+                                                ? messages[index - 1]
+                                                : null;
+                                        const prevMsgDate = prevMsg
+                                            ? new Date(prevMsg.created_at)
+                                            : null;
+                                        const showDateDivider =
+                                            !prevMsgDate ||
+                                            msgDate.toDateString() !==
+                                                prevMsgDate.toDateString();
+
+                                        return (
+                                            <div key={msg.id}>
+                                                {/* Date divider when day changes */}
+                                                {showDateDivider && (
+                                                    <DateDivider
+                                                        date={msgDate}
+                                                        className="mb-2"
+                                                    />
+                                                )}
+                                                <motion.div
+                                                    initial={{
+                                                        opacity: 0,
+                                                        y: 10,
+                                                    }}
+                                                    animate={{
+                                                        opacity: 1,
+                                                        y: 0,
+                                                    }}
+                                                    className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""}`}
+                                                >
+                                                    {/* Avatar - clickable for non-own, non-agent messages */}
+                                                    {!isOwn && (
+                                                        <div className="flex-shrink-0 relative">
+                                                            {isAgent ? (
+                                                                // Agent avatar (not clickable)
+                                                                <div className="relative">
+                                                                    {senderAvatar ? (
+                                                                        <img
+                                                                            src={
+                                                                                senderAvatar
+                                                                            }
+                                                                            alt=""
+                                                                            className="w-8 h-8 rounded-lg object-cover ring-1 ring-purple-500/50"
+                                                                        />
+                                                                    ) : senderAvatarEmoji ? (
+                                                                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-lg ring-1 ring-purple-500/50">
+                                                                            {
+                                                                                senderAvatarEmoji
+                                                                            }
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs ring-1 ring-purple-500/50">
+                                                                            🤖
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             ) : (
-                                                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs ring-1 ring-purple-500/50">
-                                                                    🤖
+                                                                // User avatar (clickable) with online status
+                                                                <div className="relative">
+                                                                    <button
+                                                                        onClick={(
+                                                                            e,
+                                                                        ) => {
+                                                                            e.stopPropagation();
+                                                                            if (
+                                                                                selectedUser ===
+                                                                                msg.sender_address
+                                                                            ) {
+                                                                                setSelectedUser(
+                                                                                    null,
+                                                                                );
+                                                                            } else {
+                                                                                handleUserClick(
+                                                                                    msg.sender_address,
+                                                                                    e,
+                                                                                );
+                                                                            }
+                                                                        }}
+                                                                        className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
+                                                                    >
+                                                                        {senderAvatar ? (
+                                                                            <img
+                                                                                src={
+                                                                                    senderAvatar
+                                                                                }
+                                                                                alt=""
+                                                                                className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
+                                                                                {formatAddress(
+                                                                                    msg.sender_address,
+                                                                                )
+                                                                                    .slice(
+                                                                                        0,
+                                                                                        2,
+                                                                                    )
+                                                                                    .toUpperCase()}
+                                                                            </div>
+                                                                        )}
+                                                                    </button>
+                                                                    {/* Online status dot */}
+                                                                    {onlineStatuses[
+                                                                        msg.sender_address.toLowerCase()
+                                                                    ] && (
+                                                                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
+                                                                    )}
                                                                 </div>
                                                             )}
+
+                                                            {/* User popup rendered as fixed position element below */}
                                                         </div>
-                                                    ) : (
-                                                        // User avatar (clickable) with online status
-                                                    <div className="relative">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                    if (selectedUser === msg.sender_address) {
-                                                                        setSelectedUser(null);
-                                                                    } else {
-                                                                        handleUserClick(msg.sender_address, e);
-                                                                    }
-                                                            }}
-                                                            className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
-                                                        >
-                                                            {senderAvatar ? (
-                                                                <img
-                                                                    src={senderAvatar}
-                                                                    alt=""
-                                                                    className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
-                                                                />
-                                                            ) : (
-                                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
-                                                                    {formatAddress(msg.sender_address)
-                                                                        .slice(0, 2)
-                                                                        .toUpperCase()}
-                                                                </div>
-                                                            )}
-                                                        </button>
-                                                        {/* Online status dot */}
-                                                        {onlineStatuses[msg.sender_address.toLowerCase()] && (
-                                                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
-                                                        )}
-                                                    </div>
                                                     )}
 
-                                                    {/* User popup rendered as fixed position element below */}
-                                                </div>
-                                            )}
-
-                                            {/* Message content */}
-                                            <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"} max-w-[80%]`}>
-                                                {showSender && !isOwn && (
-                                                    <p className={`text-xs mb-1 ml-1 font-medium flex items-center gap-1 ${isAgent ? "text-purple-400" : "text-zinc-500"}`}>
-                                                        {formatSender(msg.sender_address)}
-                                                        {isAgent && (
-                                                            <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
-                                                                AI
-                                                            </span>
-                                                        )}
-                                                        {msg.is_pinned && (
-                                                            <span className="text-amber-400" title="Pinned message">
-                                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                                    <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
-                                                                </svg>
-                                                            </span>
-                                                        )}
-                                                    </p>
-                                                )}
-                                                {/* Pinned indicator for own messages or when sender not shown */}
-                                                {msg.is_pinned && (showSender || isOwn) && isOwn && (
-                                                    <p className="text-xs text-amber-400 mb-1 mr-1 font-medium flex items-center gap-1 justify-end">
-                                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
-                                                        </svg>
-                                                        Pinned
-                                                    </p>
-                                                )}
-                                                {isPixelArt ? (
+                                                    {/* Message content */}
                                                     <div
-                                                        className={`rounded-2xl overflow-hidden relative group ${
-                                                            isOwn ? "rounded-br-md" : "rounded-bl-md"
-                                                        }`}
+                                                        className={`flex flex-col ${isOwn ? "items-end" : "items-start"} max-w-[80%]`}
                                                     >
-                                                        <PixelArtImage
-                                                            src={msg.content}
-                                                            size="lg"
-                                                            className="cursor-pointer hover:opacity-90 transition-opacity"
-                                                            onClick={() => setPreviewImage(msg.content)}
-                                                        />
-                                                    </div>
-                                                ) : isImage ? (
-                                                    <div
-                                                        className={`rounded-2xl overflow-hidden relative group ${
-                                                            isOwn ? "rounded-br-md" : "rounded-bl-md"
-                                                        }`}
-                                                    >
-                                                        <img
-                                                            src={msg.content}
-                                                            alt="Shared image"
-                                                            className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                                                            onClick={() => setPreviewImage(msg.content)}
-                                                            onError={(e) => {
-                                                                (e.target as HTMLImageElement).style.display = "none";
-                                                            }}
-                                                        />
-                                                        {/* Download Button */}
-                                                        <a
-                                                            href={msg.content}
-                                                            download="image.png"
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            title="Download"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                                            </svg>
-                                                        </a>
-                                                    </div>
-                                                ) : isGif ? (
-                                                    <div
-                                                        className={`rounded-2xl overflow-hidden relative ${
-                                                            isOwn ? "rounded-br-md" : "rounded-bl-md"
-                                                        }`}
-                                                    >
-                                                        <img
-                                                            src={msg.content.replace("[GIF]", "")}
-                                                            alt="GIF"
-                                                            className="max-w-[280px] h-auto rounded-xl"
-                                                            loading="lazy"
-                                                        />
-                                                    </div>
-                                                ) : isLocation && locationData ? (
-                                                    <LocationMessage
-                                                        location={locationData}
-                                                        isOwn={isOwn}
-                                                        className="max-w-[280px]"
-                                                    />
-                                                ) : (
-                                                    <div
-                                                        onClick={() => {
-                                                            setSelectedMessage(selectedMessage === msg.id ? null : msg.id);
-                                                            setSelectedMessageConfig(selectedMessage === msg.id ? null : {
-                                                                messageId: msg.id,
-                                                                messageContent: msg.content,
-                                                                isOwn,
-                                                                isPinned: msg.is_pinned,
-                                                                isStarred: isStarred(msg.id),
-                                                                canEdit: isOwn && !msg.is_deleted && isWithinEditWindow(msg.created_at) && msg.message_type === "text",
-                                                                hasMedia: msg.message_type === "pixel_art" || msg.message_type === "image",
-                                                                isPixelArt: msg.message_type === "pixel_art",
-                                                                mediaUrl: (msg.message_type === "pixel_art" || msg.message_type === "image") ? msg.content : isGif ? msg.content.replace("[GIF]", "") : undefined,
-                                                            });
-                                                        }}
-                                                    >
-                                                    <div
-                                                        data-message-bubble
-                                                        className={`px-4 py-2.5 rounded-2xl relative cursor-pointer ${
-                                                            isOwn
-                                                                ? "bg-[#FF5500] text-white rounded-br-md"
-                                                                : isAgent
-                                                                    ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
-                                                                : "bg-zinc-800 text-white rounded-bl-md"
-                                                        } ${selectedMessage === msg.id ? "ring-2 ring-orange-400/50" : ""}`}
-                                                    >
-                                                        {/* Reply Preview - More visible styling */}
-                                                        {msg.reply_to && (
-                                                            <div 
-                                                                className={`mb-2 p-2 rounded-lg ${
-                                                                    isOwn 
-                                                                        ? "bg-white/10 border-l-2 border-white/40" 
-                                                                        : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                        {showSender &&
+                                                            !isOwn && (
+                                                                <p
+                                                                    className={`text-xs mb-1 ml-1 font-medium flex items-center gap-1 ${isAgent ? "text-purple-400" : "text-zinc-500"}`}
+                                                                >
+                                                                    {formatSender(
+                                                                        msg.sender_address,
+                                                                    )}
+                                                                    {isAgent && (
+                                                                        <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
+                                                                            AI
+                                                                        </span>
+                                                                    )}
+                                                                    {msg.is_pinned && (
+                                                                        <span
+                                                                            className="text-amber-400"
+                                                                            title="Pinned message"
+                                                                        >
+                                                                            <svg
+                                                                                className="w-3 h-3"
+                                                                                fill="currentColor"
+                                                                                viewBox="0 0 20 20"
+                                                                            >
+                                                                                <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
+                                                                            </svg>
+                                                                        </span>
+                                                                    )}
+                                                                </p>
+                                                            )}
+                                                        {/* Pinned indicator for own messages or when sender not shown */}
+                                                        {msg.is_pinned &&
+                                                            (showSender ||
+                                                                isOwn) &&
+                                                            isOwn && (
+                                                                <p className="text-xs text-amber-400 mb-1 mr-1 font-medium flex items-center gap-1 justify-end">
+                                                                    <svg
+                                                                        className="w-3 h-3"
+                                                                        fill="currentColor"
+                                                                        viewBox="0 0 20 20"
+                                                                    >
+                                                                        <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
+                                                                    </svg>
+                                                                    Pinned
+                                                                </p>
+                                                            )}
+                                                        {isPixelArt ? (
+                                                            <div
+                                                                className={`rounded-2xl overflow-hidden relative group ${
+                                                                    isOwn
+                                                                        ? "rounded-br-md"
+                                                                        : "rounded-bl-md"
                                                                 }`}
                                                             >
-                                                                <div className="flex items-center gap-1.5 text-xs font-medium">
-                                                                    <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                    </svg>
-                                                                    <span className={isOwn ? "text-white/80" : "text-orange-400"}>
-                                                                        {formatSender(msg.reply_to.sender_address)}
-                                                                    </span>
-                                                                </div>
-                                                                <p className={`text-xs mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}>
-                                                                    {msg.reply_to.content}
-                                                                </p>
+                                                                <PixelArtImage
+                                                                    src={
+                                                                        msg.content
+                                                                    }
+                                                                    size="lg"
+                                                                    className="cursor-pointer hover:opacity-90 transition-opacity"
+                                                                    onClick={() =>
+                                                                        setPreviewImage(
+                                                                            msg.content,
+                                                                        )
+                                                                    }
+                                                                />
                                                             </div>
-                                                        )}
-                                                        
-                                                        {/* Inline Edit Form */}
-                                                        {editingMessage === msg.id ? (
-                                                            <div className="flex flex-col gap-2">
-                                                                <textarea
-                                                                    value={editContent}
-                                                                    onChange={(e) => setEditContent(e.target.value)}
-                                                                    className="w-full min-w-[200px] px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
-                                                                    rows={3}
-                                                                    autoFocus
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === "Enter" && !e.shiftKey) {
-                                                                            e.preventDefault();
-                                                                            handleSaveEdit();
-                                                                        }
-                                                                        if (e.key === "Escape") {
-                                                                            handleCancelEdit();
-                                                                        }
+                                                        ) : isImage ? (
+                                                            <div
+                                                                className={`rounded-2xl overflow-hidden relative group ${
+                                                                    isOwn
+                                                                        ? "rounded-br-md"
+                                                                        : "rounded-bl-md"
+                                                                }`}
+                                                            >
+                                                                <img
+                                                                    src={
+                                                                        msg.content
+                                                                    }
+                                                                    alt="Shared image"
+                                                                    className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                                                    onClick={() =>
+                                                                        setPreviewImage(
+                                                                            msg.content,
+                                                                        )
+                                                                    }
+                                                                    onError={(
+                                                                        e,
+                                                                    ) => {
+                                                                        (
+                                                                            e.target as HTMLImageElement
+                                                                        ).style.display =
+                                                                            "none";
                                                                     }}
                                                                 />
-                                                                <div className="flex items-center gap-2 text-xs">
-                                                                    <button
-                                                                        onClick={handleSaveEdit}
-                                                                        disabled={!editContent.trim()}
-                                                                        className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                {/* Download Button */}
+                                                                <a
+                                                                    href={
+                                                                        msg.content
+                                                                    }
+                                                                    download="image.png"
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    title="Download"
+                                                                    onClick={(
+                                                                        e,
+                                                                    ) =>
+                                                                        e.stopPropagation()
+                                                                    }
+                                                                >
+                                                                    <svg
+                                                                        className="w-4 h-4 text-white"
+                                                                        fill="none"
+                                                                        viewBox="0 0 24 24"
+                                                                        stroke="currentColor"
                                                                     >
-                                                                        Save
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={handleCancelEdit}
-                                                                        className="px-3 py-1 bg-zinc-600 hover:bg-zinc-500 text-white rounded-lg transition-colors"
-                                                                    >
-                                                                        Cancel
-                                                                    </button>
-                                                                    <span className="text-zinc-500">Enter to save, Esc to cancel</span>
-                                                                </div>
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={
+                                                                                2
+                                                                            }
+                                                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                                                        />
+                                                                    </svg>
+                                                                </a>
                                                             </div>
-                                                        ) : isAgent ? (
-                                                            // Agent messages - render markdown with images
-                                                            <div className="prose prose-sm prose-invert max-w-none
+                                                        ) : isGif ? (
+                                                            <div
+                                                                className={`rounded-2xl overflow-hidden relative ${
+                                                                    isOwn
+                                                                        ? "rounded-br-md"
+                                                                        : "rounded-bl-md"
+                                                                }`}
+                                                            >
+                                                                <img
+                                                                    src={msg.content.replace(
+                                                                        "[GIF]",
+                                                                        "",
+                                                                    )}
+                                                                    alt="GIF"
+                                                                    className="max-w-[280px] h-auto rounded-xl"
+                                                                    loading="lazy"
+                                                                />
+                                                            </div>
+                                                        ) : isLocation &&
+                                                          locationData ? (
+                                                            <LocationMessage
+                                                                location={
+                                                                    locationData
+                                                                }
+                                                                isOwn={isOwn}
+                                                                className="max-w-[280px]"
+                                                            />
+                                                        ) : (
+                                                            <div
+                                                                onClick={() => {
+                                                                    setSelectedMessage(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : msg.id,
+                                                                    );
+                                                                    setSelectedMessageConfig(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : {
+                                                                                  messageId:
+                                                                                      msg.id,
+                                                                                  messageContent:
+                                                                                      msg.content,
+                                                                                  isOwn,
+                                                                                  isPinned:
+                                                                                      msg.is_pinned,
+                                                                                  isStarred:
+                                                                                      isStarred(
+                                                                                          msg.id,
+                                                                                      ),
+                                                                                  canEdit:
+                                                                                      isOwn &&
+                                                                                      !msg.is_deleted &&
+                                                                                      isWithinEditWindow(
+                                                                                          msg.created_at,
+                                                                                      ) &&
+                                                                                      msg.message_type ===
+                                                                                          "text",
+                                                                                  hasMedia:
+                                                                                      msg.message_type ===
+                                                                                          "pixel_art" ||
+                                                                                      msg.message_type ===
+                                                                                          "image",
+                                                                                  isPixelArt:
+                                                                                      msg.message_type ===
+                                                                                      "pixel_art",
+                                                                                  mediaUrl:
+                                                                                      msg.message_type ===
+                                                                                          "pixel_art" ||
+                                                                                      msg.message_type ===
+                                                                                          "image"
+                                                                                          ? msg.content
+                                                                                          : isGif
+                                                                                            ? msg.content.replace(
+                                                                                                  "[GIF]",
+                                                                                                  "",
+                                                                                              )
+                                                                                            : undefined,
+                                                                              },
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    data-message-bubble
+                                                                    className={`px-4 py-2.5 rounded-2xl relative cursor-pointer ${
+                                                                        isOwn
+                                                                            ? "bg-[#FF5500] text-white rounded-br-md"
+                                                                            : isAgent
+                                                                              ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
+                                                                              : "bg-zinc-800 text-white rounded-bl-md"
+                                                                    } ${selectedMessage === msg.id ? "ring-2 ring-orange-400/50" : ""}`}
+                                                                >
+                                                                    {/* Reply Preview - More visible styling */}
+                                                                    {msg.reply_to && (
+                                                                        <div
+                                                                            className={`mb-2 p-2 rounded-lg ${
+                                                                                isOwn
+                                                                                    ? "bg-white/10 border-l-2 border-white/40"
+                                                                                    : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                                            }`}
+                                                                        >
+                                                                            <div className="flex items-center gap-1.5 text-xs font-medium">
+                                                                                <svg
+                                                                                    className="w-3 h-3 flex-shrink-0"
+                                                                                    fill="none"
+                                                                                    viewBox="0 0 24 24"
+                                                                                    stroke="currentColor"
+                                                                                >
+                                                                                    <path
+                                                                                        strokeLinecap="round"
+                                                                                        strokeLinejoin="round"
+                                                                                        strokeWidth={
+                                                                                            2
+                                                                                        }
+                                                                                        d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                                    />
+                                                                                </svg>
+                                                                                <span
+                                                                                    className={
+                                                                                        isOwn
+                                                                                            ? "text-white/80"
+                                                                                            : "text-orange-400"
+                                                                                    }
+                                                                                >
+                                                                                    {formatSender(
+                                                                                        msg
+                                                                                            .reply_to
+                                                                                            .sender_address,
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                            <p
+                                                                                className={`text-xs mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}
+                                                                            >
+                                                                                {
+                                                                                    msg
+                                                                                        .reply_to
+                                                                                        .content
+                                                                                }
+                                                                            </p>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Inline Edit Form */}
+                                                                    {editingMessage ===
+                                                                    msg.id ? (
+                                                                        <div className="flex flex-col gap-2">
+                                                                            <textarea
+                                                                                value={
+                                                                                    editContent
+                                                                                }
+                                                                                onChange={(
+                                                                                    e,
+                                                                                ) =>
+                                                                                    setEditContent(
+                                                                                        e
+                                                                                            .target
+                                                                                            .value,
+                                                                                    )
+                                                                                }
+                                                                                className="w-full min-w-[200px] px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
+                                                                                rows={
+                                                                                    3
+                                                                                }
+                                                                                autoFocus
+                                                                                onKeyDown={(
+                                                                                    e,
+                                                                                ) => {
+                                                                                    if (
+                                                                                        e.key ===
+                                                                                            "Enter" &&
+                                                                                        !e.shiftKey
+                                                                                    ) {
+                                                                                        e.preventDefault();
+                                                                                        handleSaveEdit();
+                                                                                    }
+                                                                                    if (
+                                                                                        e.key ===
+                                                                                        "Escape"
+                                                                                    ) {
+                                                                                        handleCancelEdit();
+                                                                                    }
+                                                                                }}
+                                                                            />
+                                                                            <div className="flex items-center gap-2 text-xs">
+                                                                                <button
+                                                                                    onClick={
+                                                                                        handleSaveEdit
+                                                                                    }
+                                                                                    disabled={
+                                                                                        !editContent.trim()
+                                                                                    }
+                                                                                    className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                                >
+                                                                                    Save
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={
+                                                                                        handleCancelEdit
+                                                                                    }
+                                                                                    className="px-3 py-1 bg-zinc-600 hover:bg-zinc-500 text-white rounded-lg transition-colors"
+                                                                                >
+                                                                                    Cancel
+                                                                                </button>
+                                                                                <span className="text-zinc-500">
+                                                                                    Enter
+                                                                                    to
+                                                                                    save,
+                                                                                    Esc
+                                                                                    to
+                                                                                    cancel
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : isAgent ? (
+                                                                        // Agent messages - render markdown with images
+                                                                        <div
+                                                                            className="prose prose-sm prose-invert max-w-none
                                                                 prose-p:my-1.5 prose-p:leading-relaxed prose-p:text-zinc-100
                                                                 prose-headings:text-white prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
                                                                 prose-h1:text-base prose-h2:text-sm prose-h3:text-sm
@@ -1532,83 +2111,159 @@ export function ChannelChatModal({
                                                                 prose-a:text-purple-300 prose-a:no-underline hover:prose-a:underline hover:prose-a:text-purple-200
                                                                 prose-hr:border-purple-500/30 prose-hr:my-3
                                                                 prose-blockquote:border-l-purple-400 prose-blockquote:bg-black/20 prose-blockquote:pl-3 prose-blockquote:py-1 prose-blockquote:my-2 prose-blockquote:rounded-r prose-blockquote:text-zinc-300
-                                                            ">
-                                                                <ReactMarkdown
-                                                                    remarkPlugins={[remarkGfm]}
-                                                                    components={{
-                                                                        img: ({ src, alt }) => {
-                                                                            const srcStr = typeof src === "string" ? src : undefined;
-                                                                            if (!srcStr) return <span className="text-xs text-purple-300/70">🖼️ {alt || "Image"}</span>;
-                                                                            return (
-                                                                                <span className="inline-block my-2">
-                                                                                    <img 
-                                                                                        src={srcStr} 
-                                                                                        alt={alt || ""} 
-                                                                                        className="max-h-40 rounded-lg border border-purple-500/30 bg-black/30"
-                                                                                        onError={(e) => {
-                                                                                            (e.target as HTMLImageElement).style.display = "none";
-                                                                                        }}
-                                                                                    />
-                                                                                    {alt && <span className="block text-[10px] text-purple-300/70 mt-1">{alt}</span>}
-                                                                                </span>
-                                                                            );
-                                                                        },
-                                                                    }}
-                                                                >
-                                                                    {msg.content}
-                                                                </ReactMarkdown>
-                                                            </div>
-                                                        ) : hasMarkdown(msg.content) ? (
-                                                        <ChatMarkdown 
-                                                            content={msg.content} 
-                                                            isOwnMessage={isOwn}
-                                                        />
-                                                        ) : (
-                                                        <p className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}>
-                                                            <MentionText
-                                                                text={msg.content}
-                                                                currentUserAddress={userAddress}
-                                                                onMentionClick={handleMentionClick}
-                                                            />
-                                                        </p>
-                                                        )}
-                                                        
-                                                        {/* Reactions Display - Mobile Friendly */}
-                                                        <ReactionDisplay
-                                                            reactions={reactions[msg.id] || []}
-                                                            onReaction={(emoji) => {
-                                                                handleReaction(msg.id, emoji);
-                                                            }}
-                                                            isOwnMessage={isOwn}
-                                                                />
-                                                            </div>
-                                                    </div>
-                                                )}
-                                                <p className="text-[10px] text-zinc-600 mt-1 px-1">
-                                                    {formatTime(msg.created_at)}
-                                                    {msg.is_edited && <span className="ml-1 italic">(edited)</span>}
-                                                </p>
-                                            </div>
+                                                            "
+                                                                        >
+                                                                            <ReactMarkdown
+                                                                                remarkPlugins={[
+                                                                                    remarkGfm,
+                                                                                ]}
+                                                                                components={{
+                                                                                    img: ({
+                                                                                        src,
+                                                                                        alt,
+                                                                                    }) => {
+                                                                                        const srcStr =
+                                                                                            typeof src ===
+                                                                                            "string"
+                                                                                                ? src
+                                                                                                : undefined;
+                                                                                        if (
+                                                                                            !srcStr
+                                                                                        )
+                                                                                            return (
+                                                                                                <span className="text-xs text-purple-300/70">
+                                                                                                    🖼️{" "}
+                                                                                                    {alt ||
+                                                                                                        "Image"}
+                                                                                                </span>
+                                                                                            );
+                                                                                        return (
+                                                                                            <span className="inline-block my-2">
+                                                                                                <img
+                                                                                                    src={
+                                                                                                        srcStr
+                                                                                                    }
+                                                                                                    alt={
+                                                                                                        alt ||
+                                                                                                        ""
+                                                                                                    }
+                                                                                                    className="max-h-40 rounded-lg border border-purple-500/30 bg-black/30"
+                                                                                                    onError={(
+                                                                                                        e,
+                                                                                                    ) => {
+                                                                                                        (
+                                                                                                            e.target as HTMLImageElement
+                                                                                                        ).style.display =
+                                                                                                            "none";
+                                                                                                    }}
+                                                                                                />
+                                                                                                {alt && (
+                                                                                                    <span className="block text-[10px] text-purple-300/70 mt-1">
+                                                                                                        {
+                                                                                                            alt
+                                                                                                        }
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </span>
+                                                                                        );
+                                                                                    },
+                                                                                }}
+                                                                            >
+                                                                                {
+                                                                                    msg.content
+                                                                                }
+                                                                            </ReactMarkdown>
+                                                                        </div>
+                                                                    ) : hasMarkdown(
+                                                                          msg.content,
+                                                                      ) ? (
+                                                                        <ChatMarkdown
+                                                                            content={
+                                                                                msg.content
+                                                                            }
+                                                                            isOwnMessage={
+                                                                                isOwn
+                                                                            }
+                                                                        />
+                                                                    ) : (
+                                                                        <p
+                                                                            className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}
+                                                                        >
+                                                                            <MentionText
+                                                                                text={
+                                                                                    msg.content
+                                                                                }
+                                                                                currentUserAddress={
+                                                                                    userAddress
+                                                                                }
+                                                                                onMentionClick={
+                                                                                    handleMentionClick
+                                                                                }
+                                                                            />
+                                                                        </p>
+                                                                    )}
 
-                                            {/* Spacer for own messages (to match avatar space) */}
-                                            {isOwn && <div className="w-8 flex-shrink-0" />}
-                                        </motion.div>
-                                        </div>
-                                    );
-                                })}
+                                                                    {/* Reactions Display - Mobile Friendly */}
+                                                                    <ReactionDisplay
+                                                                        reactions={
+                                                                            reactions[
+                                                                                msg
+                                                                                    .id
+                                                                            ] ||
+                                                                            []
+                                                                        }
+                                                                        onReaction={(
+                                                                            emoji,
+                                                                        ) => {
+                                                                            handleReaction(
+                                                                                msg.id,
+                                                                                emoji,
+                                                                            );
+                                                                        }}
+                                                                        isOwnMessage={
+                                                                            isOwn
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <p className="text-[10px] text-zinc-600 mt-1 px-1">
+                                                            {formatTime(
+                                                                msg.created_at,
+                                                            )}
+                                                            {msg.is_edited && (
+                                                                <span className="ml-1 italic">
+                                                                    (edited)
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Spacer for own messages (to match avatar space) */}
+                                                    {isOwn && (
+                                                        <div className="w-8 flex-shrink-0" />
+                                                    )}
+                                                </motion.div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                                
+
                                 {/* Loading indicators at visual TOP (end of DOM with column-reverse) */}
                                 {isLoadingMore && (
                                     <div className="flex justify-center py-4">
                                         <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-orange-500" />
                                     </div>
                                 )}
-                                {!isLoadingMore && hasMore && messages.length > 0 && (
-                                    <div className="flex justify-center py-2">
-                                        <span className="text-xs text-zinc-500">Scroll up to load more</span>
-                                    </div>
-                                )}
+                                {!isLoadingMore &&
+                                    hasMore &&
+                                    messages.length > 0 && (
+                                        <div className="flex justify-center py-2">
+                                            <span className="text-xs text-zinc-500">
+                                                Scroll up to load more
+                                            </span>
+                                        </div>
+                                    )}
                             </>
                         )}
                     </div>
@@ -1619,16 +2274,34 @@ export function ChannelChatModal({
                             <div className="w-1 h-8 bg-orange-500 rounded-full" />
                             <div className="flex-1 min-w-0">
                                 <p className="text-xs text-orange-400 font-medium">
-                                    Replying to {replyingTo.sender_address.toLowerCase() === userAddress.toLowerCase() ? "yourself" : formatSender(replyingTo.sender_address)}
+                                    Replying to{" "}
+                                    {replyingTo.sender_address.toLowerCase() ===
+                                    userAddress.toLowerCase()
+                                        ? "yourself"
+                                        : formatSender(
+                                              replyingTo.sender_address,
+                                          )}
                                 </p>
-                                <p className="text-xs text-zinc-400 truncate">{replyingTo.content}</p>
+                                <p className="text-xs text-zinc-400 truncate">
+                                    {replyingTo.content}
+                                </p>
                             </div>
                             <button
                                 onClick={() => setReplyingTo(null)}
                                 className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
                                 </svg>
                             </button>
                         </div>
@@ -1638,17 +2311,42 @@ export function ChannelChatModal({
                     <AnimatePresence>
                         {typingUsers.length > 0 && (
                             <TypingIndicator
-                                users={typingUsers.map(u => u.name || `${u.address.slice(0, 6)}...`)}
+                                users={typingUsers.map(
+                                    (u) =>
+                                        u.name || `${u.address.slice(0, 6)}...`,
+                                )}
                                 className="border-t border-zinc-800/50"
                             />
                         )}
                     </AnimatePresence>
 
                     {/* Input - with safe area padding for bottom */}
-                    <div 
+                    <div
                         className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
-                        style={isFullscreen ? { paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' } : undefined}
+                        style={
+                            isFullscreen
+                                ? {
+                                      paddingBottom:
+                                          "max(env(safe-area-inset-bottom), 16px)",
+                                  }
+                                : undefined
+                        }
                     >
+                        {/* Waku channel send error (e.g. "You must be a member to send messages") */}
+                        {isWakuChannel && wakuMessages.error && (
+                            <div className="mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
+                                <span className="shrink-0">⚠️</span>
+                                <span>{wakuMessages.error}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => wakuMessages.clearError?.()}
+                                    className="ml-auto shrink-0 text-red-400/80 hover:text-red-400"
+                                    aria-label="Dismiss"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        )}
                         {/* Hidden file input */}
                         <input
                             ref={fileInputRef}
@@ -1660,10 +2358,16 @@ export function ChannelChatModal({
                         <div className="flex items-center gap-2">
                             {/* Consolidated attachment menu */}
                             <ChatAttachmentMenu
-                                onImageUpload={() => fileInputRef.current?.click()}
+                                onImageUpload={() =>
+                                    fileInputRef.current?.click()
+                                }
                                 onPixelArt={() => setShowPixelArt(true)}
                                 onGif={handleSendGif}
-                                onPoll={canCreatePoll ? () => setShowPollCreator(true) : undefined}
+                                onPoll={
+                                    canCreatePoll
+                                        ? () => setShowPollCreator(true)
+                                        : undefined
+                                }
                                 showPoll={canCreatePoll}
                                 isUploading={isUploading || isUploadingPixelArt}
                             />
@@ -1672,6 +2376,11 @@ export function ChannelChatModal({
                                 value={inputValue}
                                 onChange={(val) => {
                                     setInputValue(val);
+                                    if (
+                                        isWakuChannel &&
+                                        wakuMessages.clearError
+                                    )
+                                        wakuMessages.clearError();
                                     if (val.trim()) setTyping();
                                 }}
                                 onSubmit={handleSend}
@@ -1716,7 +2425,12 @@ export function ChannelChatModal({
                             onClick={(e) => e.stopPropagation()}
                             className="fixed z-[100] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl p-3 min-w-[220px] max-w-[280px]"
                             style={{
-                                left: Math.min(userPopupPosition.x, typeof window !== "undefined" ? window.innerWidth - 290 : 0),
+                                left: Math.min(
+                                    userPopupPosition.x,
+                                    typeof window !== "undefined"
+                                        ? window.innerWidth - 290
+                                        : 0,
+                                ),
                                 top: userPopupPosition.y,
                             }}
                         >
@@ -1727,34 +2441,63 @@ export function ChannelChatModal({
                                     <>
                                         <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-700">
                                             {userInfo?.avatar ? (
-                                                <img src={userInfo.avatar} alt="" className="w-10 h-10 rounded-full" />
+                                                <img
+                                                    src={userInfo.avatar}
+                                                    alt=""
+                                                    className="w-10 h-10 rounded-full"
+                                                />
                                             ) : (
                                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold">
-                                                    {(userInfo?.name || selectedUser).slice(0, 2).toUpperCase()}
+                                                    {(
+                                                        userInfo?.name ||
+                                                        selectedUser
+                                                    )
+                                                        .slice(0, 2)
+                                                        .toUpperCase()}
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-white font-medium text-sm truncate">
-                                                    {userInfo?.name || `${selectedUser.slice(0, 6)}...${selectedUser.slice(-4)}`}
+                                                    {userInfo?.name ||
+                                                        `${selectedUser.slice(0, 6)}...${selectedUser.slice(-4)}`}
                                                 </p>
                                                 <p className="text-zinc-500 text-xs truncate font-mono">
-                                                    {selectedUser.slice(0, 10)}...{selectedUser.slice(-6)}
+                                                    {selectedUser.slice(0, 10)}
+                                                    ...{selectedUser.slice(-6)}
                                                 </p>
                                             </div>
                                         </div>
-                                        
+
                                         {!alreadyFriend && onAddFriend && (
                                             <button
-                                                onClick={() => handleAddFriend(selectedUser)}
-                                                disabled={addingFriend === selectedUser}
+                                                onClick={() =>
+                                                    handleAddFriend(
+                                                        selectedUser,
+                                                    )
+                                                }
+                                                disabled={
+                                                    addingFriend ===
+                                                    selectedUser
+                                                }
                                                 className="w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                             >
-                                                {addingFriend === selectedUser ? (
+                                                {addingFriend ===
+                                                selectedUser ? (
                                                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                 ) : (
                                                     <>
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                                                            />
                                                         </svg>
                                                         Add Friend
                                                     </>
@@ -1763,22 +2506,44 @@ export function ChannelChatModal({
                                         )}
                                         {alreadyFriend && (
                                             <div className="flex items-center gap-2 text-emerald-400 text-sm py-2">
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M5 13l4 4L19 7"
+                                                    />
                                                 </svg>
                                                 Already friends
                                             </div>
                                         )}
-                                        
+
                                         <button
                                             onClick={() => {
-                                                navigator.clipboard.writeText(selectedUser);
+                                                navigator.clipboard.writeText(
+                                                    selectedUser,
+                                                );
                                                 setSelectedUser(null);
                                             }}
                                             className="w-full flex items-center gap-2 px-3 py-2 mt-1 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
                                         >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            <svg
+                                                className="w-4 h-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                />
                                             </svg>
                                             Copy Address
                                         </button>
@@ -1817,16 +2582,36 @@ export function ChannelChatModal({
                                     title="Download"
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    <svg
+                                        className="w-6 h-6"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
                                     </svg>
                                 </a>
                                 <button
                                     className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
                                     onClick={() => setPreviewImage(null)}
                                 >
-                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        className="w-6 h-6"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             </div>
@@ -1843,8 +2628,20 @@ export function ChannelChatModal({
                 <PollCreator
                     isOpen={showPollCreator}
                     onClose={() => setShowPollCreator(false)}
-                    onCreatePoll={async (question, options, allowsMultiple, endsAt, isAnonymous) => {
-                        await createPoll(question, options, allowsMultiple, endsAt, isAnonymous);
+                    onCreatePoll={async (
+                        question,
+                        options,
+                        allowsMultiple,
+                        endsAt,
+                        isAnonymous,
+                    ) => {
+                        await createPoll(
+                            question,
+                            options,
+                            allowsMultiple,
+                            endsAt,
+                            isAnonymous,
+                        );
                     }}
                 />
 
@@ -1852,12 +2649,19 @@ export function ChannelChatModal({
                 <ForwardMessageModal
                     isOpen={!!forwardingMessage}
                     onClose={() => setForwardingMessage(null)}
-                    message={forwardingMessage ? {
-                        id: forwardingMessage.id,
-                        content: forwardingMessage.content,
-                        senderName: formatSender(forwardingMessage.sender_address),
-                        senderAddress: forwardingMessage.sender_address,
-                    } : null}
+                    message={
+                        forwardingMessage
+                            ? {
+                                  id: forwardingMessage.id,
+                                  content: forwardingMessage.content,
+                                  senderName: formatSender(
+                                      forwardingMessage.sender_address,
+                                  ),
+                                  senderAddress:
+                                      forwardingMessage.sender_address,
+                              }
+                            : null
+                    }
                     onForward={async (targetId, targetType) => {
                         if (!forwardingMessage) return false;
                         // For now, we'll just send a forwarded message to the current channel
@@ -1868,10 +2672,15 @@ export function ChannelChatModal({
                     }}
                     chats={[
                         // Current channel as the only option for now
-                        { id: channel.id, type: "channel", name: `#${channel.name}`, icon: channel.emoji }
+                        {
+                            id: channel.id,
+                            type: "channel",
+                            name: `#${channel.name}`,
+                            icon: channel.emoji,
+                        },
                     ]}
                 />
-                
+
                 {/* Message Action Bar */}
                 <MessageActionBar
                     isOpen={!!selectedMessage && !!selectedMessageConfig}
@@ -1881,20 +2690,64 @@ export function ChannelChatModal({
                     }}
                     config={selectedMessageConfig}
                     callbacks={{
-                        onReaction: selectedMessageConfig ? (emoji) => handleReaction(selectedMessageConfig.messageId, emoji) : undefined,
-                        onReply: selectedMessageConfig ? () => {
-                            const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
-                            if (msg) setReplyingTo(msg);
-                        } : undefined,
+                        onReaction: selectedMessageConfig
+                            ? (emoji) =>
+                                  handleReaction(
+                                      selectedMessageConfig.messageId,
+                                      emoji,
+                                  )
+                            : undefined,
+                        onReply: selectedMessageConfig
+                            ? () => {
+                                  const msg = messages.find(
+                                      (m) =>
+                                          m.id ===
+                                          selectedMessageConfig.messageId,
+                                  );
+                                  if (msg) setReplyingTo(msg);
+                              }
+                            : undefined,
                         onCopy: () => {},
-                        onForward: selectedMessageConfig ? () => {
-                            const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
-                            if (msg) setForwardingMessage(msg);
-                        } : undefined,
-                        onPin: selectedMessageConfig?.isPinned === false && isAdmin ? () => handlePinMessage(selectedMessageConfig?.messageId || "", false) : undefined,
-                        onUnpin: selectedMessageConfig?.isPinned && isAdmin ? () => handlePinMessage(selectedMessageConfig?.messageId || "", true) : undefined,
-                        onEdit: selectedMessageConfig?.canEdit ? () => setEditingMessage(selectedMessageConfig?.messageId || null) : undefined,
-                        onDelete: selectedMessageConfig?.isOwn ? () => deleteMessage(selectedMessageConfig?.messageId || "") : undefined,
+                        onForward: selectedMessageConfig
+                            ? () => {
+                                  const msg = messages.find(
+                                      (m) =>
+                                          m.id ===
+                                          selectedMessageConfig.messageId,
+                                  );
+                                  if (msg) setForwardingMessage(msg);
+                              }
+                            : undefined,
+                        onPin:
+                            selectedMessageConfig?.isPinned === false && isAdmin
+                                ? () =>
+                                      handlePinMessage(
+                                          selectedMessageConfig?.messageId ||
+                                              "",
+                                          false,
+                                      )
+                                : undefined,
+                        onUnpin:
+                            selectedMessageConfig?.isPinned && isAdmin
+                                ? () =>
+                                      handlePinMessage(
+                                          selectedMessageConfig?.messageId ||
+                                              "",
+                                          true,
+                                      )
+                                : undefined,
+                        onEdit: selectedMessageConfig?.canEdit
+                            ? () =>
+                                  setEditingMessage(
+                                      selectedMessageConfig?.messageId || null,
+                                  )
+                            : undefined,
+                        onDelete: selectedMessageConfig?.isOwn
+                            ? () =>
+                                  deleteMessage(
+                                      selectedMessageConfig?.messageId || "",
+                                  )
+                            : undefined,
                     }}
                 />
 
