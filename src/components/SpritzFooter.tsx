@@ -11,7 +11,6 @@ const SPRITZ_LINKS = [
 
 const SOCIAL_LINKS = [
     { label: "Twitter / X", href: "https://x.com/spritzchat", icon: "𝕏" },
-    { label: "Discord", href: "https://discord.gg/spritz", icon: "Discord" },
 ];
 
 type SpritzFooterProps = {

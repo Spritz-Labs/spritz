@@ -813,6 +813,7 @@ export default function EventsPage() {
         blockchains: [],
     });
     const [isLoading, setIsLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [total, setTotal] = useState(0);
     const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -919,6 +920,7 @@ export default function EventsPage() {
 
     async function fetchEvents() {
         setIsLoading(true);
+        setFetchError(null);
         try {
             const params = new URLSearchParams();
             if (selectedType) params.set("type", selectedType);
@@ -933,6 +935,10 @@ export default function EventsPage() {
             const res = await fetch(`/api/events?${params.toString()}`);
             const data = await res.json();
 
+            if (!res.ok) {
+                setFetchError(data.error || "Failed to load events");
+                return;
+            }
             if (data.events) {
                 const eventsList: Event[] = data.events;
                 setRawEvents(eventsList);
@@ -944,6 +950,7 @@ export default function EventsPage() {
             }
         } catch (error) {
             console.error("Failed to fetch events:", error);
+            setFetchError("Failed to load events");
         } finally {
             setIsLoading(false);
         }
@@ -1454,16 +1461,36 @@ export default function EventsPage() {
                             />
                         ))}
                     </div>
+                ) : fetchError ? (
+                    <div className="text-center py-20">
+                        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-zinc-800/50 flex items-center justify-center">
+                            <span className="text-4xl">📅</span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-zinc-300 mb-2">
+                            Couldn&apos;t load events
+                        </h3>
+                        <p className="text-zinc-500 mb-6">{fetchError}</p>
+                        <button
+                            onClick={() => fetchEvents()}
+                            className="px-6 py-2.5 bg-[#FF5500] hover:bg-[#e04d00] text-white rounded-xl transition-colors"
+                        >
+                            Retry
+                        </button>
+                    </div>
                 ) : events.length === 0 ? (
                     <div className="text-center py-20">
                         <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-zinc-800/50 flex items-center justify-center">
                             <span className="text-4xl">📅</span>
                         </div>
                         <h3 className="text-xl font-semibold text-zinc-300 mb-2">
-                            No events found
+                            {rawEvents.length === 0
+                                ? "No events in the directory"
+                                : "No events match your filters"}
                         </h3>
                         <p className="text-zinc-500 mb-6">
-                            Try adjusting your filters or check back later.
+                            {rawEvents.length === 0
+                                ? "Events may not be published yet, or try turning off “Upcoming only” to see past events."
+                                : "Try adjusting your filters or check back later."}
                         </p>
                         <button
                             onClick={() => {
@@ -1472,6 +1499,7 @@ export default function EventsPage() {
                                 setSelectedBlockchain("");
                                 setSearchQuery("");
                                 setEventCategory("");
+                                setShowUpcoming(false);
                             }}
                             className="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors"
                         >
