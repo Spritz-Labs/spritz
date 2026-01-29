@@ -1,16 +1,18 @@
 #!/usr/bin/env tsx
 /**
  * Cleanup Duplicate Events Script
- * 
- * This script identifies and removes duplicate events from the database.
- * It uses the same fingerprinting logic as the scrape route to ensure consistency.
- * 
- * Duplicate detection strategies:
- * 1. URL-based (most reliable): Same event_url or rsvp_url
- * 2. Fingerprint-based: Same name + date + city/venue
- * 3. Source ID: Same source + source_id
- * 
- * For each group of duplicates, keeps the oldest event (by created_at).
+ *
+ * Identifies and removes duplicate events (same name+date+city, URLs, or source_id).
+ * Name normalization strips trailing " Events"/" Event" and years (e.g. " 2026")
+ * so "SXSW Austin 2026 Events" and "SXSW Austin" are treated as the same.
+ *
+ * Duplicate detection:
+ * 1. URL-based: same event_url or rsvp_url
+ * 2. Fingerprint: normalized name + date + city (or venue)
+ * 3. Source ID: same source + source_id
+ *
+ * Keeps the oldest event per group (by created_at). To delete duplicates, run:
+ *   DELETE=true npx tsx scripts/cleanup-duplicate-events.ts
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -22,16 +24,20 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
     console.error("❌ Missing Supabase credentials");
-    console.error("Required: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    console.error(
+        "Required: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
+    );
     process.exit(1);
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Normalize event name for comparison
+// Normalize event name for comparison (strips year/Events suffix so "SXSW Austin 2026 Events" matches "SXSW Austin")
 function normalizeEventName(name: string): string {
     return name
         .toLowerCase()
+        .replace(/\s+events?\s*$/i, "") // " 2026 Events" or " Event"
+        .replace(/\s+20\d{2}\s*$/i, "") // trailing year e.g. " 2026"
         .replace(/[''`]/g, "") // Remove apostrophes
         .replace(/[^\w\s]/g, " ") // Replace special chars with space
         .replace(/\s+/g, " ") // Collapse multiple spaces
@@ -50,7 +56,10 @@ function generateEventFingerprints(event: {
     const normalized = normalizeEventName(event.name);
     const date = event.event_date;
     const city = (event.city?.toLowerCase().trim() || "").replace(/[^\w]/g, "");
-    const venue = (event.venue?.toLowerCase().trim() || "").replace(/[^\w]/g, "");
+    const venue = (event.venue?.toLowerCase().trim() || "").replace(
+        /[^\w]/g,
+        "",
+    );
 
     const fingerprints: string[] = [];
 
@@ -66,10 +75,15 @@ function generateEventFingerprints(event: {
     if (event.event_url) {
         try {
             const url = new URL(event.event_url);
-            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+            const normalizedUrl =
+                url.hostname.replace(/^www\./, "") +
+                url.pathname.replace(/\/$/, "");
             fingerprints.push(`url:${normalizedUrl.toLowerCase()}`);
         } catch {
-            const normalizedUrl = event.event_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+            const normalizedUrl = event.event_url
+                .toLowerCase()
+                .replace(/\/$/, "")
+                .split("?")[0];
             fingerprints.push(`url:${normalizedUrl}`);
         }
     }
@@ -77,10 +91,15 @@ function generateEventFingerprints(event: {
     if (event.rsvp_url) {
         try {
             const url = new URL(event.rsvp_url);
-            const normalizedUrl = url.hostname.replace(/^www\./, '') + url.pathname.replace(/\/$/, '');
+            const normalizedUrl =
+                url.hostname.replace(/^www\./, "") +
+                url.pathname.replace(/\/$/, "");
             fingerprints.push(`rsvp:${normalizedUrl.toLowerCase()}`);
         } catch {
-            const normalizedUrl = event.rsvp_url.toLowerCase().replace(/\/$/, '').split('?')[0];
+            const normalizedUrl = event.rsvp_url
+                .toLowerCase()
+                .replace(/\/$/, "")
+                .split("?")[0];
             fingerprints.push(`rsvp:${normalizedUrl}`);
         }
     }
@@ -93,9 +112,12 @@ function normalizeUrl(url: string | null | undefined): string | null {
     if (!url) return null;
     try {
         const urlObj = new URL(url);
-        return urlObj.hostname.replace(/^www\./, '') + urlObj.pathname.replace(/\/$/, '').toLowerCase();
+        return (
+            urlObj.hostname.replace(/^www\./, "") +
+            urlObj.pathname.replace(/\/$/, "").toLowerCase()
+        );
     } catch {
-        return url.toLowerCase().replace(/\/$/, '').split('?')[0];
+        return url.toLowerCase().replace(/\/$/, "").split("?")[0];
     }
 }
 
@@ -119,7 +141,9 @@ async function findDuplicates() {
     // Fetch all events (including drafts)
     const { data: events, error } = await supabase
         .from("shout_events")
-        .select("id, name, event_date, city, venue, event_url, rsvp_url, source, source_id, status, created_at")
+        .select(
+            "id, name, event_date, city, venue, event_url, rsvp_url, source, source_id, status, created_at",
+        )
         .order("created_at", { ascending: true });
 
     if (error) {
@@ -154,12 +178,18 @@ async function findDuplicates() {
     // Process source_id duplicates
     for (const [sourceId, group] of sourceIdGroups.entries()) {
         if (group.length > 1) {
-            group.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            group.sort(
+                (a, b) =>
+                    new Date(a.created_at).getTime() -
+                    new Date(b.created_at).getTime(),
+            );
             const keep = group[0];
             for (let i = 1; i < group.length; i++) {
                 duplicateGroups.add(`${sourceId} (source_id)`);
                 eventsToDelete.add(group[i].id);
-                console.log(`  🔴 Duplicate (source_id): "${group[i].name}" (${group[i].event_date}) - keeping "${keep.name}"`);
+                console.log(
+                    `  🔴 Duplicate (source_id): "${group[i].name}" (${group[i].event_date}) - keeping "${keep.name}"`,
+                );
             }
         }
     }
@@ -191,14 +221,20 @@ async function findDuplicates() {
     for (const [url, group] of urlGroups.entries()) {
         if (group.length > 1) {
             // Remove events already marked for deletion
-            const uniqueGroup = group.filter(e => !eventsToDelete.has(e.id));
+            const uniqueGroup = group.filter((e) => !eventsToDelete.has(e.id));
             if (uniqueGroup.length > 1) {
-                uniqueGroup.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                uniqueGroup.sort(
+                    (a, b) =>
+                        new Date(a.created_at).getTime() -
+                        new Date(b.created_at).getTime(),
+                );
                 const keep = uniqueGroup[0];
                 for (let i = 1; i < uniqueGroup.length; i++) {
                     duplicateGroups.add(`${url} (URL)`);
                     eventsToDelete.add(uniqueGroup[i].id);
-                    console.log(`  🔴 Duplicate (URL): "${uniqueGroup[i].name}" (${uniqueGroup[i].event_date}) - keeping "${keep.name}"`);
+                    console.log(
+                        `  🔴 Duplicate (URL): "${uniqueGroup[i].name}" (${uniqueGroup[i].event_date}) - keeping "${keep.name}"`,
+                    );
                 }
             }
         }
@@ -223,14 +259,20 @@ async function findDuplicates() {
     for (const [fp, group] of fingerprintGroups.entries()) {
         if (group.length > 1) {
             // Remove events already marked for deletion
-            const uniqueGroup = group.filter(e => !eventsToDelete.has(e.id));
+            const uniqueGroup = group.filter((e) => !eventsToDelete.has(e.id));
             if (uniqueGroup.length > 1) {
-                uniqueGroup.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                uniqueGroup.sort(
+                    (a, b) =>
+                        new Date(a.created_at).getTime() -
+                        new Date(b.created_at).getTime(),
+                );
                 const keep = uniqueGroup[0];
                 for (let i = 1; i < uniqueGroup.length; i++) {
                     duplicateGroups.add(`${fp} (fingerprint)`);
                     eventsToDelete.add(uniqueGroup[i].id);
-                    console.log(`  🔴 Duplicate (fingerprint): "${uniqueGroup[i].name}" (${uniqueGroup[i].event_date}) - keeping "${keep.name}"`);
+                    console.log(
+                        `  🔴 Duplicate (fingerprint): "${uniqueGroup[i].name}" (${uniqueGroup[i].event_date}) - keeping "${keep.name}"`,
+                    );
                 }
             }
         }
@@ -248,11 +290,14 @@ async function findDuplicates() {
 
     // Show breakdown by status
     const toDelete = Array.from(eventsToDelete);
-    const eventsToDeleteData = events.filter(e => toDelete.includes(e.id));
-    const byStatus = eventsToDeleteData.reduce((acc, e) => {
-        acc[e.status] = (acc[e.status] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
+    const eventsToDeleteData = events.filter((e) => toDelete.includes(e.id));
+    const byStatus = eventsToDeleteData.reduce(
+        (acc, e) => {
+            acc[e.status] = (acc[e.status] || 0) + 1;
+            return acc;
+        },
+        {} as Record<string, number>,
+    );
 
     console.log(`\n📊 Duplicates by status:`);
     for (const [status, count] of Object.entries(byStatus)) {
@@ -281,10 +326,15 @@ async function deleteDuplicates(eventIds: string[]) {
             .in("id", batch);
 
         if (error) {
-            console.error(`❌ Error deleting batch ${i / BATCH_SIZE + 1}:`, error);
+            console.error(
+                `❌ Error deleting batch ${i / BATCH_SIZE + 1}:`,
+                error,
+            );
         } else {
             deleted += batch.length;
-            console.log(`   ✅ Deleted ${deleted}/${eventIds.length} events...`);
+            console.log(
+                `   ✅ Deleted ${deleted}/${eventIds.length} events...`,
+            );
         }
     }
 
@@ -301,15 +351,21 @@ async function main() {
             return;
         }
 
-        console.log(`\n⚠️  About to delete ${duplicateIds.length} duplicate events.`);
+        console.log(
+            `\n⚠️  About to delete ${duplicateIds.length} duplicate events.`,
+        );
         console.log("   (Keeping the oldest event in each duplicate group)");
 
         // For safety, we'll just show what would be deleted
         // Uncomment the next line to actually delete
         // await deleteDuplicates(duplicateIds);
 
-        console.log("\n💡 To actually delete duplicates, uncomment the deleteDuplicates call in the script.");
-        console.log(`   Or run with: DELETE=true npx tsx scripts/cleanup-duplicate-events.ts`);
+        console.log(
+            "\n💡 To actually delete duplicates, uncomment the deleteDuplicates call in the script.",
+        );
+        console.log(
+            `   Or run with: DELETE=true npx tsx scripts/cleanup-duplicate-events.ts`,
+        );
 
         // Check if DELETE env var is set
         if (process.env.DELETE === "true") {

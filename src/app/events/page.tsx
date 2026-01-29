@@ -821,7 +821,7 @@ export default function EventsPage() {
     const [selectedCity, setSelectedCity] = useState<string>("");
     const [selectedBlockchain, setSelectedBlockchain] = useState<string>("");
     const [searchQuery, setSearchQuery] = useState("");
-    const [showUpcoming, setShowUpcoming] = useState(true);
+    const [showUpcoming, setShowUpcoming] = useState(false); // default: show all events (past + upcoming)
     const [eventCategory, setEventCategory] = useState<string>(""); // "main" | "side" | ""
 
     // Tab state - replaces eventCategory for better UX
@@ -1068,7 +1068,11 @@ export default function EventsPage() {
     };
 
     const handleSubmitEvent = async () => {
-        if (!submitFormData.name?.trim() || !submitFormData.event_type || !submitFormData.event_date) {
+        if (
+            !submitFormData.name?.trim() ||
+            !submitFormData.event_type ||
+            !submitFormData.event_date
+        ) {
             setSubmitError("Name, event type, and date are required.");
             return;
         }
@@ -1188,7 +1192,9 @@ export default function EventsPage() {
                             <>
                                 <button
                                     type="button"
-                                    onClick={() => setShowSubmitEventModal(true)}
+                                    onClick={() =>
+                                        setShowSubmitEventModal(true)
+                                    }
                                     className="px-4 py-2.5 rounded-xl bg-[#FF5500] hover:bg-[#e04d00] text-white text-sm font-medium transition-colors flex items-center gap-2"
                                 >
                                     + Submit event
@@ -1841,30 +1847,56 @@ export default function EventsPage() {
                                     }}
                                     className="text-zinc-400 hover:text-white transition-colors"
                                 >
-                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        className="w-6 h-6"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             </div>
                             {submitError && (
-                                <p className="mb-4 text-sm text-red-400">{submitError}</p>
+                                <p className="mb-4 text-sm text-red-400">
+                                    {submitError}
+                                </p>
                             )}
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Event name *</label>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        Event name *
+                                    </label>
                                     <input
                                         type="text"
                                         value={submitFormData.name}
-                                        onChange={(e) => setSubmitFormData({ ...submitFormData, name: e.target.value })}
+                                        onChange={(e) =>
+                                            setSubmitFormData({
+                                                ...submitFormData,
+                                                name: e.target.value,
+                                            })
+                                        }
                                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         placeholder="e.g. ETH Denver 2025"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Description</label>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        Description
+                                    </label>
                                     <textarea
                                         value={submitFormData.description}
-                                        onChange={(e) => setSubmitFormData({ ...submitFormData, description: e.target.value })}
+                                        onChange={(e) =>
+                                            setSubmitFormData({
+                                                ...submitFormData,
+                                                description: e.target.value,
+                                            })
+                                        }
                                         rows={3}
                                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         placeholder="Brief description of the event"
@@ -1872,94 +1904,163 @@ export default function EventsPage() {
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Event type *</label>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            Event type *
+                                        </label>
                                         <select
                                             value={submitFormData.event_type}
-                                            onChange={(e) => setSubmitFormData({ ...submitFormData, event_type: e.target.value })}
+                                            onChange={(e) =>
+                                                setSubmitFormData({
+                                                    ...submitFormData,
+                                                    event_type: e.target.value,
+                                                })
+                                            }
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         >
-                                            {Object.entries(EVENT_TYPE_ICONS).map(([type]) => (
-                                                <option key={type} value={type}>{EVENT_TYPE_ICONS[type]} {type}</option>
+                                            {Object.entries(
+                                                EVENT_TYPE_ICONS,
+                                            ).map(([type]) => (
+                                                <option key={type} value={type}>
+                                                    {EVENT_TYPE_ICONS[type]}{" "}
+                                                    {type}
+                                                </option>
                                             ))}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Event date *</label>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            Event date *
+                                        </label>
                                         <input
                                             type="date"
                                             value={submitFormData.event_date}
-                                            onChange={(e) => setSubmitFormData({ ...submitFormData, event_date: e.target.value })}
+                                            onChange={(e) =>
+                                                setSubmitFormData({
+                                                    ...submitFormData,
+                                                    event_date: e.target.value,
+                                                })
+                                            }
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Start time</label>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        Start time
+                                    </label>
                                     <input
                                         type="time"
                                         value={submitFormData.start_time}
-                                        onChange={(e) => setSubmitFormData({ ...submitFormData, start_time: e.target.value })}
+                                        onChange={(e) =>
+                                            setSubmitFormData({
+                                                ...submitFormData,
+                                                start_time: e.target.value,
+                                            })
+                                        }
                                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Venue</label>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        Venue
+                                    </label>
                                     <input
                                         type="text"
                                         value={submitFormData.venue}
-                                        onChange={(e) => setSubmitFormData({ ...submitFormData, venue: e.target.value })}
+                                        onChange={(e) =>
+                                            setSubmitFormData({
+                                                ...submitFormData,
+                                                venue: e.target.value,
+                                            })
+                                        }
                                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         placeholder="Venue name"
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">City</label>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            City
+                                        </label>
                                         <input
                                             type="text"
                                             value={submitFormData.city}
-                                            onChange={(e) => setSubmitFormData({ ...submitFormData, city: e.target.value })}
+                                            onChange={(e) =>
+                                                setSubmitFormData({
+                                                    ...submitFormData,
+                                                    city: e.target.value,
+                                                })
+                                            }
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Country</label>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            Country
+                                        </label>
                                         <input
                                             type="text"
                                             value={submitFormData.country}
-                                            onChange={(e) => setSubmitFormData({ ...submitFormData, country: e.target.value })}
+                                            onChange={(e) =>
+                                                setSubmitFormData({
+                                                    ...submitFormData,
+                                                    country: e.target.value,
+                                                })
+                                            }
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Organizer</label>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        Organizer
+                                    </label>
                                     <input
                                         type="text"
                                         value={submitFormData.organizer}
-                                        onChange={(e) => setSubmitFormData({ ...submitFormData, organizer: e.target.value })}
+                                        onChange={(e) =>
+                                            setSubmitFormData({
+                                                ...submitFormData,
+                                                organizer: e.target.value,
+                                            })
+                                        }
                                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Event / ticket URL</label>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        Event / ticket URL
+                                    </label>
                                     <input
                                         type="url"
                                         value={submitFormData.event_url}
-                                        onChange={(e) => setSubmitFormData({ ...submitFormData, event_url: e.target.value })}
+                                        onChange={(e) =>
+                                            setSubmitFormData({
+                                                ...submitFormData,
+                                                event_url: e.target.value,
+                                            })
+                                        }
                                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50"
                                         placeholder="https://..."
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-zinc-300 mb-2">Event image (optional)</label>
+                                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                        Event image (optional)
+                                    </label>
                                     <input
                                         type="file"
                                         accept="image/*"
-                                        onChange={(e) => setSubmitBannerFile(e.target.files?.[0] || null)}
+                                        onChange={(e) =>
+                                            setSubmitBannerFile(
+                                                e.target.files?.[0] || null,
+                                            )
+                                        }
                                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-[#FF5500]/50 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-zinc-700 file:text-white"
                                     />
-                                    <p className="mt-1 text-xs text-zinc-500">Max 5MB. JPG, PNG, WebP.</p>
+                                    <p className="mt-1 text-xs text-zinc-500">
+                                        Max 5MB. JPG, PNG, WebP.
+                                    </p>
                                 </div>
                             </div>
                             <div className="flex gap-3 mt-6">
@@ -1968,10 +2069,15 @@ export default function EventsPage() {
                                     disabled={submitLoading}
                                     className="flex-1 px-4 py-2.5 bg-[#FF5500] hover:bg-[#e04d00] text-white rounded-xl font-semibold transition-colors disabled:opacity-50"
                                 >
-                                    {submitLoading ? "Creating…" : "Create event (draft)"}
+                                    {submitLoading
+                                        ? "Creating…"
+                                        : "Create event (draft)"}
                                 </button>
                                 <button
-                                    onClick={() => { setShowSubmitEventModal(false); setSubmitError(null); }}
+                                    onClick={() => {
+                                        setShowSubmitEventModal(false);
+                                        setSubmitError(null);
+                                    }}
                                     className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-colors"
                                 >
                                     Cancel

@@ -69,11 +69,26 @@ export function LinkPreview({ url, compact = false }: LinkPreviewProps) {
         fetchPreview();
     }, [url]);
 
+    // Minimal loading placeholder to avoid layout shift / flashing in chat
     if (loading) {
         return (
-            <div className="animate-pulse bg-zinc-800/50 rounded-lg p-3 mt-2">
-                <div className="h-4 bg-zinc-700 rounded w-3/4 mb-2" />
-                <div className="h-3 bg-zinc-700 rounded w-1/2" />
+            <div
+                className={`mt-2 rounded-lg overflow-hidden bg-zinc-800/50 border border-zinc-700/50 ${
+                    compact ? "p-2 h-[52px]" : "p-3"
+                }`}
+                style={{ minHeight: compact ? undefined : 56 }}
+            >
+                {compact ? (
+                    <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 rounded bg-zinc-700 animate-pulse" />
+                        <div className="h-3 flex-1 max-w-[120px] rounded bg-zinc-700 animate-pulse" />
+                    </div>
+                ) : (
+                    <>
+                        <div className="h-4 bg-zinc-700 rounded w-3/4 mb-2 animate-pulse" />
+                        <div className="h-3 bg-zinc-700 rounded w-1/2 animate-pulse" />
+                    </>
+                )}
             </div>
         );
     }
@@ -87,16 +102,18 @@ export function LinkPreview({ url, compact = false }: LinkPreviewProps) {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`block mt-2 bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-lg overflow-hidden transition-colors ${
+            className={`block mt-2 max-w-full w-full bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-lg overflow-hidden transition-colors ${
                 compact ? "p-2" : "p-3"
             }`}
+            style={{ maxWidth: "min(100%, 280px)" }}
         >
             {preview.image && !compact && (
-                <div className="relative w-full h-32 mb-2 rounded-lg overflow-hidden bg-zinc-700">
+                <div className="relative w-full max-h-20 mb-2 rounded-lg overflow-hidden bg-zinc-700 aspect-video max-w-full">
                     <img
                         src={preview.image}
                         alt=""
                         className="w-full h-full object-cover"
+                        loading="lazy"
                         onError={(e) => {
                             (e.target as HTMLImageElement).style.display = "none";
                         }}
@@ -104,24 +121,24 @@ export function LinkPreview({ url, compact = false }: LinkPreviewProps) {
                 </div>
             )}
 
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2 min-w-0">
                 {preview.favicon && (
                     <img
                         src={preview.favicon}
                         alt=""
-                        className="w-4 h-4 mt-0.5 rounded"
+                        className="w-4 h-4 mt-0.5 rounded shrink-0"
                         onError={(e) => {
                             (e.target as HTMLImageElement).style.display = "none";
                         }}
                     />
                 )}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-1.5">
                         <span className="text-xs text-zinc-500 truncate">
                             {preview.siteName}
                         </span>
                         <svg
-                            className="w-3 h-3 text-zinc-500 flex-shrink-0"
+                            className="w-3 h-3 text-zinc-500 shrink-0"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"

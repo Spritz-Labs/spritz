@@ -33,10 +33,12 @@ interface ExtractedEvent {
     blockchain_focus?: string[];
 }
 
-// Normalize event name for comparison (removes special chars, lowercase)
+// Normalize event name for comparison (removes special chars, lowercase, strips year/Events suffix)
 function normalizeEventName(name: string): string {
     return name
         .toLowerCase()
+        .replace(/\s+events?\s*$/i, "") // " 2026 Events" or " Event"
+        .replace(/\s+20\d{2}\s*$/i, "") // trailing year e.g. " 2026"
         .replace(/[''`]/g, "") // Remove apostrophes
         .replace(/[^\w\s]/g, " ") // Replace special chars with space
         .replace(/\s+/g, " ") // Collapse multiple spaces
