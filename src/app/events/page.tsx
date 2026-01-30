@@ -247,8 +247,12 @@ function EventCard({
 
         setIsLoadingInterest(true);
         try {
-            if (userInterest === type) {
-                // Remove interest
+            const alreadyThis =
+                type === "going"
+                    ? userInterest === "going" || isRegistered
+                    : userInterest === type;
+            if (alreadyThis) {
+                // Remove interest (click again to uncheck)
                 const res = await fetch(
                     `/api/events/${event.id}/interest?type=${type}`,
                     {
@@ -311,8 +315,8 @@ function EventCard({
         }
     };
 
-    // Show "Going ✓" when user chose Going or registered on Spritz
-    const showAsGoing = userInterest === "going" || isRegistered;
+    // Show "Going ✓" only when user has interest "going" (so clicking again can uncheck)
+    const showAsGoing = userInterest === "going";
 
     // Get country flag emoji
     const getCountryFlag = (country: string | null): string => {

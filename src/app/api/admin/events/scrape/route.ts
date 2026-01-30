@@ -520,19 +520,24 @@ CRITICAL INSTRUCTIONS FOR EVENT NAMES (accuracy is essential):
 - Use the primary title/heading of each event card (the main event name), not a tagline, subtitle, or description.
 - Preserve capitalization and spelling as shown (e.g. "ETHDenver 2026", "Consensus HK", "Satoshi Roundtable").
 - Do NOT invent or combine names. If the card shows "ETHDenver 2026", use exactly that.
+- Do NOT use attendee lists, "Who's going", speaker lists, or comma-separated usernames/handles as the event name. The name must be the actual event title, not a list of people.
 - Skip entries that are NOT event names: "CNC Member Discount", "CNC Member tix", "Member Discount", standalone promos.
 - If you see "Side Events" or "Events" as the card label for a link to a sub-page, use that exact label for that entry (e.g. "ETHDenver Side Events").
 - On side-events listing pages: each card has its own specific event name—use that card’s exact title, not the page title.
 - If this is a side events page, most events will be meetups, parties, workshops, or networking—categorize by type.
+
+CRITICAL INSTRUCTIONS FOR LINKS (event_url = Event website on Spritz):
+- event_url = the event's OFFICIAL website or info page. On Cryptonomads, extract the "Link to Website" when present—that is the preferred event_url so Spritz can show it as "Event website".
+- If Cryptonomads has both a cryptonomads.org detail link and a "Link to Website", use the "Link to Website" for event_url.
+- If there is no "Link to Website", use the event detail page URL (e.g. cryptonomads.org/.../event-slug) for event_url.
 
 CRITICAL INSTRUCTIONS FOR RSVP/REGISTRATION (MUST EXTRACT):
 - For EVERY event, look for a direct registration/RSVP link. This is essential for users to sign up.
 - rsvp_url = the link users click to register/RSVP (Luma lu.ma, Eventbrite, Google Forms, typeform, etc.)
 - If the only link on an event card is a registration link, put it in BOTH event_url and rsvp_url.
 - Common patterns: "Register", "RSVP", "Get Tickets", "Sign Up", "Book Now", "Add to calendar", button hrefs
-- Cryptonomads: event cards often have a link to the event detail page (event_url) AND a separate RSVP/Register link (rsvp_url). Extract BOTH.
+- Cryptonomads: event cards often have "Link to Website" (→ event_url) AND a separate RSVP/Register link (rsvp_url). Extract BOTH.
 - If you see lu.ma, eventbrite.com, forms.gle, typeform.com, or similar in a link, that is almost always rsvp_url.
-- event_url = event info/detail page (e.g. cryptonomads.org/ETHDenverSideEvents2026/event-slug)
 - rsvp_url = direct registration link (e.g. lu.ma/xyz, eventbrite.com/...)
 
 EXTRACTION RULES:
@@ -747,6 +752,41 @@ ${contentToAnalyze}`;
                     extractedEvents.length,
                     "events",
                 );
+                // Filter out bad extractions: event "names" that are attendee/speaker lists (e.g. "user1, user2, user3")
+                const beforeFilter = extractedEvents.length;
+                extractedEvents = extractedEvents.filter(
+                    (e: { name?: string }) => {
+                        const name = (e?.name || "").trim();
+                        if (!name) return false;
+                        const commaCount = (name.match(/,/g) || []).length;
+                        if (commaCount >= 2) {
+                            const parts = name
+                                .split(",")
+                                .map((p: string) => p.trim());
+                            const lookLikeHandles = parts.every(
+                                (p: string) =>
+                                    p.length > 0 &&
+                                    p.length < 40 &&
+                                    /^[\w.-]+$/i.test(p),
+                            );
+                            if (lookLikeHandles) {
+                                console.log(
+                                    "[Event Scrape] Skipping attendee-list name:",
+                                    name.substring(0, 80),
+                                );
+                                return false;
+                            }
+                        }
+                        return true;
+                    },
+                );
+                if (extractedEvents.length < beforeFilter) {
+                    console.log(
+                        "[Event Scrape] Filtered",
+                        beforeFilter - extractedEvents.length,
+                        "attendee-list entries",
+                    );
+                }
             } catch (parseError) {
                 console.warn(
                     "[Event Scrape] JSON parse error, attempting to extract valid portion...",

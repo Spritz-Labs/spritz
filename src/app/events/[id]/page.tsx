@@ -143,7 +143,11 @@ export default function EventDetailPage() {
         }
         setIsLoadingInterest(true);
         try {
-            if (userInterest === type) {
+            const alreadyThis =
+                type === "going"
+                    ? userInterest === "going" || isRegistered
+                    : userInterest === type;
+            if (alreadyThis) {
                 const res = await fetch(
                     `/api/events/${id}/interest?type=${type}`,
                     { method: "DELETE", credentials: "include" },
@@ -394,14 +398,14 @@ export default function EventDetailPage() {
                                 onClick={() => handleInterest("going")}
                                 disabled={isLoadingInterest}
                                 className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                                    userInterest === "going" || isRegistered
+                                    userInterest === "going"
                                         ? "bg-green-500/20 text-green-400 border border-green-500/40"
                                         : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
                                 } disabled:opacity-50`}
                             >
                                 <span>✓</span>
                                 <span>
-                                    {userInterest === "going" || isRegistered
+                                    {userInterest === "going"
                                         ? "Going ✓"
                                         : "Going"}
                                 </span>

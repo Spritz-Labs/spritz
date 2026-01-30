@@ -155,7 +155,11 @@ export default function EventBySlugPage() {
         }
         setIsLoadingInterest(true);
         try {
-            if (userInterest === type) {
+            const alreadyThis =
+                type === "going"
+                    ? userInterest === "going" || isRegistered
+                    : userInterest === type;
+            if (alreadyThis) {
                 const res = await fetch(
                     `/api/events/${event.id}/interest?type=${type}`,
                     { method: "DELETE", credentials: "include" },
@@ -185,6 +189,18 @@ export default function EventBySlugPage() {
                     else setGoingCount((c) => c + 1);
                 }
             }
+            const refetch = await fetch(`/api/events/${event.id}/interest`, {
+                credentials: "include",
+            });
+            const refetchData = await refetch.json();
+            if (refetchData.user_interest !== undefined)
+                setUserInterest(refetchData.user_interest ?? null);
+            if (refetchData.interested_count !== undefined)
+                setInterestedCount(refetchData.interested_count ?? 0);
+            if (refetchData.going_count !== undefined)
+                setGoingCount(refetchData.going_count ?? 0);
+            if (refetchData.is_registered !== undefined)
+                setIsRegistered(!!refetchData.is_registered);
         } finally {
             setIsLoadingInterest(false);
         }
@@ -393,14 +409,14 @@ export default function EventBySlugPage() {
                                 onClick={() => handleInterest("going")}
                                 disabled={isLoadingInterest}
                                 className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                                    userInterest === "going" || isRegistered
+                                    userInterest === "going"
                                         ? "bg-green-500/20 text-green-400 border border-green-500/40"
                                         : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-800"
                                 } disabled:opacity-50`}
                             >
                                 <span>✓</span>
                                 <span>
-                                    {userInterest === "going" || isRegistered
+                                    {userInterest === "going"
                                         ? "Going ✓"
                                         : "Going"}
                                 </span>
