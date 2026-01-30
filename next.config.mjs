@@ -104,7 +104,7 @@ const withPWA = withPWAInit({
 const nextConfig = {
     // Disable the development indicator in the corner
     devIndicators: false,
-    
+
     // Security headers
     async headers() {
         return [
@@ -212,5 +212,4 @@ const nextConfig = {
     },
 };
 
-// @ts-expect-error - next-pwa type compatibility issue with Next.js config
 export default withPWA(nextConfig);

@@ -10,6 +10,7 @@
         "lint": "eslint",
         "generate-icons": "node scripts/generate-icons.js",
         "update-cryptonomads": "node scripts/update-cryptonomads.mjs",
+        "cleanup-split-events": "npx tsx scripts/cleanup-split-multiday-events.ts",
         "vercel": "vercel --prod",
         "vercel:preview": "vercel"
     },

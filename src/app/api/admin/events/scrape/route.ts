@@ -105,6 +105,9 @@ function generateEventFingerprints(event: {
 
     const fingerprints: string[] = [];
 
+    // Name + date only: catch same event with different/missing location (e.g. "Denver" vs "TBA")
+    fingerprints.push(`${normalized}|${date}`);
+
     // Primary fingerprint: name + date + city
     fingerprints.push(`${normalized}|${date}|${city}`);
 

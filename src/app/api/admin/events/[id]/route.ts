@@ -137,37 +137,73 @@ export async function PATCH(
         };
 
         for (const field of allowedFields) {
-            if (body[field] !== undefined) {
-                let value = body[field];
-                // Empty slug → null so multiple events can have no slug (UNIQUE allows one '')
-                if (
-                    field === "slug" &&
-                    typeof value === "string" &&
-                    value.trim() === ""
-                ) {
-                    value = null;
-                }
-                // Ensure arrays for tags/blockchain_focus (filter empty strings)
-                if (field === "tags" && Array.isArray(value)) {
-                    value = value
-                        .map((s) =>
-                            typeof s === "string" ? s.trim() : String(s),
-                        )
-                        .filter(Boolean);
-                }
-                if (
-                    field === "blockchain_focus" &&
-                    value != null &&
-                    Array.isArray(value)
-                ) {
-                    value = value
-                        .map((s) =>
-                            typeof s === "string" ? s.trim() : String(s),
-                        )
-                        .filter(Boolean);
-                }
-                updates[field] = value;
+            if (body[field] === undefined) continue;
+            let value = body[field];
+
+            // Empty string → null for slug (UNIQUE allows one '')
+            if (
+                field === "slug" &&
+                typeof value === "string" &&
+                value.trim() === ""
+            ) {
+                value = null;
             }
+            // Empty string → null for TIME/DATE (Postgres rejects '')
+            if (
+                (field === "start_time" ||
+                    field === "end_time" ||
+                    field === "event_date" ||
+                    field === "end_date") &&
+                typeof value === "string" &&
+                value.trim() === ""
+            ) {
+                value = null;
+            }
+            // max_attendees: empty string or invalid number → null
+            if (field === "max_attendees") {
+                if (value === "" || value === null || value === undefined) {
+                    value = null;
+                } else if (typeof value === "number" && !Number.isInteger(value)) {
+                    value = Math.floor(value);
+                } else if (typeof value === "string") {
+                    const n = parseInt(value, 10);
+                    value = Number.isNaN(n) ? null : n;
+                }
+            }
+            // registration_fields: ensure valid JSONB (array or object)
+            if (field === "registration_fields" && value != null) {
+                if (typeof value === "string") {
+                    try {
+                        value = JSON.parse(value);
+                    } catch {
+                        value = [];
+                    }
+                }
+                if (!Array.isArray(value) && (typeof value !== "object" || value === null)) {
+                    value = [];
+                }
+            }
+            // Arrays for tags/blockchain_focus (filter empty strings)
+            if (field === "tags" && Array.isArray(value)) {
+                value = value
+                    .map((s) =>
+                        typeof s === "string" ? s.trim() : String(s),
+                    )
+                    .filter(Boolean);
+            }
+            if (
+                field === "blockchain_focus" &&
+                value != null &&
+                Array.isArray(value)
+            ) {
+                value = value
+                    .map((s) =>
+                        typeof s === "string" ? s.trim() : String(s),
+                    )
+                    .filter(Boolean);
+            }
+
+            updates[field] = value;
         }
 
         const { data: event, error } = await supabase
@@ -179,6 +215,21 @@ export async function PATCH(
 
         if (error) {
             console.error("[Admin Events] Error updating event:", error);
+            // Unique violation (e.g. slug already used by another event)
+            if (error.code === "23505") {
+                return NextResponse.json(
+                    {
+                        error: "Duplicate value",
+                        details:
+                            error.message?.includes("slug") ||
+                            (error as { details?: string }).details?.includes("slug")
+                                ? "That slug is already used by another event. Try a different one or leave it blank."
+                                : error.message,
+                        code: error.code,
+                    },
+                    { status: 400 },
+                );
+            }
             return NextResponse.json(
                 {
                     error: "Failed to update event",

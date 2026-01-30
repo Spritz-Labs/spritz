@@ -7,9 +7,10 @@
  * so "SXSW Austin 2026 Events" and "SXSW Austin" are treated as the same.
  *
  * Duplicate detection:
- * 1. URL-based: same event_url or rsvp_url
- * 2. Fingerprint: normalized name + date + city (or venue)
- * 3. Source ID: same source + source_id
+ * 1. Source ID: same source + source_id
+ * 2. URL-based: same event_url or rsvp_url
+ * 3. Fingerprint: normalized name + date (and name + date + city/venue)
+ *    Name+date catches same event with different location (e.g. "Denver" vs "TBA")
  *
  * Keeps the oldest event per group (by created_at). To delete duplicates, run:
  *   DELETE=true npx tsx scripts/cleanup-duplicate-events.ts
@@ -62,6 +63,9 @@ function generateEventFingerprints(event: {
     );
 
     const fingerprints: string[] = [];
+
+    // Name + date only: same event with different/missing location (e.g. "Denver" vs "TBA")
+    fingerprints.push(`${normalized}|${date}`);
 
     // Primary fingerprint: name + date + city
     fingerprints.push(`${normalized}|${date}|${city}`);
