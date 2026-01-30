@@ -60,9 +60,10 @@ const BASE_URL = "https://cryptonomads.org";
 const COINPEDIA_EVENTS_URL = "https://events.coinpedia.org/";
 
 // —— Firecrawl: single consistent scraper ——
-// Firecrawl: max 50 actions, total wait ≤ 60s. Use 24 scrolls + 24 waits + scroll up + wait.
-const SCROLL_COUNT = 24;
-const SCROLL_WAIT_MS = 2450; // 24*2450 + 500 = 59.3s (under 60s limit)
+// Firecrawl: actions + page load must finish within timeout. Use fewer scrolls to avoid SCRAPE_TIMEOUT.
+const SCROLL_COUNT = 18;
+const SCROLL_WAIT_MS = 2000; // 18*2000 + 500 ≈ 36.5s of actions; leaves time for slow load
+const FIRECRAWL_TIMEOUT_MS = 240000; // 4 min (main page is heavy; 120s was timing out)
 
 function buildScrollActions() {
     const actions = [];
@@ -78,6 +79,7 @@ function buildScrollActions() {
 async function scrapeWithFirecrawl(url, options = {}) {
     const onlyMainContent = options.onlyMainContent !== false;
     const label = options.label || url;
+    const timeoutMs = options.timeout ?? FIRECRAWL_TIMEOUT_MS;
     const actions = buildScrollActions();
 
     const doScrape = async () => {
@@ -92,7 +94,7 @@ async function scrapeWithFirecrawl(url, options = {}) {
                 formats: ["markdown"],
                 onlyMainContent,
                 actions,
-                timeout: 120000,
+                timeout: timeoutMs,
             }),
         });
         if (!res.ok)
@@ -626,6 +628,7 @@ async function main() {
         mainMarkdown = await scrapeWithFirecrawl(BASE_URL + "/", {
             onlyMainContent: false,
             label: "main",
+            timeout: 300000, // 5 min for main page (heaviest; most likely to timeout)
         });
     } catch (e) {
         console.error("❌ Main page scrape failed:", e.message);

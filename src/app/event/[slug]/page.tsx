@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthProvider";
+import { useAdmin } from "@/hooks/useAdmin";
 import { SpritzFooter } from "@/components/SpritzFooter";
 
 const EVENT_TYPE_ICONS: Record<string, string> = {
@@ -100,6 +101,9 @@ export default function EventBySlugPage() {
         name?: string;
     }>({});
     const [updatingRegistration, setUpdatingRegistration] = useState(false);
+    const { isAdmin, getAuthHeaders } = useAdmin();
+    const [refreshing, setRefreshing] = useState(false);
+    const [refreshError, setRefreshError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!slug) return;
@@ -573,6 +577,66 @@ export default function EventBySlugPage() {
                                     >
                                         Event website
                                     </a>
+                                )}
+                                {isAdmin && event?.id && (
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            if (!event?.id) return;
+                                            setRefreshError(null);
+                                            setRefreshing(true);
+                                            try {
+                                                const res = await fetch(
+                                                    `/api/admin/events/${event.id}/refresh`,
+                                                    {
+                                                        method: "POST",
+                                                        headers:
+                                                            getAuthHeaders() ||
+                                                            {},
+                                                        credentials: "include",
+                                                    },
+                                                );
+                                                const data = await res.json();
+                                                if (!res.ok) {
+                                                    setRefreshError(
+                                                        data.error ||
+                                                            data.hint ||
+                                                            "Refresh failed",
+                                                    );
+                                                    return;
+                                                }
+                                                if (data.event) {
+                                                    setEvent((prev) =>
+                                                        prev
+                                                            ? {
+                                                                  ...prev,
+                                                                  ...data.event,
+                                                              }
+                                                            : null,
+                                                    );
+                                                }
+                                            } catch (e) {
+                                                setRefreshError(
+                                                    e instanceof Error
+                                                        ? e.message
+                                                        : "Refresh failed",
+                                                );
+                                            } finally {
+                                                setRefreshing(false);
+                                            }
+                                        }}
+                                        disabled={refreshing}
+                                        className="w-full text-center py-2.5 px-4 rounded-xl border border-zinc-600 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-500 transition-all disabled:opacity-50"
+                                    >
+                                        {refreshing
+                                            ? "Refreshing…"
+                                            : "Refresh from source"}
+                                    </button>
+                                )}
+                                {refreshError && (
+                                    <p className="text-sm text-amber-400">
+                                        {refreshError}
+                                    </p>
                                 )}
                             </div>
                         </div>

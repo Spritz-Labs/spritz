@@ -289,11 +289,12 @@ export async function POST(request: NextRequest) {
             crawl_depth = 1, // Default 1 for infinite scroll pages (optimal for cryptonomads)
             max_pages = 1, // Default 1 page with infinite scroll (optimal for cryptonomads)
             infinite_scroll = true, // Default enabled for event listing pages
-            scroll_count = 20, // Default 20 scrolls (optimal, respects Firecrawl limits)
+            scroll_count = 18, // Default 18 scrolls (aligned with update-cryptonomads; avoids SCRAPE_TIMEOUT)
             preview_only = false,
             events_to_save,
             skip_past_events = false, // Default to false - let user decide
             skip_if_unchanged = false, // Default to false - always extract to catch new events
+            refresh_event_id = null as string | null, // When set: scrape URL, extract, then PATCH this event (no insert)
         } = body;
 
         if (!url) {
@@ -1464,6 +1465,127 @@ ${contentToAnalyze.substring(0, 150000)}`;
             const trimmed = name.trim();
             if (trimmed.length < 3) return false;
             return true;
+        }
+
+        // Refresh single event: scrape URL, extract, then PATCH the given event (no insert)
+        if (refresh_event_id) {
+            const { data: existingEvent, error: fetchErr } = await supabase
+                .from("shout_events")
+                .select("id, name, event_date")
+                .eq("id", refresh_event_id)
+                .single();
+            if (fetchErr || !existingEvent) {
+                return NextResponse.json(
+                    {
+                        error: "Event not found for refresh",
+                        id: refresh_event_id,
+                    },
+                    { status: 404 },
+                );
+            }
+            const match =
+                extractedEvents.find(
+                    (e) =>
+                        e.name?.trim() === existingEvent.name &&
+                        e.event_date === existingEvent.event_date,
+                ) || extractedEvents[0];
+            if (
+                !match ||
+                !match.name ||
+                !match.event_date ||
+                !match.event_type
+            ) {
+                return NextResponse.json(
+                    {
+                        error: "No matching event extracted from page",
+                        extracted: extractedEvents.length,
+                    },
+                    { status: 400 },
+                );
+            }
+            const locationStr = [match.city, match.country]
+                .filter(Boolean)
+                .join(", ");
+            const coords = geocodeResults.get(locationStr);
+            let rsvpUrl = match.rsvp_url || null;
+            let eventUrl = match.event_url || null;
+            if (eventUrl && !rsvpUrl) {
+                const registrationPlatforms = [
+                    "lu.ma",
+                    "eventbrite.com",
+                    "meetup.com",
+                    "lu.ma/event",
+                ];
+                if (
+                    registrationPlatforms.some((platform) =>
+                        eventUrl!.includes(platform),
+                    )
+                ) {
+                    rsvpUrl = eventUrl;
+                    eventUrl = null;
+                }
+            }
+            const normalizedName = normalizeEventName(match.name);
+            let sourceId: string;
+            try {
+                sourceId = (
+                    sourceUrl && sourceUrl !== "preview"
+                        ? `${new URL(sourceUrl).hostname}-${normalizedName}-${match.event_date}`
+                        : `preview-${normalizedName}-${match.event_date}`
+                )
+                    .replace(/[^a-zA-Z0-9-]/g, "-")
+                    .substring(0, 200);
+            } catch {
+                sourceId = `preview-${normalizedName}-${match.event_date}`
+                    .replace(/[^a-zA-Z0-9-]/g, "-")
+                    .substring(0, 200);
+            }
+            const updatePayload = {
+                name: match.name.trim(),
+                description: match.description || null,
+                event_type: match.event_type,
+                event_date: match.event_date,
+                start_time: match.start_time || null,
+                end_time: match.end_time || null,
+                venue: match.venue || null,
+                city: match.city || null,
+                country: match.country || null,
+                latitude: coords?.lat ?? null,
+                longitude: coords?.lon ?? null,
+                organizer: match.organizer || null,
+                event_url: eventUrl,
+                rsvp_url: rsvpUrl,
+                tags: match.tags || [],
+                blockchain_focus: match.blockchain_focus || null,
+                source: "firecrawl",
+                source_url: sourceUrl || eventUrl || null,
+                source_id: sourceId,
+            };
+            const { data: updated, error: updateErr } = await supabase
+                .from("shout_events")
+                .update(updatePayload)
+                .eq("id", refresh_event_id)
+                .select()
+                .single();
+            if (updateErr) {
+                console.error(
+                    "[Event Scrape] Refresh update error:",
+                    updateErr,
+                );
+                return NextResponse.json(
+                    {
+                        error: "Failed to update event",
+                        details: updateErr.message,
+                    },
+                    { status: 500 },
+                );
+            }
+            console.log("[Event Scrape] Refreshed event:", refresh_event_id);
+            return NextResponse.json({
+                success: true,
+                updated: true,
+                event: updated,
+            });
         }
 
         console.log("[Event Scrape] Pre-processing events for batch insert...");
