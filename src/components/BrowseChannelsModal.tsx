@@ -67,7 +67,7 @@ export function BrowseChannelsModal({
     const [searchQuery, setSearchQuery] = useState("");
     const [joiningChannel, setJoiningChannel] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(initialShowCreate);
-    
+
     // Reset showCreateModal when the modal opens/closes
     useEffect(() => {
         if (isOpen) {
@@ -89,7 +89,9 @@ export function BrowseChannelsModal({
         const matchesSearch =
             searchQuery === "" ||
             channel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            channel.description?.toLowerCase().includes(searchQuery.toLowerCase());
+            channel.description
+                ?.toLowerCase()
+                .includes(searchQuery.toLowerCase());
         return matchesCategory && matchesSearch;
     });
 
@@ -126,11 +128,19 @@ export function BrowseChannelsModal({
 
             if (channel) {
                 setShowCreateModal(false);
-                setNewChannel({ name: "", description: "", emoji: "💬", category: "community", messagingType: "standard" });
+                setNewChannel({
+                    name: "",
+                    description: "",
+                    emoji: "💬",
+                    category: "community",
+                    messagingType: "standard",
+                });
                 onJoinChannel(channel);
             }
         } catch (e) {
-            setCreateError(e instanceof Error ? e.message : "Failed to create channel");
+            setCreateError(
+                e instanceof Error ? e.message : "Failed to create channel",
+            );
         }
     };
 
@@ -142,35 +152,49 @@ export function BrowseChannelsModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4"
                 onClick={onClose}
             >
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                    className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+                    className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl h-[90vh] max-h-[90vh] overflow-hidden flex flex-col"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* Header - compact: one row title + actions, one row search + category */}
                     <div className="p-3 sm:p-4 border-b border-zinc-800 space-y-3 shrink-0">
                         <div className="flex items-center justify-between gap-2">
-                            <h2 className="text-base sm:text-lg font-bold text-white truncate">Browse Channels</h2>
+                            <h2 className="text-base sm:text-lg font-bold text-white truncate">
+                                Browse Channels
+                            </h2>
                             <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                     onClick={() => setShowCreateModal(true)}
                                     className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-gradient-to-r from-[#FF5500] to-[#FF7700] rounded-lg text-white text-xs sm:text-sm font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center gap-1"
                                 >
                                     <span>+</span>
-                                    <span className="hidden sm:inline">Create</span>
+                                    <span className="hidden sm:inline">
+                                        Create
+                                    </span>
                                 </button>
                                 <button
                                     onClick={onClose}
                                     className="p-1.5 sm:p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
                                     aria-label="Close"
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             </div>
@@ -185,24 +209,36 @@ export function BrowseChannelsModal({
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
                                 >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                    />
                                 </svg>
                                 <input
                                     type="text"
                                     placeholder="Search channels..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchQuery(e.target.value)
+                                    }
                                     className="w-full pl-8 pr-3 py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/40 focus:border-[#FF5500] text-sm"
                                 />
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                                <label htmlFor="browse-category" className="text-xs text-zinc-500 whitespace-nowrap sm:sr-only">
+                                <label
+                                    htmlFor="browse-category"
+                                    className="text-xs text-zinc-500 whitespace-nowrap sm:sr-only"
+                                >
                                     Category
                                 </label>
                                 <select
                                     id="browse-category"
                                     value={selectedCategory}
-                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    onChange={(e) =>
+                                        setSelectedCategory(e.target.value)
+                                    }
                                     className="px-3 py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5500]/40 focus:border-[#FF5500] cursor-pointer min-w-[120px] sm:min-w-[140px]"
                                 >
                                     {CATEGORIES.map((cat) => (
@@ -218,78 +254,96 @@ export function BrowseChannelsModal({
                     {/* Channel List */}
                     <div className="flex flex-col min-h-0 flex-1">
                         <p className="px-3 py-1.5 text-xs text-zinc-500 border-b border-zinc-800/50 shrink-0">
-                            {isLoading ? "Loading..." : `${filteredChannels.length} channel${filteredChannels.length !== 1 ? "s" : ""}`}
+                            {isLoading
+                                ? "Loading..."
+                                : `${filteredChannels.length} channel${filteredChannels.length !== 1 ? "s" : ""}`}
                         </p>
-                        <div className="p-3 sm:p-4 overflow-y-auto flex-1 min-h-0" style={{ maxHeight: "min(55vh, 400px)" }}>
-                        {isLoading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
-                            </div>
-                        ) : filteredChannels.length === 0 ? (
-                            <div className="text-center py-12">
-                                <p className="text-zinc-500">No channels found</p>
-                            </div>
-                        ) : (
-                            <div className="grid gap-3">
-                                {filteredChannels.map((channel) => (
-                                    <motion.div
-                                        key={channel.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <ChannelIcon
-                                                emoji={channel.emoji}
-                                                iconUrl={channel.icon_url}
-                                                name={channel.name}
-                                                size="md"
-                                                className="flex-shrink-0"
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <p className="text-white font-medium truncate">
-                                                        {channel.name}
+                        <div className="p-3 sm:p-4 overflow-y-auto flex-1 min-h-0">
+                            {isLoading ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
+                                </div>
+                            ) : filteredChannels.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <p className="text-zinc-500">
+                                        No channels found
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {filteredChannels.map((channel) => (
+                                        <motion.div
+                                            key={channel.id}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <ChannelIcon
+                                                    emoji={channel.emoji}
+                                                    iconUrl={channel.icon_url}
+                                                    name={channel.name}
+                                                    size="md"
+                                                    className="flex-shrink-0"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="text-white font-medium truncate">
+                                                            {channel.name}
+                                                        </p>
+                                                        {channel.is_official && (
+                                                            <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] sm:text-xs rounded">
+                                                                Official
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-zinc-500 text-xs sm:text-sm line-clamp-1">
+                                                        {channel.description ||
+                                                            "No description"}
                                                     </p>
-                                                    {channel.is_official && (
-                                                        <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] sm:text-xs rounded">
-                                                            Official
-                                                        </span>
-                                                    )}
+                                                    <p className="text-zinc-600 text-[10px] sm:text-xs mt-0.5">
+                                                        {channel.member_count}{" "}
+                                                        members •{" "}
+                                                        {channel.message_count}{" "}
+                                                        msgs
+                                                    </p>
                                                 </div>
-                                                <p className="text-zinc-500 text-xs sm:text-sm line-clamp-1">
-                                                    {channel.description || "No description"}
-                                                </p>
-                                                <p className="text-zinc-600 text-[10px] sm:text-xs mt-0.5">
-                                                    {channel.member_count} members • {channel.message_count} msgs
-                                                </p>
+                                                <button
+                                                    onClick={() =>
+                                                        channel.is_member
+                                                            ? handleLeave(
+                                                                  channel.id,
+                                                              )
+                                                            : handleJoin(
+                                                                  channel,
+                                                              )
+                                                    }
+                                                    disabled={
+                                                        joiningChannel ===
+                                                        channel.id
+                                                    }
+                                                    className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex-shrink-0 ${
+                                                        channel.is_member
+                                                            ? "bg-zinc-700 text-zinc-300 hover:bg-red-500/20 hover:text-red-400"
+                                                            : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
+                                                    }`}
+                                                >
+                                                    {joiningChannel ===
+                                                    channel.id ? (
+                                                        <span className="animate-pulse">
+                                                            ...
+                                                        </span>
+                                                    ) : channel.is_member ? (
+                                                        "Leave"
+                                                    ) : (
+                                                        "Join"
+                                                    )}
+                                                </button>
                                             </div>
-                                            <button
-                                                onClick={() =>
-                                                    channel.is_member
-                                                        ? handleLeave(channel.id)
-                                                        : handleJoin(channel)
-                                                }
-                                                disabled={joiningChannel === channel.id}
-                                                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex-shrink-0 ${
-                                                    channel.is_member
-                                                        ? "bg-zinc-700 text-zinc-300 hover:bg-red-500/20 hover:text-red-400"
-                                                        : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
-                                                }`}
-                                            >
-                                                {joiningChannel === channel.id ? (
-                                                    <span className="animate-pulse">...</span>
-                                                ) : channel.is_member ? (
-                                                    "Leave"
-                                                ) : (
-                                                    "Join"
-                                                )}
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        )}
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </motion.div>
@@ -311,7 +365,9 @@ export function BrowseChannelsModal({
                                 className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md mx-4"
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                <h3 className="text-lg font-bold text-white mb-4">Create Channel</h3>
+                                <h3 className="text-lg font-bold text-white mb-4">
+                                    Create Channel
+                                </h3>
 
                                 <div className="space-y-4">
                                     <div>
@@ -322,7 +378,10 @@ export function BrowseChannelsModal({
                                             type="text"
                                             value={newChannel.name}
                                             onChange={(e) =>
-                                                setNewChannel({ ...newChannel, name: e.target.value })
+                                                setNewChannel({
+                                                    ...newChannel,
+                                                    name: e.target.value,
+                                                })
                                             }
                                             placeholder="My Awesome Channel"
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
@@ -337,7 +396,10 @@ export function BrowseChannelsModal({
                                         <textarea
                                             value={newChannel.description}
                                             onChange={(e) =>
-                                                setNewChannel({ ...newChannel, description: e.target.value })
+                                                setNewChannel({
+                                                    ...newChannel,
+                                                    description: e.target.value,
+                                                })
                                             }
                                             placeholder="What's this channel about?"
                                             className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-orange-500 resize-none"
@@ -355,7 +417,10 @@ export function BrowseChannelsModal({
                                                 type="text"
                                                 value={newChannel.emoji}
                                                 onChange={(e) =>
-                                                    setNewChannel({ ...newChannel, emoji: e.target.value })
+                                                    setNewChannel({
+                                                        ...newChannel,
+                                                        emoji: e.target.value,
+                                                    })
                                                 }
                                                 className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-center text-xl focus:outline-none focus:border-orange-500"
                                                 maxLength={2}
@@ -368,17 +433,35 @@ export function BrowseChannelsModal({
                                             <select
                                                 value={newChannel.category}
                                                 onChange={(e) =>
-                                                    setNewChannel({ ...newChannel, category: e.target.value })
+                                                    setNewChannel({
+                                                        ...newChannel,
+                                                        category:
+                                                            e.target.value,
+                                                    })
                                                 }
                                                 className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-orange-500"
                                             >
-                                                <option value="community">Community</option>
-                                                <option value="crypto">Crypto</option>
-                                                <option value="tech">Tech</option>
-                                                <option value="finance">Finance</option>
-                                                <option value="science">Science</option>
-                                                <option value="lifestyle">Lifestyle</option>
-                                                <option value="entertainment">Entertainment</option>
+                                                <option value="community">
+                                                    Community
+                                                </option>
+                                                <option value="crypto">
+                                                    Crypto
+                                                </option>
+                                                <option value="tech">
+                                                    Tech
+                                                </option>
+                                                <option value="finance">
+                                                    Finance
+                                                </option>
+                                                <option value="science">
+                                                    Science
+                                                </option>
+                                                <option value="lifestyle">
+                                                    Lifestyle
+                                                </option>
+                                                <option value="entertainment">
+                                                    Entertainment
+                                                </option>
                                             </select>
                                         </div>
                                     </div>
@@ -391,56 +474,93 @@ export function BrowseChannelsModal({
                                         <div className="grid grid-cols-2 gap-3">
                                             <button
                                                 type="button"
-                                                onClick={() => setNewChannel({ ...newChannel, messagingType: "standard" })}
+                                                onClick={() =>
+                                                    setNewChannel({
+                                                        ...newChannel,
+                                                        messagingType:
+                                                            "standard",
+                                                    })
+                                                }
                                                 className={`p-3 rounded-xl border-2 transition-all text-left ${
-                                                    newChannel.messagingType === "standard"
+                                                    newChannel.messagingType ===
+                                                    "standard"
                                                         ? "border-[#FF5500] bg-[#FF5500]/10"
                                                         : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
                                                 }`}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-lg">☁️</span>
-                                                    <span className="text-white font-medium text-sm">Standard</span>
+                                                    <span className="text-lg">
+                                                        ☁️
+                                                    </span>
+                                                    <span className="text-white font-medium text-sm">
+                                                        Standard
+                                                    </span>
                                                 </div>
                                                 <p className="text-zinc-500 text-xs">
-                                                    Fast & reliable cloud storage
+                                                    Fast & reliable cloud
+                                                    storage
                                                 </p>
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => setNewChannel({ ...newChannel, messagingType: "waku" })}
+                                                onClick={() =>
+                                                    setNewChannel({
+                                                        ...newChannel,
+                                                        messagingType: "waku",
+                                                    })
+                                                }
                                                 className={`p-3 rounded-xl border-2 transition-all text-left ${
-                                                    newChannel.messagingType === "waku"
+                                                    newChannel.messagingType ===
+                                                    "waku"
                                                         ? "border-purple-500 bg-purple-500/10"
                                                         : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
                                                 }`}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-lg">🌐</span>
-                                                    <span className="text-white font-medium text-sm">Decentralized</span>
+                                                    <span className="text-lg">
+                                                        🌐
+                                                    </span>
+                                                    <span className="text-white font-medium text-sm">
+                                                        Decentralized
+                                                    </span>
                                                 </div>
                                                 <p className="text-zinc-500 text-xs">
-                                                    Censorship-resistant messaging
+                                                    Censorship-resistant
+                                                    messaging
                                                 </p>
                                             </button>
                                         </div>
-                                        {newChannel.messagingType === "waku" && (
+                                        {newChannel.messagingType ===
+                                            "waku" && (
                                             <p className="text-purple-400 text-xs mt-2 flex items-center gap-1">
-                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                                <svg
+                                                    className="w-3 h-3"
+                                                    fill="currentColor"
+                                                    viewBox="0 0 20 20"
+                                                >
+                                                    <path
+                                                        fillRule="evenodd"
+                                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                                        clipRule="evenodd"
+                                                    />
                                                 </svg>
-                                                Messages are stored on a decentralized network
+                                                Messages are stored on a
+                                                decentralized network
                                             </p>
                                         )}
                                     </div>
 
                                     {createError && (
-                                        <p className="text-red-400 text-sm">{createError}</p>
+                                        <p className="text-red-400 text-sm">
+                                            {createError}
+                                        </p>
                                     )}
 
                                     <div className="flex gap-3 pt-2">
                                         <button
-                                            onClick={() => setShowCreateModal(false)}
+                                            onClick={() =>
+                                                setShowCreateModal(false)
+                                            }
                                             className="flex-1 py-2 bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors"
                                         >
                                             Cancel
@@ -461,4 +581,3 @@ export function BrowseChannelsModal({
         </AnimatePresence>
     );
 }
-
