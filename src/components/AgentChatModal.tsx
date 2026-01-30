@@ -6,6 +6,9 @@ import { useAgentChat, Agent } from "@/hooks/useAgents";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { SchedulingCard } from "./SchedulingCard";
+import { ChatKnowledgeContext } from "./ChatKnowledgeContext";
+import { fetchDelveSettings } from "@/lib/delve/settings";
+import type { DelveSettingsResponse } from "@/lib/delve/types";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
@@ -15,6 +18,8 @@ interface AgentChatModalProps {
     onClose: () => void;
     agent: Agent | null;
     userAddress: string;
+    onOpenKnowledgeGraph?: (entityName: string) => void;
+    onOpenTimeline?: (episodeId?: string) => void;
 }
 
 export function AgentChatModal({
@@ -22,11 +27,18 @@ export function AgentChatModal({
     onClose,
     agent,
     userAddress,
+    onOpenKnowledgeGraph,
+    onOpenTimeline,
 }: AgentChatModalProps) {
     const [input, setInput] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const [delveSettings, setDelveSettings] = useState<DelveSettingsResponse | null>(null);
+    const agentId = agent?.id ?? null;
+
+
     const draftAppliedRef = useRef(false);
 
     const { messages, isLoading, isSending, error, sendMessage, clearHistory } =
@@ -90,6 +102,29 @@ export function AgentChatModal({
         }
     }, [isOpen]);
 
+    useEffect(() => {
+        if (!isOpen || !agentId || !userAddress) {
+            setDelveSettings(null);
+            return;
+        }
+
+        const controller = new AbortController();
+
+        fetchDelveSettings(agentId, userAddress, { signal: controller.signal })
+            .then(setDelveSettings)
+            .catch((err) => {
+                if (err instanceof DOMException && err.name === "AbortError") return;
+                console.error("[Delve Settings] Failed to load:", err);
+                setDelveSettings(null);
+            });
+
+        return () => controller.abort();
+    }, [isOpen, agentId, userAddress]);
+
+    const showKnowledgeIndicator =
+        delveSettings?.knowledge_collection_enabled === true &&
+        delveSettings?.registration_status === "registered";
+
     const handleSend = async () => {
         if (!input.trim() || isSending) return;
         const message = input;
@@ -147,6 +182,18 @@ export function AgentChatModal({
                                     </div>
                                 )}
                                 <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-semibold text-white">{agent.name}</h3>
+                                        {showKnowledgeIndicator && (
+                                            <span
+                                                className="text-sm"
+                                                title="Learning from conversation"
+                                                aria-label="Learning from conversation"
+                                            >
+                                                🧠
+                                            </span>
+                                        )}
+                                    </div>
                                     <h3 className="font-semibold text-white">
                                         {agent.name}
                                     </h3>
@@ -287,6 +334,23 @@ export function AgentChatModal({
                                                             </ReactMarkdown>
                                                         </div>
                                                         {/* Render interactive scheduling card if present */}
+                                                        {msg.scheduling && msg.scheduling.slots.length > 0 && (
+                                                            <SchedulingCard 
+                                                                scheduling={msg.scheduling} 
+                                                                userAddress={userAddress}
+                                                            />
+                                                        )}
+                                                        {msg.kg_context && (
+                                                            <ChatKnowledgeContext
+                                                                context={msg.kg_context}
+                                                                onEntitySelect={onOpenKnowledgeGraph}
+                                                                onEpisodeSelect={
+                                                                    onOpenTimeline
+                                                                        ? (episodeId) => onOpenTimeline(episodeId)
+                                                                        : undefined
+                                                                }
+                                                            />
+                                                        )}
                                                         {msg.scheduling &&
                                                             msg.scheduling.slots
                                                                 .length > 0 && (

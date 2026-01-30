@@ -8,6 +8,7 @@
         "postinstall": "rm -rf node_modules/@types/minimatch || true",
         "start": "next start",
         "lint": "eslint",
+        "test": "node --test --experimental-strip-types",
         "generate-icons": "node scripts/generate-icons.js",
         "update-cryptonomads": "node scripts/update-cryptonomads.mjs",
         "vercel": "vercel --prod",
