@@ -182,6 +182,15 @@ export async function DELETE(
             );
         }
 
+        // When removing "going", also remove registration so "You're registered" badge goes away
+        if (interest_type === "going") {
+            await supabase
+                .from("shout_event_user_registrations")
+                .delete()
+                .eq("event_id", id)
+                .eq("wallet_address", walletAddress);
+        }
+
         return NextResponse.json({
             success: true,
             message: "Interest removed",

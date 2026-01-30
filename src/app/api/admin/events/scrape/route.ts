@@ -45,6 +45,46 @@ function normalizeEventName(name: string): string {
         .trim();
 }
 
+// Merge scraped tags with auto tags from event_type, blockchain_focus, and city (deduped, lowercase)
+function buildEventTags(event: {
+    tags?: string[] | null;
+    event_type?: string;
+    blockchain_focus?: string[] | null;
+    city?: string | null;
+}): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (s: string) => {
+        const key = s.trim().toLowerCase();
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            out.push(s.trim());
+        }
+    };
+    (event.tags || []).forEach(add);
+    if (event.event_type) add(event.event_type);
+    (event.blockchain_focus || []).forEach(add);
+    if (event.city) add(event.city);
+    return out;
+}
+
+// Reject venue/organizer that are attendee lists (e.g. "user1, user2, user3") — return null so we don't show gibberish
+function sanitizeVenueOrOrganizer(
+    value: string | null | undefined,
+): string | null {
+    const s = (value ?? "").trim();
+    if (!s) return null;
+    const commaCount = (s.match(/,/g) || []).length;
+    if (commaCount >= 2) {
+        const parts = s.split(",").map((p) => p.trim());
+        const lookLikeHandles = parts.every(
+            (p) => p.length > 0 && p.length < 40 && /^[\w.-]+$/i.test(p),
+        );
+        if (lookLikeHandles) return null;
+    }
+    return s;
+}
+
 // Generate multiple fingerprints for duplicate detection
 // Returns an array of fingerprint strings to check against
 function generateEventFingerprints(event: {
@@ -1547,15 +1587,15 @@ ${contentToAnalyze.substring(0, 150000)}`;
                 event_date: match.event_date,
                 start_time: match.start_time || null,
                 end_time: match.end_time || null,
-                venue: match.venue || null,
+                venue: sanitizeVenueOrOrganizer(match.venue),
                 city: match.city || null,
                 country: match.country || null,
                 latitude: coords?.lat ?? null,
                 longitude: coords?.lon ?? null,
-                organizer: match.organizer || null,
+                organizer: sanitizeVenueOrOrganizer(match.organizer),
                 event_url: eventUrl,
                 rsvp_url: rsvpUrl,
-                tags: match.tags || [],
+                tags: buildEventTags(match),
                 blockchain_focus: match.blockchain_focus || null,
                 source: "firecrawl",
                 source_url: sourceUrl || eventUrl || null,
@@ -1838,16 +1878,16 @@ ${contentToAnalyze.substring(0, 150000)}`;
                 event_date: event.event_date,
                 start_time: event.start_time || null,
                 end_time: event.end_time || null,
-                venue: event.venue || null,
+                venue: sanitizeVenueOrOrganizer(event.venue),
                 city: event.city || null,
                 country: event.country || null,
                 latitude,
                 longitude,
-                organizer: event.organizer || null,
+                organizer: sanitizeVenueOrOrganizer(event.organizer),
                 event_url: eventUrl,
                 rsvp_url: rsvpUrl, // Ensure RSVP URL is captured
                 banner_image_url: null, // Do not use scraped images; they were often wrong
-                tags: event.tags || [],
+                tags: buildEventTags(event),
                 blockchain_focus: event.blockchain_focus || null,
                 source: "firecrawl",
                 source_url: sourceUrl || eventUrl || null,
