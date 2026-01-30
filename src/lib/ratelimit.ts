@@ -9,73 +9,84 @@ const log = createLogger("RateLimit");
 let rateLimitDisabledWarned = false;
 
 // Initialize Redis client (will be null if not configured)
-const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
-    : null;
+const redis =
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+        ? new Redis({
+              url: process.env.UPSTASH_REDIS_REST_URL,
+              token: process.env.UPSTASH_REDIS_REST_TOKEN,
+          })
+        : null;
 
 // Different rate limit tiers for different use cases
 export const rateLimiters = {
     // Auth endpoints - strict to prevent brute force
     auth: redis
         ? new Ratelimit({
-            redis,
-            limiter: Ratelimit.slidingWindow(10, "60 s"), // 10 requests per minute
-            analytics: true,
-            prefix: "ratelimit:auth",
-        })
+              redis,
+              limiter: Ratelimit.slidingWindow(10, "60 s"), // 10 requests per minute
+              analytics: true,
+              prefix: "ratelimit:auth",
+          })
         : null,
 
     // Contact form - very strict to prevent spam
     contact: redis
         ? new Ratelimit({
-            redis,
-            limiter: Ratelimit.slidingWindow(3, "60 s"), // 3 requests per minute
-            analytics: true,
-            prefix: "ratelimit:contact",
-        })
+              redis,
+              limiter: Ratelimit.slidingWindow(3, "60 s"), // 3 requests per minute
+              analytics: true,
+              prefix: "ratelimit:contact",
+          })
         : null,
 
     // AI chat - moderate limits
     ai: redis
         ? new Ratelimit({
-            redis,
-            limiter: Ratelimit.slidingWindow(30, "60 s"), // 30 requests per minute
-            analytics: true,
-            prefix: "ratelimit:ai",
-        })
+              redis,
+              limiter: Ratelimit.slidingWindow(30, "60 s"), // 30 requests per minute
+              analytics: true,
+              prefix: "ratelimit:ai",
+          })
+        : null,
+
+    // Official AI chat - stricter to prevent spamming official agents
+    official_ai: redis
+        ? new Ratelimit({
+              redis,
+              limiter: Ratelimit.slidingWindow(10, "60 s"), // 10 requests per minute
+              analytics: true,
+              prefix: "ratelimit:official_ai",
+          })
         : null,
 
     // Messaging - generous for real-time chat
     messaging: redis
         ? new Ratelimit({
-            redis,
-            limiter: Ratelimit.slidingWindow(60, "60 s"), // 60 requests per minute
-            analytics: true,
-            prefix: "ratelimit:messaging",
-        })
+              redis,
+              limiter: Ratelimit.slidingWindow(60, "60 s"), // 60 requests per minute
+              analytics: true,
+              prefix: "ratelimit:messaging",
+          })
         : null,
 
     // General API - moderate default
     general: redis
         ? new Ratelimit({
-            redis,
-            limiter: Ratelimit.slidingWindow(100, "60 s"), // 100 requests per minute
-            analytics: true,
-            prefix: "ratelimit:general",
-        })
+              redis,
+              limiter: Ratelimit.slidingWindow(100, "60 s"), // 100 requests per minute
+              analytics: true,
+              prefix: "ratelimit:general",
+          })
         : null,
 
     // Strict - for sensitive operations
     strict: redis
         ? new Ratelimit({
-            redis,
-            limiter: Ratelimit.slidingWindow(5, "60 s"), // 5 requests per minute
-            analytics: true,
-            prefix: "ratelimit:strict",
-        })
+              redis,
+              limiter: Ratelimit.slidingWindow(5, "60 s"), // 5 requests per minute
+              analytics: true,
+              prefix: "ratelimit:strict",
+          })
         : null,
 };
 
@@ -110,38 +121,42 @@ export function getClientIdentifier(request: NextRequest): string {
 export async function checkRateLimit(
     request: NextRequest,
     tier: RateLimitTier = "general",
-    customIdentifier?: string
+    customIdentifier?: string,
 ): Promise<NextResponse | null> {
     const limiter = rateLimiters[tier];
-    
+
     // SEC-008 FIX: Log warning when rate limiting is disabled in production
     if (!limiter) {
         if (process.env.NODE_ENV === "production" && !rateLimitDisabledWarned) {
-            log.warn("SECURITY: Rate limiting is disabled - Redis not configured", {
-                tier,
-                path: request.nextUrl.pathname,
-                env: process.env.NODE_ENV,
-            });
+            log.warn(
+                "SECURITY: Rate limiting is disabled - Redis not configured",
+                {
+                    tier,
+                    path: request.nextUrl.pathname,
+                    env: process.env.NODE_ENV,
+                },
+            );
             rateLimitDisabledWarned = true; // Only warn once per process
         }
         return null;
     }
 
     const identifier = customIdentifier || getClientIdentifier(request);
-    
+
     try {
-        const { success, limit, reset, remaining } = await limiter.limit(identifier);
+        const { success, limit, reset, remaining } =
+            await limiter.limit(identifier);
 
         if (!success) {
             const retryAfter = Math.ceil((reset - Date.now()) / 1000);
-            
+
             log.info("Rate limit exceeded", {
                 tier,
                 identifier: identifier.slice(0, 10) + "...",
                 path: request.nextUrl.pathname,
                 retryAfter,
             });
-            
+
             return NextResponse.json(
                 {
                     error: "Too many requests",
@@ -156,7 +171,7 @@ export async function checkRateLimit(
                         "X-RateLimit-Reset": reset.toString(),
                         "Retry-After": retryAfter.toString(),
                     },
-                }
+                },
             );
         }
 
@@ -173,10 +188,16 @@ export async function checkRateLimit(
  * Higher-order function to wrap an API handler with rate limiting
  */
 export function withRateLimit(
-    handler: (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>,
-    tier: RateLimitTier = "general"
+    handler: (
+        request: NextRequest,
+        ...args: unknown[]
+    ) => Promise<NextResponse>,
+    tier: RateLimitTier = "general",
 ) {
-    return async (request: NextRequest, ...args: unknown[]): Promise<NextResponse> => {
+    return async (
+        request: NextRequest,
+        ...args: unknown[]
+    ): Promise<NextResponse> => {
         const rateLimitResponse = await checkRateLimit(request, tier);
         if (rateLimitResponse) {
             return rateLimitResponse;

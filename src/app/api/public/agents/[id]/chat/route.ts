@@ -547,10 +547,6 @@ export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    // Rate limit: 30 requests per minute for AI chat
-    const rateLimitResponse = await checkRateLimit(request, "ai");
-    if (rateLimitResponse) return rateLimitResponse;
-
     if (!supabase || !ai) {
         return NextResponse.json(
             { error: "Service not configured" },
@@ -599,6 +595,12 @@ export async function POST(
                 { status: 403 },
             );
         }
+
+        // Rate limit: stricter for official agents to prevent spamming
+        const rateLimitTier =
+            agent.visibility === "official" ? "official_ai" : "ai";
+        const rateLimitResponse = await checkRateLimit(request, rateLimitTier);
+        if (rateLimitResponse) return rateLimitResponse;
 
         // Initialize payment tracking
         let payerAddress = "anonymous";

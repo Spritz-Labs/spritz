@@ -444,7 +444,7 @@ const ChatRow = memo(
                         </div>
                         <div className="shrink-0 flex items-center gap-1.5 sm:gap-2">
                             {chat.type === "dm" && (
-                                <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="hidden sm:flex items-center gap-1">
                                     {onCallClick && (
                                         <button
                                             type="button"
@@ -509,10 +509,10 @@ const ChatRow = memo(
                                     e.stopPropagation();
                                     onFolderButtonClick(chat.id);
                                 }}
-                                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all ${
+                                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center ${
                                     chatFolder
                                         ? "bg-zinc-700/50 text-white"
-                                        : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                                        : "bg-zinc-800/50 text-zinc-500"
                                 }`}
                                 title={
                                     chatFolder

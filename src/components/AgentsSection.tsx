@@ -492,8 +492,8 @@ export function AgentsSection({
                                                         "AI Assistant"}
                                                 </p>
                                             </div>
-                                            {/* Action buttons - always visible on mobile, hover on desktop */}
-                                            <div className="flex items-center gap-0.5 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            {/* Action buttons - always visible */}
+                                            <div className="flex items-center gap-0.5 sm:gap-1">
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -718,7 +718,7 @@ export function AgentsSection({
                                                                     fav.agent,
                                                                 );
                                                             }}
-                                                            className="p-1.5 sm:p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+                                                            className="p-1.5 sm:p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
                                                             title="Chat"
                                                         >
                                                             <svg
