@@ -12,7 +12,7 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "💬", label: "General", category: "popular" },
     { emoji: "✨", label: "VIP", category: "popular" },
     { emoji: "🏆", label: "Best", category: "popular" },
-    
+
     // People & Social
     { emoji: "👨‍👩‍👧", label: "Family", category: "people" },
     { emoji: "❤️", label: "Close Friends", category: "people" },
@@ -22,7 +22,7 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "🤗", label: "Besties", category: "people" },
     { emoji: "💪", label: "Gym Buddies", category: "people" },
     { emoji: "🎂", label: "Birthday", category: "people" },
-    
+
     // Work & Productivity
     { emoji: "💼", label: "Work", category: "work" },
     { emoji: "📊", label: "Projects", category: "work" },
@@ -32,7 +32,7 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "🎓", label: "School", category: "work" },
     { emoji: "📅", label: "Meetings", category: "work" },
     { emoji: "✅", label: "Done", category: "work" },
-    
+
     // Interests
     { emoji: "🎮", label: "Gaming", category: "interests" },
     { emoji: "🎨", label: "Creative", category: "interests" },
@@ -46,7 +46,7 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "📷", label: "Photos", category: "interests" },
     { emoji: "🎸", label: "Band", category: "interests" },
     { emoji: "🌱", label: "Plants", category: "interests" },
-    
+
     // Tech & Crypto
     { emoji: "🤖", label: "Bots", category: "tech" },
     { emoji: "💎", label: "Crypto", category: "tech" },
@@ -57,7 +57,7 @@ export const DEFAULT_FOLDER_EMOJIS = [
     { emoji: "🎲", label: "NFTs", category: "tech" },
     { emoji: "🌐", label: "DeFi", category: "tech" },
     { emoji: "🚀", label: "Alpha", category: "tech" },
-    
+
     // Community
     { emoji: "🌍", label: "Community", category: "community" },
     { emoji: "🏠", label: "Local", category: "community" },
@@ -116,34 +116,44 @@ export function useChatFolders(userAddress: string | null) {
             if (isSupabaseConfigured && supabase) {
                 try {
                     // Fetch folders
-                    const { data: foldersData, error: foldersError } = await supabase
-                        .from("shout_chat_folders")
-                        .select("*")
-                        .eq("user_address", addressLower)
-                        .order("sort_order", { ascending: true });
+                    const { data: foldersData, error: foldersError } =
+                        await supabase
+                            .from("shout_chat_folders")
+                            .select("*")
+                            .eq("user_address", addressLower)
+                            .order("sort_order", { ascending: true });
 
                     if (foldersError) {
-                        console.warn("[ChatFolders] Failed to load folders from Supabase:", foldersError);
+                        console.warn(
+                            "[ChatFolders] Failed to load folders from Supabase:",
+                            foldersError,
+                        );
                     } else if (foldersData) {
-                        const loadedFolders: ChatFolder[] = foldersData.map(f => ({
-                            emoji: f.emoji,
-                            label: f.label,
-                            chatIds: [],
-                        }));
+                        const loadedFolders: ChatFolder[] = foldersData.map(
+                            (f) => ({
+                                emoji: f.emoji,
+                                label: f.label,
+                                chatIds: [],
+                            }),
+                        );
                         setFolders(loadedFolders);
                     }
 
                     // Fetch assignments
-                    const { data: assignmentsData, error: assignmentsError } = await supabase
-                        .from("shout_chat_folder_assignments")
-                        .select("*")
-                        .eq("user_address", addressLower);
+                    const { data: assignmentsData, error: assignmentsError } =
+                        await supabase
+                            .from("shout_chat_folder_assignments")
+                            .select("*")
+                            .eq("user_address", addressLower);
 
                     if (assignmentsError) {
-                        console.warn("[ChatFolders] Failed to load assignments from Supabase:", assignmentsError);
+                        console.warn(
+                            "[ChatFolders] Failed to load assignments from Supabase:",
+                            assignmentsError,
+                        );
                     } else if (assignmentsData) {
                         const loadedAssignments: Record<string, string> = {};
-                        assignmentsData.forEach(a => {
+                        assignmentsData.forEach((a) => {
                             loadedAssignments[a.chat_id] = a.folder_emoji;
                         });
                         setAssignments(loadedAssignments);
@@ -152,15 +162,22 @@ export function useChatFolders(userAddress: string | null) {
                     setIsLoading(false);
                     return;
                 } catch (err) {
-                    console.warn("[ChatFolders] Supabase error, falling back to localStorage:", err);
+                    console.warn(
+                        "[ChatFolders] Supabase error, falling back to localStorage:",
+                        err,
+                    );
                 }
             }
 
             // Fallback to localStorage
             try {
-                const storedFolders = localStorage.getItem(`${STORAGE_KEY}_${addressLower}`);
-                const storedAssignments = localStorage.getItem(`${ASSIGNMENTS_KEY}_${addressLower}`);
-                
+                const storedFolders = localStorage.getItem(
+                    `${STORAGE_KEY}_${addressLower}`,
+                );
+                const storedAssignments = localStorage.getItem(
+                    `${ASSIGNMENTS_KEY}_${addressLower}`,
+                );
+
                 if (storedFolders) {
                     setFolders(JSON.parse(storedFolders));
                 }
@@ -168,7 +185,10 @@ export function useChatFolders(userAddress: string | null) {
                     setAssignments(JSON.parse(storedAssignments));
                 }
             } catch (e) {
-                console.warn("[ChatFolders] Failed to load from localStorage:", e);
+                console.warn(
+                    "[ChatFolders] Failed to load from localStorage:",
+                    e,
+                );
             }
             setIsLoading(false);
         };
@@ -180,153 +200,193 @@ export function useChatFolders(userAddress: string | null) {
     useEffect(() => {
         if (!isLoading && userAddress) {
             const addressLower = userAddress.toLowerCase();
-            localStorage.setItem(`${STORAGE_KEY}_${addressLower}`, JSON.stringify(folders));
-            localStorage.setItem(`${ASSIGNMENTS_KEY}_${addressLower}`, JSON.stringify(assignments));
+            localStorage.setItem(
+                `${STORAGE_KEY}_${addressLower}`,
+                JSON.stringify(folders),
+            );
+            localStorage.setItem(
+                `${ASSIGNMENTS_KEY}_${addressLower}`,
+                JSON.stringify(assignments),
+            );
         }
     }, [folders, assignments, isLoading, userAddress]);
 
     // Add a new folder
-    const addFolder = useCallback(async (emoji: string, label: string) => {
-        if (!userAddress) return;
-        
-        const addressLower = userAddress.toLowerCase();
-        
-        // Check if already exists
-        if (folders.some(f => f.emoji === emoji)) {
-            return;
-        }
-        
-        // Optimistic update
-        const newFolder: ChatFolder = { emoji, label, chatIds: [] };
-        setFolders(prev => [...prev, newFolder]);
-        
-        // Sync to Supabase
-        if (isSupabaseConfigured && supabase) {
-            try {
-                const { error } = await supabase
-                    .from("shout_chat_folders")
-                    .upsert({
-                        user_address: addressLower,
-                        emoji,
-                        label,
-                        sort_order: folders.length,
-                    }, {
-                        onConflict: "user_address,emoji",
-                    });
-                
-                if (error) {
-                    console.error("[ChatFolders] Failed to save folder:", error);
-                }
-            } catch (err) {
-                console.error("[ChatFolders] Failed to save folder:", err);
+    const addFolder = useCallback(
+        async (emoji: string, label: string) => {
+            if (!userAddress) return;
+
+            const addressLower = userAddress.toLowerCase();
+
+            // Check if already exists
+            if (folders.some((f) => f.emoji === emoji)) {
+                return;
             }
-        }
-    }, [userAddress, folders]);
+
+            // Optimistic update
+            const newFolder: ChatFolder = { emoji, label, chatIds: [] };
+            setFolders((prev) => [...prev, newFolder]);
+
+            // Sync to Supabase
+            if (isSupabaseConfigured && supabase) {
+                try {
+                    const { error } = await supabase
+                        .from("shout_chat_folders")
+                        .upsert(
+                            {
+                                user_address: addressLower,
+                                emoji,
+                                label,
+                                sort_order: folders.length,
+                            },
+                            {
+                                onConflict: "user_address,emoji",
+                            },
+                        );
+
+                    if (error) {
+                        console.error(
+                            "[ChatFolders] Failed to save folder:",
+                            error,
+                        );
+                    }
+                } catch (err) {
+                    console.error("[ChatFolders] Failed to save folder:", err);
+                }
+            }
+        },
+        [userAddress, folders],
+    );
 
     // Remove a folder
-    const removeFolder = useCallback(async (emoji: string) => {
-        if (!userAddress) return;
-        
-        const addressLower = userAddress.toLowerCase();
-        
-        // Optimistic update
-        setFolders(prev => prev.filter(f => f.emoji !== emoji));
-        
-        // Also remove assignments to this folder
-        setAssignments(prev => {
-            const updated = { ...prev };
-            Object.keys(updated).forEach(key => {
-                if (updated[key] === emoji) {
-                    delete updated[key];
-                }
-            });
-            return updated;
-        });
-        
-        // Sync to Supabase
-        if (isSupabaseConfigured && supabase) {
-            try {
-                // Delete the folder
-                await supabase
-                    .from("shout_chat_folders")
-                    .delete()
-                    .eq("user_address", addressLower)
-                    .eq("emoji", emoji);
-                
-                // Delete assignments to this folder
-                await supabase
-                    .from("shout_chat_folder_assignments")
-                    .delete()
-                    .eq("user_address", addressLower)
-                    .eq("folder_emoji", emoji);
-            } catch (err) {
-                console.error("[ChatFolders] Failed to delete folder:", err);
-            }
-        }
-    }, [userAddress]);
+    const removeFolder = useCallback(
+        async (emoji: string) => {
+            if (!userAddress) return;
 
-    // Assign a chat to a folder
-    const assignChat = useCallback(async (chatId: string, folderEmoji: string | null, chatType: "dm" | "group" | "channel" | "global" = "dm") => {
-        if (!userAddress) return;
-        
-        const addressLower = userAddress.toLowerCase();
-        
-        // Optimistic update
-        setAssignments(prev => {
-            if (folderEmoji === null) {
+            const addressLower = userAddress.toLowerCase();
+
+            // Optimistic update
+            setFolders((prev) => prev.filter((f) => f.emoji !== emoji));
+
+            // Also remove assignments to this folder
+            setAssignments((prev) => {
                 const updated = { ...prev };
-                delete updated[chatId];
+                Object.keys(updated).forEach((key) => {
+                    if (updated[key] === emoji) {
+                        delete updated[key];
+                    }
+                });
                 return updated;
-            }
-            return { ...prev, [chatId]: folderEmoji };
-        });
-        
-        // Sync to Supabase
-        if (isSupabaseConfigured && supabase) {
-            try {
-                if (folderEmoji === null) {
-                    // Remove assignment
+            });
+
+            // Sync to Supabase
+            if (isSupabaseConfigured && supabase) {
+                try {
+                    // Delete the folder
+                    await supabase
+                        .from("shout_chat_folders")
+                        .delete()
+                        .eq("user_address", addressLower)
+                        .eq("emoji", emoji);
+
+                    // Delete assignments to this folder
                     await supabase
                         .from("shout_chat_folder_assignments")
                         .delete()
                         .eq("user_address", addressLower)
-                        .eq("chat_id", chatId);
-                } else {
-                    // Upsert assignment
-                    await supabase
-                        .from("shout_chat_folder_assignments")
-                        .upsert({
-                            user_address: addressLower,
-                            chat_id: chatId,
-                            chat_type: chatType,
-                            folder_emoji: folderEmoji,
-                        }, {
-                            onConflict: "user_address,chat_id",
-                        });
+                        .eq("folder_emoji", emoji);
+                } catch (err) {
+                    console.error(
+                        "[ChatFolders] Failed to delete folder:",
+                        err,
+                    );
                 }
-            } catch (err) {
-                console.error("[ChatFolders] Failed to save assignment:", err);
             }
-        }
-    }, [userAddress]);
+        },
+        [userAddress],
+    );
+
+    // Assign a chat to a folder
+    const assignChat = useCallback(
+        async (
+            chatId: string,
+            folderEmoji: string | null,
+            chatType: "dm" | "group" | "channel" | "global" = "dm",
+        ) => {
+            if (!userAddress) return;
+
+            const addressLower = userAddress.toLowerCase();
+
+            // Optimistic update
+            setAssignments((prev) => {
+                if (folderEmoji === null) {
+                    const updated = { ...prev };
+                    delete updated[chatId];
+                    return updated;
+                }
+                return { ...prev, [chatId]: folderEmoji };
+            });
+
+            // Sync to Supabase
+            if (isSupabaseConfigured && supabase) {
+                try {
+                    if (folderEmoji === null) {
+                        // Remove assignment
+                        await supabase
+                            .from("shout_chat_folder_assignments")
+                            .delete()
+                            .eq("user_address", addressLower)
+                            .eq("chat_id", chatId);
+                    } else {
+                        // Upsert assignment
+                        await supabase
+                            .from("shout_chat_folder_assignments")
+                            .upsert(
+                                {
+                                    user_address: addressLower,
+                                    chat_id: chatId,
+                                    chat_type: chatType,
+                                    folder_emoji: folderEmoji,
+                                },
+                                {
+                                    onConflict: "user_address,chat_id",
+                                },
+                            );
+                    }
+                } catch (err) {
+                    console.error(
+                        "[ChatFolders] Failed to save assignment:",
+                        err,
+                    );
+                }
+            }
+        },
+        [userAddress],
+    );
 
     // Get folder for a chat
-    const getChatFolder = useCallback((chatId: string): string | null => {
-        return assignments[chatId] || null;
-    }, [assignments]);
+    const getChatFolder = useCallback(
+        (chatId: string): string | null => {
+            return assignments[chatId] || null;
+        },
+        [assignments],
+    );
 
     // Get all chats in a folder
-    const getChatsInFolder = useCallback((folderEmoji: string): string[] => {
-        return Object.entries(assignments)
-            .filter(([_, emoji]) => emoji === folderEmoji)
-            .map(([chatId, _]) => chatId);
-    }, [assignments]);
+    const getChatsInFolder = useCallback(
+        (folderEmoji: string): string[] => {
+            return Object.entries(assignments)
+                .filter(([_, emoji]) => emoji === folderEmoji)
+                .map(([chatId, _]) => chatId);
+        },
+        [assignments],
+    );
 
     // Get folders that have been used (have at least one chat assigned)
     const activeFolders = useMemo(() => {
         const usedEmojis = new Set(Object.values(assignments));
         // Include all created folders, plus mark which ones have chats
-        return folders.map(f => ({
+        return folders.map((f) => ({
             ...f,
             chatIds: Object.entries(assignments)
                 .filter(([_, emoji]) => emoji === f.emoji)
@@ -334,10 +394,16 @@ export function useChatFolders(userAddress: string | null) {
         }));
     }, [folders, assignments]);
 
-    // Get all folders including defaults that aren't active yet
+    // Get all folders including defaults that aren't active yet (as ChatFolder shape)
     const allAvailableFolders = useMemo(() => {
-        const existing = new Set(folders.map(f => f.emoji));
-        const available = DEFAULT_FOLDER_EMOJIS.filter(f => !existing.has(f.emoji));
+        const existing = new Set(folders.map((f) => f.emoji));
+        const available = DEFAULT_FOLDER_EMOJIS.filter(
+            (f) => !existing.has(f.emoji),
+        ).map((f) => ({
+            emoji: f.emoji,
+            label: f.label,
+            chatIds: [] as string[],
+        }));
         return [...folders, ...available];
     }, [folders]);
 

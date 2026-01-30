@@ -408,7 +408,7 @@ async function getGlobalEventsContext(message: string): Promise<string | null> {
             .order("is_featured", { ascending: false })
             .order("event_date", { ascending: true })
             .order("start_time", { ascending: true, nullsFirst: false })
-            .limit(15);
+            .limit(40);
 
         if (askToday || askTomorrow) {
             query = query.eq("event_date", eventDateFilter);
@@ -416,16 +416,34 @@ async function getGlobalEventsContext(message: string): Promise<string | null> {
             query = query.gte("event_date", today);
         }
 
-        const { data: events, error } = await query;
+        const { data: rawEvents, error } = await query;
         if (error) {
             console.error("[Public Chat] Global events fetch error:", error);
             return null;
         }
-        if (!events?.length) {
+        if (!rawEvents?.length) {
             return `\n\n## Global Events Database (Spritz)
 No events found for the requested date/range. Users can browse all events at: https://app.spritz.chat/events
 When users ask about events, tell them to check the events directory and offer to help with registration for any event.`;
         }
+
+        // Deduplicate: same event often appears with slight name/location variants (e.g. "Satoshi Roundtable XII" Dubai vs دبي)
+        const seen = new Set<string>();
+        const events = rawEvents.filter((e) => {
+            const nameNorm = (e.name || "")
+                .toLowerCase()
+                .replace(/^\s*the\s+/i, "")
+                .replace(/\s+/g, " ")
+                .replace(/\s*\d{4}\s*$/, "")
+                .trim();
+            const loc =
+                [e.city, e.country].filter(Boolean).join(", ").toLowerCase() ||
+                "tba";
+            const key = `${nameNorm}|${e.event_date}|${loc}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
 
         const lines = events
             .map(
@@ -442,6 +460,7 @@ When users ask about events, tell them to check the events directory and offer t
 
         return `\n\n## Global Events Database (Spritz) – ${events.length} event(s)
 Use this data to answer event questions. Do NOT write code (e.g. Python) to compute dates – use the event list below.
+List each event only once. When the same event appears in different forms (e.g. different language for location), present it once with the clearest name and location.
 
 ${lines}
 

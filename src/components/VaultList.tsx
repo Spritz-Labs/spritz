@@ -63,6 +63,8 @@ type PendingTransaction = {
 // Common emojis for vaults
 const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "🔒", "💼", "🏠", "🎮", "🌈"];
 
+const HIDDEN_VAULTS_STORAGE_KEY = (address: string) => `spritz-hidden-vaults-${(address || "").toLowerCase()}`;
+
 // Tab types for vault detail view
 type VaultTab = "assets" | "send" | "receive" | "activity";
 
@@ -92,6 +94,55 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     
     // Cache for vault list balances (keyed by vault ID)
     const [vaultBalanceCache, setVaultBalanceCache] = useState<Record<string, { totalUsd: number; loading: boolean }>>({});
+    
+    // Hidden vaults (per user, persisted in localStorage)
+    const [hiddenVaultIds, setHiddenVaultIds] = useState<Set<string>>(() => new Set());
+    const [showHiddenVaults, setShowHiddenVaults] = useState(false);
+    
+    useEffect(() => {
+        if (!userAddress) {
+            setHiddenVaultIds(new Set());
+            return;
+        }
+        try {
+            const raw = typeof window !== "undefined" ? localStorage.getItem(HIDDEN_VAULTS_STORAGE_KEY(userAddress)) : null;
+            const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+            setHiddenVaultIds(new Set(Array.isArray(parsed) ? parsed : []));
+        } catch {
+            setHiddenVaultIds(new Set());
+        }
+    }, [userAddress]);
+    
+    const hideVault = useCallback((vaultId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setHiddenVaultIds((prev) => {
+            const next = new Set(prev);
+            next.add(vaultId);
+            if (userAddress) {
+                try {
+                    localStorage.setItem(HIDDEN_VAULTS_STORAGE_KEY(userAddress), JSON.stringify([...next]));
+                } catch {}
+            }
+            return next;
+        });
+    }, [userAddress]);
+    
+    const unhideVault = useCallback((vaultId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setHiddenVaultIds((prev) => {
+            const next = new Set(prev);
+            next.delete(vaultId);
+            if (userAddress) {
+                try {
+                    localStorage.setItem(HIDDEN_VAULTS_STORAGE_KEY(userAddress), JSON.stringify([...next]));
+                } catch {}
+            }
+            return next;
+        });
+    }, [userAddress]);
+    
+    const visibleVaults = useMemo(() => vaults.filter((v) => !hiddenVaultIds.has(v.id)), [vaults, hiddenVaultIds]);
+    const hiddenVaultsList = useMemo(() => vaults.filter((v) => hiddenVaultIds.has(v.id)), [vaults, hiddenVaultIds]);
     
     // Edit state
     const [isEditing, setIsEditing] = useState(false);
@@ -2681,72 +2732,138 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         );
     }
 
+    // Render a single vault row (used for both visible and hidden lists)
+    const renderVaultRow = (vault: VaultListItem, options: { isHidden?: boolean } = {}) => {
+        const chainInfo = getChainById(vault.chainId);
+        const { isHidden = false } = options;
+        return (
+            <div
+                key={vault.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => !isHidden && handleViewVault(vault)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (!isHidden) handleViewVault(vault);
+                    }
+                }}
+                className={`w-full p-4 bg-zinc-800/50 border rounded-xl transition-all text-left flex items-center gap-3 ${
+                    isHidden ? "border-zinc-700/70 opacity-90" : "border-zinc-700 hover:border-zinc-600 cursor-pointer"
+                } ${isLoadingDetails ? "pointer-events-none opacity-70" : ""}`}
+            >
+                <span className="text-2xl">{vault.emoji}</span>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-medium text-white truncate">
+                            {vault.name}
+                        </h4>
+                        {vault.isCreator && (
+                            <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
+                                Creator
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-zinc-500 flex items-center gap-1">
+                            <span>{chainInfo?.icon}</span>
+                            {chainInfo?.name}
+                        </span>
+                        <span className="text-xs text-zinc-600">•</span>
+                        <span className="text-xs text-zinc-500">
+                            {vault.threshold}/{vault.memberCount} sigs
+                        </span>
+                        <span className="text-xs text-zinc-600">•</span>
+                        <span className={`text-xs ${vault.isDeployed ? "text-emerald-400" : "text-yellow-400"}`}>
+                            {vault.isDeployed ? "Active" : "Pending"}
+                        </span>
+                    </div>
+                </div>
+                {vault.isDeployed && (
+                    <div className="text-right mr-1">
+                        {vaultBalanceCache[vault.id]?.loading ? (
+                            <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
+                        ) : vaultBalanceCache[vault.id]?.totalUsd ? (
+                            <span className="text-sm font-medium text-emerald-400">
+                                ${vaultBalanceCache[vault.id].totalUsd.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                })}
+                            </span>
+                        ) : (
+                            <span className="text-xs text-zinc-500">$0.00</span>
+                        )}
+                    </div>
+                )}
+                {isHidden ? (
+                    <button
+                        type="button"
+                        onClick={(e) => unhideVault(vault.id, e)}
+                        className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                        title="Show vault"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                    </button>
+                ) : (
+                    <>
+                        <button
+                            type="button"
+                            onClick={(e) => hideVault(vault.id, e)}
+                            className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+                            title="Hide vault"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.275 4.275M12 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m-5.858.908a3 3 0 004.275 4.275M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </button>
+                        <svg className="w-5 h-5 text-zinc-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </>
+                )}
+            </div>
+        );
+    };
+
     // Vault list
     return (
         <div className="space-y-3">
-            {vaults.map((vault) => {
-                const chainInfo = getChainById(vault.chainId);
-                
-                return (
-                    <button
-                        key={vault.id}
-                        onClick={() => handleViewVault(vault)}
-                        disabled={isLoadingDetails}
-                        className="w-full p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl hover:border-zinc-600 transition-all text-left"
-                    >
-                        <div className="flex items-center gap-3">
-                            <span className="text-2xl">{vault.emoji}</span>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <h4 className="text-sm font-medium text-white truncate">
-                                        {vault.name}
-                                    </h4>
-                                    {vault.isCreator && (
-                                        <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
-                                            Creator
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-xs text-zinc-500 flex items-center gap-1">
-                                        <span>{chainInfo?.icon}</span>
-                                        {chainInfo?.name}
-                                    </span>
-                                    <span className="text-xs text-zinc-600">•</span>
-                                    <span className="text-xs text-zinc-500">
-                                        {vault.threshold}/{vault.memberCount} sigs
-                                    </span>
-                                    <span className="text-xs text-zinc-600">•</span>
-                                    <span className={`text-xs ${vault.isDeployed ? "text-emerald-400" : "text-yellow-400"}`}>
-                                        {vault.isDeployed ? "Active" : "Pending"}
-                                    </span>
-                                </div>
-                            </div>
-                            {/* Balance display */}
-                            {vault.isDeployed && (
-                                <div className="text-right mr-2">
-                                    {vaultBalanceCache[vault.id]?.loading ? (
-                                        <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
-                                    ) : vaultBalanceCache[vault.id]?.totalUsd ? (
-                                        <span className="text-sm font-medium text-emerald-400">
-                                            ${vaultBalanceCache[vault.id].totalUsd.toLocaleString(undefined, { 
-                                                minimumFractionDigits: 2, 
-                                                maximumFractionDigits: 2 
-                                            })}
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs text-zinc-500">$0.00</span>
-                                    )}
-                                </div>
-                            )}
-                            <svg className="w-5 h-5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            {hiddenVaultsList.length > 0 && (
+                <button
+                    type="button"
+                    onClick={() => setShowHiddenVaults((prev) => !prev)}
+                    className="w-full py-2 px-3 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors flex items-center justify-center gap-1.5"
+                >
+                    {showHiddenVaults ? (
+                        <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.275 4.275M12 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m-5.858.908a3 3 0 004.275 4.275M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                        </div>
-                    </button>
-                );
-            })}
-
+                            Hide {hiddenVaultsList.length} hidden vault{hiddenVaultsList.length !== 1 ? "s" : ""}
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            Show {hiddenVaultsList.length} hidden vault{hiddenVaultsList.length !== 1 ? "s" : ""}
+                        </>
+                    )}
+                </button>
+            )}
+            {visibleVaults.map((vault) => renderVaultRow(vault, { isHidden: false }))}
+            {showHiddenVaults && hiddenVaultsList.length > 0 && (
+                <div className="pt-2 border-t border-zinc-800">
+                    <p className="text-xs font-medium text-zinc-500 mb-2">Hidden vaults</p>
+                    <div className="space-y-2">
+                        {hiddenVaultsList.map((vault) => renderVaultRow(vault, { isHidden: true }))}
+                    </div>
+                </div>
+            )}
             {/* Create new button */}
             <button
                 onClick={onCreateNew}

@@ -149,86 +149,78 @@ export function BrowseChannelsModal({
                     initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                    className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden"
+                    className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {/* Header */}
-                    <div className="p-4 sm:p-6 border-b border-zinc-800">
-                        <div className="flex items-center justify-between mb-3 sm:mb-4">
-                            <h2 className="text-lg sm:text-xl font-bold text-white">Browse Channels</h2>
-                            <div className="flex items-center gap-2">
+                    {/* Header - compact: one row title + actions, one row search + category */}
+                    <div className="p-3 sm:p-4 border-b border-zinc-800 space-y-3 shrink-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <h2 className="text-base sm:text-lg font-bold text-white truncate">Browse Channels</h2>
+                            <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                     onClick={() => setShowCreateModal(true)}
-                                    className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-[#FF5500] to-[#FF7700] rounded-xl text-white text-sm font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center gap-1.5"
+                                    className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-gradient-to-r from-[#FF5500] to-[#FF7700] rounded-lg text-white text-xs sm:text-sm font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center gap-1"
                                 >
                                     <span>+</span>
                                     <span className="hidden sm:inline">Create</span>
                                 </button>
                                 <button
                                     onClick={onClose}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                    className="p-1.5 sm:p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                    aria-label="Close"
                                 >
-                                    <svg
-                                        className="w-5 h-5 text-zinc-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                 </button>
                             </div>
                         </div>
 
-                        {/* Search */}
-                        <div className="relative mb-3 sm:mb-4">
-                            <input
-                                type="text"
-                                placeholder="Search channels..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full px-4 py-2.5 sm:py-3 pl-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500] text-sm sm:text-base"
-                            />
-                            <svg
-                                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                />
-                            </svg>
-                        </div>
-
-                        {/* Categories */}
-                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                            {CATEGORIES.map((cat) => (
-                                <button
-                                    key={cat.id}
-                                    onClick={() => setSelectedCategory(cat.id)}
-                                    className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                                        selectedCategory === cat.id
-                                            ? "bg-[#FF5500] text-white"
-                                            : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                                    }`}
+                        {/* Search + Category on one row - compact */}
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <div className="relative flex-1 min-w-0">
+                                <svg
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
                                 >
-                                    {cat.emoji} <span className="hidden sm:inline">{cat.name}</span>
-                                </button>
-                            ))}
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    placeholder="Search channels..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-8 pr-3 py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/40 focus:border-[#FF5500] text-sm"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <label htmlFor="browse-category" className="text-xs text-zinc-500 whitespace-nowrap sm:sr-only">
+                                    Category
+                                </label>
+                                <select
+                                    id="browse-category"
+                                    value={selectedCategory}
+                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    className="px-3 py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#FF5500]/40 focus:border-[#FF5500] cursor-pointer min-w-[120px] sm:min-w-[140px]"
+                                >
+                                    {CATEGORIES.map((cat) => (
+                                        <option key={cat.id} value={cat.id}>
+                                            {cat.emoji} {cat.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </div>
 
                     {/* Channel List */}
-                    <div className="p-4 overflow-y-auto max-h-[50vh]">
+                    <div className="flex flex-col min-h-0 flex-1">
+                        <p className="px-3 py-1.5 text-xs text-zinc-500 border-b border-zinc-800/50 shrink-0">
+                            {isLoading ? "Loading..." : `${filteredChannels.length} channel${filteredChannels.length !== 1 ? "s" : ""}`}
+                        </p>
+                        <div className="p-3 sm:p-4 overflow-y-auto flex-1 min-h-0" style={{ maxHeight: "min(55vh, 400px)" }}>
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
                                 <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
@@ -298,6 +290,7 @@ export function BrowseChannelsModal({
                                 ))}
                             </div>
                         )}
+                        </div>
                     </div>
                 </motion.div>
 

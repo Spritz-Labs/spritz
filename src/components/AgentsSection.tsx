@@ -172,23 +172,25 @@ export function AgentsSection({ userAddress, hasBetaAccess, isBetaAccessLoading 
         <div>
             {/* Section Header */}
             <div 
-                className="flex items-center justify-between mb-2 sm:mb-3 cursor-pointer"
+                className="flex items-center justify-between mb-3 sm:mb-4 cursor-pointer rounded-xl p-3 sm:p-4 -mx-1 sm:mx-0 hover:bg-purple-500/10 border-b border-zinc-800/80 transition-colors"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                    <h2 className="text-sm sm:text-lg font-semibold text-white flex items-center gap-1.5 sm:gap-2">
-                        <span className="text-purple-400">✨</span>
-                        AI Agents
-                        <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
-                            Beta
-                        </span>
-                    </h2>
-                    <span className="text-[10px] sm:text-xs text-zinc-500">
-                        {isAdmin ? agents.length : `${agents.length}/5`}
-                        {favorites.length > 0 && (
-                            <span className="ml-1 text-yellow-400">⭐{favorites.length}</span>
-                        )}
-                    </span>
+                <div className="flex items-center gap-3">
+                    <span className="text-2xl sm:text-3xl" aria-hidden>✨</span>
+                    <div>
+                        <h2 className="text-base sm:text-xl font-bold text-white flex items-center gap-2 flex-wrap">
+                            AI Agents
+                            <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full font-medium">
+                                Beta
+                            </span>
+                        </h2>
+                        <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
+                            {isAdmin ? `${agents.length} agent${agents.length !== 1 ? "s" : ""}` : `${agents.length}/5 created`}
+                            {favorites.length > 0 && (
+                                <span className="ml-1.5 text-amber-400">· ⭐ {favorites.length} favorite{favorites.length !== 1 ? "s" : ""}</span>
+                            )}
+                        </p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2">
                     {/* Explore Button */}

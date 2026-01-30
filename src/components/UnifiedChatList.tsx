@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useChatFolders, DEFAULT_FOLDER_EMOJIS, FOLDER_CATEGORIES, type ChatFolder } from "@/hooks/useChatFolders";
 
@@ -222,7 +222,259 @@ const getChatTypeIcon = (type: UnifiedChatItem["type"]) => {
     }
 };
 
-export function UnifiedChatList({
+function chatItemEqual(a: UnifiedChatItem, b: UnifiedChatItem): boolean {
+    return (
+        a.id === b.id &&
+        a.name === b.name &&
+        a.avatar === b.avatar &&
+        a.lastMessage === b.lastMessage &&
+        a.unreadCount === b.unreadCount &&
+        (a.lastMessageAt?.getTime() ?? 0) === (b.lastMessageAt?.getTime() ?? 0)
+    );
+}
+
+type ChatRowProps = {
+    chat: UnifiedChatItem;
+    chatFolder: string | null;
+    isFolderPickerOpen: boolean;
+    folderPickerPosition: { top: number; left: number; openUpward: boolean } | null;
+    onChatClick: (chat: UnifiedChatItem) => void;
+    onFolderButtonClick: (chatId: string) => void;
+    onAssignFolder: (chatId: string, emoji: string | null, chatType: "dm" | "group" | "channel" | "global") => void;
+    onCloseFolderPicker: () => void;
+    allAvailableFolders: ChatFolder[];
+    setFolderButtonRef: (id: string, el: HTMLButtonElement | null) => void;
+    onTouchStart: (chatId: string) => void;
+    onTouchEnd: () => void;
+    onContextMenu: (e: React.MouseEvent) => void;
+    onCallClick?: (chat: UnifiedChatItem) => void;
+    onVideoClick?: (chat: UnifiedChatItem) => void;
+};
+
+const ChatRow = memo(function ChatRow({
+    chat,
+    chatFolder,
+    isFolderPickerOpen,
+    folderPickerPosition,
+    onChatClick,
+    onFolderButtonClick,
+    onAssignFolder,
+    onCloseFolderPicker,
+    allAvailableFolders,
+    setFolderButtonRef,
+    onTouchStart,
+    onTouchEnd,
+    onContextMenu,
+    onCallClick,
+    onVideoClick,
+}: ChatRowProps) {
+    return (
+        <div
+            className="relative select-none"
+            onTouchStart={(e) => {
+                e.currentTarget.style.webkitUserSelect = "none";
+                onTouchStart(chat.id);
+            }}
+            onTouchEnd={onTouchEnd}
+            onTouchCancel={onTouchEnd}
+            onContextMenu={onContextMenu}
+        >
+            <div
+                onClick={() => onChatClick(chat)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onChatClick(chat);
+                    }
+                }}
+                className={`w-full rounded-lg sm:rounded-xl px-2 py-2 sm:p-3 transition-all text-left group cursor-pointer ${
+                    chat.unreadCount > 0
+                        ? "bg-[#FF5500]/10 hover:bg-[#FF5500]/15 border border-[#FF5500]/30"
+                        : "bg-zinc-800/30 sm:bg-zinc-800/50 hover:bg-zinc-800 border border-transparent sm:border-zinc-700/50"
+                }`}
+            >
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                    <div className="relative shrink-0">
+                        {chat.avatar ? (
+                            <img
+                                src={chat.avatar}
+                                alt={chat.name}
+                                loading="lazy"
+                                className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover ${
+                                    chat.unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""
+                                }`}
+                            />
+                        ) : (
+                            <div
+                                className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
+                                    chat.type === "global"
+                                        ? "bg-gradient-to-br from-orange-500 to-amber-500"
+                                        : chat.type === "channel"
+                                          ? "bg-gradient-to-br from-blue-500 to-cyan-500"
+                                          : chat.type === "group"
+                                            ? "bg-gradient-to-br from-purple-500 to-pink-500"
+                                            : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
+                                } ${chat.unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""}`}
+                            >
+                                <span className="text-white font-bold text-base sm:text-lg">
+                                    {chat.name[0].toUpperCase()}
+                                </span>
+                            </div>
+                        )}
+                        {chat.type === "dm" && chat.isOnline && (
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-emerald-500 rounded-full border-2 border-zinc-900" />
+                        )}
+                        {chat.unreadCount > 0 && (
+                            <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 min-w-[18px] h-[18px] sm:min-w-[20px] sm:h-[20px] px-1 bg-[#FF5500] rounded-full flex items-center justify-center border-2 border-zinc-900">
+                                <span className="text-white text-[9px] sm:text-[10px] font-bold">
+                                    {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                                </span>
+                            </div>
+                        )}
+                        {chat.type !== "dm" && (
+                            <div className="absolute -bottom-0.5 -left-0.5 w-4 h-4 sm:w-5 sm:h-5 bg-zinc-700 rounded-full flex items-center justify-center border-2 border-zinc-900 text-zinc-300">
+                                {getChatTypeIcon(chat.type)}
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                            <p className={`font-medium truncate text-sm sm:text-base ${chat.unreadCount > 0 ? "text-white" : "text-zinc-200"}`}>
+                                {chat.name}
+                            </p>
+                            {chatFolder && <span className="text-xs sm:text-sm shrink-0">{chatFolder}</span>}
+                        </div>
+                        <p className={`text-xs sm:text-sm truncate ${chat.unreadCount > 0 ? "text-zinc-300" : "text-zinc-500"}`}>
+                            {chat.lastMessage ||
+                                (chat.type === "dm"
+                                    ? "Say hello!"
+                                    : chat.type === "global"
+                                      ? "Join the global conversation"
+                                      : `${chat.metadata.memberCount || 0} members`)}
+                        </p>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-1.5 sm:gap-2">
+                        {chat.type === "dm" && (
+                            <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {onCallClick && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onCallClick(chat);
+                                        }}
+                                        className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/30 transition-colors"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                    </button>
+                                )}
+                                {onVideoClick && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onVideoClick(chat);
+                                        }}
+                                        className="w-7 h-7 rounded-full bg-[#FB8D22]/20 text-[#FFBBA7] flex items-center justify-center hover:bg-[#FB8D22]/30 transition-colors"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {chat.lastMessageAt && (
+                            <span className={`text-[10px] sm:text-xs ${chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"}`}>
+                                {formatTime(chat.lastMessageAt)}
+                            </span>
+                        )}
+                        <button
+                            type="button"
+                            ref={(el) => setFolderButtonRef(chat.id, el)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onFolderButtonClick(chat.id);
+                            }}
+                            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all ${
+                                chatFolder ? "bg-zinc-700/50 text-white" : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                            }`}
+                            title={chatFolder ? `In folder ${chatFolder}` : "Add to folder"}
+                        >
+                            {chatFolder ? (
+                                <span className="text-xs sm:text-sm">{chatFolder}</span>
+                            ) : (
+                                <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                </svg>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <AnimatePresence>
+                {isFolderPickerOpen && folderPickerPosition && (
+                    <>
+                        <div className="fixed inset-0 z-[60]" onClick={onCloseFolderPicker} />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: folderPickerPosition.openUpward ? 10 : -10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: folderPickerPosition.openUpward ? 10 : -10 }}
+                            className="fixed z-[70] bg-zinc-900 border border-zinc-700 rounded-lg sm:rounded-xl shadow-2xl p-1.5 sm:p-2 min-w-[180px] sm:min-w-[200px] max-h-[280px] overflow-y-auto"
+                            style={{
+                                top: folderPickerPosition.openUpward ? "auto" : folderPickerPosition.top,
+                                bottom: folderPickerPosition.openUpward ? `${window.innerHeight - folderPickerPosition.top + 4}px` : "auto",
+                                left: folderPickerPosition.left,
+                            }}
+                        >
+                            <p className="text-[10px] sm:text-xs text-zinc-500 px-1.5 sm:px-2 py-0.5 sm:py-1 mb-0.5 sm:mb-1">Move to folder</p>
+                            {chatFolder && (
+                                <button
+                                    type="button"
+                                    onClick={() => onAssignFolder(chat.id, null, chat.type)}
+                                    className="w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-xs sm:text-sm"
+                                >
+                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Remove from {chatFolder}
+                                </button>
+                            )}
+                            <div className="grid grid-cols-5 gap-0.5 sm:gap-1 p-0.5 sm:p-1">
+                                {allAvailableFolders.map((folder) => (
+                                    <button
+                                        key={folder.emoji}
+                                        type="button"
+                                        onClick={() => onAssignFolder(chat.id, folder.emoji, chat.type)}
+                                        className={`w-8 h-8 sm:w-10 sm:h-10 rounded-md sm:rounded-lg flex items-center justify-center text-base sm:text-lg transition-all ${
+                                            chatFolder === folder.emoji ? "bg-[#FF5500]/20 ring-2 ring-[#FF5500]" : "hover:bg-zinc-800"
+                                        }`}
+                                        title={folder.label}
+                                    >
+                                        {folder.emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}, (prev, next) => {
+    return (
+        chatItemEqual(prev.chat, next.chat) &&
+        prev.chatFolder === next.chatFolder &&
+        prev.isFolderPickerOpen === next.isFolderPickerOpen &&
+        (prev.folderPickerPosition === next.folderPickerPosition || !next.isFolderPickerOpen)
+    );
+});
+
+function UnifiedChatListInner({
     chats,
     userAddress,
     onChatClick,
@@ -274,7 +526,14 @@ export function UnifiedChatList({
     const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
     const [folderLongPressTimer, setFolderLongPressTimer] = useState<NodeJS.Timeout | null>(null);
 
-    // Sort chats by last message date (most recent first)
+    // Get sortable timestamp (0 for null/invalid so those sort to bottom)
+    const getSortTime = useCallback((chat: UnifiedChatItem): number => {
+        if (!chat.lastMessageAt) return 0;
+        const t = chat.lastMessageAt.getTime();
+        return Number.isFinite(t) ? t : 0;
+    }, []);
+
+    // Sort chats by last message date (most recent first), with stable secondary sort by id
     const sortedChats = useMemo(() => {
         return [...chats].sort((a, b) => {
             // Pinned chats come first
@@ -285,17 +544,15 @@ export function UnifiedChatList({
             if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
             if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
             
-            // Then by last message time (most recent first)
-            // Chats without messages (null) go to the bottom
-            if (!a.lastMessageAt && !b.lastMessageAt) return 0;
-            if (!a.lastMessageAt) return 1; // a goes after b
-            if (!b.lastMessageAt) return -1; // b goes after a
+            // Then by last message time (most recent first); null/invalid = 0 → bottom
+            const aTime = getSortTime(a);
+            const bTime = getSortTime(b);
+            if (aTime !== bTime) return bTime - aTime; // Most recent first
             
-            const aTime = a.lastMessageAt.getTime();
-            const bTime = b.lastMessageAt.getTime();
-            return bTime - aTime; // Most recent first
+            // Stable sort: same time → order by id so order is deterministic
+            return a.id.localeCompare(b.id, "en");
         });
-    }, [chats]);
+    }, [chats, getSortTime]);
 
     // Filter chats by active folder, search query, and type filter
     const filteredChats = useMemo(() => {
@@ -432,6 +689,10 @@ export function UnifiedChatList({
             setActiveFolder(null);
         }
     }, [removeFolder, activeFolder]);
+
+    const setFolderButtonRef = useCallback((id: string, el: HTMLButtonElement | null) => {
+        folderButtonRefs.current[id] = el;
+    }, []);
 
     return (
         <div className="space-y-1.5 sm:space-y-3 select-none">
@@ -579,240 +840,30 @@ export function UnifiedChatList({
                         </p>
                     </div>
                 ) : (
-                    filteredChats.map(chat => {
+                    filteredChats.map((chat) => {
                         const chatFolder = getChatFolder(chat.id);
-                        
                         return (
-                            <motion.div
+                            <ChatRow
                                 key={chat.id}
-                                className="relative select-none"
-                                onTouchStart={(e) => {
-                                    // Prevent text selection on long press
-                                    e.currentTarget.style.webkitUserSelect = 'none';
-                                    handleTouchStart(chat.id);
-                                }}
+                                chat={chat}
+                                chatFolder={chatFolder}
+                                isFolderPickerOpen={showFolderPicker === chat.id}
+                                folderPickerPosition={folderPickerPosition}
+                                onChatClick={onChatClick}
+                                onFolderButtonClick={setShowFolderPicker}
+                                onAssignFolder={handleAssignFolder}
+                                onCloseFolderPicker={() => setShowFolderPicker(null)}
+                                allAvailableFolders={allAvailableFolders}
+                                setFolderButtonRef={setFolderButtonRef}
+                                onTouchStart={handleTouchStart}
                                 onTouchEnd={handleTouchEnd}
-                                onTouchCancel={handleTouchEnd}
                                 onContextMenu={(e) => {
                                     e.preventDefault();
                                     setShowFolderPicker(chat.id);
                                 }}
-                            >
-                                <div
-                                    onClick={() => onChatClick(chat)}
-                                    role="button"
-                                    tabIndex={0}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter" || e.key === " ") {
-                                            e.preventDefault();
-                                            onChatClick(chat);
-                                        }
-                                    }}
-                                    className={`w-full rounded-lg sm:rounded-xl px-2 py-2 sm:p-3 transition-all text-left group cursor-pointer ${
-                                        chat.unreadCount > 0
-                                            ? "bg-[#FF5500]/10 hover:bg-[#FF5500]/15 border border-[#FF5500]/30"
-                                            : "bg-zinc-800/30 sm:bg-zinc-800/50 hover:bg-zinc-800 border border-transparent sm:border-zinc-700/50"
-                                    }`}
-                                >
-                                    <div className="flex items-center gap-2.5 sm:gap-3">
-                                        {/* Avatar */}
-                                        <div className="relative flex-shrink-0">
-                                            {chat.avatar ? (
-                                                <img
-                                                    src={chat.avatar}
-                                                    alt={chat.name}
-                                                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover ${
-                                                        chat.unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""
-                                                    }`}
-                                                />
-                                            ) : (
-                                                <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
-                                                    chat.type === "global"
-                                                        ? "bg-gradient-to-br from-orange-500 to-amber-500"
-                                                        : chat.type === "channel"
-                                                        ? "bg-gradient-to-br from-blue-500 to-cyan-500"
-                                                        : chat.type === "group"
-                                                        ? "bg-gradient-to-br from-purple-500 to-pink-500"
-                                                        : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
-                                                } ${chat.unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""}`}>
-                                                    <span className="text-white font-bold text-base sm:text-lg">
-                                                        {chat.name[0].toUpperCase()}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            
-                                            {/* Online indicator for DMs */}
-                                            {chat.type === "dm" && chat.isOnline && (
-                                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-emerald-500 rounded-full border-2 border-zinc-900" />
-                                            )}
-                                            
-                                            {/* Unread badge */}
-                                            {chat.unreadCount > 0 && (
-                                                <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 min-w-[18px] h-[18px] sm:min-w-[20px] sm:h-[20px] px-1 bg-[#FF5500] rounded-full flex items-center justify-center border-2 border-zinc-900">
-                                                    <span className="text-white text-[9px] sm:text-[10px] font-bold">
-                                                        {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            
-                                            {/* Chat type badge */}
-                                            {chat.type !== "dm" && (
-                                                <div className="absolute -bottom-0.5 -left-0.5 w-4 h-4 sm:w-5 sm:h-5 bg-zinc-700 rounded-full flex items-center justify-center border-2 border-zinc-900 text-zinc-300">
-                                                    {getChatTypeIcon(chat.type)}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Content */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5 sm:gap-2">
-                                                <p className={`font-medium truncate text-sm sm:text-base ${
-                                                    chat.unreadCount > 0 ? "text-white" : "text-zinc-200"
-                                                }`}>
-                                                    {chat.name}
-                                                </p>
-                                                {/* Folder indicator */}
-                                                {chatFolder && (
-                                                    <span className="text-xs sm:text-sm flex-shrink-0">{chatFolder}</span>
-                                                )}
-                                            </div>
-                                            
-                                            {/* Last message preview */}
-                                            <p className={`text-xs sm:text-sm truncate ${
-                                                chat.unreadCount > 0 ? "text-zinc-300" : "text-zinc-500"
-                                            }`}>
-                                                {chat.lastMessage || (
-                                                    chat.type === "dm" ? "Say hello!" : 
-                                                    chat.type === "global" ? "Join the global conversation" :
-                                                    `${chat.metadata.memberCount || 0} members`
-                                                )}
-                                            </p>
-                                        </div>
-
-                                        {/* Time & Actions */}
-                                        <div className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2">
-                                            {/* Quick actions - hidden on mobile, show on hover for desktop */}
-                                            {chat.type === "dm" && (
-                                                <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {onCallClick && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                onCallClick(chat);
-                                                            }}
-                                                            className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/30 transition-colors"
-                                                        >
-                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                                            </svg>
-                                                        </button>
-                                                    )}
-                                                    {onVideoClick && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                onVideoClick(chat);
-                                                            }}
-                                                            className="w-7 h-7 rounded-full bg-[#FB8D22]/20 text-[#FFBBA7] flex items-center justify-center hover:bg-[#FB8D22]/30 transition-colors"
-                                                        >
-                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                            </svg>
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-                                            
-                                            {chat.lastMessageAt && (
-                                                <span className={`text-[10px] sm:text-xs ${
-                                                    chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"
-                                                }`}>
-                                                    {formatTime(chat.lastMessageAt)}
-                                                </span>
-                                            )}
-                                            
-                                            {/* Folder quick-action button */}
-                                            <button
-                                                ref={(el) => { folderButtonRefs.current[chat.id] = el; }}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setShowFolderPicker(chat.id);
-                                                }}
-                                                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all ${
-                                                    chatFolder
-                                                        ? "bg-zinc-700/50 text-white"
-                                                        : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
-                                                }`}
-                                                title={chatFolder ? `In folder ${chatFolder}` : "Add to folder"}
-                                            >
-                                                {chatFolder ? (
-                                                    <span className="text-xs sm:text-sm">{chatFolder}</span>
-                                                ) : (
-                                                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                                    </svg>
-                                                )}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Folder Picker Popup - Rendered via portal-like fixed positioning */}
-                                <AnimatePresence>
-                                    {showFolderPicker === chat.id && folderPickerPosition && (
-                                        <>
-                                            <div 
-                                                className="fixed inset-0 z-[60]"
-                                                onClick={() => setShowFolderPicker(null)}
-                                            />
-                                            <motion.div
-                                                initial={{ opacity: 0, scale: 0.95, y: folderPickerPosition.openUpward ? 10 : -10 }}
-                                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                                exit={{ opacity: 0, scale: 0.95, y: folderPickerPosition.openUpward ? 10 : -10 }}
-                                                className="fixed z-[70] bg-zinc-900 border border-zinc-700 rounded-lg sm:rounded-xl shadow-2xl p-1.5 sm:p-2 min-w-[180px] sm:min-w-[200px] max-h-[280px] overflow-y-auto"
-                                                style={{
-                                                    top: folderPickerPosition.openUpward ? 'auto' : folderPickerPosition.top,
-                                                    bottom: folderPickerPosition.openUpward ? `${window.innerHeight - folderPickerPosition.top + 4}px` : 'auto',
-                                                    left: folderPickerPosition.left,
-                                                }}
-                                            >
-                                                <p className="text-[10px] sm:text-xs text-zinc-500 px-1.5 sm:px-2 py-0.5 sm:py-1 mb-0.5 sm:mb-1">Move to folder</p>
-                                                
-                                                {/* Remove from folder option */}
-                                                {chatFolder && (
-                                                    <button
-                                                        onClick={() => handleAssignFolder(chat.id, null, chat.type)}
-                                                        className="w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-xs sm:text-sm"
-                                                    >
-                                                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                        Remove from {chatFolder}
-                                                    </button>
-                                                )}
-                                                
-                                                {/* Available folders */}
-                                                <div className="grid grid-cols-5 gap-0.5 sm:gap-1 p-0.5 sm:p-1">
-                                                    {allAvailableFolders.map(folder => (
-                                                        <button
-                                                            key={folder.emoji}
-                                                            onClick={() => handleAssignFolder(chat.id, folder.emoji, chat.type)}
-                                                            className={`w-8 h-8 sm:w-10 sm:h-10 rounded-md sm:rounded-lg flex items-center justify-center text-base sm:text-lg transition-all ${
-                                                                chatFolder === folder.emoji
-                                                                    ? "bg-[#FF5500]/20 ring-2 ring-[#FF5500]"
-                                                                    : "hover:bg-zinc-800"
-                                                            }`}
-                                                            title={folder.label}
-                                                        >
-                                                            {folder.emoji}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </motion.div>
-                                        </>
-                                    )}
-                                </AnimatePresence>
-                            </motion.div>
+                                onCallClick={onCallClick}
+                                onVideoClick={onVideoClick}
+                            />
                         );
                     })
                 )}
@@ -885,3 +936,5 @@ export function UnifiedChatList({
         </div>
     );
 }
+
+export const UnifiedChatList = memo(UnifiedChatListInner);

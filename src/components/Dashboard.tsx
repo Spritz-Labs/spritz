@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, startTransition } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
 import { useAccount, useSwitchChain } from "wagmi";
@@ -1128,7 +1128,7 @@ function DashboardContent({
         });
         
         if (Object.keys(updates).length > 0) {
-            setLastMessageTimes(prev => ({ ...prev, ...updates }));
+            startTransition(() => setLastMessageTimes(prev => ({ ...prev, ...updates })));
         }
         
         prevUnreadCountsRef.current = { ...unreadCounts };
@@ -1138,8 +1138,7 @@ function DashboardContent({
     const prevAlphaUnreadRef = useRef<number>(0);
     useEffect(() => {
         if (alphaUnreadCount > prevAlphaUnreadRef.current) {
-            // New message in global chat - update timestamp
-            setLastMessageTimes(prev => ({ ...prev, "global-spritz": Date.now() }));
+            startTransition(() => setLastMessageTimes(prev => ({ ...prev, "global-spritz": Date.now() })));
         }
         prevAlphaUnreadRef.current = alphaUnreadCount;
     }, [alphaUnreadCount]);
@@ -1350,6 +1349,14 @@ function DashboardContent({
         [friends, getEffectiveAvatar]
     );
 
+    // Normalize to a valid Date or null (invalid/missing values sort to bottom)
+    const toValidLastMessageAt = useCallback((value: unknown): Date | null => {
+        if (value == null) return null;
+        const d = value instanceof Date ? value : new Date(value as string | number);
+        const t = d.getTime();
+        return Number.isFinite(t) ? d : null;
+    }, []);
+
     // Create unified chat list combining DMs, groups, channels, and global chat
     const unifiedChats: UnifiedChatItem[] = useMemo(() => {
         const items: UnifiedChatItem[] = [];
@@ -1357,11 +1364,10 @@ function DashboardContent({
         // Add DM chats from friends
         friendsListData.forEach((friend) => {
             const addressLower = friend.address.toLowerCase();
-            // Use tracked last message time, or fall back to when they were added
             const lastMsgTime = lastMessageTimes[addressLower];
-            const lastMessageAt = lastMsgTime 
-                ? new Date(lastMsgTime) 
-                : new Date(friend.addedAt);
+            const lastMessageAt = lastMsgTime
+                ? toValidLastMessageAt(lastMsgTime)
+                : toValidLastMessageAt(friend.addedAt);
             
             items.push({
                 id: `dm-${friend.address}`,
@@ -1383,7 +1389,7 @@ function DashboardContent({
             });
         });
         
-        // Add Spritz Global Chat
+        // Add Spritz Global Chat (use null when no activity so it doesn't sort as "now")
         const globalLastMsgTime = lastMessageTimes["global-spritz"];
         items.push({
             id: "global-spritz",
@@ -1391,7 +1397,7 @@ function DashboardContent({
             name: "Spritz Global",
             avatar: globalChatIconUrl,
             lastMessage: lastMessagePreviews["global-spritz"] || "Community chat",
-            lastMessageAt: globalLastMsgTime ? new Date(globalLastMsgTime) : new Date(),
+            lastMessageAt: toValidLastMessageAt(globalLastMsgTime),
             unreadCount: alphaUnreadCount,
             isPinned: true,
             metadata: {
@@ -1403,14 +1409,10 @@ function DashboardContent({
         joinedChannels.forEach((channel) => {
             const channelKey = `channel-${channel.id}`;
             const lastMsgTime = lastMessageTimes[channelKey];
-            // Use tracked last message time - channels will sort by activity
-            // If not tracked yet, use channel's updated_at as initial fallback
             const fallbackTime = channel.updated_at || channel.created_at;
-            const lastMessageAt = lastMsgTime 
-                ? new Date(lastMsgTime) 
-                : fallbackTime 
-                ? new Date(fallbackTime) 
-                : null;
+            const lastMessageAt = lastMsgTime
+                ? toValidLastMessageAt(lastMsgTime)
+                : toValidLastMessageAt(fallbackTime);
             items.push({
                 id: channelKey,
                 type: "channel",
@@ -1430,12 +1432,9 @@ function DashboardContent({
         groups.forEach((group) => {
             const groupKey = `group-${group.id}`;
             const lastMsgTime = lastMessageTimes[groupKey];
-            // Use tracked last message time, or fall back to group creation time
-            const lastMessageAt = lastMsgTime 
-                ? new Date(lastMsgTime) 
-                : group.createdAt 
-                ? new Date(group.createdAt) 
-                : null;
+            const lastMessageAt = lastMsgTime
+                ? toValidLastMessageAt(lastMsgTime)
+                : toValidLastMessageAt(group.createdAt);
             items.push({
                 id: groupKey,
                 type: "group",
@@ -1452,24 +1451,25 @@ function DashboardContent({
         });
         
         return items;
-    }, [friendsListData, unreadCounts, lastMessageTimes, lastMessagePreviews, joinedChannels, groups, alphaUnreadCount, isAlphaMember]);
+    }, [friendsListData, unreadCounts, lastMessageTimes, lastMessagePreviews, joinedChannels, groups, alphaUnreadCount, isAlphaMember, globalChatIconUrl, toValidLastMessageAt]);
     
-    // Function to update last message time and preview when user sends a message
+    // Function to update last message time and preview when user sends a message (non-urgent to keep list responsive)
     const updateLastMessageTime = useCallback((chatKey: string, messagePreview?: string) => {
-        setLastMessageTimes(prev => ({
-            ...prev,
-            [chatKey]: Date.now(),
-        }));
-        if (messagePreview) {
-            // Truncate long previews
-            const preview = messagePreview.length > 50 
-                ? messagePreview.slice(0, 50) + "..." 
-                : messagePreview;
-            setLastMessagePreviews(prev => ({
+        startTransition(() => {
+            setLastMessageTimes(prev => ({
                 ...prev,
-                [chatKey]: preview,
+                [chatKey]: Date.now(),
             }));
-        }
+            if (messagePreview) {
+                const preview = messagePreview.length > 50
+                    ? messagePreview.slice(0, 50) + "..."
+                    : messagePreview;
+                setLastMessagePreviews(prev => ({
+                    ...prev,
+                    [chatKey]: preview,
+                }));
+            }
+        });
     }, []);
 
     // Open chat from URL parameter (e.g., ?chat=0x123...)
@@ -1892,9 +1892,7 @@ function DashboardContent({
 
         const unsubscribe = onNewMessage(({ senderAddress, content }) => {
             const senderAddressLower = senderAddress.toLowerCase();
-            
-            // Always update last message time for this conversation (for sorting)
-            setLastMessageTimes(prev => ({ ...prev, [senderAddressLower]: Date.now() }));
+            startTransition(() => setLastMessageTimes(prev => ({ ...prev, [senderAddressLower]: Date.now() })));
             
             // Skip notification if we're already viewing this conversation
             if (chatFriend?.address.toLowerCase() === senderAddressLower) {
@@ -1949,9 +1947,8 @@ function DashboardContent({
     // Listen for new channel messages and show toast + notification
     useEffect(() => {
         const unsubscribe = onNewChannelMessage(({ channelId, channelName, senderAddress, content }) => {
-            // Always update last message time for this channel (for sorting)
             const channelKey = `channel-${channelId}`;
-            setLastMessageTimes(prev => ({ ...prev, [channelKey]: Date.now() }));
+            startTransition(() => setLastMessageTimes(prev => ({ ...prev, [channelKey]: Date.now() })));
             
             // Skip notification if we're already viewing this channel
             if (selectedChannel?.id === channelId) {
@@ -3573,9 +3570,9 @@ function DashboardContent({
                     {activeNavTab === "agents" && (
                         <div
                             id="agents-section"
-                            className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6"
+                            className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6 sm:border-l-4 sm:border-l-purple-500/50 sm:shadow-lg sm:shadow-purple-500/5"
                         >
-                            <div className="px-1 py-2 sm:p-6">
+                            <div className="px-3 py-3 sm:p-6">
                                 <AgentsSection
                                     userAddress={userAddress}
                                     hasBetaAccess={hasBetaAccess}
@@ -3872,12 +3869,20 @@ function DashboardContent({
                             )}
 
                             {/* Unified Chat List - Telegram-style with emoji folders */}
-                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
-                                <div className="px-1 py-2 sm:p-4 sm:border-b sm:border-zinc-800">
+                            <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6 sm:border-l-4 sm:border-l-blue-500/50 sm:shadow-lg sm:shadow-blue-500/5">
+                                <div className="px-3 py-3 sm:px-5 sm:py-4 sm:border-b sm:border-zinc-800 bg-blue-500/5">
                                     <div className="flex items-center justify-between gap-2">
-                                        <h2 className="text-base sm:text-xl font-bold text-white">
-                                            Chats
-                                        </h2>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl sm:text-3xl" aria-hidden>💬</span>
+                                            <div>
+                                                <h2 className="text-base sm:text-xl font-bold text-white">
+                                                    Chats
+                                                </h2>
+                                                <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
+                                                    Direct & group conversations
+                                                </p>
+                                            </div>
+                                        </div>
                                         <div className="flex items-center gap-1 sm:gap-2">
                                             {/* Search Toggle Button */}
                                             <button
@@ -4062,7 +4067,7 @@ function DashboardContent({
                                         </div>
                                     </div>
                                 </div>
-                                <div className="px-0 sm:p-4">
+                                <div className="px-3 py-2 sm:px-5 sm:py-4">
                                     <UnifiedChatList
                                         chats={unifiedChats}
                                         userAddress={userAddress}
