@@ -95,7 +95,10 @@ export type ChatMessage = {
     scheduling?: SchedulingData;
 };
 
-export function useAgents(userAddress: string | null, isAdmin: boolean = false) {
+export function useAgents(
+    userAddress: string | null,
+    isAdmin: boolean = false,
+) {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -113,10 +116,10 @@ export function useAgents(userAddress: string | null, isAdmin: boolean = false) 
 
         try {
             // Build URL with optional includeOfficial param for admins
-            const url = isAdmin 
+            const url = isAdmin
                 ? `/api/agents?userAddress=${encodeURIComponent(userAddress)}&includeOfficial=true`
                 : `/api/agents?userAddress=${encodeURIComponent(userAddress)}`;
-            
+
             const res = await fetch(url);
             const data = await res.json();
 
@@ -127,132 +130,143 @@ export function useAgents(userAddress: string | null, isAdmin: boolean = false) 
             setAgents(data.agents || []);
         } catch (err) {
             console.error("[useAgents] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to fetch agents");
+            setError(
+                err instanceof Error ? err.message : "Failed to fetch agents",
+            );
         } finally {
             setIsLoading(false);
         }
     }, [userAddress, isAdmin]);
 
     // Create a new agent
-    const createAgent = useCallback(async (
-        name: string,
-        personality?: string,
-        avatarEmoji?: string,
-        visibility?: "private" | "friends" | "public" | "official",
-        tags?: string[]
-    ): Promise<Agent | null> => {
-        if (!userAddress) return null;
+    const createAgent = useCallback(
+        async (
+            name: string,
+            personality?: string,
+            avatarEmoji?: string,
+            visibility?: "private" | "friends" | "public" | "official",
+            tags?: string[],
+        ): Promise<Agent | null> => {
+            if (!userAddress) return null;
 
-        try {
-            const res = await fetch("/api/agents", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include", // Important for session cookie
-                body: JSON.stringify({
-                    userAddress,
-                    name,
-                    personality,
-                    avatarEmoji,
-                    visibility,
-                    tags,
-                }),
-            });
+            try {
+                const res = await fetch("/api/agents", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include", // Important for session cookie
+                    body: JSON.stringify({
+                        userAddress,
+                        name,
+                        personality,
+                        avatarEmoji,
+                        visibility,
+                        tags,
+                    }),
+                });
 
-            const data = await res.json();
+                const data = await res.json();
 
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to create agent");
+                if (!res.ok) {
+                    throw new Error(data.error || "Failed to create agent");
+                }
+
+                // Refresh agents list
+                await fetchAgents();
+
+                return data.agent;
+            } catch (err) {
+                console.error("[useAgents] Error creating agent:", err);
+                throw err;
             }
-
-            // Refresh agents list
-            await fetchAgents();
-
-            return data.agent;
-        } catch (err) {
-            console.error("[useAgents] Error creating agent:", err);
-            throw err;
-        }
-    }, [userAddress, fetchAgents]);
+        },
+        [userAddress, fetchAgents],
+    );
 
     // Update an agent
-    const updateAgent = useCallback(async (
-        agentId: string,
-        updates: {
-            name?: string;
-            personality?: string;
-            systemInstructions?: string;
-            avatarEmoji?: string;
-            avatarUrl?: string | null;
-            visibility?: "private" | "friends" | "public" | "official";
-            tags?: string[];
-            suggestedQuestions?: string[];
-            webSearchEnabled?: boolean;
-            useKnowledgeBase?: boolean;
-            mcpEnabled?: boolean;
-            apiEnabled?: boolean;
-            schedulingEnabled?: boolean;
-            publicAccessEnabled?: boolean;
-            x402Enabled?: boolean;
-            x402PriceCents?: number;
-            x402Network?: "base" | "base-sepolia";
-            x402WalletAddress?: string;
-            x402PricingMode?: "global" | "per_tool";
-            mcpServers?: MCPServer[];
-            apiTools?: APITool[];
-        }
-    ): Promise<Agent | null> => {
-        if (!userAddress) return null;
+    const updateAgent = useCallback(
+        async (
+            agentId: string,
+            updates: {
+                name?: string;
+                personality?: string;
+                systemInstructions?: string;
+                avatarEmoji?: string;
+                avatarUrl?: string | null;
+                visibility?: "private" | "friends" | "public" | "official";
+                tags?: string[];
+                suggestedQuestions?: string[];
+                webSearchEnabled?: boolean;
+                useKnowledgeBase?: boolean;
+                mcpEnabled?: boolean;
+                apiEnabled?: boolean;
+                schedulingEnabled?: boolean;
+                publicAccessEnabled?: boolean;
+                x402Enabled?: boolean;
+                x402PriceCents?: number;
+                x402Network?: "base" | "base-sepolia";
+                x402WalletAddress?: string;
+                x402PricingMode?: "global" | "per_tool";
+                mcpServers?: MCPServer[];
+                apiTools?: APITool[];
+            },
+        ): Promise<Agent | null> => {
+            if (!userAddress) return null;
 
-        try {
-            const res = await fetch(`/api/agents/${agentId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    userAddress,
-                    ...updates,
-                }),
-            });
+            try {
+                const res = await fetch(`/api/agents/${agentId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userAddress,
+                        ...updates,
+                    }),
+                });
 
-            const data = await res.json();
+                const data = await res.json();
 
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to update agent");
+                if (!res.ok) {
+                    throw new Error(data.error || "Failed to update agent");
+                }
+
+                // Refresh agents list
+                await fetchAgents();
+
+                return data.agent;
+            } catch (err) {
+                console.error("[useAgents] Error updating agent:", err);
+                throw err;
             }
-
-            // Refresh agents list
-            await fetchAgents();
-
-            return data.agent;
-        } catch (err) {
-            console.error("[useAgents] Error updating agent:", err);
-            throw err;
-        }
-    }, [userAddress, fetchAgents]);
+        },
+        [userAddress, fetchAgents],
+    );
 
     // Delete an agent
-    const deleteAgent = useCallback(async (agentId: string): Promise<boolean> => {
-        if (!userAddress) return false;
+    const deleteAgent = useCallback(
+        async (agentId: string): Promise<boolean> => {
+            if (!userAddress) return false;
 
-        try {
-            const res = await fetch(
-                `/api/agents/${agentId}?userAddress=${encodeURIComponent(userAddress)}`,
-                { method: "DELETE" }
-            );
+            try {
+                const res = await fetch(
+                    `/api/agents/${agentId}?userAddress=${encodeURIComponent(userAddress)}`,
+                    { method: "DELETE" },
+                );
 
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || "Failed to delete agent");
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "Failed to delete agent");
+                }
+
+                // Refresh agents list
+                await fetchAgents();
+
+                return true;
+            } catch (err) {
+                console.error("[useAgents] Error deleting agent:", err);
+                throw err;
             }
-
-            // Refresh agents list
-            await fetchAgents();
-
-            return true;
-        } catch (err) {
-            console.error("[useAgents] Error deleting agent:", err);
-            throw err;
-        }
-    }, [userAddress, fetchAgents]);
+        },
+        [userAddress, fetchAgents],
+    );
 
     // Load agents on mount
     useEffect(() => {
@@ -271,7 +285,10 @@ export function useAgents(userAddress: string | null, isAdmin: boolean = false) 
 }
 
 // Separate hook for agent chat
-export function useAgentChat(userAddress: string | null, agentId: string | null) {
+export function useAgentChat(
+    userAddress: string | null,
+    agentId: string | null,
+) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isSending, setIsSending] = useState(false);
@@ -289,7 +306,7 @@ export function useAgentChat(userAddress: string | null, agentId: string | null)
 
         try {
             const res = await fetch(
-                `/api/agents/${agentId}/chat?userAddress=${encodeURIComponent(userAddress)}`
+                `/api/agents/${agentId}/chat?userAddress=${encodeURIComponent(userAddress)}`,
             );
             const data = await res.json();
 
@@ -300,62 +317,163 @@ export function useAgentChat(userAddress: string | null, agentId: string | null)
             setMessages(data.chats || []);
         } catch (err) {
             console.error("[useAgentChat] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to fetch chat history");
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to fetch chat history",
+            );
         } finally {
             setIsLoading(false);
         }
     }, [userAddress, agentId]);
 
     // Send a message
-    const sendMessage = useCallback(async (message: string): Promise<string | null> => {
-        if (!userAddress || !agentId || !message.trim()) return null;
+    const sendMessage = useCallback(
+        async (message: string): Promise<string | null> => {
+            if (!userAddress || !agentId || !message.trim()) return null;
 
-        setIsSending(true);
-        setError(null);
+            setIsSending(true);
+            setError(null);
 
-        // Optimistically add user message
-        const tempUserMessage: ChatMessage = {
-            id: `temp-${Date.now()}`,
-            role: "user",
-            content: message,
-            created_at: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, tempUserMessage]);
-
-        try {
-            const res = await fetch(`/api/agents/${agentId}/chat`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userAddress, message }),
-            });
-
-            const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to send message");
-            }
-
-            // Add assistant response with optional scheduling data
-            const assistantMessage: ChatMessage = {
-                id: `resp-${Date.now()}`,
-                role: "assistant",
-                content: data.message,
+            // Optimistically add user message
+            const tempUserMessage: ChatMessage = {
+                id: `temp-${Date.now()}`,
+                role: "user",
+                content: message,
                 created_at: new Date().toISOString(),
-                scheduling: data.scheduling || undefined,
             };
-            setMessages(prev => [...prev, assistantMessage]);
+            setMessages((prev) => [...prev, tempUserMessage]);
 
-            return data.message;
-        } catch (err) {
-            console.error("[useAgentChat] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to send message");
-            // Remove optimistic message on error
-            setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
-            return null;
-        } finally {
-            setIsSending(false);
-        }
-    }, [userAddress, agentId]);
+            try {
+                const res = await fetch(`/api/agents/${agentId}/chat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userAddress,
+                        message,
+                        stream: true,
+                    }),
+                });
+
+                const contentType = res.headers.get("content-type") || "";
+                if (
+                    res.ok &&
+                    contentType.includes("application/x-ndjson") &&
+                    res.body
+                ) {
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = "";
+                    let streamedContent = "";
+                    const respId = `resp-${Date.now()}`;
+                    setMessages((prev) => [
+                        ...prev,
+                        {
+                            id: respId,
+                            role: "assistant",
+                            content: "",
+                            created_at: new Date().toISOString(),
+                        },
+                    ]);
+                    let finalScheduling: ChatMessage["scheduling"];
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split("\n");
+                            buffer = lines.pop() || "";
+                            for (const line of lines) {
+                                if (!line.trim()) continue;
+                                try {
+                                    const data = JSON.parse(line);
+                                    if (data.type === "chunk" && data.text) {
+                                        streamedContent += data.text;
+                                        setMessages((prev) => {
+                                            const next = [...prev];
+                                            const last = next[next.length - 1];
+                                            if (last?.id === respId)
+                                                next[next.length - 1] = {
+                                                    ...last,
+                                                    content: streamedContent,
+                                                };
+                                            return next;
+                                        });
+                                    }
+                                    if (data.type === "done") {
+                                        if (data.scheduling)
+                                            finalScheduling = data.scheduling;
+                                        const finalContent =
+                                            data.message ?? streamedContent;
+                                        setMessages((prev) => {
+                                            const next = [...prev];
+                                            const last = next[next.length - 1];
+                                            if (last?.id === respId)
+                                                next[next.length - 1] = {
+                                                    ...last,
+                                                    content: finalContent,
+                                                    scheduling: finalScheduling,
+                                                };
+                                            return next;
+                                        });
+                                        return finalContent;
+                                    }
+                                    if (data.type === "error") {
+                                        setMessages((prev) => {
+                                            const next = [...prev];
+                                            const last = next[next.length - 1];
+                                            if (last?.id === respId)
+                                                next[next.length - 1] = {
+                                                    ...last,
+                                                    content: `❌ ${data.error || "Error"}`,
+                                                };
+                                            return next;
+                                        });
+                                        return null;
+                                    }
+                                } catch {
+                                    // skip malformed line
+                                }
+                            }
+                        }
+                    } finally {
+                        reader.releaseLock();
+                    }
+                    return streamedContent;
+                }
+
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || "Failed to send message");
+                }
+
+                const assistantMessage: ChatMessage = {
+                    id: `resp-${Date.now()}`,
+                    role: "assistant",
+                    content: data.message,
+                    created_at: new Date().toISOString(),
+                    scheduling: data.scheduling || undefined,
+                };
+                setMessages((prev) => [...prev, assistantMessage]);
+                return data.message;
+            } catch (err) {
+                console.error("[useAgentChat] Error:", err);
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to send message",
+                );
+                // Remove optimistic message on error
+                setMessages((prev) =>
+                    prev.filter((m) => m.id !== tempUserMessage.id),
+                );
+                return null;
+            } finally {
+                setIsSending(false);
+            }
+        },
+        [userAddress, agentId],
+    );
 
     // Clear chat history
     const clearHistory = useCallback(async (): Promise<boolean> => {
@@ -364,7 +482,7 @@ export function useAgentChat(userAddress: string | null, agentId: string | null)
         try {
             const res = await fetch(
                 `/api/agents/${agentId}/chat?userAddress=${encodeURIComponent(userAddress)}`,
-                { method: "DELETE" }
+                { method: "DELETE" },
             );
 
             if (!res.ok) {
@@ -411,7 +529,10 @@ export type AgentKnowledge = {
 };
 
 // Hook for managing agent knowledge base
-export function useAgentKnowledge(userAddress: string | null, agentId: string | null) {
+export function useAgentKnowledge(
+    userAddress: string | null,
+    agentId: string | null,
+) {
     const [knowledgeItems, setKnowledgeItems] = useState<AgentKnowledge[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -428,7 +549,7 @@ export function useAgentKnowledge(userAddress: string | null, agentId: string | 
 
         try {
             const res = await fetch(
-                `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}`
+                `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}`,
             );
             const data = await res.json();
 
@@ -439,96 +560,127 @@ export function useAgentKnowledge(userAddress: string | null, agentId: string | 
             setKnowledgeItems(data.items || []);
         } catch (err) {
             console.error("[useAgentKnowledge] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to fetch knowledge");
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to fetch knowledge",
+            );
         } finally {
             setIsLoading(false);
         }
     }, [userAddress, agentId]);
 
     // Add a knowledge item
-    const addKnowledgeItem = useCallback(async (
-        title: string,
-        url: string,
-        contentType?: string
-    ): Promise<AgentKnowledge | null> => {
-        if (!userAddress || !agentId) return null;
+    const addKnowledgeItem = useCallback(
+        async (
+            title: string,
+            url: string,
+            contentType?: string,
+        ): Promise<AgentKnowledge | null> => {
+            if (!userAddress || !agentId) return null;
 
-        try {
-            const res = await fetch(`/api/agents/${agentId}/knowledge`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userAddress, title, url, contentType }),
-            });
+            try {
+                const res = await fetch(`/api/agents/${agentId}/knowledge`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userAddress,
+                        title,
+                        url,
+                        contentType,
+                    }),
+                });
 
-            const data = await res.json();
+                const data = await res.json();
 
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to add knowledge item");
+                if (!res.ok) {
+                    throw new Error(
+                        data.error || "Failed to add knowledge item",
+                    );
+                }
+
+                await fetchKnowledge();
+                return data.item;
+            } catch (err) {
+                console.error("[useAgentKnowledge] Error:", err);
+                throw err;
             }
-
-            await fetchKnowledge();
-            return data.item;
-        } catch (err) {
-            console.error("[useAgentKnowledge] Error:", err);
-            throw err;
-        }
-    }, [userAddress, agentId, fetchKnowledge]);
+        },
+        [userAddress, agentId, fetchKnowledge],
+    );
 
     // Delete a knowledge item
-    const deleteKnowledgeItem = useCallback(async (knowledgeId: string): Promise<boolean> => {
-        if (!userAddress || !agentId) return false;
+    const deleteKnowledgeItem = useCallback(
+        async (knowledgeId: string): Promise<boolean> => {
+            if (!userAddress || !agentId) return false;
 
-        try {
-            const res = await fetch(
-                `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}&knowledgeId=${encodeURIComponent(knowledgeId)}`,
-                { method: "DELETE" }
-            );
+            try {
+                const res = await fetch(
+                    `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}&knowledgeId=${encodeURIComponent(knowledgeId)}`,
+                    { method: "DELETE" },
+                );
 
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || "Failed to delete knowledge item");
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(
+                        data.error || "Failed to delete knowledge item",
+                    );
+                }
+
+                await fetchKnowledge();
+                return true;
+            } catch (err) {
+                console.error("[useAgentKnowledge] Error:", err);
+                throw err;
             }
-
-            await fetchKnowledge();
-            return true;
-        } catch (err) {
-            console.error("[useAgentKnowledge] Error:", err);
-            throw err;
-        }
-    }, [userAddress, agentId, fetchKnowledge]);
+        },
+        [userAddress, agentId, fetchKnowledge],
+    );
 
     // Index a knowledge item (generate embeddings)
-    const indexKnowledgeItem = useCallback(async (knowledgeId: string): Promise<boolean> => {
-        if (!userAddress || !agentId) return false;
+    const indexKnowledgeItem = useCallback(
+        async (knowledgeId: string): Promise<boolean> => {
+            if (!userAddress || !agentId) return false;
 
-        // Update local state to show processing
-        setKnowledgeItems(prev => prev.map(item => 
-            item.id === knowledgeId ? { ...item, status: "processing" as const } : item
-        ));
+            // Update local state to show processing
+            setKnowledgeItems((prev) =>
+                prev.map((item) =>
+                    item.id === knowledgeId
+                        ? { ...item, status: "processing" as const }
+                        : item,
+                ),
+            );
 
-        try {
-            const res = await fetch(`/api/agents/${agentId}/knowledge/index`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userAddress, knowledgeId }),
-            });
+            try {
+                const res = await fetch(
+                    `/api/agents/${agentId}/knowledge/index`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ userAddress, knowledgeId }),
+                    },
+                );
 
-            const data = await res.json();
+                const data = await res.json();
 
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to index knowledge item");
+                if (!res.ok) {
+                    throw new Error(
+                        data.error || "Failed to index knowledge item",
+                    );
+                }
+
+                // Refresh to get updated status
+                await fetchKnowledge();
+                return true;
+            } catch (err) {
+                console.error("[useAgentKnowledge] Error indexing:", err);
+                // Refresh to get actual status
+                await fetchKnowledge();
+                throw err;
             }
-
-            // Refresh to get updated status
-            await fetchKnowledge();
-            return true;
-        } catch (err) {
-            console.error("[useAgentKnowledge] Error indexing:", err);
-            // Refresh to get actual status
-            await fetchKnowledge();
-            throw err;
-        }
-    }, [userAddress, agentId, fetchKnowledge]);
+        },
+        [userAddress, agentId, fetchKnowledge],
+    );
 
     // Load knowledge when agent changes
     useEffect(() => {
@@ -589,7 +741,11 @@ export function useDiscoverAgents(userAddress: string | null) {
             setAgents(data.agents || []);
         } catch (err) {
             console.error("[useDiscoverAgents] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to discover agents");
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to discover agents",
+            );
         } finally {
             setIsLoading(false);
         }
@@ -635,7 +791,9 @@ export function useFavoriteAgents(userAddress: string | null) {
         setError(null);
 
         try {
-            const res = await fetch(`/api/agents/favorites?userAddress=${encodeURIComponent(userAddress)}`);
+            const res = await fetch(
+                `/api/agents/favorites?userAddress=${encodeURIComponent(userAddress)}`,
+            );
             const data = await res.json();
 
             if (!res.ok) {
@@ -643,81 +801,105 @@ export function useFavoriteAgents(userAddress: string | null) {
             }
 
             setFavorites(data.favorites || []);
-            setFavoriteIds(new Set((data.favorites || []).map((f: FavoriteAgent) => f.agent.id)));
+            setFavoriteIds(
+                new Set(
+                    (data.favorites || []).map(
+                        (f: FavoriteAgent) => f.agent.id,
+                    ),
+                ),
+            );
         } catch (err) {
             console.error("[useFavoriteAgents] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to fetch favorites");
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to fetch favorites",
+            );
         } finally {
             setIsLoading(false);
         }
     }, [userAddress]);
 
-    const addFavorite = useCallback(async (agentId: string): Promise<boolean> => {
-        if (!userAddress) return false;
+    const addFavorite = useCallback(
+        async (agentId: string): Promise<boolean> => {
+            if (!userAddress) return false;
 
-        try {
-            const res = await fetch("/api/agents/favorites", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include", // Important for session cookie
-                body: JSON.stringify({ userAddress, agentId }),
-            });
+            try {
+                const res = await fetch("/api/agents/favorites", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include", // Important for session cookie
+                    body: JSON.stringify({ userAddress, agentId }),
+                });
 
-            const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || "Failed to add favorite");
-            }
-
-            // Update local state
-            setFavoriteIds(prev => new Set([...prev, agentId]));
-            await fetchFavorites();
-            return true;
-        } catch (err) {
-            console.error("[useFavoriteAgents] Error:", err);
-            throw err;
-        }
-    }, [userAddress, fetchFavorites]);
-
-    const removeFavorite = useCallback(async (agentId: string): Promise<boolean> => {
-        if (!userAddress) return false;
-
-        try {
-            const res = await fetch(
-                `/api/agents/favorites?userAddress=${encodeURIComponent(userAddress)}&agentId=${encodeURIComponent(agentId)}`,
-                { method: "DELETE" }
-            );
-
-            if (!res.ok) {
                 const data = await res.json();
-                throw new Error(data.error || "Failed to remove favorite");
+
+                if (!res.ok) {
+                    throw new Error(data.error || "Failed to add favorite");
+                }
+
+                // Update local state
+                setFavoriteIds((prev) => new Set([...prev, agentId]));
+                await fetchFavorites();
+                return true;
+            } catch (err) {
+                console.error("[useFavoriteAgents] Error:", err);
+                throw err;
             }
+        },
+        [userAddress, fetchFavorites],
+    );
 
-            // Update local state
-            setFavoriteIds(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(agentId);
-                return newSet;
-            });
-            setFavorites(prev => prev.filter(f => f.agent.id !== agentId));
-            return true;
-        } catch (err) {
-            console.error("[useFavoriteAgents] Error:", err);
-            throw err;
-        }
-    }, [userAddress]);
+    const removeFavorite = useCallback(
+        async (agentId: string): Promise<boolean> => {
+            if (!userAddress) return false;
 
-    const isFavorite = useCallback((agentId: string) => {
-        return favoriteIds.has(agentId);
-    }, [favoriteIds]);
+            try {
+                const res = await fetch(
+                    `/api/agents/favorites?userAddress=${encodeURIComponent(userAddress)}&agentId=${encodeURIComponent(agentId)}`,
+                    { method: "DELETE" },
+                );
 
-    const toggleFavorite = useCallback(async (agentId: string): Promise<boolean> => {
-        if (isFavorite(agentId)) {
-            return removeFavorite(agentId);
-        } else {
-            return addFavorite(agentId);
-        }
-    }, [isFavorite, addFavorite, removeFavorite]);
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "Failed to remove favorite");
+                }
+
+                // Update local state
+                setFavoriteIds((prev) => {
+                    const newSet = new Set(prev);
+                    newSet.delete(agentId);
+                    return newSet;
+                });
+                setFavorites((prev) =>
+                    prev.filter((f) => f.agent.id !== agentId),
+                );
+                return true;
+            } catch (err) {
+                console.error("[useFavoriteAgents] Error:", err);
+                throw err;
+            }
+        },
+        [userAddress],
+    );
+
+    const isFavorite = useCallback(
+        (agentId: string) => {
+            return favoriteIds.has(agentId);
+        },
+        [favoriteIds],
+    );
+
+    const toggleFavorite = useCallback(
+        async (agentId: string): Promise<boolean> => {
+            if (isFavorite(agentId)) {
+                return removeFavorite(agentId);
+            } else {
+                return addFavorite(agentId);
+            }
+        },
+        [isFavorite, addFavorite, removeFavorite],
+    );
 
     useEffect(() => {
         fetchFavorites();
@@ -736,4 +918,3 @@ export function useFavoriteAgents(userAddress: string | null) {
 }
 
 export default useAgents;
-

@@ -154,6 +154,8 @@ function isEventQuery(message: string): boolean {
         "hackathon",
         "workshop",
         "side event",
+        "gathering",
+        "privacy",
         "what's on",
         "whats on",
         "what is on",
@@ -183,6 +185,55 @@ function isEventQuery(message: string): boolean {
     ];
     const lowerMessage = message.toLowerCase();
     return eventKeywords.some((keyword) => lowerMessage.includes(keyword));
+}
+
+// Extract topic words from message for event name/description matching (4+ chars, not generic)
+const EVENT_STOPWORDS = new Set([
+    "event",
+    "events",
+    "schedule",
+    "happening",
+    "today",
+    "tomorrow",
+    "about",
+    "what",
+    "when",
+    "where",
+    "which",
+    "there",
+    "this",
+    "that",
+    "have",
+    "with",
+    "would",
+    "could",
+    "please",
+    "check",
+    "double",
+    "think",
+    "thought",
+    "know",
+    "february",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]);
+function extractEventTopicWords(message: string): string[] {
+    const words = message
+        .toLowerCase()
+        .replace(/[^\w\s]/g, " ")
+        .split(/\s+/);
+    const out: string[] = [];
+    for (const w of words) {
+        if (w.length >= 4 && !EVENT_STOPWORDS.has(w) && !out.includes(w)) {
+            out.push(w);
+        }
+    }
+    return out.slice(0, 5); // max 5 topic words
 }
 
 // Helper to extract date from message (returns YYYY-MM-DD or null)
@@ -399,11 +450,51 @@ async function getGlobalEventsContext(message: string): Promise<string | null> {
             eventDateFilter = t.toISOString().split("T")[0];
         }
 
+        const eventFields =
+            "id, name, description, event_type, event_date, start_time, end_time, venue, city, country, is_virtual, organizer, event_url, rsvp_url, registration_enabled, is_featured";
+
+        // If user asks about a specific topic (e.g. "Privacy Gathering", "privacy events"), fetch events matching name/description first
+        const topicWords = extractEventTopicWords(message);
+        type EventRow = {
+            id: string;
+            name: string | null;
+            description: string | null;
+            event_type: string;
+            event_date: string;
+            start_time: string | null;
+            end_time: string | null;
+            venue: string | null;
+            city: string | null;
+            country: string | null;
+            is_virtual: boolean | null;
+            organizer: string | null;
+            event_url: string | null;
+            rsvp_url: string | null;
+            registration_enabled: boolean | null;
+            is_featured: boolean | null;
+        };
+        let topicMatchedEvents: EventRow[] = [];
+        if (topicWords.length > 0) {
+            const orParts = topicWords.flatMap((w) => [
+                `name.ilike.%${w}%`,
+                `description.ilike.%${w}%`,
+            ]);
+            const { data: topicEvents } = await supabase
+                .from("shout_events")
+                .select(eventFields)
+                .eq("status", "published")
+                .gte("event_date", today)
+                .or(orParts.join(","))
+                .order("is_featured", { ascending: false })
+                .order("event_date", { ascending: true })
+                .order("start_time", { ascending: true, nullsFirst: false })
+                .limit(20);
+            topicMatchedEvents = (topicEvents || []) as EventRow[];
+        }
+
         let query = supabase
             .from("shout_events")
-            .select(
-                "id, name, description, event_type, event_date, start_time, end_time, venue, city, country, is_virtual, organizer, event_url, rsvp_url, registration_enabled, is_featured",
-            )
+            .select(eventFields)
             .eq("status", "published")
             .order("is_featured", { ascending: false })
             .order("event_date", { ascending: true })
@@ -421,7 +512,13 @@ async function getGlobalEventsContext(message: string): Promise<string | null> {
             console.error("[Public Chat] Global events fetch error:", error);
             return null;
         }
-        if (!rawEvents?.length) {
+        // Merge topic-matched events first (so e.g. "Privacy Gathering" appears when user asks about it), then main list
+        const topicIds = new Set(topicMatchedEvents.map((e) => e.id));
+        const mainList = (rawEvents || []).filter(
+            (e: { id: string }) => !topicIds.has(e.id),
+        );
+        const mergedRaw = [...topicMatchedEvents, ...mainList];
+        if (!mergedRaw.length) {
             return `\n\n## Global Events Database (Spritz)
 No events found for the requested date/range. Users can browse all events at: https://app.spritz.chat/events
 When users ask about events, tell them to check the events directory and offer to help with registration for any event.`;
@@ -429,7 +526,7 @@ When users ask about events, tell them to check the events directory and offer t
 
         // Deduplicate: same event often appears with slight name/location variants (e.g. "Satoshi Roundtable XII" Dubai vs دبي)
         const seen = new Set<string>();
-        const events = rawEvents.filter((e) => {
+        const events = mergedRaw.filter((e) => {
             const nameNorm = (e.name || "")
                 .toLowerCase()
                 .replace(/^\s*the\s+/i, "")
@@ -458,8 +555,12 @@ When users ask about events, tell them to check the events directory and offer t
             )
             .join("\n\n");
 
+        const topicNote =
+            topicWords.length > 0
+                ? `The user asked about topics like: ${topicWords.join(", ")}. Events matching those terms are listed FIRST – prioritize and mention them.\n\n`
+                : "";
         return `\n\n## Global Events Database (Spritz) – ${events.length} event(s)
-Use this data to answer event questions. Do NOT write code (e.g. Python) to compute dates – use the event list below.
+${topicNote}Use this data to answer event questions. Do NOT write code (e.g. Python) to compute dates – use the event list below.
 List each event only once. When the same event appears in different forms (e.g. different language for location), present it once with the clearest name and location.
 
 ${lines}
@@ -558,7 +659,7 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { message, sessionId } = body;
+        const { message, sessionId, stream: streamRequested } = body;
 
         if (!message?.trim()) {
             return NextResponse.json(
@@ -743,17 +844,109 @@ export async function POST(
             },
         };
 
-        // Generate response
-        const result = await ai.models.generateContent(generateConfig);
-        const assistantMessage =
-            result.text || "I'm sorry, I couldn't generate a response.";
-
-        // Create session ID if not provided
         const finalSessionId =
             sessionId ||
             `x402-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-        // Store the conversation
+        if (streamRequested === true) {
+            // Stream response: yield chunks then persist and send done
+            const encoder = new TextEncoder();
+            const stream = new ReadableStream({
+                async start(controller) {
+                    let fullText = "";
+                    try {
+                        const streamResponse =
+                            await ai.models.generateContentStream(
+                                generateConfig,
+                            );
+                        for await (const chunk of streamResponse) {
+                            const text = chunk.text ?? "";
+                            if (text) {
+                                fullText += text;
+                                controller.enqueue(
+                                    encoder.encode(
+                                        JSON.stringify({
+                                            type: "chunk",
+                                            text,
+                                        }) + "\n",
+                                    ),
+                                );
+                            }
+                        }
+                        const assistantMessage =
+                            fullText.trim() ||
+                            "I'm sorry, I couldn't generate a response.";
+                        await supabase.from("shout_agent_chats").insert([
+                            {
+                                agent_id: id,
+                                user_address: payerAddress,
+                                session_id: finalSessionId,
+                                role: "user",
+                                content: message,
+                            },
+                            {
+                                agent_id: id,
+                                user_address: payerAddress,
+                                session_id: finalSessionId,
+                                role: "assistant",
+                                content: assistantMessage,
+                            },
+                        ]);
+                        await supabase.rpc("increment_agent_messages", {
+                            agent_id_param: id,
+                        });
+                        if (paymentAmountCents > 0) {
+                            await supabase.rpc("increment_agent_paid_stats", {
+                                agent_id_param: id,
+                                amount_cents_param: paymentAmountCents,
+                            });
+                            await supabase
+                                .from("shout_agent_x402_transactions")
+                                .insert({
+                                    agent_id: id,
+                                    payer_address: payerAddress,
+                                    amount_cents: paymentAmountCents,
+                                    network: agent.x402_network || "base",
+                                    transaction_hash: paymentTxHash,
+                                });
+                        }
+                        controller.enqueue(
+                            encoder.encode(
+                                JSON.stringify({
+                                    type: "done",
+                                    sessionId: finalSessionId,
+                                    message: assistantMessage,
+                                }) + "\n",
+                            ),
+                        );
+                    } catch (err) {
+                        console.error("[Public Agent Chat] Stream error:", err);
+                        controller.enqueue(
+                            encoder.encode(
+                                JSON.stringify({
+                                    type: "error",
+                                    error: "Failed to generate response",
+                                }) + "\n",
+                            ),
+                        );
+                    } finally {
+                        controller.close();
+                    }
+                },
+            });
+            return new Response(stream, {
+                headers: {
+                    "Content-Type": "application/x-ndjson",
+                    "Cache-Control": "no-store",
+                },
+            });
+        }
+
+        // Non-stream: generate full response then return JSON
+        const result = await ai.models.generateContent(generateConfig);
+        const assistantMessage =
+            result.text || "I'm sorry, I couldn't generate a response.";
+
         await supabase.from("shout_agent_chats").insert([
             {
                 agent_id: id,
@@ -771,17 +964,14 @@ export async function POST(
             },
         ]);
 
-        // Increment message count and paid stats
         await supabase.rpc("increment_agent_messages", { agent_id_param: id });
 
-        // Track the paid transaction
         if (paymentAmountCents > 0) {
             await supabase.rpc("increment_agent_paid_stats", {
                 agent_id_param: id,
                 amount_cents_param: paymentAmountCents,
             });
 
-            // Log the transaction
             await supabase.from("shout_agent_x402_transactions").insert({
                 agent_id: id,
                 payer_address: payerAddress,

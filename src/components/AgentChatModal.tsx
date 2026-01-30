@@ -3,8 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAgentChat, Agent } from "@/hooks/useAgents";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { ChatMarkdown } from "./ChatMarkdown";
 import { SchedulingCard } from "./SchedulingCard";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
@@ -217,7 +216,10 @@ export function AgentChatModal({
                             className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 space-y-4"
                         >
                             {isLoading ? (
-                                <ChatSkeleton messageCount={6} className="p-4" />
+                                <ChatSkeleton
+                                    messageCount={6}
+                                    className="p-4"
+                                />
                             ) : messages.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-full text-center">
                                     {agent.avatar_url ? (
@@ -278,15 +280,15 @@ export function AgentChatModal({
                                                 {msg.role === "assistant" ? (
                                                     <>
                                                         <div className="text-sm prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700 prose-code:text-pink-400 prose-code:before:content-[''] prose-code:after:content-['']">
-                                                            <ReactMarkdown
-                                                                remarkPlugins={[
-                                                                    remarkGfm,
-                                                                ]}
-                                                            >
-                                                                {msg.content}
-                                                            </ReactMarkdown>
+                                                            <ChatMarkdown
+                                                                content={
+                                                                    msg.content
+                                                                }
+                                                                isOwnMessage={
+                                                                    false
+                                                                }
+                                                            />
                                                         </div>
-                                                        {/* Render interactive scheduling card if present */}
                                                         {msg.scheduling &&
                                                             msg.scheduling.slots
                                                                 .length > 0 && (
@@ -405,47 +407,47 @@ export function AgentChatModal({
                                         maxLength={10000}
                                         className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
                                     />
-                                <button
-                                    onClick={handleSend}
-                                    disabled={!input.trim() || isSending}
-                                    className="px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all"
-                                >
-                                    {isSending ? (
-                                        <svg
-                                            className="animate-spin w-5 h-5"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <circle
-                                                className="opacity-25"
-                                                cx="12"
-                                                cy="12"
-                                                r="10"
+                                    <button
+                                        onClick={handleSend}
+                                        disabled={!input.trim() || isSending}
+                                        className="px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all"
+                                    >
+                                        {isSending ? (
+                                            <svg
+                                                className="animate-spin w-5 h-5"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                />
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                                />
+                                            </svg>
+                                        ) : (
+                                            <svg
+                                                className="w-5 h-5"
+                                                fill="none"
                                                 stroke="currentColor"
-                                                strokeWidth="4"
-                                            />
-                                            <path
-                                                className="opacity-75"
-                                                fill="currentColor"
-                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                                            />
-                                        </svg>
-                                    ) : (
-                                        <svg
-                                            className="w-5 h-5"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                                            />
-                                        </svg>
-                                    )}
-                                </button>
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                                                />
+                                            </svg>
+                                        )}
+                                    </button>
                                 </div>
                                 {input.length > 500 && (
                                     <p className="text-xs text-zinc-500">

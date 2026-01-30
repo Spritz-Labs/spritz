@@ -435,7 +435,7 @@ export async function POST(
     try {
         const { id } = await params;
         const body = await request.json();
-        const { userAddress, message } = body;
+        const { userAddress, message, stream: streamRequested } = body;
 
         if (!userAddress || !message) {
             return NextResponse.json(
@@ -1845,17 +1845,84 @@ ${apiResults.join("\n")}
             config.tools = [{ googleSearch: {} }];
         }
 
-        // Generate response using Gemini 2.0 Flash (free tier: 15 RPM, 1500 req/day)
-        const response = await ai.models.generateContent({
+        const generateConfig = {
             model: "gemini-2.0-flash",
             contents: history,
             config,
-        });
+        };
 
+        if (streamRequested === true) {
+            const encoder = new TextEncoder();
+            const stream = new ReadableStream({
+                async start(controller) {
+                    let fullText = "";
+                    try {
+                        const streamResponse =
+                            await ai.models.generateContentStream(
+                                generateConfig,
+                            );
+                        for await (const chunk of streamResponse) {
+                            const text = chunk.text ?? "";
+                            if (text) {
+                                fullText += text;
+                                controller.enqueue(
+                                    encoder.encode(
+                                        JSON.stringify({
+                                            type: "chunk",
+                                            text,
+                                        }) + "\n",
+                                    ),
+                                );
+                            }
+                        }
+                        const assistantMessage =
+                            fullText.trim() ||
+                            "I'm sorry, I couldn't generate a response.";
+                        await supabase.from("shout_agent_chats").insert({
+                            agent_id: id,
+                            user_address: normalizedAddress,
+                            role: "assistant",
+                            content: assistantMessage,
+                        });
+                        await supabase.rpc("increment_agent_messages", {
+                            p_agent_id: id,
+                        });
+                        controller.enqueue(
+                            encoder.encode(
+                                JSON.stringify({
+                                    type: "done",
+                                    message: assistantMessage,
+                                    scheduling: schedulingResponseData,
+                                }) + "\n",
+                            ),
+                        );
+                    } catch (err) {
+                        console.error("[Agent Chat] Stream error:", err);
+                        controller.enqueue(
+                            encoder.encode(
+                                JSON.stringify({
+                                    type: "error",
+                                    error: "Failed to generate response",
+                                }) + "\n",
+                            ),
+                        );
+                    } finally {
+                        controller.close();
+                    }
+                },
+            });
+            return new Response(stream, {
+                headers: {
+                    "Content-Type": "application/x-ndjson",
+                    "Cache-Control": "no-store",
+                },
+            });
+        }
+
+        const response = await ai.models.generateContent(generateConfig);
         const assistantMessage =
             response.text || "I'm sorry, I couldn't generate a response.";
 
-        // Store assistant message
         await supabase.from("shout_agent_chats").insert({
             agent_id: id,
             user_address: normalizedAddress,
@@ -1863,7 +1930,6 @@ ${apiResults.join("\n")}
             content: assistantMessage,
         });
 
-        // Increment message count
         await supabase.rpc("increment_agent_messages", { p_agent_id: id });
 
         return NextResponse.json({
