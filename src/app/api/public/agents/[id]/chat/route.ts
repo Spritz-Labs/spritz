@@ -883,6 +883,7 @@ export async function POST(
                                 session_id: finalSessionId,
                                 role: "user",
                                 content: message,
+                                source: "public",
                             },
                             {
                                 agent_id: id,
@@ -890,6 +891,7 @@ export async function POST(
                                 session_id: finalSessionId,
                                 role: "assistant",
                                 content: assistantMessage,
+                                source: "public",
                             },
                         ]);
                         await supabase.rpc("increment_agent_messages", {
@@ -954,6 +956,7 @@ export async function POST(
                 session_id: finalSessionId,
                 role: "user",
                 content: message,
+                source: "public",
             },
             {
                 agent_id: id,
@@ -961,6 +964,7 @@ export async function POST(
                 session_id: finalSessionId,
                 role: "assistant",
                 content: assistantMessage,
+                source: "public",
             },
         ]);
 

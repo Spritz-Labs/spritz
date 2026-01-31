@@ -6,64 +6,147 @@ import { Agent, MCPServer, APITool } from "@/hooks/useAgents";
 import AgentEventsModal from "./AgentEventsModal";
 
 const AGENT_EMOJIS = [
-    "🤖", "🧠", "💡", "🎯", "🚀", "⚡", "🔮", "🎨",
-    "📚", "💼", "🔬", "🎭", "🌟", "🦾", "🤓", "🧙",
+    "🤖",
+    "🧠",
+    "💡",
+    "🎯",
+    "🚀",
+    "⚡",
+    "🔮",
+    "🎨",
+    "📚",
+    "💼",
+    "🔬",
+    "🎭",
+    "🌟",
+    "🦾",
+    "🤓",
+    "🧙",
 ];
 
 // Pre-configured MCP servers users can choose from
 const POPULAR_MCP_SERVERS = [
-    { id: "filesystem", name: "File System", url: "npx -y @modelcontextprotocol/server-filesystem", description: "Read/write local files", requiresApiKey: false },
-    { id: "github", name: "GitHub", url: "npx -y @modelcontextprotocol/server-github", description: "GitHub repository access", requiresApiKey: true },
-    { id: "slack", name: "Slack", url: "npx -y @modelcontextprotocol/server-slack", description: "Slack workspace integration", requiresApiKey: true },
-    { id: "postgres", name: "PostgreSQL", url: "npx -y @modelcontextprotocol/server-postgres", description: "Database queries", requiresApiKey: true },
-    { id: "brave-search", name: "Brave Search", url: "npx -y @modelcontextprotocol/server-brave-search", description: "Web search via Brave", requiresApiKey: true },
-    { id: "memory", name: "Memory", url: "npx -y @modelcontextprotocol/server-memory", description: "Persistent memory storage", requiresApiKey: false },
+    {
+        id: "the-grid",
+        name: "The Grid",
+        url: "https://grid-mcp.example.com",
+        description:
+            "Data & query tools (platform provides GraphQL API by default)",
+        requiresApiKey: false,
+    },
+    {
+        id: "filesystem",
+        name: "File System",
+        url: "npx -y @modelcontextprotocol/server-filesystem",
+        description: "Read/write local files",
+        requiresApiKey: false,
+    },
+    {
+        id: "github",
+        name: "GitHub",
+        url: "npx -y @modelcontextprotocol/server-github",
+        description: "GitHub repository access",
+        requiresApiKey: true,
+    },
+    {
+        id: "slack",
+        name: "Slack",
+        url: "npx -y @modelcontextprotocol/server-slack",
+        description: "Slack workspace integration",
+        requiresApiKey: true,
+    },
+    {
+        id: "postgres",
+        name: "PostgreSQL",
+        url: "npx -y @modelcontextprotocol/server-postgres",
+        description: "Database queries",
+        requiresApiKey: true,
+    },
+    {
+        id: "brave-search",
+        name: "Brave Search",
+        url: "npx -y @modelcontextprotocol/server-brave-search",
+        description: "Web search via Brave",
+        requiresApiKey: true,
+    },
+    {
+        id: "memory",
+        name: "Memory",
+        url: "npx -y @modelcontextprotocol/server-memory",
+        description: "Persistent memory storage",
+        requiresApiKey: false,
+    },
 ];
 
 // Popular tag suggestions
 const TAG_SUGGESTIONS = [
-    "coding", "writing", "research", "math", "creative", "productivity",
-    "learning", "fitness", "finance", "health", "gaming", "music",
-    "art", "science", "business", "education", "assistant", "fun",
+    "coding",
+    "writing",
+    "research",
+    "math",
+    "creative",
+    "productivity",
+    "learning",
+    "fitness",
+    "finance",
+    "health",
+    "gaming",
+    "music",
+    "art",
+    "science",
+    "business",
+    "education",
+    "assistant",
+    "fun",
 ];
 
 interface EditAgentModalProps {
     isOpen: boolean;
     onClose: () => void;
     agent: Agent | null;
-    onSave: (agentId: string, updates: {
-        name?: string;
-        personality?: string;
-        systemInstructions?: string;
-        avatarEmoji?: string;
-        avatarUrl?: string | null;
-        visibility?: "private" | "friends" | "public" | "official";
-        tags?: string[];
-        suggestedQuestions?: string[];
-        webSearchEnabled?: boolean;
-        useKnowledgeBase?: boolean;
-        mcpEnabled?: boolean;
-        apiEnabled?: boolean;
-        schedulingEnabled?: boolean;
-        eventsAccess?: boolean;
-        publicAccessEnabled?: boolean;
-        x402Enabled?: boolean;
-        x402PriceCents?: number;
-        x402Network?: "base" | "base-sepolia";
-        x402WalletAddress?: string;
-        x402PricingMode?: "global" | "per_tool";
-        mcpServers?: MCPServer[];
-        apiTools?: APITool[];
-    }) => Promise<void>;
+    onSave: (
+        agentId: string,
+        updates: {
+            name?: string;
+            personality?: string;
+            systemInstructions?: string;
+            avatarEmoji?: string;
+            avatarUrl?: string | null;
+            visibility?: "private" | "friends" | "public" | "official";
+            tags?: string[];
+            suggestedQuestions?: string[];
+            webSearchEnabled?: boolean;
+            useKnowledgeBase?: boolean;
+            mcpEnabled?: boolean;
+            apiEnabled?: boolean;
+            schedulingEnabled?: boolean;
+            eventsAccess?: boolean;
+            publicAccessEnabled?: boolean;
+            x402Enabled?: boolean;
+            x402PriceCents?: number;
+            x402Network?: "base" | "base-sepolia";
+            x402WalletAddress?: string;
+            x402PricingMode?: "global" | "per_tool";
+            mcpServers?: MCPServer[];
+            apiTools?: APITool[];
+        },
+    ) => Promise<void>;
     userAddress?: string;
     isAdmin?: boolean;
 }
 
 type TabType = "general" | "capabilities" | "mcp" | "api";
 
-export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, isAdmin = false }: EditAgentModalProps) {
+export function EditAgentModal({
+    isOpen,
+    onClose,
+    agent,
+    onSave,
+    userAddress,
+    isAdmin = false,
+}: EditAgentModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("general");
-    
+
     // General settings
     const [name, setName] = useState("");
     const [personality, setPersonality] = useState("");
@@ -71,16 +154,28 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [emoji, setEmoji] = useState("🤖");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-    const [visibility, setVisibility] = useState<"private" | "friends" | "public" | "official">("private");
+    const [visibility, setVisibility] = useState<
+        "private" | "friends" | "public" | "official"
+    >("private");
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
-    const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(["", "", "", ""]);
-    
+    const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
+        "",
+        "",
+        "",
+        "",
+    ]);
+
     // Channel presence (for Official agents)
-    const [availableChannels, setAvailableChannels] = useState<Array<{id: string; name: string; emoji: string}>>([]);
-    const [channelMemberships, setChannelMemberships] = useState<{global: boolean; channels: string[]}>({ global: false, channels: [] });
+    const [availableChannels, setAvailableChannels] = useState<
+        Array<{ id: string; name: string; emoji: string }>
+    >([]);
+    const [channelMemberships, setChannelMemberships] = useState<{
+        global: boolean;
+        channels: string[];
+    }>({ global: false, channels: [] });
     const [isSavingChannels, setIsSavingChannels] = useState(false);
-    
+
     // Tag helpers
     const addTag = (tag: string) => {
         const normalizedTag = tag.trim().toLowerCase();
@@ -91,7 +186,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     };
 
     const removeTag = (tagToRemove: string) => {
-        setTags(tags.filter(t => t !== tagToRemove));
+        setTags(tags.filter((t) => t !== tagToRemove));
     };
 
     const handleTagKeyDown = (e: React.KeyboardEvent) => {
@@ -105,54 +200,67 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
 
     // Resize image for avatar (ensure high quality)
     // Increased to 1024px and 95% quality for sharper profile photos
-    const resizeImageForAvatar = (file: File, maxSize: number = 1024): Promise<Blob> => {
+    const resizeImageForAvatar = (
+        file: File,
+        maxSize: number = 1024,
+    ): Promise<Blob> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+
             img.onload = () => {
                 if (!ctx) {
-                    reject(new Error('Could not get canvas context'));
+                    reject(new Error("Could not get canvas context"));
                     return;
                 }
-                
+
                 // Calculate dimensions (crop to square, then resize)
                 const size = Math.min(img.width, img.height);
                 const sx = (img.width - size) / 2;
                 const sy = (img.height - size) / 2;
-                
+
                 // Set canvas to target size (use original size if smaller than max)
                 const targetSize = Math.min(size, maxSize);
                 canvas.width = targetSize;
                 canvas.height = targetSize;
-                
+
                 // Enable high-quality image smoothing
                 ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-                
+                ctx.imageSmoothingQuality = "high";
+
                 // Draw cropped and resized image
-                ctx.drawImage(img, sx, sy, size, size, 0, 0, targetSize, targetSize);
-                
+                ctx.drawImage(
+                    img,
+                    sx,
+                    sy,
+                    size,
+                    size,
+                    0,
+                    0,
+                    targetSize,
+                    targetSize,
+                );
+
                 // Convert to blob with high quality
                 canvas.toBlob(
                     (blob) => {
                         if (blob) {
                             resolve(blob);
                         } else {
-                            reject(new Error('Failed to create image blob'));
+                            reject(new Error("Failed to create image blob"));
                         }
                     },
-                    'image/jpeg',
-                    0.95 // Higher quality (was 0.9)
+                    "image/jpeg",
+                    0.95, // Higher quality (was 0.9)
                 );
             };
-            
-            img.onerror = () => reject(new Error('Failed to load image'));
+
+            img.onerror = () => reject(new Error("Failed to load image"));
             img.src = URL.createObjectURL(file);
         });
     };
-    
+
     // Capabilities
     const [webSearchEnabled, setWebSearchEnabled] = useState(true);
     const [useKnowledgeBase, setUseKnowledgeBase] = useState(true);
@@ -163,10 +271,14 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [publicAccessEnabled, setPublicAccessEnabled] = useState(true); // For Official agents
     const [x402Enabled, setX402Enabled] = useState(false);
     const [x402PriceCents, setX402PriceCents] = useState(1);
-    const [x402Network, setX402Network] = useState<"base" | "base-sepolia">("base");
+    const [x402Network, setX402Network] = useState<"base" | "base-sepolia">(
+        "base",
+    );
     const [x402WalletAddress, setX402WalletAddress] = useState("");
-    const [x402PricingMode, setX402PricingMode] = useState<"global" | "per_tool">("global");
-    
+    const [x402PricingMode, setX402PricingMode] = useState<
+        "global" | "per_tool"
+    >("global");
+
     // MCP Servers
     const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
     const [showAddMcp, setShowAddMcp] = useState(false);
@@ -174,23 +286,31 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const [newMcpUrl, setNewMcpUrl] = useState("");
     const [newMcpApiKey, setNewMcpApiKey] = useState("");
     const [newMcpDescription, setNewMcpDescription] = useState("");
-    const [newMcpHeaders, setNewMcpHeaders] = useState<Record<string, string>>({});
-    
+    const [newMcpHeaders, setNewMcpHeaders] = useState<Record<string, string>>(
+        {},
+    );
+
     // API Tools
     const [apiTools, setApiTools] = useState<APITool[]>([]);
     const [showAddApi, setShowAddApi] = useState(false);
     const [newApiName, setNewApiName] = useState("");
     const [newApiUrl, setNewApiUrl] = useState("");
-    const [newApiMethod, setNewApiMethod] = useState<"GET" | "POST" | "PUT" | "DELETE">("GET");
+    const [newApiMethod, setNewApiMethod] = useState<
+        "GET" | "POST" | "PUT" | "DELETE"
+    >("GET");
     const [newApiKey, setNewApiKey] = useState("");
     const [newApiDescription, setNewApiDescription] = useState("");
-    const [newApiHeaders, setNewApiHeaders] = useState<Record<string, string>>({});
-    
+    const [newApiHeaders, setNewApiHeaders] = useState<Record<string, string>>(
+        {},
+    );
+
     // API Key visibility toggles
-    const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(new Set());
-    
+    const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(
+        new Set(),
+    );
+
     const toggleApiKeyVisibility = (id: string) => {
-        setVisibleApiKeys(prev => {
+        setVisibleApiKeys((prev) => {
             const next = new Set(prev);
             if (next.has(id)) {
                 next.delete(id);
@@ -200,12 +320,15 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             return next;
         });
     };
-    
+
     // UI state
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showEmbedCode, setShowEmbedCode] = useState(false);
-    const [embedData, setEmbedData] = useState<{ code: { sdk: string }; endpoints: { chat: string } } | null>(null);
+    const [embedData, setEmbedData] = useState<{
+        code: { sdk: string };
+        endpoints: { chat: string };
+    } | null>(null);
     const [showEventsModal, setShowEventsModal] = useState(false);
 
     // Track original values to detect changes
@@ -252,7 +375,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             const agentX402 = agent.x402_enabled || false;
             const agentX402Price = agent.x402_price_cents || 1;
             const agentX402Network = agent.x402_network || "base";
-            const agentX402Wallet = agent.x402_wallet_address || userAddress || "";
+            const agentX402Wallet =
+                agent.x402_wallet_address || userAddress || "";
             const agentX402Mode = agent.x402_pricing_mode || "global";
             const agentMcpServers = agent.mcp_servers || [];
             const agentApiTools = agent.api_tools || [];
@@ -320,13 +444,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setOriginalValues(null);
         }
     }, [agent?.id, isOpen, userAddress]); // Use agent.id to ensure reset when switching agents
-    
+
     // Fetch available channels and agent's channel memberships (for Official agents)
     useEffect(() => {
         if (!isOpen || !agent?.id || visibility !== "official") return;
-        
+
         const agentId = agent.id;
-        
+
         // Fetch available public channels
         async function fetchChannels() {
             try {
@@ -339,7 +463,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 console.error("[EditAgent] Error fetching channels:", err);
             }
         }
-        
+
         // Fetch agent's current channel memberships
         async function fetchMemberships() {
             try {
@@ -347,31 +471,44 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 if (res.ok) {
                     const data = await res.json();
                     const memberships = data.memberships || [];
-                    const isInGlobal = memberships.some((m: { channel_type: string }) => m.channel_type === "global");
+                    const isInGlobal = memberships.some(
+                        (m: { channel_type: string }) =>
+                            m.channel_type === "global",
+                    );
                     const channelIds = memberships
-                        .filter((m: { channel_type: string }) => m.channel_type === "channel")
+                        .filter(
+                            (m: { channel_type: string }) =>
+                                m.channel_type === "channel",
+                        )
                         .map((m: { channel_id: string }) => m.channel_id);
-                    setChannelMemberships({ global: isInGlobal, channels: channelIds });
+                    setChannelMemberships({
+                        global: isInGlobal,
+                        channels: channelIds,
+                    });
                 }
             } catch (err) {
                 console.error("[EditAgent] Error fetching memberships:", err);
             }
         }
-        
+
         fetchChannels();
         fetchMemberships();
     }, [isOpen, agent?.id, visibility]);
-    
+
     // Handle channel membership toggle
-    const toggleChannelMembership = async (channelType: "global" | "channel", channelId?: string) => {
+    const toggleChannelMembership = async (
+        channelType: "global" | "channel",
+        channelId?: string,
+    ) => {
         if (!agent || !userAddress) return;
-        
+
         setIsSavingChannels(true);
         try {
-            const isCurrentlyIn = channelType === "global" 
-                ? channelMemberships.global 
-                : channelMemberships.channels.includes(channelId!);
-            
+            const isCurrentlyIn =
+                channelType === "global"
+                    ? channelMemberships.global
+                    : channelMemberships.channels.includes(channelId!);
+
             if (isCurrentlyIn) {
                 // Remove from channel
                 const params = new URLSearchParams({
@@ -379,13 +516,16 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                     channelType,
                     ...(channelId && { channelId }),
                 });
-                await fetch(`/api/agents/${agent.id}/channels?${params}`, { method: "DELETE" });
-                
-                setChannelMemberships(prev => ({
+                await fetch(`/api/agents/${agent.id}/channels?${params}`, {
+                    method: "DELETE",
+                });
+
+                setChannelMemberships((prev) => ({
                     global: channelType === "global" ? false : prev.global,
-                    channels: channelType === "channel" 
-                        ? prev.channels.filter(id => id !== channelId) 
-                        : prev.channels,
+                    channels:
+                        channelType === "channel"
+                            ? prev.channels.filter((id) => id !== channelId)
+                            : prev.channels,
                 }));
             } else {
                 // Add to channel
@@ -395,19 +535,24 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                     body: JSON.stringify({
                         userAddress,
                         channelType,
-                        channelId: channelType === "channel" ? channelId : undefined,
+                        channelId:
+                            channelType === "channel" ? channelId : undefined,
                     }),
                 });
-                
-                setChannelMemberships(prev => ({
+
+                setChannelMemberships((prev) => ({
                     global: channelType === "global" ? true : prev.global,
-                    channels: channelType === "channel" && channelId
-                        ? [...prev.channels, channelId] 
-                        : prev.channels,
+                    channels:
+                        channelType === "channel" && channelId
+                            ? [...prev.channels, channelId]
+                            : prev.channels,
                 }));
             }
         } catch (err) {
-            console.error("[EditAgent] Error toggling channel membership:", err);
+            console.error(
+                "[EditAgent] Error toggling channel membership:",
+                err,
+            );
         } finally {
             setIsSavingChannels(false);
         }
@@ -417,7 +562,9 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     const fetchEmbedCode = async () => {
         if (!agent || !userAddress) return;
         try {
-            const res = await fetch(`/api/agents/${agent.id}/embed?userAddress=${encodeURIComponent(userAddress)}`);
+            const res = await fetch(
+                `/api/agents/${agent.id}/embed?userAddress=${encodeURIComponent(userAddress)}`,
+            );
             if (res.ok) {
                 const data = await res.json();
                 setEmbedData(data);
@@ -429,7 +576,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
     };
 
     // Add MCP server
-    const addMcpServer = (preset?: typeof POPULAR_MCP_SERVERS[0]) => {
+    const addMcpServer = (preset?: (typeof POPULAR_MCP_SERVERS)[0]) => {
         const newServer: MCPServer = {
             id: preset?.id || `custom-${Date.now()}`,
             name: preset?.name || newMcpName,
@@ -439,11 +586,11 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             x402Enabled: false,
             x402PriceCents: 1,
         };
-        
+
         if (!preset && newMcpApiKey) {
             newServer.apiKey = newMcpApiKey;
         }
-        
+
         // Add headers if any are configured
         if (!preset && Object.keys(newMcpHeaders).length > 0) {
             // Filter out empty key-value pairs
@@ -455,8 +602,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 newServer.headers = validHeaders;
             }
         }
-        
-        setMcpServers(prev => [...prev, newServer]);
+
+        setMcpServers((prev) => [...prev, newServer]);
         setNewMcpName("");
         setNewMcpUrl("");
         setNewMcpApiKey("");
@@ -467,26 +614,33 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
 
     // Remove MCP server (using functional update to avoid stale closure)
     const removeMcpServer = (id: string) => {
-        setMcpServers(prev => prev.filter(s => s.id !== id));
+        setMcpServers((prev) => prev.filter((s) => s.id !== id));
     };
 
     // Update MCP server (using functional update to avoid stale closure)
     const updateMcpServer = (id: string, updates: Partial<MCPServer>) => {
-        setMcpServers(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+        setMcpServers((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+        );
     };
 
     // Detect API type
     const [detectingApiId, setDetectingApiId] = useState<string | null>(null);
-    
-    const detectApiType = async (toolId: string, url: string, apiKey?: string, headers?: Record<string, string>) => {
+
+    const detectApiType = async (
+        toolId: string,
+        url: string,
+        apiKey?: string,
+        headers?: Record<string, string>,
+    ) => {
         setDetectingApiId(toolId);
         try {
             const response = await fetch("/api/agents/detect-api", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url, apiKey, headers })
+                body: JSON.stringify({ url, apiKey, headers }),
             });
-            
+
             if (response.ok) {
                 const result = await response.json();
                 updateApiTool(toolId, {
@@ -494,7 +648,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                     schema: result.schema,
                     detectedAt: result.detectedAt,
                     // Auto-set method to POST for GraphQL
-                    ...(result.apiType === "graphql" ? { method: "POST" } : {})
+                    ...(result.apiType === "graphql" ? { method: "POST" } : {}),
                 });
             }
         } catch (error) {
@@ -503,13 +657,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             setDetectingApiId(null);
         }
     };
-    
+
     // Add API Tool
     const addApiTool = async () => {
         if (!newApiName || !newApiUrl) return;
-        
+
         const toolId = `api-${Date.now()}`;
-        
+
         const newTool: APITool = {
             id: toolId,
             name: newApiName,
@@ -520,7 +674,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             x402Enabled: false,
             x402PriceCents: 1,
         };
-        
+
         // Add headers if any are configured
         const validHeaders: Record<string, string> = {};
         if (Object.keys(newApiHeaders).length > 0) {
@@ -532,8 +686,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 newTool.headers = validHeaders;
             }
         }
-        
-        setApiTools(prev => [...prev, newTool]);
+
+        setApiTools((prev) => [...prev, newTool]);
         setNewApiName("");
         setNewApiUrl("");
         setNewApiMethod("GET");
@@ -541,19 +695,26 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
         setNewApiDescription("");
         setNewApiHeaders({});
         setShowAddApi(false);
-        
+
         // Auto-detect API type after adding
-        detectApiType(toolId, newApiUrl, newApiKey || undefined, Object.keys(validHeaders).length > 0 ? validHeaders : undefined);
+        detectApiType(
+            toolId,
+            newApiUrl,
+            newApiKey || undefined,
+            Object.keys(validHeaders).length > 0 ? validHeaders : undefined,
+        );
     };
 
     // Remove API Tool (using functional update to avoid stale closure)
     const removeApiTool = (id: string) => {
-        setApiTools(prev => prev.filter(t => t.id !== id));
+        setApiTools((prev) => prev.filter((t) => t.id !== id));
     };
 
     // Update API Tool (using functional update to avoid stale closure)
     const updateApiTool = (id: string, updates: Partial<APITool>) => {
-        setApiTools(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+        setApiTools((prev) =>
+            prev.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        );
     };
 
     const handleSave = async () => {
@@ -568,7 +729,9 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 return;
             }
             if (!x402WalletAddress || !x402WalletAddress.startsWith("0x")) {
-                setError("Please enter a valid wallet address to receive payments");
+                setError(
+                    "Please enter a valid wallet address to receive payments",
+                );
                 return;
             }
         }
@@ -578,10 +741,13 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
 
         try {
             // Filter out empty suggested questions for Official agents
-            const filteredQuestions = visibility === "official" 
-                ? suggestedQuestions.filter(q => q.trim()).map(q => q.trim())
-                : undefined;
-            
+            const filteredQuestions =
+                visibility === "official"
+                    ? suggestedQuestions
+                          .filter((q) => q.trim())
+                          .map((q) => q.trim())
+                    : undefined;
+
             await onSave(agent.id, {
                 name: name.trim(),
                 personality: personality.trim(),
@@ -597,7 +763,8 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                 apiEnabled,
                 schedulingEnabled,
                 eventsAccess,
-                publicAccessEnabled: visibility === "official" ? publicAccessEnabled : undefined,
+                publicAccessEnabled:
+                    visibility === "official" ? publicAccessEnabled : undefined,
                 x402Enabled,
                 x402PriceCents,
                 x402Network,
@@ -608,39 +775,47 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
             });
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save changes");
+            setError(
+                err instanceof Error ? err.message : "Failed to save changes",
+            );
         } finally {
             setIsSaving(false);
         }
     };
 
     // Check if there are unsaved changes
-    const hasUnsavedChanges = originalValues && (
-        name !== originalValues.name ||
-        personality !== originalValues.personality ||
-        emoji !== originalValues.emoji ||
-        avatarUrl !== originalValues.avatarUrl ||
-        visibility !== originalValues.visibility ||
-        JSON.stringify(tags) !== JSON.stringify(originalValues.tags) ||
-        webSearchEnabled !== originalValues.webSearchEnabled ||
-        useKnowledgeBase !== originalValues.useKnowledgeBase ||
-        mcpEnabled !== originalValues.mcpEnabled ||
-        apiEnabled !== originalValues.apiEnabled ||
-        schedulingEnabled !== originalValues.schedulingEnabled ||
-        eventsAccess !== originalValues.eventsAccess ||
-        x402Enabled !== originalValues.x402Enabled ||
-        x402PriceCents !== originalValues.x402PriceCents ||
-        x402Network !== originalValues.x402Network ||
-        x402WalletAddress !== originalValues.x402WalletAddress ||
-        x402PricingMode !== originalValues.x402PricingMode ||
-        JSON.stringify(mcpServers) !== JSON.stringify(originalValues.mcpServers) ||
-        JSON.stringify(apiTools) !== JSON.stringify(originalValues.apiTools)
-    );
+    const hasUnsavedChanges =
+        originalValues &&
+        (name !== originalValues.name ||
+            personality !== originalValues.personality ||
+            emoji !== originalValues.emoji ||
+            avatarUrl !== originalValues.avatarUrl ||
+            visibility !== originalValues.visibility ||
+            JSON.stringify(tags) !== JSON.stringify(originalValues.tags) ||
+            webSearchEnabled !== originalValues.webSearchEnabled ||
+            useKnowledgeBase !== originalValues.useKnowledgeBase ||
+            mcpEnabled !== originalValues.mcpEnabled ||
+            apiEnabled !== originalValues.apiEnabled ||
+            schedulingEnabled !== originalValues.schedulingEnabled ||
+            eventsAccess !== originalValues.eventsAccess ||
+            x402Enabled !== originalValues.x402Enabled ||
+            x402PriceCents !== originalValues.x402PriceCents ||
+            x402Network !== originalValues.x402Network ||
+            x402WalletAddress !== originalValues.x402WalletAddress ||
+            x402PricingMode !== originalValues.x402PricingMode ||
+            JSON.stringify(mcpServers) !==
+                JSON.stringify(originalValues.mcpServers) ||
+            JSON.stringify(apiTools) !==
+                JSON.stringify(originalValues.apiTools));
 
     // Handle close with warning if there are unsaved changes
     const handleClose = () => {
         if (hasUnsavedChanges) {
-            if (confirm("You have unsaved changes. Are you sure you want to close? All changes will be lost.")) {
+            if (
+                confirm(
+                    "You have unsaved changes. Are you sure you want to close? All changes will be lost.",
+                )
+            ) {
                 onClose();
             }
         } else {
@@ -673,12 +848,29 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                 {emoji}
                             </div>
                             <div className="flex-1">
-                                <h2 className="text-xl font-bold text-white">Edit Agent</h2>
-                                <p className="text-sm text-zinc-400">{agent.name}</p>
+                                <h2 className="text-xl font-bold text-white">
+                                    Edit Agent
+                                </h2>
+                                <p className="text-sm text-zinc-400">
+                                    {agent.name}
+                                </p>
                             </div>
-                            <button onClick={handleClose} className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <button
+                                onClick={handleClose}
+                                className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800"
+                            >
+                                <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
                                 </svg>
                             </button>
                         </div>
@@ -686,11 +878,27 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                         {/* Tabs */}
                         <div className="flex gap-1 mb-4 bg-zinc-800 rounded-lg p-1">
                             {[
-                                { id: "general" as TabType, label: "General", icon: "⚙️" },
-                                { id: "capabilities" as TabType, label: "Capabilities", icon: "🔧" },
-                                { id: "mcp" as TabType, label: "MCP", icon: "🔌" },
-                                { id: "api" as TabType, label: "APIs", icon: "🌐" },
-                            ].map(tab => (
+                                {
+                                    id: "general" as TabType,
+                                    label: "General",
+                                    icon: "⚙️",
+                                },
+                                {
+                                    id: "capabilities" as TabType,
+                                    label: "Capabilities",
+                                    icon: "🔧",
+                                },
+                                {
+                                    id: "mcp" as TabType,
+                                    label: "MCP",
+                                    icon: "🔌",
+                                },
+                                {
+                                    id: "api" as TabType,
+                                    label: "APIs",
+                                    icon: "🌐",
+                                },
+                            ].map((tab) => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
@@ -701,7 +909,9 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                     }`}
                                 >
                                     <span>{tab.icon}</span>
-                                    <span className="hidden sm:inline">{tab.label}</span>
+                                    <span className="hidden sm:inline">
+                                        {tab.label}
+                                    </span>
                                 </button>
                             ))}
                         </div>
@@ -720,11 +930,15 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                 <>
                                     {/* Name */}
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Agent Name *</label>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            Agent Name *
+                                        </label>
                                         <input
                                             type="text"
                                             value={name}
-                                            onChange={(e) => setName(e.target.value)}
+                                            onChange={(e) =>
+                                                setName(e.target.value)
+                                            }
                                             maxLength={50}
                                             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
                                         />
@@ -732,8 +946,10 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
 
                                     {/* Avatar */}
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Avatar</label>
-                                        
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            Avatar
+                                        </label>
+
                                         {/* Current Avatar Preview */}
                                         <div className="flex items-center gap-4 mb-3">
                                             <div className="relative">
@@ -754,7 +970,7 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                                     </div>
                                                 )}
                                             </div>
-                                            
+
                                             <div className="flex flex-col gap-2">
                                                 <label className="px-3 py-1.5 text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 rounded-lg cursor-pointer transition-colors">
                                                     <input
@@ -762,54 +978,109 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                                         accept="image/*"
                                                         className="hidden"
                                                         onChange={async (e) => {
-                                                            const file = e.target.files?.[0];
+                                                            const file =
+                                                                e.target
+                                                                    .files?.[0];
                                                             if (!file) return;
-                                                            
-                                                            if (!file.type.startsWith('image/')) {
-                                                                setError('Please select an image file');
+
+                                                            if (
+                                                                !file.type.startsWith(
+                                                                    "image/",
+                                                                )
+                                                            ) {
+                                                                setError(
+                                                                    "Please select an image file",
+                                                                );
                                                                 return;
                                                             }
-                                                            if (file.size > 5 * 1024 * 1024) {
-                                                                setError('Image must be less than 5MB');
+                                                            if (
+                                                                file.size >
+                                                                5 * 1024 * 1024
+                                                            ) {
+                                                                setError(
+                                                                    "Image must be less than 5MB",
+                                                                );
                                                                 return;
                                                             }
 
-                                                            setIsUploadingAvatar(true);
+                                                            setIsUploadingAvatar(
+                                                                true,
+                                                            );
                                                             setError(null);
 
                                                             try {
                                                                 // Resize image for better quality (1024x1024)
-                                                                const resizedBlob = await resizeImageForAvatar(file, 1024);
-                                                                const resizedFile = new File([resizedBlob], 'avatar.jpg', { type: 'image/jpeg' });
-                                                                
-                                                                const formData = new FormData();
-                                                                formData.append('file', resizedFile);
+                                                                const resizedBlob =
+                                                                    await resizeImageForAvatar(
+                                                                        file,
+                                                                        1024,
+                                                                    );
+                                                                const resizedFile =
+                                                                    new File(
+                                                                        [
+                                                                            resizedBlob,
+                                                                        ],
+                                                                        "avatar.jpg",
+                                                                        {
+                                                                            type: "image/jpeg",
+                                                                        },
+                                                                    );
 
-                                                                const res = await fetch('/api/upload?type=avatar', {
-                                                                    method: 'POST',
-                                                                    body: formData,
-                                                                });
+                                                                const formData =
+                                                                    new FormData();
+                                                                formData.append(
+                                                                    "file",
+                                                                    resizedFile,
+                                                                );
+
+                                                                const res =
+                                                                    await fetch(
+                                                                        "/api/upload?type=avatar",
+                                                                        {
+                                                                            method: "POST",
+                                                                            body: formData,
+                                                                        },
+                                                                    );
 
                                                                 if (!res.ok) {
-                                                                    const data = await res.json();
-                                                                    throw new Error(data.error || 'Failed to upload');
+                                                                    const data =
+                                                                        await res.json();
+                                                                    throw new Error(
+                                                                        data.error ||
+                                                                            "Failed to upload",
+                                                                    );
                                                                 }
 
-                                                                const { url } = await res.json();
-                                                                setAvatarUrl(url);
+                                                                const { url } =
+                                                                    await res.json();
+                                                                setAvatarUrl(
+                                                                    url,
+                                                                );
                                                             } catch (err) {
-                                                                setError(err instanceof Error ? err.message : 'Upload failed');
+                                                                setError(
+                                                                    err instanceof
+                                                                        Error
+                                                                        ? err.message
+                                                                        : "Upload failed",
+                                                                );
                                                             } finally {
-                                                                setIsUploadingAvatar(false);
-                                                                e.target.value = '';
+                                                                setIsUploadingAvatar(
+                                                                    false,
+                                                                );
+                                                                e.target.value =
+                                                                    "";
                                                             }
                                                         }}
                                                     />
-                                                    {isUploadingAvatar ? 'Uploading...' : 'Upload Image'}
+                                                    {isUploadingAvatar
+                                                        ? "Uploading..."
+                                                        : "Upload Image"}
                                                 </label>
                                                 {avatarUrl && (
                                                     <button
-                                                        onClick={() => setAvatarUrl(null)}
+                                                        onClick={() =>
+                                                            setAvatarUrl(null)
+                                                        }
                                                         className="px-3 py-1.5 text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors"
                                                     >
                                                         Remove Image
@@ -817,10 +1088,12 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                                 )}
                                             </div>
                                         </div>
-                                        
+
                                         {/* Emoji Picker (fallback when no image) */}
                                         <p className="text-xs text-zinc-500 mb-2">
-                                            {avatarUrl ? 'Or choose an emoji as fallback:' : 'Or choose an emoji:'}
+                                            {avatarUrl
+                                                ? "Or choose an emoji as fallback:"
+                                                : "Or choose an emoji:"}
                                         </p>
                                         <div className="flex flex-wrap gap-2">
                                             {AGENT_EMOJIS.map((e) => (
@@ -828,11 +1101,12 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                                     key={e}
                                                     onClick={() => setEmoji(e)}
                                                     className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${
-                                                        emoji === e && !avatarUrl
+                                                        emoji === e &&
+                                                        !avatarUrl
                                                             ? "bg-purple-500/30 border-2 border-purple-500 scale-110"
                                                             : emoji === e
-                                                            ? "bg-purple-500/20 border border-purple-500/50"
-                                                            : "bg-zinc-800 border border-zinc-700 hover:border-zinc-600"
+                                                              ? "bg-purple-500/20 border border-purple-500/50"
+                                                              : "bg-zinc-800 border border-zinc-700 hover:border-zinc-600"
                                                     }`}
                                                 >
                                                     {e}
@@ -843,10 +1117,14 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
 
                                     {/* Personality */}
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Personality</label>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            Personality
+                                        </label>
                                         <textarea
                                             value={personality}
-                                            onChange={(e) => setPersonality(e.target.value)}
+                                            onChange={(e) =>
+                                                setPersonality(e.target.value)
+                                            }
                                             maxLength={1000}
                                             rows={3}
                                             placeholder="Friendly and helpful assistant..."
@@ -859,27 +1137,73 @@ export function EditAgentModal({ isOpen, onClose, agent, onSave, userAddress, is
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                const el = document.getElementById('system-instructions-section');
-                                                if (el) el.classList.toggle('hidden');
+                                                const el =
+                                                    document.getElementById(
+                                                        "system-instructions-section",
+                                                    );
+                                                if (el)
+                                                    el.classList.toggle(
+                                                        "hidden",
+                                                    );
                                             }}
                                             className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 mb-2"
                                         >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <svg
+                                                className="w-4 h-4"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                                />
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                                />
                                             </svg>
                                             System Instructions (Advanced)
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            <svg
+                                                className="w-4 h-4"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M19 9l-7 7-7-7"
+                                                />
                                             </svg>
                                         </button>
-                                        <div id="system-instructions-section" className={systemInstructions ? "" : "hidden"}>
+                                        <div
+                                            id="system-instructions-section"
+                                            className={
+                                                systemInstructions
+                                                    ? ""
+                                                    : "hidden"
+                                            }
+                                        >
                                             <p className="text-xs text-zinc-500 mb-2">
-                                                Detailed instructions that tell the AI how to behave. Use this for knowledge source context, response formatting, and specific behaviors.
+                                                Detailed instructions that tell
+                                                the AI how to behave. Use this
+                                                for knowledge source context,
+                                                response formatting, and
+                                                specific behaviors.
                                             </p>
                                             <textarea
                                                 value={systemInstructions}
-                                                onChange={(e) => setSystemInstructions(e.target.value)}
+                                                onChange={(e) =>
+                                                    setSystemInstructions(
+                                                        e.target.value,
+                                                    )
+                                                }
                                                 maxLength={4000}
                                                 rows={6}
                                                 placeholder={`Example for an agent with multiple knowledge sources:
@@ -900,20 +1224,45 @@ When users ask about X, prioritize results from source Y...`}
 
                                     {/* Visibility */}
                                     <div>
-                                        <label className="block text-sm font-medium text-zinc-300 mb-2">Visibility</label>
-                                        <div className={`grid gap-2 ${isAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+                                        <label className="block text-sm font-medium text-zinc-300 mb-2">
+                                            Visibility
+                                        </label>
+                                        <div
+                                            className={`grid gap-2 ${isAdmin ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}
+                                        >
                                             {[
-                                                { value: "private", label: "🔒 Private" },
-                                                { value: "friends", label: "👥 Friends" },
-                                                { value: "public", label: "🌍 Public" },
-                                                ...(isAdmin ? [{ value: "official", label: "⭐ Official" }] : []),
-                                            ].map(opt => (
+                                                {
+                                                    value: "private",
+                                                    label: "🔒 Private",
+                                                },
+                                                {
+                                                    value: "friends",
+                                                    label: "👥 Friends",
+                                                },
+                                                {
+                                                    value: "public",
+                                                    label: "🌍 Public",
+                                                },
+                                                ...(isAdmin
+                                                    ? [
+                                                          {
+                                                              value: "official",
+                                                              label: "⭐ Official",
+                                                          },
+                                                      ]
+                                                    : []),
+                                            ].map((opt) => (
                                                 <button
                                                     key={opt.value}
-                                                    onClick={() => setVisibility(opt.value as typeof visibility)}
+                                                    onClick={() =>
+                                                        setVisibility(
+                                                            opt.value as typeof visibility,
+                                                        )
+                                                    }
                                                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                                                         visibility === opt.value
-                                                            ? opt.value === "official" 
+                                                            ? opt.value ===
+                                                              "official"
                                                                 ? "bg-orange-500/20 border-2 border-orange-500 text-orange-400"
                                                                 : "bg-purple-500/20 border-2 border-purple-500 text-purple-400"
                                                             : "bg-zinc-800 border border-zinc-700 text-zinc-400"
@@ -926,21 +1275,30 @@ When users ask about X, prioritize results from source Y...`}
                                     </div>
 
                                     {/* Tags */}
-                                    {(visibility === "friends" || visibility === "public" || visibility === "official") && (
+                                    {(visibility === "friends" ||
+                                        visibility === "public" ||
+                                        visibility === "official") && (
                                         <div>
                                             <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                                Tags <span className="text-zinc-500 font-normal">({tags.length}/5)</span>
+                                                Tags{" "}
+                                                <span className="text-zinc-500 font-normal">
+                                                    ({tags.length}/5)
+                                                </span>
                                             </label>
                                             <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-2 focus-within:border-purple-500 transition-colors">
                                                 <div className="flex flex-wrap gap-2 mb-2">
-                                                    {tags.map(tag => (
+                                                    {tags.map((tag) => (
                                                         <span
                                                             key={tag}
                                                             className="inline-flex items-center gap-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded-lg text-sm"
                                                         >
                                                             #{tag}
                                                             <button
-                                                                onClick={() => removeTag(tag)}
+                                                                onClick={() =>
+                                                                    removeTag(
+                                                                        tag,
+                                                                    )
+                                                                }
                                                                 className="hover:text-purple-300"
                                                             >
                                                                 ×
@@ -951,23 +1309,41 @@ When users ask about X, prioritize results from source Y...`}
                                                 <input
                                                     type="text"
                                                     value={tagInput}
-                                                    onChange={(e) => setTagInput(e.target.value.slice(0, 20))}
+                                                    onChange={(e) =>
+                                                        setTagInput(
+                                                            e.target.value.slice(
+                                                                0,
+                                                                20,
+                                                            ),
+                                                        )
+                                                    }
                                                     onKeyDown={handleTagKeyDown}
-                                                    placeholder={tags.length < 5 ? "Add tags (press Enter)" : "Max tags reached"}
+                                                    placeholder={
+                                                        tags.length < 5
+                                                            ? "Add tags (press Enter)"
+                                                            : "Max tags reached"
+                                                    }
                                                     disabled={tags.length >= 5}
                                                     className="w-full bg-transparent text-white placeholder-zinc-500 focus:outline-none text-sm disabled:opacity-50"
                                                 />
                                             </div>
                                             {/* Tag suggestions */}
                                             <div className="flex flex-wrap gap-1 mt-2">
-                                                {TAG_SUGGESTIONS
-                                                    .filter(t => !tags.includes(t))
+                                                {TAG_SUGGESTIONS.filter(
+                                                    (t) => !tags.includes(t),
+                                                )
                                                     .slice(0, 8)
-                                                    .map(suggestion => (
+                                                    .map((suggestion) => (
                                                         <button
                                                             key={suggestion}
-                                                            onClick={() => addTag(suggestion)}
-                                                            disabled={tags.length >= 5}
+                                                            onClick={() =>
+                                                                addTag(
+                                                                    suggestion,
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                tags.length >= 5
+                                                            }
                                                             className="px-2 py-0.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             +{suggestion}
@@ -975,40 +1351,58 @@ When users ask about X, prioritize results from source Y...`}
                                                     ))}
                                             </div>
                                             <p className="text-xs text-zinc-500 mt-2">
-                                                Tags help users find your agent when searching
+                                                Tags help users find your agent
+                                                when searching
                                             </p>
                                         </div>
                                     )}
-                                    
+
                                     {/* Suggested Questions (Official agents only) */}
                                     {visibility === "official" && (
                                         <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
                                             <div className="flex items-center gap-2 mb-3">
-                                                <span className="text-lg">💬</span>
+                                                <span className="text-lg">
+                                                    💬
+                                                </span>
                                                 <label className="text-sm font-medium text-orange-400">
                                                     Suggested Questions
                                                 </label>
-                                                <span className="text-xs text-zinc-500 font-normal">(Optional)</span>
+                                                <span className="text-xs text-zinc-500 font-normal">
+                                                    (Optional)
+                                                </span>
                                             </div>
                                             <p className="text-xs text-zinc-400 mb-3">
-                                                Custom prompts shown to users on the public agent page. Leave empty for auto-generated questions.
+                                                Custom prompts shown to users on
+                                                the public agent page. Leave
+                                                empty for auto-generated
+                                                questions.
                                             </p>
                                             <div className="space-y-2">
-                                                {suggestedQuestions.map((question, idx) => (
-                                                    <input
-                                                        key={idx}
-                                                        type="text"
-                                                        value={question}
-                                                        onChange={(e) => {
-                                                            const newQuestions = [...suggestedQuestions];
-                                                            newQuestions[idx] = e.target.value;
-                                                            setSuggestedQuestions(newQuestions);
-                                                        }}
-                                                        placeholder={`Question ${idx + 1} (e.g., "What can you help me with?")`}
-                                                        maxLength={100}
-                                                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
-                                                    />
-                                                ))}
+                                                {suggestedQuestions.map(
+                                                    (question, idx) => (
+                                                        <input
+                                                            key={idx}
+                                                            type="text"
+                                                            value={question}
+                                                            onChange={(e) => {
+                                                                const newQuestions =
+                                                                    [
+                                                                        ...suggestedQuestions,
+                                                                    ];
+                                                                newQuestions[
+                                                                    idx
+                                                                ] =
+                                                                    e.target.value;
+                                                                setSuggestedQuestions(
+                                                                    newQuestions,
+                                                                );
+                                                            }}
+                                                            placeholder={`Question ${idx + 1} (e.g., "What can you help me with?")`}
+                                                            maxLength={100}
+                                                            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
+                                                        />
+                                                    ),
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -1018,9 +1412,11 @@ When users ask about X, prioritize results from source Y...`}
                             {/* Capabilities Tab */}
                             {activeTab === "capabilities" && (
                                 <>
-                                    {/* Built-in Capabilities */}
+                                    {/* Search & knowledge */}
                                     <div className="space-y-3">
-                                        {/* Web Search */}
+                                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-2 first:mt-0">
+                                            Search & knowledge
+                                        </h3>
                                         <CapabilityToggle
                                             icon="🔍"
                                             title="Web Search"
@@ -1028,8 +1424,6 @@ When users ask about X, prioritize results from source Y...`}
                                             enabled={webSearchEnabled}
                                             onChange={setWebSearchEnabled}
                                         />
-
-                                        {/* Knowledge Base */}
                                         <CapabilityToggle
                                             icon="📚"
                                             title="Knowledge Base"
@@ -1037,28 +1431,13 @@ When users ask about X, prioritize results from source Y...`}
                                             enabled={useKnowledgeBase}
                                             onChange={setUseKnowledgeBase}
                                         />
+                                    </div>
 
-                                        {/* MCP Servers */}
-                                        <CapabilityToggle
-                                            icon="🔌"
-                                            title="MCP Servers"
-                                            description="Connect to Model Context Protocol servers"
-                                            enabled={mcpEnabled}
-                                            onChange={setMcpEnabled}
-                                            color="purple"
-                                        />
-
-                                        {/* API Tools */}
-                                        <CapabilityToggle
-                                            icon="🌐"
-                                            title="API Tools"
-                                            description="Call external APIs during conversations"
-                                            enabled={apiEnabled}
-                                            onChange={setApiEnabled}
-                                            color="cyan"
-                                        />
-
-                                        {/* Scheduling Tool */}
+                                    {/* Calendar & events */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-4">
+                                            Calendar & events
+                                        </h3>
                                         <CapabilityToggle
                                             icon="📅"
                                             title="Scheduling Assistant"
@@ -1067,8 +1446,6 @@ When users ask about X, prioritize results from source Y...`}
                                             onChange={setSchedulingEnabled}
                                             color="cyan"
                                         />
-                                        
-                                        {/* Events Database Access */}
                                         <CapabilityToggle
                                             icon="🎪"
                                             title="Events Database Access"
@@ -1077,44 +1454,118 @@ When users ask about X, prioritize results from source Y...`}
                                             onChange={setEventsAccess}
                                             color="emerald"
                                         />
-                                        
-                                        {/* Public Access Toggle - Only for Official agents */}
+                                    </div>
+
+                                    {/* External tools: platform + MCP + API */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-4">
+                                            External tools
+                                        </h3>
+                                        <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-base">
+                                                    🔗
+                                                </span>
+                                                <h4 className="text-sm font-medium text-zinc-300">
+                                                    Platform tools
+                                                </h4>
+                                            </div>
+                                            <p className="text-xs text-zinc-500">
+                                                All agents have access to{" "}
+                                                <strong className="text-zinc-400">
+                                                    The Grid
+                                                </strong>{" "}
+                                                GraphQL API (Web3 data:
+                                                profiles, products, assets,
+                                                socials, entities). See{" "}
+                                                <a
+                                                    href="https://docs.thegrid.id/p/Q6EWCrHLq98qF5/Using-the-API"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-purple-400 hover:underline"
+                                                >
+                                                    Using the API
+                                                </a>
+                                                .
+                                            </p>
+                                        </div>
+                                        <CapabilityToggle
+                                            icon="🔌"
+                                            title="MCP Servers"
+                                            description="Connect to Model Context Protocol servers (your own)"
+                                            enabled={mcpEnabled}
+                                            onChange={setMcpEnabled}
+                                            color="purple"
+                                        />
+                                        <CapabilityToggle
+                                            icon="🌐"
+                                            title="API Tools"
+                                            description="Call external APIs during conversations"
+                                            enabled={apiEnabled}
+                                            onChange={setApiEnabled}
+                                            color="cyan"
+                                        />
+                                    </div>
+
+                                    {/* Access & monetization */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-4">
+                                            Access & monetization
+                                        </h3>
                                         {visibility === "official" && (
                                             <CapabilityToggle
                                                 icon="🌐"
                                                 title="Public Access"
                                                 description="Allow anyone to chat via /agent/[id] page"
                                                 enabled={publicAccessEnabled}
-                                                onChange={setPublicAccessEnabled}
+                                                onChange={
+                                                    setPublicAccessEnabled
+                                                }
                                                 color="orange"
                                             />
                                         )}
-                                        
-                                        {/* Channel Presence - Only for Official agents */}
                                         {visibility === "official" && (
                                             <ChannelPresenceSection
-                                                channelMemberships={channelMemberships}
-                                                availableChannels={availableChannels}
-                                                isSavingChannels={isSavingChannels}
-                                                toggleChannelMembership={toggleChannelMembership}
+                                                channelMemberships={
+                                                    channelMemberships
+                                                }
+                                                availableChannels={
+                                                    availableChannels
+                                                }
+                                                isSavingChannels={
+                                                    isSavingChannels
+                                                }
+                                                toggleChannelMembership={
+                                                    toggleChannelMembership
+                                                }
                                                 agentName={name}
                                             />
                                         )}
-
-                                        {/* Event Management - Only for Official agents */}
                                         {visibility === "official" && agent && (
                                             <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-base">📅</span>
+                                                        <span className="text-base">
+                                                            📅
+                                                        </span>
                                                         <div>
-                                                            <h4 className="text-sm font-medium text-purple-400">Event Management</h4>
-                                                            <p className="text-xs text-zinc-500">Create an events page for your agent</p>
+                                                            <h4 className="text-sm font-medium text-purple-400">
+                                                                Event Management
+                                                            </h4>
+                                                            <p className="text-xs text-zinc-500">
+                                                                Create an events
+                                                                page for your
+                                                                agent
+                                                            </p>
                                                         </div>
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        onClick={() => setShowEventsModal(true)}
+                                                        onClick={() =>
+                                                            setShowEventsModal(
+                                                                true,
+                                                            )
+                                                        }
                                                         className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm font-medium transition-colors"
                                                     >
                                                         Manage Events
@@ -1122,8 +1573,6 @@ When users ask about X, prioritize results from source Y...`}
                                                 </div>
                                             </div>
                                         )}
-
-                                        {/* x402 API Access */}
                                         <CapabilityToggle
                                             icon="💰"
                                             title="x402 API Access"
@@ -1141,17 +1590,23 @@ When users ask about X, prioritize results from source Y...`}
                                                 🔗 Public Chat Page
                                             </h4>
                                             <p className="text-xs text-zinc-400 mb-2">
-                                                Anyone can chat with your agent at this URL:
+                                                Anyone can chat with your agent
+                                                at this URL:
                                             </p>
                                             <div className="flex gap-2">
                                                 <code className="flex-1 text-xs bg-zinc-900 p-2 rounded text-purple-400 break-all">
-                                                    {typeof window !== 'undefined' ? `${window.location.origin}/agent/${agent.id}` : `/agent/${agent.id}`}
+                                                    {typeof window !==
+                                                    "undefined"
+                                                        ? `${window.location.origin}/agent/${agent.id}`
+                                                        : `/agent/${agent.id}`}
                                                 </code>
                                                 <button
                                                     type="button"
                                                     onClick={() => {
                                                         const url = `${window.location.origin}/agent/${agent.id}`;
-                                                        navigator.clipboard.writeText(url);
+                                                        navigator.clipboard.writeText(
+                                                            url,
+                                                        );
                                                     }}
                                                     className="px-3 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded text-xs"
                                                 >
@@ -1168,7 +1623,8 @@ When users ask about X, prioritize results from source Y...`}
                                             </div>
                                             {x402Enabled && (
                                                 <p className="text-xs text-amber-400 mt-2">
-                                                    💰 x402 payments will be required for chat
+                                                    💰 x402 payments will be
+                                                    required for chat
                                                 </p>
                                             )}
                                         </div>
@@ -1183,19 +1639,29 @@ When users ask about X, prioritize results from source Y...`}
 
                                             {visibility !== "public" && (
                                                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                                                    <p className="text-xs text-amber-400">⚠️ x402 requires Public visibility</p>
+                                                    <p className="text-xs text-amber-400">
+                                                        ⚠️ x402 requires Public
+                                                        visibility
+                                                    </p>
                                                 </div>
                                             )}
 
                                             {/* Pricing Mode */}
                                             <div>
-                                                <label className="block text-xs font-medium text-zinc-400 mb-2">Pricing Mode</label>
+                                                <label className="block text-xs font-medium text-zinc-400 mb-2">
+                                                    Pricing Mode
+                                                </label>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <button
                                                         type="button"
-                                                        onClick={() => setX402PricingMode("global")}
+                                                        onClick={() =>
+                                                            setX402PricingMode(
+                                                                "global",
+                                                            )
+                                                        }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                                            x402PricingMode === "global"
+                                                            x402PricingMode ===
+                                                            "global"
                                                                 ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
                                                                 : "bg-zinc-800 border border-zinc-700 text-zinc-400"
                                                         }`}
@@ -1204,9 +1670,14 @@ When users ask about X, prioritize results from source Y...`}
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        onClick={() => setX402PricingMode("per_tool")}
+                                                        onClick={() =>
+                                                            setX402PricingMode(
+                                                                "per_tool",
+                                                            )
+                                                        }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                                            x402PricingMode === "per_tool"
+                                                            x402PricingMode ===
+                                                            "per_tool"
                                                                 ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
                                                                 : "bg-zinc-800 border border-zinc-700 text-zinc-400"
                                                         }`}
@@ -1215,8 +1686,9 @@ When users ask about X, prioritize results from source Y...`}
                                                     </button>
                                                 </div>
                                                 <p className="text-xs text-zinc-500 mt-1">
-                                                    {x402PricingMode === "global" 
-                                                        ? "Single price for all interactions" 
+                                                    {x402PricingMode ===
+                                                    "global"
+                                                        ? "Single price for all interactions"
                                                         : "Set different prices per MCP tool"}
                                                 </p>
                                             </div>
@@ -1224,31 +1696,62 @@ When users ask about X, prioritize results from source Y...`}
                                             {/* Global Price (only shown in global mode) */}
                                             {x402PricingMode === "global" && (
                                                 <div>
-                                                    <label className="block text-xs font-medium text-zinc-400 mb-1">Price per Message</label>
+                                                    <label className="block text-xs font-medium text-zinc-400 mb-1">
+                                                        Price per Message
+                                                    </label>
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-zinc-400">$</span>
+                                                        <span className="text-zinc-400">
+                                                            $
+                                                        </span>
                                                         <input
                                                             type="number"
                                                             min="0.01"
                                                             step="0.01"
-                                                            value={(x402PriceCents / 100).toFixed(2)}
-                                                            onChange={(e) => setX402PriceCents(Math.max(1, Math.round(parseFloat(e.target.value || "0.01") * 100)))}
+                                                            value={(
+                                                                x402PriceCents /
+                                                                100
+                                                            ).toFixed(2)}
+                                                            onChange={(e) =>
+                                                                setX402PriceCents(
+                                                                    Math.max(
+                                                                        1,
+                                                                        Math.round(
+                                                                            parseFloat(
+                                                                                e
+                                                                                    .target
+                                                                                    .value ||
+                                                                                    "0.01",
+                                                                            ) *
+                                                                                100,
+                                                                        ),
+                                                                    ),
+                                                                )
+                                                            }
                                                             className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
                                                         />
-                                                        <span className="text-xs text-zinc-500">USDC</span>
+                                                        <span className="text-xs text-zinc-500">
+                                                            USDC
+                                                        </span>
                                                     </div>
                                                 </div>
                                             )}
 
                                             {/* Network */}
                                             <div>
-                                                <label className="block text-xs font-medium text-zinc-400 mb-1">Network</label>
+                                                <label className="block text-xs font-medium text-zinc-400 mb-1">
+                                                    Network
+                                                </label>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <button
                                                         type="button"
-                                                        onClick={() => setX402Network("base")}
+                                                        onClick={() =>
+                                                            setX402Network(
+                                                                "base",
+                                                            )
+                                                        }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium ${
-                                                            x402Network === "base"
+                                                            x402Network ===
+                                                            "base"
                                                                 ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
                                                                 : "bg-zinc-800 border border-zinc-700 text-zinc-400"
                                                         }`}
@@ -1257,9 +1760,14 @@ When users ask about X, prioritize results from source Y...`}
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        onClick={() => setX402Network("base-sepolia")}
+                                                        onClick={() =>
+                                                            setX402Network(
+                                                                "base-sepolia",
+                                                            )
+                                                        }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium ${
-                                                            x402Network === "base-sepolia"
+                                                            x402Network ===
+                                                            "base-sepolia"
                                                                 ? "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400"
                                                                 : "bg-zinc-800 border border-zinc-700 text-zinc-400"
                                                         }`}
@@ -1271,11 +1779,17 @@ When users ask about X, prioritize results from source Y...`}
 
                                             {/* Wallet */}
                                             <div>
-                                                <label className="block text-xs font-medium text-zinc-400 mb-1">Payment Wallet</label>
+                                                <label className="block text-xs font-medium text-zinc-400 mb-1">
+                                                    Payment Wallet
+                                                </label>
                                                 <input
                                                     type="text"
                                                     value={x402WalletAddress}
-                                                    onChange={(e) => setX402WalletAddress(e.target.value)}
+                                                    onChange={(e) =>
+                                                        setX402WalletAddress(
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     placeholder="0x..."
                                                     spellCheck={false}
                                                     autoComplete="off"
@@ -1297,18 +1811,34 @@ When users ask about X, prioritize results from source Y...`}
                                             )}
 
                                             {/* Earnings */}
-                                            {agent?.x402_enabled && (agent.x402_message_count_paid || 0) > 0 && (
-                                                <div className="p-3 bg-emerald-500/10 rounded-lg">
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="text-zinc-400">Paid Messages:</span>
-                                                        <span className="text-white">{agent.x402_message_count_paid}</span>
+                                            {agent?.x402_enabled &&
+                                                (agent.x402_message_count_paid ||
+                                                    0) > 0 && (
+                                                    <div className="p-3 bg-emerald-500/10 rounded-lg">
+                                                        <div className="flex justify-between text-xs">
+                                                            <span className="text-zinc-400">
+                                                                Paid Messages:
+                                                            </span>
+                                                            <span className="text-white">
+                                                                {
+                                                                    agent.x402_message_count_paid
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between text-xs">
+                                                            <span className="text-zinc-400">
+                                                                Total Earned:
+                                                            </span>
+                                                            <span className="text-emerald-400">
+                                                                $
+                                                                {(
+                                                                    (agent.x402_total_earnings_cents ||
+                                                                        0) / 100
+                                                                ).toFixed(2)}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="text-zinc-400">Total Earned:</span>
-                                                        <span className="text-emerald-400">${((agent.x402_total_earnings_cents || 0) / 100).toFixed(2)}</span>
-                                                    </div>
-                                                </div>
-                                            )}
+                                                )}
                                         </div>
                                     )}
 
@@ -1316,20 +1846,36 @@ When users ask about X, prioritize results from source Y...`}
                                     {showEmbedCode && embedData && (
                                         <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl">
                                             <div className="flex items-center justify-between mb-2">
-                                                <h4 className="text-sm font-medium text-white">API Endpoint</h4>
-                                                <button onClick={() => setShowEmbedCode(false)} className="text-zinc-400 hover:text-white text-sm">✕</button>
+                                                <h4 className="text-sm font-medium text-white">
+                                                    API Endpoint
+                                                </h4>
+                                                <button
+                                                    onClick={() =>
+                                                        setShowEmbedCode(false)
+                                                    }
+                                                    className="text-zinc-400 hover:text-white text-sm"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
                                             <code className="block text-xs bg-zinc-900 p-2 rounded text-emerald-400 mb-3 break-all">
                                                 {embedData.endpoints.chat}
                                             </code>
                                             <details className="text-xs">
-                                                <summary className="text-zinc-400 cursor-pointer hover:text-white">Show SDK Code</summary>
+                                                <summary className="text-zinc-400 cursor-pointer hover:text-white">
+                                                    Show SDK Code
+                                                </summary>
                                                 <pre className="mt-2 bg-zinc-900 p-3 rounded-lg overflow-x-auto text-zinc-300 max-h-32">
                                                     {embedData.code.sdk}
                                                 </pre>
                                             </details>
                                             <button
-                                                onClick={() => navigator.clipboard.writeText(embedData.endpoints.chat)}
+                                                onClick={() =>
+                                                    navigator.clipboard.writeText(
+                                                        embedData.endpoints
+                                                            .chat,
+                                                    )
+                                                }
                                                 className="mt-2 w-full py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-xs text-white"
                                             >
                                                 📋 Copy URL
@@ -1343,47 +1889,97 @@ When users ask about X, prioritize results from source Y...`}
                             {activeTab === "mcp" && (
                                 <>
                                     <p className="text-xs text-zinc-500 mb-4">
-                                        Connect MCP servers to give your agent access to external tools and services.
+                                        Connect MCP servers to give your agent
+                                        access to external tools and services.
                                     </p>
 
                                     {/* Configured MCP Servers */}
                                     {mcpServers.length > 0 && (
                                         <div className="space-y-2 mb-4">
-                                            {mcpServers.map(server => (
-                                                <div key={server.id} className="p-3 bg-zinc-800 border border-zinc-700 rounded-xl">
+                                            {mcpServers.map((server) => (
+                                                <div
+                                                    key={server.id}
+                                                    className="p-3 bg-zinc-800 border border-zinc-700 rounded-xl"
+                                                >
                                                     <div className="flex items-start justify-between mb-2">
                                                         <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                            <span className="text-lg shrink-0">🔌</span>
+                                                            <span className="text-lg shrink-0">
+                                                                🔌
+                                                            </span>
                                                             <div className="flex-1 min-w-0">
                                                                 <input
                                                                     type="text"
-                                                                    value={server.name}
-                                                                    onChange={(e) => updateMcpServer(server.id, { name: e.target.value })}
+                                                                    value={
+                                                                        server.name
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        updateMcpServer(
+                                                                            server.id,
+                                                                            {
+                                                                                name: e
+                                                                                    .target
+                                                                                    .value,
+                                                                            },
+                                                                        )
+                                                                    }
                                                                     className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-purple-500 text-sm font-medium text-white focus:outline-none px-0 py-0.5"
                                                                     placeholder="Server name"
                                                                 />
                                                                 <input
                                                                     type="text"
-                                                                    value={server.url}
-                                                                    onChange={(e) => updateMcpServer(server.id, { url: e.target.value })}
+                                                                    value={
+                                                                        server.url
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        updateMcpServer(
+                                                                            server.id,
+                                                                            {
+                                                                                url: e
+                                                                                    .target
+                                                                                    .value,
+                                                                            },
+                                                                        )
+                                                                    }
                                                                     className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-purple-500 text-xs text-zinc-400 font-mono focus:outline-none px-0 py-0.5"
                                                                     placeholder="Server URL"
                                                                 />
                                                             </div>
                                                         </div>
                                                         <button
-                                                            onClick={() => removeMcpServer(server.id)}
+                                                            onClick={() =>
+                                                                removeMcpServer(
+                                                                    server.id,
+                                                                )
+                                                            }
                                                             className="text-zinc-500 hover:text-red-400 text-sm shrink-0 ml-2"
                                                         >
                                                             ✕
                                                         </button>
                                                     </div>
-                                                    
+
                                                     {/* Instructions for Agent */}
                                                     <div className="mb-2">
                                                         <textarea
-                                                            value={server.description || ""}
-                                                            onChange={(e) => updateMcpServer(server.id, { description: e.target.value || undefined })}
+                                                            value={
+                                                                server.description ||
+                                                                ""
+                                                            }
+                                                            onChange={(e) =>
+                                                                updateMcpServer(
+                                                                    server.id,
+                                                                    {
+                                                                        description:
+                                                                            e
+                                                                                .target
+                                                                                .value ||
+                                                                            undefined,
+                                                                    },
+                                                                )
+                                                            }
                                                             placeholder="Instructions for agent (e.g. 'Use this MCP server to search documentation when the user asks about API references')"
                                                             rows={2}
                                                             className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-purple-500 resize-none"
@@ -1394,9 +1990,29 @@ When users ask about X, prioritize results from source Y...`}
                                                     <div className="mb-2">
                                                         <div className="relative">
                                                             <input
-                                                                type={visibleApiKeys.has(`mcp-${server.id}`) ? "text" : "password"}
-                                                                value={server.apiKey || ""}
-                                                                onChange={(e) => updateMcpServer(server.id, { apiKey: e.target.value || undefined })}
+                                                                type={
+                                                                    visibleApiKeys.has(
+                                                                        `mcp-${server.id}`,
+                                                                    )
+                                                                        ? "text"
+                                                                        : "password"
+                                                                }
+                                                                value={
+                                                                    server.apiKey ||
+                                                                    ""
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateMcpServer(
+                                                                        server.id,
+                                                                        {
+                                                                            apiKey:
+                                                                                e
+                                                                                    .target
+                                                                                    .value ||
+                                                                                undefined,
+                                                                        },
+                                                                    )
+                                                                }
                                                                 placeholder="API Key (optional)"
                                                                 autoComplete="off"
                                                                 data-lpignore="true"
@@ -1405,11 +2021,25 @@ When users ask about X, prioritize results from source Y...`}
                                                             />
                                                             <button
                                                                 type="button"
-                                                                onClick={() => toggleApiKeyVisibility(`mcp-${server.id}`)}
+                                                                onClick={() =>
+                                                                    toggleApiKeyVisibility(
+                                                                        `mcp-${server.id}`,
+                                                                    )
+                                                                }
                                                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
-                                                                title={visibleApiKeys.has(`mcp-${server.id}`) ? "Hide" : "Show"}
+                                                                title={
+                                                                    visibleApiKeys.has(
+                                                                        `mcp-${server.id}`,
+                                                                    )
+                                                                        ? "Hide"
+                                                                        : "Show"
+                                                                }
                                                             >
-                                                                {visibleApiKeys.has(`mcp-${server.id}`) ? "🙈" : "👁️"}
+                                                                {visibleApiKeys.has(
+                                                                    `mcp-${server.id}`,
+                                                                )
+                                                                    ? "🙈"
+                                                                    : "👁️"}
                                                             </button>
                                                         </div>
                                                         {/* Add API Key as Header */}
@@ -1419,29 +2049,73 @@ When users ask about X, prioritize results from source Y...`}
                                                                     type="text"
                                                                     placeholder="Header name (e.g. X-API-Key)"
                                                                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                                                                            const headerName = e.currentTarget.value.trim();
-                                                                            const newHeaders = { ...(server.headers || {}), [headerName]: server.apiKey || "" };
-                                                                            updateMcpServer(server.id, { headers: newHeaders });
-                                                                            e.currentTarget.value = "";
+                                                                    onKeyDown={(
+                                                                        e,
+                                                                    ) => {
+                                                                        if (
+                                                                            e.key ===
+                                                                                "Enter" &&
+                                                                            e.currentTarget.value.trim()
+                                                                        ) {
+                                                                            const headerName =
+                                                                                e.currentTarget.value.trim();
+                                                                            const newHeaders =
+                                                                                {
+                                                                                    ...(server.headers ||
+                                                                                        {}),
+                                                                                    [headerName]:
+                                                                                        server.apiKey ||
+                                                                                        "",
+                                                                                };
+                                                                            updateMcpServer(
+                                                                                server.id,
+                                                                                {
+                                                                                    headers:
+                                                                                        newHeaders,
+                                                                                },
+                                                                            );
+                                                                            e.currentTarget.value =
+                                                                                "";
                                                                         }
                                                                     }}
                                                                 />
                                                                 <button
                                                                     type="button"
-                                                                    onClick={(e) => {
-                                                                        const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-                                                                        if (input?.value.trim()) {
-                                                                            const headerName = input.value.trim();
-                                                                            const newHeaders = { ...(server.headers || {}), [headerName]: server.apiKey || "" };
-                                                                            updateMcpServer(server.id, { headers: newHeaders });
-                                                                            input.value = "";
+                                                                    onClick={(
+                                                                        e,
+                                                                    ) => {
+                                                                        const input =
+                                                                            e
+                                                                                .currentTarget
+                                                                                .previousElementSibling as HTMLInputElement;
+                                                                        if (
+                                                                            input?.value.trim()
+                                                                        ) {
+                                                                            const headerName =
+                                                                                input.value.trim();
+                                                                            const newHeaders =
+                                                                                {
+                                                                                    ...(server.headers ||
+                                                                                        {}),
+                                                                                    [headerName]:
+                                                                                        server.apiKey ||
+                                                                                        "",
+                                                                                };
+                                                                            updateMcpServer(
+                                                                                server.id,
+                                                                                {
+                                                                                    headers:
+                                                                                        newHeaders,
+                                                                                },
+                                                                            );
+                                                                            input.value =
+                                                                                "";
                                                                         }
                                                                     }}
                                                                     className="px-2 py-1 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 rounded text-xs whitespace-nowrap"
                                                                 >
-                                                                    + Add to Headers
+                                                                    + Add to
+                                                                    Headers
                                                                 </button>
                                                             </div>
                                                         )}
@@ -1451,60 +2125,167 @@ When users ask about X, prioritize results from source Y...`}
                                                     <div className="mb-2">
                                                         <details className="group">
                                                             <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300 flex items-center gap-1">
-                                                                <span className="group-open:rotate-90 transition-transform">▶</span>
-                                                                Headers {server.headers && Object.keys(server.headers).length > 0 && (
-                                                                    <span className="text-purple-400">({Object.keys(server.headers).length})</span>
-                                                                )}
+                                                                <span className="group-open:rotate-90 transition-transform">
+                                                                    ▶
+                                                                </span>
+                                                                Headers{" "}
+                                                                {server.headers &&
+                                                                    Object.keys(
+                                                                        server.headers,
+                                                                    ).length >
+                                                                        0 && (
+                                                                        <span className="text-purple-400">
+                                                                            (
+                                                                            {
+                                                                                Object.keys(
+                                                                                    server.headers,
+                                                                                )
+                                                                                    .length
+                                                                            }
+                                                                            )
+                                                                        </span>
+                                                                    )}
                                                             </summary>
                                                             <div className="mt-2 space-y-2">
                                                                 {/* Existing headers */}
-                                                                {server.headers && Object.entries(server.headers).map(([key, value], idx) => (
-                                                                    <div key={idx} className="flex gap-2 items-center">
-                                                                        <input
-                                                                            type="text"
-                                                                            value={key}
-                                                                            onChange={(e) => {
-                                                                                const newHeaders = { ...server.headers };
-                                                                                const oldValue = newHeaders[key];
-                                                                                delete newHeaders[key];
-                                                                                if (e.target.value.trim()) {
-                                                                                    newHeaders[e.target.value.trim()] = oldValue;
+                                                                {server.headers &&
+                                                                    Object.entries(
+                                                                        server.headers,
+                                                                    ).map(
+                                                                        (
+                                                                            [
+                                                                                key,
+                                                                                value,
+                                                                            ],
+                                                                            idx,
+                                                                        ) => (
+                                                                            <div
+                                                                                key={
+                                                                                    idx
                                                                                 }
-                                                                                updateMcpServer(server.id, { headers: Object.keys(newHeaders).length > 0 ? newHeaders : undefined });
-                                                                            }}
-                                                                            placeholder="Header name"
-                                                                            className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
-                                                                        />
-                                                                        <span className="text-zinc-600">:</span>
-                                                                        <input
-                                                                            type="text"
-                                                                            value={value}
-                                                                            onChange={(e) => {
-                                                                                const newHeaders = { ...server.headers, [key]: e.target.value };
-                                                                                updateMcpServer(server.id, { headers: newHeaders });
-                                                                            }}
-                                                                            placeholder="Value"
-                                                                            className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
-                                                                        />
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                const newHeaders = { ...server.headers };
-                                                                                delete newHeaders[key];
-                                                                                updateMcpServer(server.id, { headers: Object.keys(newHeaders).length > 0 ? newHeaders : undefined });
-                                                                            }}
-                                                                            className="text-zinc-500 hover:text-red-400 text-xs px-1"
-                                                                        >
-                                                                            ✕
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
+                                                                                className="flex gap-2 items-center"
+                                                                            >
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={
+                                                                                        key
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        e,
+                                                                                    ) => {
+                                                                                        const newHeaders =
+                                                                                            {
+                                                                                                ...server.headers,
+                                                                                            };
+                                                                                        const oldValue =
+                                                                                            newHeaders[
+                                                                                                key
+                                                                                            ];
+                                                                                        delete newHeaders[
+                                                                                            key
+                                                                                        ];
+                                                                                        if (
+                                                                                            e.target.value.trim()
+                                                                                        ) {
+                                                                                            newHeaders[
+                                                                                                e.target.value.trim()
+                                                                                            ] =
+                                                                                                oldValue;
+                                                                                        }
+                                                                                        updateMcpServer(
+                                                                                            server.id,
+                                                                                            {
+                                                                                                headers:
+                                                                                                    Object.keys(
+                                                                                                        newHeaders,
+                                                                                                    )
+                                                                                                        .length >
+                                                                                                    0
+                                                                                                        ? newHeaders
+                                                                                                        : undefined,
+                                                                                            },
+                                                                                        );
+                                                                                    }}
+                                                                                    placeholder="Header name"
+                                                                                    className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                                                                                />
+                                                                                <span className="text-zinc-600">
+                                                                                    :
+                                                                                </span>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={
+                                                                                        value
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        e,
+                                                                                    ) => {
+                                                                                        const newHeaders =
+                                                                                            {
+                                                                                                ...server.headers,
+                                                                                                [key]: e
+                                                                                                    .target
+                                                                                                    .value,
+                                                                                            };
+                                                                                        updateMcpServer(
+                                                                                            server.id,
+                                                                                            {
+                                                                                                headers:
+                                                                                                    newHeaders,
+                                                                                            },
+                                                                                        );
+                                                                                    }}
+                                                                                    placeholder="Value"
+                                                                                    className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                                                                                />
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const newHeaders =
+                                                                                            {
+                                                                                                ...server.headers,
+                                                                                            };
+                                                                                        delete newHeaders[
+                                                                                            key
+                                                                                        ];
+                                                                                        updateMcpServer(
+                                                                                            server.id,
+                                                                                            {
+                                                                                                headers:
+                                                                                                    Object.keys(
+                                                                                                        newHeaders,
+                                                                                                    )
+                                                                                                        .length >
+                                                                                                    0
+                                                                                                        ? newHeaders
+                                                                                                        : undefined,
+                                                                                            },
+                                                                                        );
+                                                                                    }}
+                                                                                    className="text-zinc-500 hover:text-red-400 text-xs px-1"
+                                                                                >
+                                                                                    ✕
+                                                                                </button>
+                                                                            </div>
+                                                                        ),
+                                                                    )}
                                                                 {/* Add new header */}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {
-                                                                        const newHeaders = { ...(server.headers || {}), "": "" };
-                                                                        updateMcpServer(server.id, { headers: newHeaders });
+                                                                        const newHeaders =
+                                                                            {
+                                                                                ...(server.headers ||
+                                                                                    {}),
+                                                                                "": "",
+                                                                            };
+                                                                        updateMcpServer(
+                                                                            server.id,
+                                                                            {
+                                                                                headers:
+                                                                                    newHeaders,
+                                                                            },
+                                                                        );
                                                                     }}
                                                                     className="w-full py-1.5 border border-dashed border-zinc-700 rounded text-zinc-500 hover:border-purple-500 hover:text-purple-400 text-xs transition-colors"
                                                                 >
@@ -1515,34 +2296,81 @@ When users ask about X, prioritize results from source Y...`}
                                                     </div>
 
                                                     {/* Per-tool pricing */}
-                                                    {x402Enabled && x402PricingMode === "per_tool" && (
-                                                        <div className="flex items-center gap-2 pt-2 border-t border-zinc-700">
-                                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={server.x402Enabled || false}
-                                                                    onChange={(e) => updateMcpServer(server.id, { x402Enabled: e.target.checked })}
-                                                                    className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
-                                                                />
-                                                                <span className="text-xs text-zinc-400">💰 Paid tool</span>
-                                                            </label>
-                                                            {server.x402Enabled && (
-                                                                <div className="flex items-center gap-1 ml-auto">
-                                                                    <span className="text-xs text-zinc-500">$</span>
+                                                    {x402Enabled &&
+                                                        x402PricingMode ===
+                                                            "per_tool" && (
+                                                            <div className="flex items-center gap-2 pt-2 border-t border-zinc-700">
+                                                                <label className="flex items-center gap-2 cursor-pointer">
                                                                     <input
-                                                                        type="number"
-                                                                        min="0.01"
-                                                                        step="0.01"
-                                                                        value={((server.x402PriceCents || 1) / 100).toFixed(2)}
-                                                                        onChange={(e) => updateMcpServer(server.id, { 
-                                                                            x402PriceCents: Math.max(1, Math.round(parseFloat(e.target.value || "0.01") * 100))
-                                                                        })}
-                                                                        className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                                        type="checkbox"
+                                                                        checked={
+                                                                            server.x402Enabled ||
+                                                                            false
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) =>
+                                                                            updateMcpServer(
+                                                                                server.id,
+                                                                                {
+                                                                                    x402Enabled:
+                                                                                        e
+                                                                                            .target
+                                                                                            .checked,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
                                                                     />
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
+                                                                    <span className="text-xs text-zinc-400">
+                                                                        💰 Paid
+                                                                        tool
+                                                                    </span>
+                                                                </label>
+                                                                {server.x402Enabled && (
+                                                                    <div className="flex items-center gap-1 ml-auto">
+                                                                        <span className="text-xs text-zinc-500">
+                                                                            $
+                                                                        </span>
+                                                                        <input
+                                                                            type="number"
+                                                                            min="0.01"
+                                                                            step="0.01"
+                                                                            value={(
+                                                                                (server.x402PriceCents ||
+                                                                                    1) /
+                                                                                100
+                                                                            ).toFixed(
+                                                                                2,
+                                                                            )}
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
+                                                                                updateMcpServer(
+                                                                                    server.id,
+                                                                                    {
+                                                                                        x402PriceCents:
+                                                                                            Math.max(
+                                                                                                1,
+                                                                                                Math.round(
+                                                                                                    parseFloat(
+                                                                                                        e
+                                                                                                            .target
+                                                                                                            .value ||
+                                                                                                            "0.01",
+                                                                                                    ) *
+                                                                                                        100,
+                                                                                                ),
+                                                                                            ),
+                                                                                    },
+                                                                                )
+                                                                            }
+                                                                            className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                 </div>
                                             ))}
                                         </div>
@@ -1559,47 +2387,85 @@ When users ask about X, prioritize results from source Y...`}
                                     ) : (
                                         <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl space-y-3">
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-sm font-medium text-white">Add MCP Server</h4>
-                                                <button onClick={() => setShowAddMcp(false)} className="text-zinc-400 hover:text-white text-sm">✕</button>
+                                                <h4 className="text-sm font-medium text-white">
+                                                    Add MCP Server
+                                                </h4>
+                                                <button
+                                                    onClick={() =>
+                                                        setShowAddMcp(false)
+                                                    }
+                                                    className="text-zinc-400 hover:text-white text-sm"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
 
                                             {/* Popular presets */}
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-2">Popular servers:</p>
+                                                <p className="text-xs text-zinc-500 mb-2">
+                                                    Popular servers:
+                                                </p>
                                                 <div className="flex flex-wrap gap-2">
-                                                    {POPULAR_MCP_SERVERS.filter(s => !mcpServers.some(m => m.id === s.id)).slice(0, 4).map(preset => (
-                                                        <button
-                                                            key={preset.id}
-                                                            onClick={() => addMcpServer(preset)}
-                                                            className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-white"
-                                                        >
-                                                            {preset.name}
-                                                        </button>
-                                                    ))}
+                                                    {POPULAR_MCP_SERVERS.filter(
+                                                        (s) =>
+                                                            !mcpServers.some(
+                                                                (m) =>
+                                                                    m.id ===
+                                                                    s.id,
+                                                            ),
+                                                    )
+                                                        .slice(0, 4)
+                                                        .map((preset) => (
+                                                            <button
+                                                                key={preset.id}
+                                                                onClick={() =>
+                                                                    addMcpServer(
+                                                                        preset,
+                                                                    )
+                                                                }
+                                                                className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-white"
+                                                            >
+                                                                {preset.name}
+                                                            </button>
+                                                        ))}
                                                 </div>
                                             </div>
 
                                             {/* Custom server */}
                                             <div className="pt-2 border-t border-zinc-700">
-                                                <p className="text-xs text-zinc-500 mb-2">Or add custom:</p>
+                                                <p className="text-xs text-zinc-500 mb-2">
+                                                    Or add custom:
+                                                </p>
                                                 <input
                                                     type="text"
                                                     value={newMcpName}
-                                                    onChange={(e) => setNewMcpName(e.target.value)}
+                                                    onChange={(e) =>
+                                                        setNewMcpName(
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     placeholder="Server name"
                                                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none focus:border-purple-500"
                                                 />
                                                 <input
                                                     type="text"
                                                     value={newMcpUrl}
-                                                    onChange={(e) => setNewMcpUrl(e.target.value)}
+                                                    onChange={(e) =>
+                                                        setNewMcpUrl(
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     placeholder="Server URL or command"
                                                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 font-mono focus:outline-none focus:border-purple-500"
                                                 />
                                                 <input
                                                     type="password"
                                                     value={newMcpApiKey}
-                                                    onChange={(e) => setNewMcpApiKey(e.target.value)}
+                                                    onChange={(e) =>
+                                                        setNewMcpApiKey(
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     placeholder="API Key (optional)"
                                                     autoComplete="off"
                                                     data-lpignore="true"
@@ -1608,67 +2474,132 @@ When users ask about X, prioritize results from source Y...`}
                                                 />
                                                 <textarea
                                                     value={newMcpDescription}
-                                                    onChange={(e) => setNewMcpDescription(e.target.value)}
+                                                    onChange={(e) =>
+                                                        setNewMcpDescription(
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     placeholder="Instructions for agent (when should it use this server?)"
                                                     rows={2}
                                                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none focus:border-purple-500 resize-none"
                                                 />
-                                                
+
                                                 {/* Headers */}
                                                 <div className="mb-2">
-                                                    <p className="text-xs text-zinc-500 mb-2">Headers (optional)</p>
+                                                    <p className="text-xs text-zinc-500 mb-2">
+                                                        Headers (optional)
+                                                    </p>
                                                     <div className="space-y-2">
-                                                        {Object.entries(newMcpHeaders).map(([key, value], idx) => (
-                                                            <div key={idx} className="flex gap-2 items-center">
-                                                                <input
-                                                                    type="text"
-                                                                    value={key}
-                                                                    onChange={(e) => {
-                                                                        const newHeaders = { ...newMcpHeaders };
-                                                                        const oldValue = newHeaders[key];
-                                                                        delete newHeaders[key];
-                                                                        newHeaders[e.target.value] = oldValue;
-                                                                        setNewMcpHeaders(newHeaders);
-                                                                    }}
-                                                                    placeholder="Header name"
-                                                                    className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
-                                                                />
-                                                                <span className="text-zinc-600">:</span>
-                                                                <input
-                                                                    type="text"
-                                                                    value={value}
-                                                                    onChange={(e) => {
-                                                                        setNewMcpHeaders({ ...newMcpHeaders, [key]: e.target.value });
-                                                                    }}
-                                                                    placeholder="Value"
-                                                                    className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        const newHeaders = { ...newMcpHeaders };
-                                                                        delete newHeaders[key];
-                                                                        setNewMcpHeaders(newHeaders);
-                                                                    }}
-                                                                    className="text-zinc-500 hover:text-red-400 text-xs px-1"
+                                                        {Object.entries(
+                                                            newMcpHeaders,
+                                                        ).map(
+                                                            (
+                                                                [key, value],
+                                                                idx,
+                                                            ) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="flex gap-2 items-center"
                                                                 >
-                                                                    ✕
-                                                                </button>
-                                                            </div>
-                                                        ))}
+                                                                    <input
+                                                                        type="text"
+                                                                        value={
+                                                                            key
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) => {
+                                                                            const newHeaders =
+                                                                                {
+                                                                                    ...newMcpHeaders,
+                                                                                };
+                                                                            const oldValue =
+                                                                                newHeaders[
+                                                                                    key
+                                                                                ];
+                                                                            delete newHeaders[
+                                                                                key
+                                                                            ];
+                                                                            newHeaders[
+                                                                                e.target.value
+                                                                            ] =
+                                                                                oldValue;
+                                                                            setNewMcpHeaders(
+                                                                                newHeaders,
+                                                                            );
+                                                                        }}
+                                                                        placeholder="Header name"
+                                                                        className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                                                                    />
+                                                                    <span className="text-zinc-600">
+                                                                        :
+                                                                    </span>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={
+                                                                            value
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) => {
+                                                                            setNewMcpHeaders(
+                                                                                {
+                                                                                    ...newMcpHeaders,
+                                                                                    [key]: e
+                                                                                        .target
+                                                                                        .value,
+                                                                                },
+                                                                            );
+                                                                        }}
+                                                                        placeholder="Value"
+                                                                        className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const newHeaders =
+                                                                                {
+                                                                                    ...newMcpHeaders,
+                                                                                };
+                                                                            delete newHeaders[
+                                                                                key
+                                                                            ];
+                                                                            setNewMcpHeaders(
+                                                                                newHeaders,
+                                                                            );
+                                                                        }}
+                                                                        className="text-zinc-500 hover:text-red-400 text-xs px-1"
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                </div>
+                                                            ),
+                                                        )}
                                                         <button
                                                             type="button"
-                                                            onClick={() => setNewMcpHeaders({ ...newMcpHeaders, "": "" })}
+                                                            onClick={() =>
+                                                                setNewMcpHeaders(
+                                                                    {
+                                                                        ...newMcpHeaders,
+                                                                        "": "",
+                                                                    },
+                                                                )
+                                                            }
                                                             className="w-full py-1.5 border border-dashed border-zinc-700 rounded text-zinc-500 hover:border-purple-500 hover:text-purple-400 text-xs transition-colors"
                                                         >
                                                             + Add Header
                                                         </button>
                                                     </div>
                                                 </div>
-                                                
+
                                                 <button
-                                                    onClick={() => addMcpServer()}
-                                                    disabled={!newMcpName || !newMcpUrl}
+                                                    onClick={() =>
+                                                        addMcpServer()
+                                                    }
+                                                    disabled={
+                                                        !newMcpName ||
+                                                        !newMcpUrl
+                                                    }
                                                     className="w-full py-2 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
                                                 >
                                                     Add Server
@@ -1683,99 +2614,224 @@ When users ask about X, prioritize results from source Y...`}
                             {activeTab === "api" && (
                                 <>
                                     <p className="text-xs text-zinc-500 mb-4">
-                                        Configure external API endpoints your agent can call to fetch data or perform actions.
+                                        Configure external API endpoints your
+                                        agent can call to fetch data or perform
+                                        actions.
                                     </p>
 
                                     {/* Configured API Tools */}
                                     {apiTools.length > 0 && (
                                         <div className="space-y-2 mb-4">
-                                                    {apiTools.map(tool => (
-                                                                <div key={tool.id} className="p-3 bg-zinc-800 border border-zinc-700 rounded-xl">
-                                                                    <div className="flex items-start justify-between mb-2">
-                                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                            <select
-                                                                                value={tool.method}
-                                                                                onChange={(e) => updateApiTool(tool.id, { method: e.target.value as "GET" | "POST" | "PUT" | "DELETE" })}
-                                                                                className={`text-xs font-mono px-2 py-0.5 rounded cursor-pointer focus:outline-none ${
-                                                                                    tool.method === "GET" ? "bg-green-500/20 text-green-400" :
-                                                                                    tool.method === "POST" ? "bg-blue-500/20 text-blue-400" :
-                                                                                    tool.method === "PUT" ? "bg-yellow-500/20 text-yellow-400" :
-                                                                                    "bg-red-500/20 text-red-400"
-                                                                                }`}
-                                                                            >
-                                                                                <option value="GET">GET</option>
-                                                                                <option value="POST">POST</option>
-                                                                                <option value="PUT">PUT</option>
-                                                                                <option value="DELETE">DELETE</option>
-                                                                            </select>
-                                                                            {/* API Type Badge */}
-                                                                            {tool.apiType && (
-                                                                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                                                                                    tool.apiType === "graphql" ? "bg-pink-500/20 text-pink-400" :
-                                                                                    tool.apiType === "openapi" ? "bg-purple-500/20 text-purple-400" :
-                                                                                    "bg-zinc-600/20 text-zinc-400"
-                                                                                }`}>
-                                                                                    {tool.apiType === "graphql" ? "GraphQL" : 
-                                                                                     tool.apiType === "openapi" ? "OpenAPI" : "REST"}
-                                                                                </span>
-                                                                            )}
-                                                                            {/* Detect/Fetch Schema Button */}
-                                                                            <button
-                                                                                onClick={() => detectApiType(tool.id, tool.url, tool.apiKey, tool.headers)}
-                                                                                disabled={detectingApiId === tool.id}
-                                                                                className="text-xs px-1.5 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 disabled:opacity-50"
-                                                                                title={tool.schema ? "Refresh schema" : "Auto-detect API type and fetch schema"}
-                                                                            >
-                                                                                {detectingApiId === tool.id ? "..." : tool.schema ? "🔄" : "🔍"}
-                                                                            </button>
-                                                                            <div className="flex-1 min-w-0">
-                                                                                <input
-                                                                                    type="text"
-                                                                                    value={tool.name}
-                                                                                    onChange={(e) => updateApiTool(tool.id, { name: e.target.value })}
-                                                                                    className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-cyan-500 text-sm font-medium text-white focus:outline-none px-0 py-0.5"
-                                                                                    placeholder="API name"
-                                                                                />
-                                                                                <input
-                                                                                    type="text"
-                                                                                    value={tool.url}
-                                                                                    onChange={(e) => updateApiTool(tool.id, { url: e.target.value })}
-                                                                                    className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-cyan-500 text-xs text-zinc-400 font-mono focus:outline-none px-0 py-0.5"
-                                                                                    placeholder="API URL"
-                                                                                />
-                                                                            </div>
-                                                                        </div>
-                                                                        <button
-                                                                            onClick={() => removeApiTool(tool.id)}
-                                                                            className="text-zinc-500 hover:text-red-400 text-sm shrink-0 ml-2"
-                                                                        >
-                                                                            ✕
-                                                                        </button>
-                                                                    </div>
-                                                                    
-                                                                    {/* Schema Preview */}
-                                                                    {tool.schema && (
-                                                                        <div className="mb-2 p-2 bg-zinc-900/50 rounded-lg border border-zinc-700/50">
-                                                                            <div className="flex items-center justify-between mb-1">
-                                                                                <span className="text-xs text-zinc-500">Detected Schema</span>
-                                                                                <button
-                                                                                    onClick={() => updateApiTool(tool.id, { schema: undefined })}
-                                                                                    className="text-xs text-zinc-500 hover:text-zinc-300"
-                                                                                >
-                                                                                    Clear
-                                                                                </button>
-                                                                            </div>
-                                                                            <pre className="text-xs text-zinc-400 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
-                                                                                {tool.schema.length > 500 ? tool.schema.substring(0, 500) + "..." : tool.schema}
-                                                                            </pre>
-                                                                        </div>
-                                                                    )}
-                                                    
+                                            {apiTools.map((tool) => (
+                                                <div
+                                                    key={tool.id}
+                                                    className="p-3 bg-zinc-800 border border-zinc-700 rounded-xl"
+                                                >
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                            <select
+                                                                value={
+                                                                    tool.method
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateApiTool(
+                                                                        tool.id,
+                                                                        {
+                                                                            method: e
+                                                                                .target
+                                                                                .value as
+                                                                                | "GET"
+                                                                                | "POST"
+                                                                                | "PUT"
+                                                                                | "DELETE",
+                                                                        },
+                                                                    )
+                                                                }
+                                                                className={`text-xs font-mono px-2 py-0.5 rounded cursor-pointer focus:outline-none ${
+                                                                    tool.method ===
+                                                                    "GET"
+                                                                        ? "bg-green-500/20 text-green-400"
+                                                                        : tool.method ===
+                                                                            "POST"
+                                                                          ? "bg-blue-500/20 text-blue-400"
+                                                                          : tool.method ===
+                                                                              "PUT"
+                                                                            ? "bg-yellow-500/20 text-yellow-400"
+                                                                            : "bg-red-500/20 text-red-400"
+                                                                }`}
+                                                            >
+                                                                <option value="GET">
+                                                                    GET
+                                                                </option>
+                                                                <option value="POST">
+                                                                    POST
+                                                                </option>
+                                                                <option value="PUT">
+                                                                    PUT
+                                                                </option>
+                                                                <option value="DELETE">
+                                                                    DELETE
+                                                                </option>
+                                                            </select>
+                                                            {/* API Type Badge */}
+                                                            {tool.apiType && (
+                                                                <span
+                                                                    className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                                                        tool.apiType ===
+                                                                        "graphql"
+                                                                            ? "bg-pink-500/20 text-pink-400"
+                                                                            : tool.apiType ===
+                                                                                "openapi"
+                                                                              ? "bg-purple-500/20 text-purple-400"
+                                                                              : "bg-zinc-600/20 text-zinc-400"
+                                                                    }`}
+                                                                >
+                                                                    {tool.apiType ===
+                                                                    "graphql"
+                                                                        ? "GraphQL"
+                                                                        : tool.apiType ===
+                                                                            "openapi"
+                                                                          ? "OpenAPI"
+                                                                          : "REST"}
+                                                                </span>
+                                                            )}
+                                                            {/* Detect/Fetch Schema Button */}
+                                                            <button
+                                                                onClick={() =>
+                                                                    detectApiType(
+                                                                        tool.id,
+                                                                        tool.url,
+                                                                        tool.apiKey,
+                                                                        tool.headers,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    detectingApiId ===
+                                                                    tool.id
+                                                                }
+                                                                className="text-xs px-1.5 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 disabled:opacity-50"
+                                                                title={
+                                                                    tool.schema
+                                                                        ? "Refresh schema"
+                                                                        : "Auto-detect API type and fetch schema"
+                                                                }
+                                                            >
+                                                                {detectingApiId ===
+                                                                tool.id
+                                                                    ? "..."
+                                                                    : tool.schema
+                                                                      ? "🔄"
+                                                                      : "🔍"}
+                                                            </button>
+                                                            <div className="flex-1 min-w-0">
+                                                                <input
+                                                                    type="text"
+                                                                    value={
+                                                                        tool.name
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        updateApiTool(
+                                                                            tool.id,
+                                                                            {
+                                                                                name: e
+                                                                                    .target
+                                                                                    .value,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                    className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-cyan-500 text-sm font-medium text-white focus:outline-none px-0 py-0.5"
+                                                                    placeholder="API name"
+                                                                />
+                                                                <input
+                                                                    type="text"
+                                                                    value={
+                                                                        tool.url
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        updateApiTool(
+                                                                            tool.id,
+                                                                            {
+                                                                                url: e
+                                                                                    .target
+                                                                                    .value,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                    className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-cyan-500 text-xs text-zinc-400 font-mono focus:outline-none px-0 py-0.5"
+                                                                    placeholder="API URL"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() =>
+                                                                removeApiTool(
+                                                                    tool.id,
+                                                                )
+                                                            }
+                                                            className="text-zinc-500 hover:text-red-400 text-sm shrink-0 ml-2"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Schema Preview */}
+                                                    {tool.schema && (
+                                                        <div className="mb-2 p-2 bg-zinc-900/50 rounded-lg border border-zinc-700/50">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <span className="text-xs text-zinc-500">
+                                                                    Detected
+                                                                    Schema
+                                                                </span>
+                                                                <button
+                                                                    onClick={() =>
+                                                                        updateApiTool(
+                                                                            tool.id,
+                                                                            {
+                                                                                schema: undefined,
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                    className="text-xs text-zinc-500 hover:text-zinc-300"
+                                                                >
+                                                                    Clear
+                                                                </button>
+                                                            </div>
+                                                            <pre className="text-xs text-zinc-400 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                                                {tool.schema
+                                                                    .length >
+                                                                500
+                                                                    ? tool.schema.substring(
+                                                                          0,
+                                                                          500,
+                                                                      ) + "..."
+                                                                    : tool.schema}
+                                                            </pre>
+                                                        </div>
+                                                    )}
+
                                                     {/* Instructions for Agent */}
                                                     <div className="mb-2">
                                                         <textarea
-                                                            value={tool.description || ""}
-                                                            onChange={(e) => updateApiTool(tool.id, { description: e.target.value || undefined })}
+                                                            value={
+                                                                tool.description ||
+                                                                ""
+                                                            }
+                                                            onChange={(e) =>
+                                                                updateApiTool(
+                                                                    tool.id,
+                                                                    {
+                                                                        description:
+                                                                            e
+                                                                                .target
+                                                                                .value ||
+                                                                            undefined,
+                                                                    },
+                                                                )
+                                                            }
                                                             placeholder="Instructions for agent (e.g. 'Call this API to get weather data when the user asks about the forecast')"
                                                             rows={2}
                                                             className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 resize-none"
@@ -1786,9 +2842,29 @@ When users ask about X, prioritize results from source Y...`}
                                                     <div className="mb-2">
                                                         <div className="relative">
                                                             <input
-                                                                type={visibleApiKeys.has(`api-${tool.id}`) ? "text" : "password"}
-                                                                value={tool.apiKey || ""}
-                                                                onChange={(e) => updateApiTool(tool.id, { apiKey: e.target.value || undefined })}
+                                                                type={
+                                                                    visibleApiKeys.has(
+                                                                        `api-${tool.id}`,
+                                                                    )
+                                                                        ? "text"
+                                                                        : "password"
+                                                                }
+                                                                value={
+                                                                    tool.apiKey ||
+                                                                    ""
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateApiTool(
+                                                                        tool.id,
+                                                                        {
+                                                                            apiKey:
+                                                                                e
+                                                                                    .target
+                                                                                    .value ||
+                                                                                undefined,
+                                                                        },
+                                                                    )
+                                                                }
                                                                 placeholder="API Key (optional)"
                                                                 autoComplete="off"
                                                                 data-lpignore="true"
@@ -1797,11 +2873,25 @@ When users ask about X, prioritize results from source Y...`}
                                                             />
                                                             <button
                                                                 type="button"
-                                                                onClick={() => toggleApiKeyVisibility(`api-${tool.id}`)}
+                                                                onClick={() =>
+                                                                    toggleApiKeyVisibility(
+                                                                        `api-${tool.id}`,
+                                                                    )
+                                                                }
                                                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
-                                                                title={visibleApiKeys.has(`api-${tool.id}`) ? "Hide" : "Show"}
+                                                                title={
+                                                                    visibleApiKeys.has(
+                                                                        `api-${tool.id}`,
+                                                                    )
+                                                                        ? "Hide"
+                                                                        : "Show"
+                                                                }
                                                             >
-                                                                {visibleApiKeys.has(`api-${tool.id}`) ? "🙈" : "👁️"}
+                                                                {visibleApiKeys.has(
+                                                                    `api-${tool.id}`,
+                                                                )
+                                                                    ? "🙈"
+                                                                    : "👁️"}
                                                             </button>
                                                         </div>
                                                         {/* Add API Key as Header */}
@@ -1811,29 +2901,73 @@ When users ask about X, prioritize results from source Y...`}
                                                                     type="text"
                                                                     placeholder="Header name (e.g. Authorization)"
                                                                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                                                                            const headerName = e.currentTarget.value.trim();
-                                                                            const newHeaders = { ...(tool.headers || {}), [headerName]: tool.apiKey || "" };
-                                                                            updateApiTool(tool.id, { headers: newHeaders });
-                                                                            e.currentTarget.value = "";
+                                                                    onKeyDown={(
+                                                                        e,
+                                                                    ) => {
+                                                                        if (
+                                                                            e.key ===
+                                                                                "Enter" &&
+                                                                            e.currentTarget.value.trim()
+                                                                        ) {
+                                                                            const headerName =
+                                                                                e.currentTarget.value.trim();
+                                                                            const newHeaders =
+                                                                                {
+                                                                                    ...(tool.headers ||
+                                                                                        {}),
+                                                                                    [headerName]:
+                                                                                        tool.apiKey ||
+                                                                                        "",
+                                                                                };
+                                                                            updateApiTool(
+                                                                                tool.id,
+                                                                                {
+                                                                                    headers:
+                                                                                        newHeaders,
+                                                                                },
+                                                                            );
+                                                                            e.currentTarget.value =
+                                                                                "";
                                                                         }
                                                                     }}
                                                                 />
                                                                 <button
                                                                     type="button"
-                                                                    onClick={(e) => {
-                                                                        const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-                                                                        if (input?.value.trim()) {
-                                                                            const headerName = input.value.trim();
-                                                                            const newHeaders = { ...(tool.headers || {}), [headerName]: tool.apiKey || "" };
-                                                                            updateApiTool(tool.id, { headers: newHeaders });
-                                                                            input.value = "";
+                                                                    onClick={(
+                                                                        e,
+                                                                    ) => {
+                                                                        const input =
+                                                                            e
+                                                                                .currentTarget
+                                                                                .previousElementSibling as HTMLInputElement;
+                                                                        if (
+                                                                            input?.value.trim()
+                                                                        ) {
+                                                                            const headerName =
+                                                                                input.value.trim();
+                                                                            const newHeaders =
+                                                                                {
+                                                                                    ...(tool.headers ||
+                                                                                        {}),
+                                                                                    [headerName]:
+                                                                                        tool.apiKey ||
+                                                                                        "",
+                                                                                };
+                                                                            updateApiTool(
+                                                                                tool.id,
+                                                                                {
+                                                                                    headers:
+                                                                                        newHeaders,
+                                                                                },
+                                                                            );
+                                                                            input.value =
+                                                                                "";
                                                                         }
                                                                     }}
                                                                     className="px-2 py-1 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 rounded text-xs whitespace-nowrap"
                                                                 >
-                                                                    + Add to Headers
+                                                                    + Add to
+                                                                    Headers
                                                                 </button>
                                                             </div>
                                                         )}
@@ -1843,60 +2977,167 @@ When users ask about X, prioritize results from source Y...`}
                                                     <div className="mb-2">
                                                         <details className="group">
                                                             <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300 flex items-center gap-1">
-                                                                <span className="group-open:rotate-90 transition-transform">▶</span>
-                                                                Headers {tool.headers && Object.keys(tool.headers).length > 0 && (
-                                                                    <span className="text-cyan-400">({Object.keys(tool.headers).length})</span>
-                                                                )}
+                                                                <span className="group-open:rotate-90 transition-transform">
+                                                                    ▶
+                                                                </span>
+                                                                Headers{" "}
+                                                                {tool.headers &&
+                                                                    Object.keys(
+                                                                        tool.headers,
+                                                                    ).length >
+                                                                        0 && (
+                                                                        <span className="text-cyan-400">
+                                                                            (
+                                                                            {
+                                                                                Object.keys(
+                                                                                    tool.headers,
+                                                                                )
+                                                                                    .length
+                                                                            }
+                                                                            )
+                                                                        </span>
+                                                                    )}
                                                             </summary>
                                                             <div className="mt-2 space-y-2">
                                                                 {/* Existing headers */}
-                                                                {tool.headers && Object.entries(tool.headers).map(([key, value], idx) => (
-                                                                    <div key={idx} className="flex gap-2 items-center">
-                                                                        <input
-                                                                            type="text"
-                                                                            value={key}
-                                                                            onChange={(e) => {
-                                                                                const newHeaders = { ...tool.headers };
-                                                                                const oldValue = newHeaders[key];
-                                                                                delete newHeaders[key];
-                                                                                if (e.target.value.trim()) {
-                                                                                    newHeaders[e.target.value.trim()] = oldValue;
+                                                                {tool.headers &&
+                                                                    Object.entries(
+                                                                        tool.headers,
+                                                                    ).map(
+                                                                        (
+                                                                            [
+                                                                                key,
+                                                                                value,
+                                                                            ],
+                                                                            idx,
+                                                                        ) => (
+                                                                            <div
+                                                                                key={
+                                                                                    idx
                                                                                 }
-                                                                                updateApiTool(tool.id, { headers: Object.keys(newHeaders).length > 0 ? newHeaders : undefined });
-                                                                            }}
-                                                                            placeholder="Header name"
-                                                                            className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
-                                                                        />
-                                                                        <span className="text-zinc-600">:</span>
-                                                                        <input
-                                                                            type="text"
-                                                                            value={value}
-                                                                            onChange={(e) => {
-                                                                                const newHeaders = { ...tool.headers, [key]: e.target.value };
-                                                                                updateApiTool(tool.id, { headers: newHeaders });
-                                                                            }}
-                                                                            placeholder="Value"
-                                                                            className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
-                                                                        />
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                const newHeaders = { ...tool.headers };
-                                                                                delete newHeaders[key];
-                                                                                updateApiTool(tool.id, { headers: Object.keys(newHeaders).length > 0 ? newHeaders : undefined });
-                                                                            }}
-                                                                            className="text-zinc-500 hover:text-red-400 text-xs px-1"
-                                                                        >
-                                                                            ✕
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
+                                                                                className="flex gap-2 items-center"
+                                                                            >
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={
+                                                                                        key
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        e,
+                                                                                    ) => {
+                                                                                        const newHeaders =
+                                                                                            {
+                                                                                                ...tool.headers,
+                                                                                            };
+                                                                                        const oldValue =
+                                                                                            newHeaders[
+                                                                                                key
+                                                                                            ];
+                                                                                        delete newHeaders[
+                                                                                            key
+                                                                                        ];
+                                                                                        if (
+                                                                                            e.target.value.trim()
+                                                                                        ) {
+                                                                                            newHeaders[
+                                                                                                e.target.value.trim()
+                                                                                            ] =
+                                                                                                oldValue;
+                                                                                        }
+                                                                                        updateApiTool(
+                                                                                            tool.id,
+                                                                                            {
+                                                                                                headers:
+                                                                                                    Object.keys(
+                                                                                                        newHeaders,
+                                                                                                    )
+                                                                                                        .length >
+                                                                                                    0
+                                                                                                        ? newHeaders
+                                                                                                        : undefined,
+                                                                                            },
+                                                                                        );
+                                                                                    }}
+                                                                                    placeholder="Header name"
+                                                                                    className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                                                                                />
+                                                                                <span className="text-zinc-600">
+                                                                                    :
+                                                                                </span>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={
+                                                                                        value
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        e,
+                                                                                    ) => {
+                                                                                        const newHeaders =
+                                                                                            {
+                                                                                                ...tool.headers,
+                                                                                                [key]: e
+                                                                                                    .target
+                                                                                                    .value,
+                                                                                            };
+                                                                                        updateApiTool(
+                                                                                            tool.id,
+                                                                                            {
+                                                                                                headers:
+                                                                                                    newHeaders,
+                                                                                            },
+                                                                                        );
+                                                                                    }}
+                                                                                    placeholder="Value"
+                                                                                    className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                                                                                />
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const newHeaders =
+                                                                                            {
+                                                                                                ...tool.headers,
+                                                                                            };
+                                                                                        delete newHeaders[
+                                                                                            key
+                                                                                        ];
+                                                                                        updateApiTool(
+                                                                                            tool.id,
+                                                                                            {
+                                                                                                headers:
+                                                                                                    Object.keys(
+                                                                                                        newHeaders,
+                                                                                                    )
+                                                                                                        .length >
+                                                                                                    0
+                                                                                                        ? newHeaders
+                                                                                                        : undefined,
+                                                                                            },
+                                                                                        );
+                                                                                    }}
+                                                                                    className="text-zinc-500 hover:text-red-400 text-xs px-1"
+                                                                                >
+                                                                                    ✕
+                                                                                </button>
+                                                                            </div>
+                                                                        ),
+                                                                    )}
                                                                 {/* Add new header */}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {
-                                                                        const newHeaders = { ...(tool.headers || {}), "": "" };
-                                                                        updateApiTool(tool.id, { headers: newHeaders });
+                                                                        const newHeaders =
+                                                                            {
+                                                                                ...(tool.headers ||
+                                                                                    {}),
+                                                                                "": "",
+                                                                            };
+                                                                        updateApiTool(
+                                                                            tool.id,
+                                                                            {
+                                                                                headers:
+                                                                                    newHeaders,
+                                                                            },
+                                                                        );
                                                                     }}
                                                                     className="w-full py-1.5 border border-dashed border-zinc-700 rounded text-zinc-500 hover:border-cyan-500 hover:text-cyan-400 text-xs transition-colors"
                                                                 >
@@ -1907,34 +3148,81 @@ When users ask about X, prioritize results from source Y...`}
                                                     </div>
 
                                                     {/* Per-tool pricing */}
-                                                    {x402Enabled && x402PricingMode === "per_tool" && (
-                                                        <div className="flex items-center gap-2 pt-2 border-t border-zinc-700">
-                                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={tool.x402Enabled || false}
-                                                                    onChange={(e) => updateApiTool(tool.id, { x402Enabled: e.target.checked })}
-                                                                    className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
-                                                                />
-                                                                <span className="text-xs text-zinc-400">💰 Paid API</span>
-                                                            </label>
-                                                            {tool.x402Enabled && (
-                                                                <div className="flex items-center gap-1 ml-auto">
-                                                                    <span className="text-xs text-zinc-500">$</span>
+                                                    {x402Enabled &&
+                                                        x402PricingMode ===
+                                                            "per_tool" && (
+                                                            <div className="flex items-center gap-2 pt-2 border-t border-zinc-700">
+                                                                <label className="flex items-center gap-2 cursor-pointer">
                                                                     <input
-                                                                        type="number"
-                                                                        min="0.01"
-                                                                        step="0.01"
-                                                                        value={((tool.x402PriceCents || 1) / 100).toFixed(2)}
-                                                                        onChange={(e) => updateApiTool(tool.id, { 
-                                                                            x402PriceCents: Math.max(1, Math.round(parseFloat(e.target.value || "0.01") * 100))
-                                                                        })}
-                                                                        className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                                        type="checkbox"
+                                                                        checked={
+                                                                            tool.x402Enabled ||
+                                                                            false
+                                                                        }
+                                                                        onChange={(
+                                                                            e,
+                                                                        ) =>
+                                                                            updateApiTool(
+                                                                                tool.id,
+                                                                                {
+                                                                                    x402Enabled:
+                                                                                        e
+                                                                                            .target
+                                                                                            .checked,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
                                                                     />
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
+                                                                    <span className="text-xs text-zinc-400">
+                                                                        💰 Paid
+                                                                        API
+                                                                    </span>
+                                                                </label>
+                                                                {tool.x402Enabled && (
+                                                                    <div className="flex items-center gap-1 ml-auto">
+                                                                        <span className="text-xs text-zinc-500">
+                                                                            $
+                                                                        </span>
+                                                                        <input
+                                                                            type="number"
+                                                                            min="0.01"
+                                                                            step="0.01"
+                                                                            value={(
+                                                                                (tool.x402PriceCents ||
+                                                                                    1) /
+                                                                                100
+                                                                            ).toFixed(
+                                                                                2,
+                                                                            )}
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
+                                                                                updateApiTool(
+                                                                                    tool.id,
+                                                                                    {
+                                                                                        x402PriceCents:
+                                                                                            Math.max(
+                                                                                                1,
+                                                                                                Math.round(
+                                                                                                    parseFloat(
+                                                                                                        e
+                                                                                                            .target
+                                                                                                            .value ||
+                                                                                                            "0.01",
+                                                                                                    ) *
+                                                                                                        100,
+                                                                                                ),
+                                                                                            ),
+                                                                                    },
+                                                                                )
+                                                                            }
+                                                                            className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                 </div>
                                             ))}
                                         </div>
@@ -1951,15 +3239,28 @@ When users ask about X, prioritize results from source Y...`}
                                     ) : (
                                         <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl space-y-3">
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-sm font-medium text-white">Add API Endpoint</h4>
-                                                <button onClick={() => setShowAddApi(false)} className="text-zinc-400 hover:text-white text-sm">✕</button>
+                                                <h4 className="text-sm font-medium text-white">
+                                                    Add API Endpoint
+                                                </h4>
+                                                <button
+                                                    onClick={() =>
+                                                        setShowAddApi(false)
+                                                    }
+                                                    className="text-zinc-400 hover:text-white text-sm"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
 
                                             {/* Name */}
                                             <input
                                                 type="text"
                                                 value={newApiName}
-                                                onChange={(e) => setNewApiName(e.target.value)}
+                                                onChange={(e) =>
+                                                    setNewApiName(
+                                                        e.target.value,
+                                                    )
+                                                }
                                                 placeholder="API name (e.g., Weather API)"
                                                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
                                             />
@@ -1968,18 +3269,35 @@ When users ask about X, prioritize results from source Y...`}
                                             <div className="flex gap-2">
                                                 <select
                                                     value={newApiMethod}
-                                                    onChange={(e) => setNewApiMethod(e.target.value as typeof newApiMethod)}
+                                                    onChange={(e) =>
+                                                        setNewApiMethod(
+                                                            e.target
+                                                                .value as typeof newApiMethod,
+                                                        )
+                                                    }
                                                     className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
                                                 >
-                                                    <option value="GET">GET</option>
-                                                    <option value="POST">POST</option>
-                                                    <option value="PUT">PUT</option>
-                                                    <option value="DELETE">DELETE</option>
+                                                    <option value="GET">
+                                                        GET
+                                                    </option>
+                                                    <option value="POST">
+                                                        POST
+                                                    </option>
+                                                    <option value="PUT">
+                                                        PUT
+                                                    </option>
+                                                    <option value="DELETE">
+                                                        DELETE
+                                                    </option>
                                                 </select>
                                                 <input
                                                     type="text"
                                                     value={newApiUrl}
-                                                    onChange={(e) => setNewApiUrl(e.target.value)}
+                                                    onChange={(e) =>
+                                                        setNewApiUrl(
+                                                            e.target.value,
+                                                        )
+                                                    }
                                                     placeholder="https://api.example.com/endpoint"
                                                     className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-cyan-500"
                                                 />
@@ -1988,7 +3306,11 @@ When users ask about X, prioritize results from source Y...`}
                                             {/* Instructions for Agent */}
                                             <textarea
                                                 value={newApiDescription}
-                                                onChange={(e) => setNewApiDescription(e.target.value)}
+                                                onChange={(e) =>
+                                                    setNewApiDescription(
+                                                        e.target.value,
+                                                    )
+                                                }
                                                 placeholder="Instructions for agent (when should it use this API?)"
                                                 rows={2}
                                                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500 resize-none"
@@ -1998,14 +3320,16 @@ When users ask about X, prioritize results from source Y...`}
                                             <input
                                                 type="password"
                                                 value={newApiKey}
-                                                onChange={(e) => setNewApiKey(e.target.value)}
+                                                onChange={(e) =>
+                                                    setNewApiKey(e.target.value)
+                                                }
                                                 placeholder="API Key (optional)"
                                                 autoComplete="off"
                                                 data-lpignore="true"
                                                 data-1p-ignore="true"
                                                 className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-cyan-500"
                                             />
-                                            
+
                                             {/* Add API Key as Header */}
                                             {newApiKey && (
                                                 <div className="flex items-center gap-2">
@@ -2015,21 +3339,46 @@ When users ask about X, prioritize results from source Y...`}
                                                         placeholder="Header name (e.g. Authorization)"
                                                         className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
                                                         onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                                                                const headerName = e.currentTarget.value.trim();
-                                                                setNewApiHeaders({ ...newApiHeaders, [headerName]: newApiKey });
-                                                                e.currentTarget.value = "";
+                                                            if (
+                                                                e.key ===
+                                                                    "Enter" &&
+                                                                e.currentTarget.value.trim()
+                                                            ) {
+                                                                const headerName =
+                                                                    e.currentTarget.value.trim();
+                                                                setNewApiHeaders(
+                                                                    {
+                                                                        ...newApiHeaders,
+                                                                        [headerName]:
+                                                                            newApiKey,
+                                                                    },
+                                                                );
+                                                                e.currentTarget.value =
+                                                                    "";
                                                             }
                                                         }}
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            const input = document.getElementById('new-api-header-name') as HTMLInputElement;
-                                                            if (input?.value.trim()) {
-                                                                const headerName = input.value.trim();
-                                                                setNewApiHeaders({ ...newApiHeaders, [headerName]: newApiKey });
-                                                                input.value = "";
+                                                            const input =
+                                                                document.getElementById(
+                                                                    "new-api-header-name",
+                                                                ) as HTMLInputElement;
+                                                            if (
+                                                                input?.value.trim()
+                                                            ) {
+                                                                const headerName =
+                                                                    input.value.trim();
+                                                                setNewApiHeaders(
+                                                                    {
+                                                                        ...newApiHeaders,
+                                                                        [headerName]:
+                                                                            newApiKey,
+                                                                    },
+                                                                );
+                                                                input.value =
+                                                                    "";
                                                             }
                                                         }}
                                                         className="px-2 py-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 rounded text-xs whitespace-nowrap"
@@ -2041,49 +3390,98 @@ When users ask about X, prioritize results from source Y...`}
 
                                             {/* Headers */}
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-2">Headers (optional)</p>
+                                                <p className="text-xs text-zinc-500 mb-2">
+                                                    Headers (optional)
+                                                </p>
                                                 <div className="space-y-2">
-                                                    {Object.entries(newApiHeaders).map(([key, value], idx) => (
-                                                        <div key={idx} className="flex gap-2 items-center">
-                                                            <input
-                                                                type="text"
-                                                                value={key}
-                                                                onChange={(e) => {
-                                                                    const newHeaders = { ...newApiHeaders };
-                                                                    const oldValue = newHeaders[key];
-                                                                    delete newHeaders[key];
-                                                                    newHeaders[e.target.value] = oldValue;
-                                                                    setNewApiHeaders(newHeaders);
-                                                                }}
-                                                                placeholder="Header name"
-                                                                className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
-                                                            />
-                                                            <span className="text-zinc-600">:</span>
-                                                            <input
-                                                                type="text"
-                                                                value={value}
-                                                                onChange={(e) => {
-                                                                    setNewApiHeaders({ ...newApiHeaders, [key]: e.target.value });
-                                                                }}
-                                                                placeholder="Value"
-                                                                className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const newHeaders = { ...newApiHeaders };
-                                                                    delete newHeaders[key];
-                                                                    setNewApiHeaders(newHeaders);
-                                                                }}
-                                                                className="text-zinc-500 hover:text-red-400 text-xs px-1"
+                                                    {Object.entries(
+                                                        newApiHeaders,
+                                                    ).map(
+                                                        ([key, value], idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex gap-2 items-center"
                                                             >
-                                                                ✕
-                                                            </button>
-                                                        </div>
-                                                    ))}
+                                                                <input
+                                                                    type="text"
+                                                                    value={key}
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        const newHeaders =
+                                                                            {
+                                                                                ...newApiHeaders,
+                                                                            };
+                                                                        const oldValue =
+                                                                            newHeaders[
+                                                                                key
+                                                                            ];
+                                                                        delete newHeaders[
+                                                                            key
+                                                                        ];
+                                                                        newHeaders[
+                                                                            e.target.value
+                                                                        ] =
+                                                                            oldValue;
+                                                                        setNewApiHeaders(
+                                                                            newHeaders,
+                                                                        );
+                                                                    }}
+                                                                    placeholder="Header name"
+                                                                    className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                                                                />
+                                                                <span className="text-zinc-600">
+                                                                    :
+                                                                </span>
+                                                                <input
+                                                                    type="text"
+                                                                    value={
+                                                                        value
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) => {
+                                                                        setNewApiHeaders(
+                                                                            {
+                                                                                ...newApiHeaders,
+                                                                                [key]: e
+                                                                                    .target
+                                                                                    .value,
+                                                                            },
+                                                                        );
+                                                                    }}
+                                                                    placeholder="Value"
+                                                                    className="flex-[2] bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const newHeaders =
+                                                                            {
+                                                                                ...newApiHeaders,
+                                                                            };
+                                                                        delete newHeaders[
+                                                                            key
+                                                                        ];
+                                                                        setNewApiHeaders(
+                                                                            newHeaders,
+                                                                        );
+                                                                    }}
+                                                                    className="text-zinc-500 hover:text-red-400 text-xs px-1"
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            </div>
+                                                        ),
+                                                    )}
                                                     <button
                                                         type="button"
-                                                        onClick={() => setNewApiHeaders({ ...newApiHeaders, "": "" })}
+                                                        onClick={() =>
+                                                            setNewApiHeaders({
+                                                                ...newApiHeaders,
+                                                                "": "",
+                                                            })
+                                                        }
                                                         className="w-full py-1.5 border border-dashed border-zinc-700 rounded text-zinc-500 hover:border-cyan-500 hover:text-cyan-400 text-xs transition-colors"
                                                     >
                                                         + Add Header
@@ -2093,7 +3491,9 @@ When users ask about X, prioritize results from source Y...`}
 
                                             <button
                                                 onClick={addApiTool}
-                                                disabled={!newApiName || !newApiUrl}
+                                                disabled={
+                                                    !newApiName || !newApiUrl
+                                                }
                                                 className="w-full py-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
                                             >
                                                 Add API
@@ -2149,36 +3549,49 @@ function ChannelPresenceSection({
     channelMemberships: { global: boolean; channels: string[] };
     availableChannels: Array<{ id: string; name: string; emoji: string }>;
     isSavingChannels: boolean;
-    toggleChannelMembership: (type: "global" | "channel", channelId?: string) => void;
+    toggleChannelMembership: (
+        type: "global" | "channel",
+        channelId?: string,
+    ) => void;
     agentName: string;
 }) {
     const [showChannelPicker, setShowChannelPicker] = useState(false);
     const [channelSearch, setChannelSearch] = useState("");
-    
+
     // Get selected channel names for display
-    const selectedChannels = availableChannels.filter(c => channelMemberships.channels.includes(c.id));
-    const unselectedChannels = availableChannels.filter(c => !channelMemberships.channels.includes(c.id));
-    const filteredChannels = unselectedChannels.filter(c => 
-        c.name.toLowerCase().includes(channelSearch.toLowerCase())
+    const selectedChannels = availableChannels.filter((c) =>
+        channelMemberships.channels.includes(c.id),
     );
-    
-    const totalActive = (channelMemberships.global ? 1 : 0) + channelMemberships.channels.length;
-    
+    const unselectedChannels = availableChannels.filter(
+        (c) => !channelMemberships.channels.includes(c.id),
+    );
+    const filteredChannels = unselectedChannels.filter((c) =>
+        c.name.toLowerCase().includes(channelSearch.toLowerCase()),
+    );
+
+    const totalActive =
+        (channelMemberships.global ? 1 : 0) +
+        channelMemberships.channels.length;
+
     return (
         <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                     <span className="text-base">🤖</span>
-                    <h4 className="text-sm font-medium text-purple-400">Channel Presence</h4>
+                    <h4 className="text-sm font-medium text-purple-400">
+                        Channel Presence
+                    </h4>
                     {isSavingChannels && (
                         <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
                     )}
                 </div>
                 <span className="text-xs text-zinc-500">
-                    {totalActive > 0 ? `${totalActive} active` : "Not in any channels"}
+                    {totalActive > 0
+                        ? `${totalActive} active`
+                        : "Not in any channels"}
                 </span>
             </div>
-            
+
             {/* Active channels as compact chips */}
             <div className="flex flex-wrap gap-1.5 mb-2">
                 {/* Global Chat chip */}
@@ -2194,46 +3607,82 @@ function ChannelPresenceSection({
                     <span>🌍</span>
                     <span>Global</span>
                     {channelMemberships.global && (
-                        <svg className="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        <svg
+                            className="w-3 h-3 ml-0.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                            />
                         </svg>
                     )}
                 </button>
-                
+
                 {/* Selected channel chips */}
-                {selectedChannels.map(channel => (
+                {selectedChannels.map((channel) => (
                     <button
                         key={channel.id}
-                        onClick={() => toggleChannelMembership("channel", channel.id)}
+                        onClick={() =>
+                            toggleChannelMembership("channel", channel.id)
+                        }
                         disabled={isSavingChannels}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/40 hover:bg-purple-500/30 transition-all"
                     >
                         <span>{channel.emoji || "#"}</span>
-                        <span className="max-w-[80px] truncate">{channel.name}</span>
-                        <svg className="w-3 h-3 ml-0.5 text-purple-400/70 hover:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <span className="max-w-[80px] truncate">
+                            {channel.name}
+                        </span>
+                        <svg
+                            className="w-3 h-3 ml-0.5 text-purple-400/70 hover:text-red-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                            />
                         </svg>
                     </button>
                 ))}
-                
+
                 {/* Add channel button */}
                 {unselectedChannels.length > 0 && (
                     <div className="relative">
                         <button
-                            onClick={() => setShowChannelPicker(!showChannelPicker)}
+                            onClick={() =>
+                                setShowChannelPicker(!showChannelPicker)
+                            }
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700 border-dashed hover:bg-zinc-700 hover:text-white transition-all"
                         >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M12 4v16m8-8H4"
+                                />
                             </svg>
                             <span>Add channel</span>
                         </button>
-                        
+
                         {/* Channel picker dropdown */}
                         {showChannelPicker && (
                             <>
-                                <div 
-                                    className="fixed inset-0 z-40" 
+                                <div
+                                    className="fixed inset-0 z-40"
                                     onClick={() => setShowChannelPicker(false)}
                                 />
                                 <div className="absolute top-full left-0 mt-1 w-56 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden">
@@ -2242,32 +3691,45 @@ function ChannelPresenceSection({
                                         <input
                                             type="text"
                                             value={channelSearch}
-                                            onChange={(e) => setChannelSearch(e.target.value)}
+                                            onChange={(e) =>
+                                                setChannelSearch(e.target.value)
+                                            }
                                             placeholder="Search channels..."
                                             className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
                                             autoFocus
                                         />
                                     </div>
-                                    
+
                                     {/* Channel list */}
                                     <div className="max-h-40 overflow-y-auto">
                                         {filteredChannels.length === 0 ? (
                                             <p className="p-3 text-xs text-zinc-500 text-center">
-                                                {channelSearch ? "No channels found" : "No more channels"}
+                                                {channelSearch
+                                                    ? "No channels found"
+                                                    : "No more channels"}
                                             </p>
                                         ) : (
-                                            filteredChannels.map(channel => (
+                                            filteredChannels.map((channel) => (
                                                 <button
                                                     key={channel.id}
                                                     onClick={() => {
-                                                        toggleChannelMembership("channel", channel.id);
+                                                        toggleChannelMembership(
+                                                            "channel",
+                                                            channel.id,
+                                                        );
                                                         setChannelSearch("");
-                                                        setShowChannelPicker(false);
+                                                        setShowChannelPicker(
+                                                            false,
+                                                        );
                                                     }}
                                                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-700 transition-colors"
                                                 >
-                                                    <span>{channel.emoji || "#"}</span>
-                                                    <span className="text-sm text-white truncate">{channel.name}</span>
+                                                    <span>
+                                                        {channel.emoji || "#"}
+                                                    </span>
+                                                    <span className="text-sm text-white truncate">
+                                                        {channel.name}
+                                                    </span>
                                                 </button>
                                             ))
                                         )}
@@ -2278,11 +3740,15 @@ function ChannelPresenceSection({
                     </div>
                 )}
             </div>
-            
+
             {/* Help text */}
             {totalActive > 0 && (
                 <p className="text-[10px] text-zinc-500">
-                    Users can @mention <code className="px-1 py-0.5 bg-zinc-800 rounded text-purple-400">{agentName || "Agent"}</code> in these channels
+                    Users can @mention{" "}
+                    <code className="px-1 py-0.5 bg-zinc-800 rounded text-purple-400">
+                        {agentName || "Agent"}
+                    </code>{" "}
+                    in these channels
                 </p>
             )}
         </div>
@@ -2290,25 +3756,32 @@ function ChannelPresenceSection({
 }
 
 // Toggle component for capabilities
-function CapabilityToggle({ 
-    icon, 
-    title, 
-    description, 
-    enabled, 
+function CapabilityToggle({
+    icon,
+    title,
+    description,
+    enabled,
     onChange,
-    color = "purple"
-}: { 
-    icon: string; 
-    title: string; 
-    description: string; 
-    enabled: boolean; 
+    color = "purple",
+}: {
+    icon: string;
+    title: string;
+    description: string;
+    enabled: boolean;
     onChange: (v: boolean) => void;
     color?: "purple" | "emerald" | "cyan" | "orange";
 }) {
-    const colorClass = color === "emerald" ? "bg-emerald-500" : color === "cyan" ? "bg-cyan-500" : color === "orange" ? "bg-orange-500" : "bg-purple-500";
-    
+    const colorClass =
+        color === "emerald"
+            ? "bg-emerald-500"
+            : color === "cyan"
+              ? "bg-cyan-500"
+              : color === "orange"
+                ? "bg-orange-500"
+                : "bg-purple-500";
+
     return (
-        <div 
+        <div
             onClick={() => onChange(!enabled)}
             className="flex items-center justify-between p-3 bg-zinc-800 border border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-600 transition-colors"
         >
@@ -2319,8 +3792,12 @@ function CapabilityToggle({
                     <p className="text-xs text-zinc-500">{description}</p>
                 </div>
             </div>
-            <div className={`w-11 h-6 rounded-full transition-colors relative ${enabled ? colorClass : "bg-zinc-600"}`}>
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${enabled ? "left-6" : "left-1"}`} />
+            <div
+                className={`w-11 h-6 rounded-full transition-colors relative ${enabled ? colorClass : "bg-zinc-600"}`}
+            >
+                <div
+                    className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${enabled ? "left-6" : "left-1"}`}
+                />
             </div>
         </div>
     );

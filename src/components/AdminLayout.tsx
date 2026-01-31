@@ -30,6 +30,12 @@ const NAV_ITEMS = [
         mobileLabel: "Stats",
     },
     {
+        href: "/admin/agent-chats",
+        label: "Agent Chats",
+        icon: "💬",
+        mobileLabel: "Agent Chats",
+    },
+    {
         href: "/admin/bug-reports",
         label: "Bug Reports",
         icon: "🐛",

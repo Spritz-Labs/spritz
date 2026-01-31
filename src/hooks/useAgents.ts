@@ -9,6 +9,8 @@ export type MCPServer = {
     apiKey?: string;
     headers?: Record<string, string>;
     description?: string;
+    /** Instructions for the agent on when/how to use this MCP server */
+    instructions?: string;
     x402Enabled?: boolean;
     x402PriceCents?: number;
 };

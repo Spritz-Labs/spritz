@@ -5,6 +5,10 @@ import { google } from "googleapis";
 import { localTimeToUTC, getDayOfWeekInTimezone } from "@/lib/timezone";
 import { toZonedTime, format } from "date-fns-tz";
 import { checkRateLimit } from "@/lib/ratelimit";
+import {
+    getPlatformApiTools,
+    getPlatformMcpServers,
+} from "@/lib/agent-capabilities";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -538,12 +542,17 @@ export async function POST(
         // Track MCP results to add BEFORE personality
         let mcpResultsSection = "";
 
-        // Add MCP server information and call them (if MCP is enabled)
+        // MCP: platform-wide tools (e.g. The Grid) + per-agent servers when MCP is enabled
         const mcpEnabled = agent.mcp_enabled !== false; // Default true
-        if (mcpEnabled && agent.mcp_servers && agent.mcp_servers.length > 0) {
+        const platformServers = getPlatformMcpServers();
+        const agentServers =
+            mcpEnabled && agent.mcp_servers?.length ? agent.mcp_servers : [];
+        const effectiveMcpServers = [...platformServers, ...agentServers];
+
+        if (effectiveMcpServers.length > 0) {
             // Try to call MCP servers dynamically using AI-driven tool selection
             const mcpResults: string[] = [];
-            for (const server of agent.mcp_servers) {
+            for (const server of effectiveMcpServers) {
                 // Check if this MCP server should be called based on the message
                 const serverText = [
                     server.name,
@@ -1421,7 +1430,7 @@ Full events directory: https://app.spritz.chat/events
 
             // Try to call relevant APIs based on the message
             const apiResults: string[] = [];
-            for (const tool of agent.api_tools) {
+            for (const tool of effectiveApiTools) {
                 // Build a comprehensive set of keywords from name, description, and instructions
                 const toolText = [
                     tool.name || "",
@@ -1828,6 +1837,7 @@ ${apiResults.join("\n")}
             user_address: normalizedAddress,
             role: "user",
             content: message,
+            source: "direct",
         });
 
         // Build config with optional Google Search grounding
@@ -1883,6 +1893,7 @@ ${apiResults.join("\n")}
                             user_address: normalizedAddress,
                             role: "assistant",
                             content: assistantMessage,
+                            source: "direct",
                         });
                         await supabase.rpc("increment_agent_messages", {
                             p_agent_id: id,
@@ -1928,6 +1939,7 @@ ${apiResults.join("\n")}
             user_address: normalizedAddress,
             role: "assistant",
             content: assistantMessage,
+            source: "direct",
         });
 
         await supabase.rpc("increment_agent_messages", { p_agent_id: id });
