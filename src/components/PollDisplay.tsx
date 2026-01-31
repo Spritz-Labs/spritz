@@ -2,11 +2,24 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import type { Poll } from "@/app/api/channels/[id]/polls/route";
 import { formatDistanceToNow } from "date-fns";
 
+/** Minimal poll shape supported by channel, group, and alpha polls */
+export type DisplayPoll = {
+    id: string;
+    question: string;
+    options: string[];
+    allows_multiple: boolean;
+    ends_at: string | null;
+    is_anonymous: boolean;
+    is_closed: boolean;
+    votes: { option_index: number; count: number; voters: string[] }[];
+    user_votes: number[];
+    total_votes: number;
+};
+
 type PollDisplayProps = {
-    poll: Poll;
+    poll: DisplayPoll;
     onVote: (optionIndex: number) => Promise<void>;
     showVoters?: boolean;
     compact?: boolean;

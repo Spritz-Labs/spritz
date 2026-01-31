@@ -25,6 +25,7 @@ import { useModeration } from "@/hooks/useModeration";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { LinkPreview, detectUrls } from "./LinkPreview";
 import { ChannelIcon } from "./ChannelIcon";
 import { TypingIndicator } from "./TypingIndicator";
 import { AvatarWithStatus } from "./OnlineStatus";
@@ -37,6 +38,9 @@ import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { ChatMembersList } from "./ChatMembersList";
+import { PollCreator } from "./PollCreator";
+import { PollDisplay } from "./PollDisplay";
+import { useAlphaPolls } from "@/hooks/useAlphaPolls";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -135,6 +139,7 @@ export function AlphaChatModal({
     } = alphaChat;
 
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [showPollCreator, setShowPollCreator] = useState(false);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const [showModerationPanel, setShowModerationPanel] = useState(false);
@@ -146,6 +151,9 @@ export function AlphaChatModal({
 
     // Moderation hook (null channelId = global/alpha chat)
     const moderation = useModeration(userAddress, null);
+
+    const { polls, canCreatePoll, fetchPolls, createPoll, vote } =
+        useAlphaPolls(userAddress);
 
     // Typing indicator for global chat
     const { typingUsers, setTyping, stopTyping } = useTypingIndicator(
@@ -337,6 +345,11 @@ export function AlphaChatModal({
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [isOpen, onClose, replyingTo, showSettings, showModerationPanel, showMembersList]);
+
+    // Fetch polls when alpha chat opens
+    useEffect(() => {
+        if (isOpen) fetchPolls();
+    }, [isOpen, fetchPolls]);
 
     // Scroll to bottom with unread badge
     const {
@@ -1852,21 +1865,32 @@ export function AlphaChatModal({
                                                                                         }
                                                                                     />
                                                                                 ) : (
-                                                                                    <p
-                                                                                        className={`break-words ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}
-                                                                                    >
-                                                                                        <MentionText
-                                                                                            text={
-                                                                                                msg.content
-                                                                                            }
-                                                                                            currentUserAddress={
-                                                                                                userAddress
-                                                                                            }
-                                                                                            onMentionClick={
-                                                                                                handleMentionClick
-                                                                                            }
-                                                                                        />
-                                                                                    </p>
+                                                                                    <>
+                                                                                        <p
+                                                                                            className={`break-words ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}
+                                                                                        >
+                                                                                            <MentionText
+                                                                                                text={
+                                                                                                    msg.content
+                                                                                                }
+                                                                                                currentUserAddress={
+                                                                                                    userAddress
+                                                                                                }
+                                                                                                onMentionClick={
+                                                                                                    handleMentionClick
+                                                                                                }
+                                                                                            />
+                                                                                        </p>
+                                                                                        {detectUrls(msg.content)
+                                                                                            .slice(0, 1)
+                                                                                            .map((url) => (
+                                                                                                <LinkPreview
+                                                                                                    key={url}
+                                                                                                    url={url}
+                                                                                                    compact
+                                                                                                />
+                                                                                            ))}
+                                                                                    </>
                                                                                 )}
 
                                                                                 {/* Reactions Display - Mobile Friendly */}
@@ -2028,6 +2052,15 @@ export function AlphaChatModal({
                                                     setShowPixelArt(true)
                                                 }
                                                 onGif={handleSendGif}
+                                                onPoll={
+                                                    canCreatePoll
+                                                        ? () =>
+                                                              setShowPollCreator(
+                                                                  true,
+                                                              )
+                                                        : undefined
+                                                }
+                                                showPoll={canCreatePoll}
                                                 isUploading={
                                                     isUploadingPixelArt
                                                 }
@@ -2174,6 +2207,26 @@ export function AlphaChatModal({
                         channelId={null}
                         channelName="Spritz Global Chat"
                         getUserInfo={getUserInfo}
+                    />
+
+                    <PollCreator
+                        isOpen={showPollCreator}
+                        onClose={() => setShowPollCreator(false)}
+                        onCreatePoll={async (
+                            question,
+                            options,
+                            allowsMultiple,
+                            endsAt,
+                            isAnonymous,
+                        ) => {
+                            await createPoll(
+                                question,
+                                options,
+                                allowsMultiple,
+                                endsAt,
+                                isAnonymous,
+                            );
+                        }}
                     />
 
                     {/* User Popup - Fixed position near click */}

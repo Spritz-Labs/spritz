@@ -50,6 +50,8 @@ import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { ChatMembersList } from "./ChatMembersList";
+import { LinkPreview, detectUrls } from "./LinkPreview";
+import { MessageSearch } from "./MessageSearch";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -476,6 +478,9 @@ export function ChannelChatModal({
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
+    const [showSearch, setShowSearch] = useState(false);
+    const [threadRootMessage, setThreadRootMessage] = useState<ChannelMessage | null>(null);
+    const [threadInputValue, setThreadInputValue] = useState("");
     const [showSettings, setShowSettings] = useState(false);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const [forwardingMessage, setForwardingMessage] =
@@ -510,6 +515,11 @@ export function ChannelChatModal({
         if (!isOpen) return;
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key !== "Escape") return;
+            if (threadRootMessage) {
+                setThreadRootMessage(null);
+                setThreadInputValue("");
+                return;
+            }
             if (replyingTo) {
                 setReplyingTo(null);
                 return;
@@ -529,7 +539,7 @@ export function ChannelChatModal({
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen, onClose, replyingTo, editingMessage, showSettings, showPinnedMessages, showMembersList]);
+    }, [isOpen, onClose, threadRootMessage, replyingTo, editingMessage, showSettings, showPinnedMessages, showMembersList]);
 
     // Scroll to bottom with unread badge
     const {
@@ -1194,6 +1204,29 @@ export function ChannelChatModal({
         );
     };
 
+    const channelSearchMessages = useMemo(
+        () =>
+            messages.map((m) => ({
+                id: m.id,
+                content: m.content,
+                senderAddress: m.sender_address,
+                sentAt: new Date(m.created_at),
+            })),
+        [messages]
+    );
+
+    const handleSelectSearchMessage = useCallback(
+        (messageId: string) => {
+            setShowSearch(false);
+            setTimeout(() => {
+                document
+                    .querySelector(`[data-message-id="${messageId}"]`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 100);
+        },
+        []
+    );
+
     if (!isOpen) return null;
 
     return (
@@ -1238,6 +1271,111 @@ export function ChannelChatModal({
                     }
                     onClick={(e) => e.stopPropagation()}
                 >
+                    <MessageSearch
+                        isOpen={showSearch}
+                        onClose={() => setShowSearch(false)}
+                        onSelectMessage={handleSelectSearchMessage}
+                        messages={channelSearchMessages}
+                        userAddress={userAddress}
+                        peerName={`#${channel.name}`}
+                    />
+                    {/* Thread drawer - standard channels only */}
+                    {!isWakuChannel && (
+                        <AnimatePresence>
+                            {threadRootMessage && (
+                                <motion.div
+                                    initial={{ x: "100%" }}
+                                    animate={{ x: 0 }}
+                                    exit={{ x: "100%" }}
+                                    transition={{ type: "tween", duration: 0.2 }}
+                                    className="absolute inset-0 z-10 bg-zinc-900 flex flex-col border-l border-zinc-800"
+                                >
+                                    <div className="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-800 shrink-0">
+                                        <button
+                                            onClick={() => {
+                                                setThreadRootMessage(null);
+                                                setThreadInputValue("");
+                                            }}
+                                            className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                                            aria-label="Close thread"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                        <span className="text-white font-medium text-sm">Thread</span>
+                                    </div>
+                                    <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+                                        {/* Root message */}
+                                        <div className="p-3 bg-zinc-800/50 rounded-xl border-l-2 border-orange-500">
+                                            <p className="text-xs text-zinc-500 mb-1">
+                                                {formatSender(threadRootMessage.sender_address)}
+                                            </p>
+                                            <p className="text-sm text-white break-words whitespace-pre-wrap">
+                                                {threadRootMessage.content}
+                                            </p>
+                                        </div>
+                                        {/* Replies */}
+                                        {messages
+                                            .filter((m) => m.reply_to_id === threadRootMessage.id)
+                                            .map((reply) => {
+                                                const isOwnReply =
+                                                    reply.sender_address.toLowerCase() === userAddress.toLowerCase();
+                                                return (
+                                                    <div
+                                                        key={reply.id}
+                                                        className={`p-3 rounded-xl ${
+                                                            isOwnReply ? "bg-[#FF5500]/20 ml-4" : "bg-zinc-800/50 ml-4"
+                                                        }`}
+                                                    >
+                                                        <p className="text-xs text-zinc-500 mb-1">
+                                                            {formatSender(reply.sender_address)}
+                                                        </p>
+                                                        <p className="text-sm text-white break-words whitespace-pre-wrap">
+                                                            {reply.content}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                    <div className="p-3 border-t border-zinc-800 shrink-0 flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={threadInputValue}
+                                            onChange={(e) => setThreadInputValue(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter" && !e.shiftKey) {
+                                                    e.preventDefault();
+                                                    if (threadInputValue.trim() && !isSending) {
+                                                        sendMessage(threadInputValue.trim(), "text", threadRootMessage.id);
+                                                        setThreadInputValue("");
+                                                        onMessageSent?.();
+                                                    }
+                                                }
+                                            }}
+                                            placeholder="Reply in thread..."
+                                            className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
+                                        />
+                                        <button
+                                            onClick={async () => {
+                                                if (!threadInputValue.trim() || isSending) return;
+                                                await sendMessage(threadInputValue.trim(), "text", threadRootMessage.id);
+                                                setThreadInputValue("");
+                                                onMessageSent?.();
+                                            }}
+                                            disabled={!threadInputValue.trim() || isSending}
+                                            className="p-3 bg-[#FF5500] text-white rounded-xl hover:bg-[#FF6600] disabled:opacity-50 disabled:cursor-not-allowed"
+                                            aria-label="Send"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    )}
                     {/* Header - unified mobile-first design */}
                     <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
                         {/* Avatar - shows custom icon if available, otherwise emoji */}
@@ -1290,6 +1428,16 @@ export function ChannelChatModal({
 
                         {/* Action buttons */}
                         <div className="shrink-0 flex items-center">
+                            {/* Search */}
+                            <button
+                                onClick={() => setShowSearch(true)}
+                                className="p-2.5 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                                aria-label="Search messages"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </button>
                             {/* Pinned Messages - icon only */}
                             {pinnedMessages.length > 0 && (
                                 <button
@@ -1808,7 +1956,7 @@ export function ChannelChatModal({
                                                 prevMsgDate.toDateString();
 
                                         return (
-                                            <div key={msg.id}>
+                                            <div key={msg.id} data-message-id={msg.id}>
                                                 {/* Date divider when day changes */}
                                                 {showDateDivider && (
                                                     <DateDivider
@@ -2353,21 +2501,32 @@ export function ChannelChatModal({
                                                                             }
                                                                         />
                                                                     ) : (
-                                                                        <p
-                                                                            className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}
-                                                                        >
-                                                                            <MentionText
-                                                                                text={
-                                                                                    msg.content
-                                                                                }
-                                                                                currentUserAddress={
-                                                                                    userAddress
-                                                                                }
-                                                                                onMentionClick={
-                                                                                    handleMentionClick
-                                                                                }
-                                                                            />
-                                                                        </p>
+                                                                        <>
+                                                                            <p
+                                                                                className={`break-words whitespace-pre-wrap ${isEmojiOnly(msg.content) ? "text-4xl leading-tight" : ""}`}
+                                                                            >
+                                                                                <MentionText
+                                                                                    text={
+                                                                                        msg.content
+                                                                                    }
+                                                                                    currentUserAddress={
+                                                                                        userAddress
+                                                                                    }
+                                                                                    onMentionClick={
+                                                                                        handleMentionClick
+                                                                                    }
+                                                                                />
+                                                                            </p>
+                                                                            {detectUrls(msg.content)
+                                                                                .slice(0, 1)
+                                                                                .map((url) => (
+                                                                                    <LinkPreview
+                                                                                        key={url}
+                                                                                        url={url}
+                                                                                        compact
+                                                                                    />
+                                                                                ))}
+                                                                        </>
                                                                     )}
 
                                                                     {/* Reactions Display - Mobile Friendly */}
@@ -2391,6 +2550,26 @@ export function ChannelChatModal({
                                                                             isOwn
                                                                         }
                                                                     />
+                                                                    {!isWakuChannel &&
+                                                                        (() => {
+                                                                            const replyCount = messages.filter(
+                                                                                (m) => m.reply_to_id === msg.id
+                                                                            ).length;
+                                                                            return replyCount > 0 ? (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        setThreadRootMessage(msg)
+                                                                                    }
+                                                                                    className="mt-1.5 text-xs text-zinc-500 hover:text-orange-400 transition-colors flex items-center gap-1"
+                                                                                >
+                                                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                                                    </svg>
+                                                                                    View thread ({replyCount} {replyCount === 1 ? "reply" : "replies"})
+                                                                                </button>
+                                                                            ) : null;
+                                                                        })()}
                                                                 </div>
                                                             </div>
                                                         )}

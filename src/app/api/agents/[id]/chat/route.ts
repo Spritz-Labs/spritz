@@ -1430,7 +1430,7 @@ Full events directory: https://app.spritz.chat/events
 
             // Try to call relevant APIs based on the message
             const apiResults: string[] = [];
-            for (const tool of effectiveApiTools) {
+            for (const tool of agent.api_tools) {
                 // Build a comprehensive set of keywords from name, description, and instructions
                 const toolText = [
                     tool.name || "",

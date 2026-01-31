@@ -21,6 +21,7 @@ import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { LinkPreview, detectUrls } from "./LinkPreview";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import {
     LocationMessage,
@@ -39,6 +40,10 @@ import { ChatSkeleton } from "./ChatSkeleton";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
+import { MessageSearch } from "./MessageSearch";
+import { PollCreator } from "./PollCreator";
+import { PollDisplay } from "./PollDisplay";
+import { useGroupPolls } from "@/hooks/useGroupPolls";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -145,6 +150,18 @@ export function GroupChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [selectedMessageConfig, setSelectedMessageConfig] =
         useState<MessageActionConfig | null>(null);
+    const [showSearch, setShowSearch] = useState(false);
+    const [showPollCreator, setShowPollCreator] = useState(false);
+    const [showPinnedMessages, setShowPinnedMessages] = useState(false);
+    const [pinnedList, setPinnedList] = useState<
+        { messageId: string; pinnedBy: string; pinnedAt: string }[]
+    >([]);
+    const [pinningMessageId, setPinningMessageId] = useState<string | null>(
+        null,
+    );
+    const [readReceipts, setReadReceipts] = useState<
+        { userAddress: string; lastReadMessageId: string }[]
+    >([]);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [onlineStatuses, setOnlineStatuses] = useState<
         Record<string, boolean>
@@ -172,6 +189,9 @@ export function GroupChatModal({
         fetchReactions: fetchMsgReactions,
         toggleReaction: toggleMsgReaction,
     } = useMessageReactions(userAddress, group?.id || null);
+
+    const { polls, canCreatePoll, fetchPolls, createPoll, vote } =
+        useGroupPolls(group?.id ?? null, userAddress);
 
     const {
         isInitialized,
@@ -203,6 +223,92 @@ export function GroupChatModal({
             })
             .filter((u) => u.address); // Only include members with addresses
     }, [members, userInboxId, getUserInfo, memberENSData]);
+
+    const groupSearchMessages = useMemo(
+        () =>
+            messages.map((m) => ({
+                id: m.id,
+                content: m.content,
+                senderAddress:
+                    members.find((mem) => mem.inboxId === m.senderInboxId)
+                        ?.addresses?.[0] || m.senderInboxId,
+                sentAt: m.sentAt,
+            })),
+        [messages, members],
+    );
+
+    const handleSelectSearchMessage = useCallback((messageId: string) => {
+        setShowSearch(false);
+        setTimeout(() => {
+            document
+                .querySelector(`[data-message-id="${messageId}"]`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+    }, []);
+
+    const messageOrderMap = useMemo(() => {
+        const sorted = [...messages].sort(
+            (a, b) =>
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+        );
+        const map: Record<string, number> = {};
+        sorted.forEach((m, i) => {
+            map[m.id] = i;
+        });
+        return map;
+    }, [messages]);
+
+    const fetchPinned = useCallback(async () => {
+        if (!group?.id) return;
+        try {
+            const res = await fetch(
+                `/api/groups/${encodeURIComponent(group.id)}/pin`,
+            );
+            const data = await res.json();
+            if (res.ok && data.pinned) setPinnedList(data.pinned);
+        } catch (e) {
+            console.error("[GroupChat] Fetch pinned error:", e);
+        }
+    }, [group?.id]);
+
+    const togglePin = useCallback(
+        async (messageId: string, pin: boolean) => {
+            if (!group?.id) return;
+            setPinningMessageId(messageId);
+            try {
+                const res = await fetch(
+                    `/api/groups/${encodeURIComponent(group.id)}/pin`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ messageId, pin }),
+                    },
+                );
+                const data = await res.json();
+                if (res.ok) {
+                    if (pin) {
+                        setPinnedList((prev) => [
+                            {
+                                messageId,
+                                pinnedBy: data.pinnedBy ?? "",
+                                pinnedAt: new Date().toISOString(),
+                            },
+                            ...prev,
+                        ]);
+                    } else {
+                        setPinnedList((prev) =>
+                            prev.filter((p) => p.messageId !== messageId),
+                        );
+                    }
+                }
+            } catch (e) {
+                console.error("[GroupChat] Toggle pin error:", e);
+            } finally {
+                setPinningMessageId(null);
+            }
+        },
+        [group?.id],
+    );
 
     // Handle mention click
     const handleMentionClick = useCallback((address: string) => {
@@ -251,7 +357,14 @@ export function GroupChatModal({
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen, onClose, replyingTo, showManageMenu, showMembers, showAddMember]);
+    }, [
+        isOpen,
+        onClose,
+        replyingTo,
+        showManageMenu,
+        showMembers,
+        showAddMember,
+    ]);
 
     // Scroll to bottom with unread badge
     const {
@@ -359,8 +472,52 @@ export function GroupChatModal({
                 const groupMembers = await getGroupMembers(group.id);
                 setMembers(groupMembers);
 
-                // Mark as read
+                // Fetch pinned messages
+                try {
+                    const pinRes = await fetch(
+                        `/api/groups/${encodeURIComponent(group.id)}/pin`,
+                    );
+                    const pinData = await pinRes.json();
+                    if (pinRes.ok && pinData.pinned)
+                        setPinnedList(pinData.pinned);
+                } catch {
+                    // ignore
+                }
+
+                // Fetch read receipts
+                try {
+                    const readRes = await fetch(
+                        `/api/groups/${encodeURIComponent(group.id)}/read`,
+                    );
+                    const readData = await readRes.json();
+                    if (readRes.ok && readData.receipts)
+                        setReadReceipts(readData.receipts);
+                } catch {
+                    // ignore
+                }
+
+                fetchPolls();
+
+                // Mark as read (post my last read message id = latest)
                 markGroupAsRead(group.id);
+                if (formattedMessages.length > 0) {
+                    const sortedByTime = [...formattedMessages].sort(
+                        (a, b) =>
+                            new Date(a.sentAt).getTime() -
+                            new Date(b.sentAt).getTime(),
+                    );
+                    const latestId = sortedByTime[sortedByTime.length - 1]?.id;
+                    if (latestId) {
+                        fetch(
+                            `/api/groups/${encodeURIComponent(group.id)}/read`,
+                            {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ messageId: latestId }),
+                            },
+                        ).catch(() => {});
+                    }
+                }
 
                 // Start streaming
                 const stream = await streamGroupMessages(
@@ -385,6 +542,32 @@ export function GroupChatModal({
                                 return prev;
                             // Notify parent of new message (for sort order)
                             onMessageReceived?.();
+                            // Post my last read (new message id)
+                            fetch(
+                                `/api/groups/${encodeURIComponent(group.id)}/read`,
+                                {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({
+                                        messageId: newMsg.id,
+                                    }),
+                                },
+                            )
+                                .then(() => {
+                                    fetch(
+                                        `/api/groups/${encodeURIComponent(group.id)}/read`,
+                                    )
+                                        .then((r) => r.json())
+                                        .then(
+                                            (d) =>
+                                                d.receipts &&
+                                                setReadReceipts(d.receipts),
+                                        )
+                                        .catch(() => {});
+                                })
+                                .catch(() => {});
                             return [...prev, newMsg];
                         });
                         markGroupAsRead(group.id);
@@ -414,6 +597,7 @@ export function GroupChatModal({
         getGroupMembers,
         streamGroupMessages,
         markGroupAsRead,
+        fetchPolls,
     ]);
 
     // Resolve ENS data for group members
@@ -775,6 +959,33 @@ export function GroupChatModal({
                                     : undefined
                             }
                         >
+                            <MessageSearch
+                                isOpen={showSearch}
+                                onClose={() => setShowSearch(false)}
+                                onSelectMessage={handleSelectSearchMessage}
+                                messages={groupSearchMessages}
+                                userAddress={userAddress}
+                                peerName={group?.name ?? "Group"}
+                            />
+                            <PollCreator
+                                isOpen={showPollCreator}
+                                onClose={() => setShowPollCreator(false)}
+                                onCreatePoll={async (
+                                    question,
+                                    options,
+                                    allowsMultiple,
+                                    endsAt,
+                                    isAnonymous,
+                                ) => {
+                                    await createPoll(
+                                        question,
+                                        options,
+                                        allowsMultiple,
+                                        endsAt,
+                                        isAnonymous,
+                                    );
+                                }}
+                            />
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
                                 {/* Avatar */}
@@ -808,6 +1019,51 @@ export function GroupChatModal({
 
                                 {/* Action buttons */}
                                 <div className="shrink-0 flex items-center">
+                                    <button
+                                        onClick={() => setShowSearch(true)}
+                                        className="p-2.5 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                                        aria-label="Search messages"
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                            />
+                                        </svg>
+                                    </button>
+                                    {pinnedList.length > 0 && (
+                                        <button
+                                            onClick={() =>
+                                                setShowPinnedMessages(
+                                                    !showPinnedMessages,
+                                                )
+                                            }
+                                            className={`p-2.5 rounded-xl flex items-center gap-1 transition-colors ${
+                                                showPinnedMessages
+                                                    ? "bg-amber-500/20 text-amber-400"
+                                                    : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                                            }`}
+                                            aria-label="View pinned messages"
+                                        >
+                                            <svg
+                                                className="w-5 h-5"
+                                                fill="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                                            </svg>
+                                            <span className="hidden sm:inline text-xs font-medium">
+                                                {pinnedList.length}
+                                            </span>
+                                        </button>
+                                    )}
                                     {/* Call Buttons - voice only on mobile, both on desktop */}
                                     {onStartCall && (
                                         <>
@@ -1094,6 +1350,134 @@ export function GroupChatModal({
                                 )}
                             </AnimatePresence>
 
+                            {/* Pinned Messages Panel */}
+                            <AnimatePresence>
+                                {showPinnedMessages &&
+                                    pinnedList.length > 0 && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{
+                                                height: "auto",
+                                                opacity: 1,
+                                            }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            className="border-b border-zinc-800 overflow-hidden"
+                                        >
+                                            <div className="p-3 bg-amber-500/5 max-h-48 overflow-y-auto">
+                                                <div className="flex items-center gap-2 mb-2 text-amber-400">
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="currentColor"
+                                                        viewBox="0 0 20 20"
+                                                    >
+                                                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                                                    </svg>
+                                                    <span className="text-sm font-medium">
+                                                        Pinned Messages
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {pinnedList.map((p) => {
+                                                        const msg =
+                                                            messages.find(
+                                                                (m) =>
+                                                                    m.id ===
+                                                                    p.messageId,
+                                                            );
+                                                        const senderAddr =
+                                                            members.find(
+                                                                (m) =>
+                                                                    m.inboxId ===
+                                                                    msg?.senderInboxId,
+                                                            )?.addresses[0];
+                                                        return (
+                                                            <div
+                                                                key={
+                                                                    p.messageId
+                                                                }
+                                                                className="flex items-start gap-2 p-2 bg-zinc-800/50 rounded-lg group"
+                                                            >
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs text-zinc-400 mb-0.5">
+                                                                        {senderAddr
+                                                                            ? senderAddr.slice(
+                                                                                  0,
+                                                                                  6,
+                                                                              ) +
+                                                                              "…" +
+                                                                              senderAddr.slice(
+                                                                                  -4,
+                                                                              )
+                                                                            : "Unknown"}
+                                                                    </p>
+                                                                    <p className="text-sm text-white truncate">
+                                                                        {msg?.content
+                                                                            ?.replace(
+                                                                                /^\[GIF\]/,
+                                                                                "🎬 GIF",
+                                                                            )
+                                                                            .replace(
+                                                                                /^\[PIXEL_ART\]/,
+                                                                                "🎨 Pixel Art",
+                                                                            )
+                                                                            .slice(
+                                                                                0,
+                                                                                80,
+                                                                            ) ??
+                                                                            "—"}
+                                                                        {(msg
+                                                                            ?.content
+                                                                            ?.length ??
+                                                                            0) >
+                                                                        80
+                                                                            ? "…"
+                                                                            : ""}
+                                                                    </p>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() =>
+                                                                        togglePin(
+                                                                            p.messageId,
+                                                                            false,
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        pinningMessageId ===
+                                                                        p.messageId
+                                                                    }
+                                                                    className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                                    title="Unpin"
+                                                                >
+                                                                    {pinningMessageId ===
+                                                                    p.messageId ? (
+                                                                        <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                                                    ) : (
+                                                                        <svg
+                                                                            className="w-4 h-4"
+                                                                            fill="none"
+                                                                            viewBox="0 0 24 24"
+                                                                            stroke="currentColor"
+                                                                        >
+                                                                            <path
+                                                                                strokeLinecap="round"
+                                                                                strokeLinejoin="round"
+                                                                                strokeWidth={
+                                                                                    2
+                                                                                }
+                                                                                d="M6 18L18 6M6 6l12 12"
+                                                                            />
+                                                                        </svg>
+                                                                    )}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                            </AnimatePresence>
+
                             {/* Messages - flex-col-reverse so newest at bottom */}
                             <div
                                 ref={messagesContainerRef}
@@ -1206,7 +1590,12 @@ export function GroupChatModal({
                                                             prevMsgDate.toDateString();
 
                                                     return (
-                                                        <div key={msg.id}>
+                                                        <div
+                                                            key={msg.id}
+                                                            data-message-id={
+                                                                msg.id
+                                                            }
+                                                        >
                                                             {showDateDivider && (
                                                                 <DateDivider
                                                                     date={
@@ -1282,6 +1671,14 @@ export function GroupChatModal({
                                                                                       messageContent:
                                                                                           msg.content,
                                                                                       isOwn,
+                                                                                      isPinned:
+                                                                                          pinnedList.some(
+                                                                                              (
+                                                                                                  p,
+                                                                                              ) =>
+                                                                                                  p.messageId ===
+                                                                                                  msg.id,
+                                                                                          ),
                                                                                       hasMedia:
                                                                                           isPixelArt ||
                                                                                           isGif,
@@ -1479,21 +1876,45 @@ export function GroupChatModal({
                                                                                 }
 
                                                                                 return (
-                                                                                    <p
-                                                                                        className={`break-words ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : ""}`}
-                                                                                    >
-                                                                                        <MentionText
-                                                                                            text={
-                                                                                                displayContent
-                                                                                            }
-                                                                                            currentUserAddress={
-                                                                                                userAddress
-                                                                                            }
-                                                                                            onMentionClick={
-                                                                                                handleMentionClick
-                                                                                            }
-                                                                                        />
-                                                                                    </p>
+                                                                                    <>
+                                                                                        <p
+                                                                                            className={`break-words ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : ""}`}
+                                                                                        >
+                                                                                            <MentionText
+                                                                                                text={
+                                                                                                    displayContent
+                                                                                                }
+                                                                                                currentUserAddress={
+                                                                                                    userAddress
+                                                                                                }
+                                                                                                onMentionClick={
+                                                                                                    handleMentionClick
+                                                                                                }
+                                                                                            />
+                                                                                        </p>
+                                                                                        {detectUrls(
+                                                                                            displayContent,
+                                                                                        )
+                                                                                            .slice(
+                                                                                                0,
+                                                                                                1,
+                                                                                            )
+                                                                                            .map(
+                                                                                                (
+                                                                                                    url,
+                                                                                                ) => (
+                                                                                                    <LinkPreview
+                                                                                                        key={
+                                                                                                            url
+                                                                                                        }
+                                                                                                        url={
+                                                                                                            url
+                                                                                                        }
+                                                                                                        compact
+                                                                                                    />
+                                                                                                ),
+                                                                                            )}
+                                                                                    </>
                                                                                 );
                                                                             })()
                                                                         )}
@@ -1524,7 +1945,7 @@ export function GroupChatModal({
                                                                         />
 
                                                                         <p
-                                                                            className={`text-xs mt-1 ${
+                                                                            className={`text-xs mt-1 flex items-center gap-1.5 ${
                                                                                 isOwn
                                                                                     ? "text-[#FFF0E0]"
                                                                                     : "text-zinc-500"
@@ -1537,6 +1958,37 @@ export function GroupChatModal({
                                                                                     minute: "2-digit",
                                                                                 },
                                                                             )}
+                                                                            {isOwn &&
+                                                                                (() => {
+                                                                                    const readByCount =
+                                                                                        readReceipts.filter(
+                                                                                            (
+                                                                                                r,
+                                                                                            ) =>
+                                                                                                r.userAddress.toLowerCase() !==
+                                                                                                    userAddress.toLowerCase() &&
+                                                                                                (messageOrderMap[
+                                                                                                    r
+                                                                                                        .lastReadMessageId
+                                                                                                ] ??
+                                                                                                    -1) >=
+                                                                                                    (messageOrderMap[
+                                                                                                        msg
+                                                                                                            .id
+                                                                                                    ] ??
+                                                                                                        -1),
+                                                                                        ).length;
+                                                                                    return readByCount >
+                                                                                        0 ? (
+                                                                                        <span className="text-[10px] text-white/70">
+                                                                                            Read
+                                                                                            by{" "}
+                                                                                            {
+                                                                                                readByCount
+                                                                                            }
+                                                                                        </span>
+                                                                                    ) : null;
+                                                                                })()}
                                                                         </p>
                                                                     </div>
                                                                 </div>
@@ -1624,6 +2076,12 @@ export function GroupChatModal({
                                     <ChatAttachmentMenu
                                         onPixelArt={() => setShowPixelArt(true)}
                                         onGif={handleSendGif}
+                                        onPoll={
+                                            canCreatePoll
+                                                ? () => setShowPollCreator(true)
+                                                : undefined
+                                        }
+                                        showPoll={canCreatePoll}
                                         onLocation={async (location) => {
                                             if (!group) return;
                                             const locationMsg =
@@ -1871,6 +2329,22 @@ export function GroupChatModal({
                                   }
                                 : undefined,
                             onCopy: () => {},
+                            onPin:
+                                selectedMessageConfig &&
+                                !selectedMessageConfig.isPinned
+                                    ? () =>
+                                          togglePin(
+                                              selectedMessageConfig.messageId,
+                                              true,
+                                          )
+                                    : undefined,
+                            onUnpin: selectedMessageConfig?.isPinned
+                                ? () =>
+                                      togglePin(
+                                          selectedMessageConfig.messageId,
+                                          false,
+                                      )
+                                : undefined,
                             onDelete: selectedMessageConfig?.isOwn
                                 ? () => {
                                       setMessages((prev) =>
