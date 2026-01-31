@@ -24,6 +24,8 @@ The Grid GraphQL API provides Web3 data. Data coverage:
 
 Use introspection or plural query names (e.g. profiles, products, assets) to list collections.
 For "what's available", "list", "show me", "find" use appropriate queries with pagination (first: 50).
+
+When presenting results to the user, use markdown: lists for multiple items, tables for structured data (| col | col |), and **bold** for key names.
 `;
 
 /**

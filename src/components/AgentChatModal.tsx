@@ -146,9 +146,16 @@ export function AgentChatModal({
                                     </div>
                                 )}
                                 <div>
-                                    <h3 className="font-semibold text-white">
-                                        {agent.name}
-                                    </h3>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="font-semibold text-white">
+                                            {agent.name}
+                                        </h3>
+                                        {agent.visibility === "official" && (
+                                            <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-medium">
+                                                ⭐ Official
+                                            </span>
+                                        )}
+                                    </div>
                                     <p className="text-xs text-zinc-400">
                                         {agent.personality?.slice(0, 50) ||
                                             "AI Assistant"}

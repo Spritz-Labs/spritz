@@ -16,11 +16,14 @@ export async function generateMetadata({
     try {
         const { data: agent, error } = await supabase
             .from("shout_agents")
-            .select("id, name, personality, avatar_emoji, visibility, x402_enabled, x402_price_cents")
+            .select("id, name, personality, avatar_emoji, avatar_url, visibility, public_access_enabled, x402_enabled, x402_price_cents")
             .eq("id", id)
             .single();
 
-        if (error || !agent || agent.visibility !== "public") {
+        const isPublic = agent?.visibility === "public";
+        const isOfficial = agent?.visibility === "official" && agent?.public_access_enabled !== false;
+
+        if (error || !agent || (!isPublic && !isOfficial)) {
             return {
                 title: "Agent Not Found | Spritz",
                 description: "This AI agent is not available.",
@@ -33,7 +36,12 @@ export async function generateMetadata({
 
         const description = agent.personality
             ? `${agent.personality} - Chat with ${agent.name} on Spritz`
-            : `Chat with ${agent.name}, an AI agent on Spritz. ${agent.x402_enabled ? `$${(agent.x402_price_cents / 100).toFixed(2)} per message.` : "Free to use."}`;
+            : `Chat with ${agent.name}, an AI agent on Spritz. ${agent.x402_enabled ? `$${((agent.x402_price_cents || 0) / 100).toFixed(2)} per message.` : "Free to use."}`;
+
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.spritz.chat";
+        const ogImageUrl = agent.avatar_url?.startsWith("http")
+            ? agent.avatar_url
+            : `${baseUrl}/og-image.png`;
 
         return {
             title: `${agent.name} | AI Agent on Spritz`,
@@ -41,11 +49,12 @@ export async function generateMetadata({
             openGraph: {
                 title: `${agent.name} | AI Agent on Spritz`,
                 description,
-                url: `https://app.spritz.chat/agent/${id}`,
+                url: `${baseUrl}/agent/${id}`,
                 type: "website",
+                siteName: "Spritz",
                 images: [
                     {
-                        url: "/og-image.png",
+                        url: ogImageUrl,
                         width: 1200,
                         height: 630,
                         alt: `${agent.name} - AI Agent`,
@@ -56,14 +65,14 @@ export async function generateMetadata({
                 card: "summary_large_image",
                 title: `${agent.name} | AI Agent on Spritz`,
                 description,
-                images: ["/og-image.png"],
+                images: [ogImageUrl],
             },
             robots: {
                 index: true,
                 follow: true,
             },
             alternates: {
-                canonical: `https://app.spritz.chat/agent/${id}`,
+                canonical: `${baseUrl}/agent/${id}`,
             },
         };
     } catch (error) {

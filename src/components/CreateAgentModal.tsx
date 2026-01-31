@@ -355,10 +355,10 @@ export function CreateAgentModal({ isOpen, onClose, onCreate, isAdmin = false }:
                                     )}
                                 </div>
                                 <p className="text-xs text-zinc-500 mt-2">
-                                    {visibility === "private" && "Only you can use this agent"}
-                                    {visibility === "friends" && "Your friends can also use this agent"}
-                                    {visibility === "public" && "Anyone can discover and use this agent"}
-                                    {visibility === "official" && "Official Spritz agent - public & managed by admins"}
+                                    {visibility === "private" && "Only you can see and chat with this agent."}
+                                    {visibility === "friends" && "You and your friends can discover and use this agent."}
+                                    {visibility === "public" && "Anyone can discover and use this agent."}
+                                    {visibility === "official" && "Official Spritz agent — public and managed by admins."}
                                 </p>
                             </div>
 

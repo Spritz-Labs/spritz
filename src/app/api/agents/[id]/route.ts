@@ -46,11 +46,24 @@ export async function GET(
         }
 
         // Check access
-        if (agent.owner_address !== normalizedAddress && agent.visibility === "private") {
-            return NextResponse.json({ error: "Access denied" }, { status: 403 });
+        if (agent.owner_address !== normalizedAddress) {
+            if (agent.visibility === "private") {
+                return NextResponse.json({ error: "Access denied" }, { status: 403 });
+            }
+            if (agent.visibility === "friends") {
+                const { data: friendship } = await supabase
+                    .from("shout_friends")
+                    .select("id")
+                    .or(
+                        `and(user_address.eq.${agent.owner_address},friend_address.eq.${normalizedAddress}),and(user_address.eq.${normalizedAddress},friend_address.eq.${agent.owner_address})`
+                    )
+                    .limit(1)
+                    .maybeSingle();
+                if (!friendship) {
+                    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+                }
+            }
         }
-
-        // TODO: For "friends" visibility, check if user is a friend
 
         return NextResponse.json({ agent });
     } catch (error) {

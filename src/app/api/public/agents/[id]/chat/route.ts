@@ -41,6 +41,16 @@ CURRENT DATE: Today is ${currentDate}. When users ask about "today", "tomorrow",
         agent.system_instructions ||
         `You are a helpful AI assistant named ${agent.name}.${agent.personality ? ` ${agent.personality}` : ""}`;
 
+    const formattingGuidance = `
+
+## Response formatting
+Use markdown so replies are easy to read:
+- **Bold** for emphasis and *italic* when needed
+- Bullet or numbered lists for options, steps, or multiple items
+- Tables (| col1 | col2 |) for comparisons or structured data
+- \`inline code\` for technical terms, and code blocks for longer snippets
+- Short paragraphs; add blank lines between sections`;
+
     // Add markdown and image guidance for official agents with knowledge bases
     const markdownGuidance =
         agent.visibility === "official" && agent.use_knowledge_base
@@ -56,7 +66,6 @@ IMPORTANT: You can use full markdown formatting in your responses:
 - Only display images if you have a proper URL starting with http:// or https://`
             : "";
 
-    // Add event registration guidance for official agents
     const eventRegistrationGuidance =
         agent.visibility === "official"
             ? `
@@ -88,12 +97,7 @@ CRITICAL: Always use the EXACT URL from the "🎫 REGISTRATION URL:" field - nev
 - Explain the registration process briefly`
             : "";
 
-    return (
-        baseInstruction +
-        dateContext +
-        markdownGuidance +
-        eventRegistrationGuidance
-    );
+    return `${dateContext}\n\n${baseInstruction}${formattingGuidance}${markdownGuidance}${eventRegistrationGuidance}`;
 }
 
 // Clean base64 data from content to prevent it from polluting AI context/responses

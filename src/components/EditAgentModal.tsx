@@ -1272,6 +1272,16 @@ When users ask about X, prioritize results from source Y...`}
                                                 </button>
                                             ))}
                                         </div>
+                                        <p className="text-xs text-zinc-500 mt-2">
+                                            {visibility === "private" &&
+                                                "Only you can see and chat with this agent."}
+                                            {visibility === "friends" &&
+                                                "You and your friends can discover and use this agent."}
+                                            {visibility === "public" &&
+                                                "Anyone can discover and use this agent."}
+                                            {visibility === "official" &&
+                                                "Official Spritz agent — public and managed by admins."}
+                                        </p>
                                     </div>
 
                                     {/* Tags */}

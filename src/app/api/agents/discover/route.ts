@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const userAddress = searchParams.get("userAddress");
-        const filter = searchParams.get("filter") || "all"; // all, public, friends
+        const filter = searchParams.get("filter") || "all"; // all, public, friends, official
         const search = searchParams.get("search") || "";
         // Increase limit when searching to ensure we can find all matching agents
         const baseLimit = parseInt(searchParams.get("limit") || "20");
@@ -70,7 +70,9 @@ export async function GET(request: NextRequest) {
 
         // Apply visibility filter
         // Note: "official" agents are always discoverable like public agents
-        if (filter === "public") {
+        if (filter === "official") {
+            query = query.eq("visibility", "official");
+        } else if (filter === "public") {
             // Public and official agents
             query = query.in("visibility", ["public", "official"]);
         } else if (filter === "friends") {

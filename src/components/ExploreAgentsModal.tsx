@@ -112,9 +112,10 @@ export function ExploreAgentsModal({
                             </div>
 
                             {/* Filter Tabs */}
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                                 {[
                                     { key: "all", label: "All", icon: "🌐" },
+                                    { key: "official", label: "Official", icon: "⭐" },
                                     { key: "friends", label: "Friends", icon: "👥" },
                                     { key: "public", label: "Public", icon: "🌍" },
                                 ].map((tab) => (
@@ -187,8 +188,13 @@ export function ExploreAgentsModal({
                                                     </div>
                                                 )}
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-1">
+                                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                                                         <h4 className="font-semibold text-white truncate">{agent.name}</h4>
+                                                        {agent.visibility === "official" && (
+                                                            <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded-full font-medium">
+                                                                ⭐ Official
+                                                            </span>
+                                                        )}
                                                         {agent.isFriendsAgent && (
                                                             <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded-full">
                                                                 👥 Friend

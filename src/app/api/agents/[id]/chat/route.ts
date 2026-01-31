@@ -465,14 +465,29 @@ export async function POST(
         }
 
         // Check access
-        if (
-            agent.owner_address !== normalizedAddress &&
-            agent.visibility === "private"
-        ) {
-            return NextResponse.json(
-                { error: "Access denied" },
-                { status: 403 },
-            );
+        if (agent.owner_address !== normalizedAddress) {
+            if (agent.visibility === "private") {
+                return NextResponse.json(
+                    { error: "Access denied" },
+                    { status: 403 },
+                );
+            }
+            if (agent.visibility === "friends") {
+                const { data: friendship } = await supabase
+                    .from("shout_friends")
+                    .select("id")
+                    .or(
+                        `and(user_address.eq.${agent.owner_address},friend_address.eq.${normalizedAddress}),and(user_address.eq.${normalizedAddress},friend_address.eq.${agent.owner_address})`,
+                    )
+                    .limit(1)
+                    .maybeSingle();
+                if (!friendship) {
+                    return NextResponse.json(
+                        { error: "Access denied" },
+                        { status: 403 },
+                    );
+                }
+            }
         }
 
         // Get recent chat history for context (last 10 messages)
@@ -794,6 +809,17 @@ Remember: The user asked a question and the answer is in the data above. Just pr
         systemInstructions +=
             agent.system_instructions ||
             `You are a helpful AI assistant named ${agent.name}.`;
+
+        // Formatting guideline for all agents (better chat output)
+        systemInstructions += `
+
+## Response formatting
+Use markdown so replies are easy to read:
+- **Bold** for emphasis and *italic* when needed
+- Bullet or numbered lists for options, steps, or multiple items
+- Tables (| col1 | col2 |) for comparisons or structured data
+- \`inline code\` for technical terms, and code blocks for longer snippets
+- Short paragraphs; add blank lines between sections`;
 
         // Add knowledge context
         if (knowledgeContext) {
@@ -1804,7 +1830,7 @@ ABSOLUTE RULES:
 1. DO NOT write code showing how to query these APIs
 2. DO NOT show GraphQL queries or fetch examples  
 3. JUST use the retrieved data to answer the user's question directly
-4. Format the information nicely (use markdown tables, lists, etc.)
+4. Format the information nicely: use **bold** for key terms, bullet or numbered lists for multiple items, and markdown tables (| col | col |) for comparisons or rows of data. Keep paragraphs short.
 
 ${apiResults.join("\n")}
 
@@ -2002,14 +2028,29 @@ export async function GET(
             );
         }
 
-        if (
-            agent.owner_address !== normalizedAddress &&
-            agent.visibility === "private"
-        ) {
-            return NextResponse.json(
-                { error: "Access denied" },
-                { status: 403 },
-            );
+        if (agent.owner_address !== normalizedAddress) {
+            if (agent.visibility === "private") {
+                return NextResponse.json(
+                    { error: "Access denied" },
+                    { status: 403 },
+                );
+            }
+            if (agent.visibility === "friends") {
+                const { data: friendship } = await supabase
+                    .from("shout_friends")
+                    .select("id")
+                    .or(
+                        `and(user_address.eq.${agent.owner_address},friend_address.eq.${normalizedAddress}),and(user_address.eq.${normalizedAddress},friend_address.eq.${agent.owner_address})`,
+                    )
+                    .limit(1)
+                    .maybeSingle();
+                if (!friendship) {
+                    return NextResponse.json(
+                        { error: "Access denied" },
+                        { status: 403 },
+                    );
+                }
+            }
         }
 
         // Get chat history
