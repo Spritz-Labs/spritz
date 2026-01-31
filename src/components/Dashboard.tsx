@@ -2548,6 +2548,31 @@ function DashboardContent({
         markAsRead(friend.address);
     };
 
+    // Open DM by address (from Alpha/Channel when clicking "Message" on already-friend)
+    const openDMByAddress = useCallback(
+        (address: string) => {
+            const existing = friendsListData.find(
+                (f) => f.address.toLowerCase() === address.toLowerCase(),
+            );
+            if (existing) {
+                setChatFriend(existing);
+                markAsRead(existing.address);
+            } else {
+                const info = getAlphaUserInfo(address);
+                setChatFriend({
+                    id: address,
+                    address: address as Address,
+                    ensName: null,
+                    avatar: info?.avatar ?? null,
+                    nickname: info?.name ?? null,
+                    reachUsername: null,
+                    addedAt: new Date().toISOString(),
+                });
+            }
+        },
+        [friendsListData, getAlphaUserInfo, markAsRead],
+    );
+
     // Handle unified chat item click
     const handleUnifiedChatClick = useCallback(
         (chat: UnifiedChatItem) => {
@@ -4419,6 +4444,21 @@ function DashboardContent({
                                                 !isChatSearchOpen,
                                             )
                                         }
+                                        onOpenAddFriend={() =>
+                                            setIsAddFriendOpen(true)
+                                        }
+                                        onOpenBrowseChannels={() => {
+                                            setBrowseChannelsInitialCreate(
+                                                true,
+                                            );
+                                            setIsBrowseChannelsOpen(true);
+                                        }}
+                                        onOpenCreateGroup={() =>
+                                            setIsCreateGroupOpen(true)
+                                        }
+                                        canCreateGroup={
+                                            friendsListData.length > 0
+                                        }
                                     />
                                 </div>
                             </div>
@@ -5353,6 +5393,10 @@ function DashboardContent({
                             address.toLowerCase(),
                     )
                 }
+                onOpenDM={(address) => {
+                    openDMByAddress(address);
+                    setIsAlphaChatOpen(false);
+                }}
                 isAdmin={isAdmin}
                 onMessageSent={() => {
                     updateLastMessageTime("global-spritz");
@@ -5445,6 +5489,10 @@ function DashboardContent({
                                 address.toLowerCase(),
                         )
                     }
+                    onOpenDM={(address) => {
+                        openDMByAddress(address);
+                        setSelectedChannel(null);
+                    }}
                     notificationsEnabled={isNotificationsEnabled(
                         selectedChannel.id,
                     )}

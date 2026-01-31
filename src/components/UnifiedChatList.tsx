@@ -224,6 +224,11 @@ type UnifiedChatListProps = {
     onVideoClick?: (chat: UnifiedChatItem) => void;
     showCreateFolderModal?: boolean;
     onCreateFolderModalClose?: () => void;
+    /** When "No chats yet", show CTAs to add friend, browse channels, create group */
+    onOpenAddFriend?: () => void;
+    onOpenBrowseChannels?: () => void;
+    onOpenCreateGroup?: () => void;
+    canCreateGroup?: boolean;
 };
 
 const formatTime = (date: Date | null) => {
@@ -671,6 +676,10 @@ function UnifiedChatListInner({
     onCreateFolderModalClose,
     showSearch = false,
     onSearchToggle,
+    onOpenAddFriend,
+    onOpenBrowseChannels,
+    onOpenCreateGroup,
+    canCreateGroup = false,
 }: UnifiedChatListProps & {
     showSearch?: boolean;
     onSearchToggle?: () => void;
@@ -1085,7 +1094,7 @@ function UnifiedChatListInner({
             {/* Chat List */}
             <div className="space-y-1 sm:space-y-2">
                 {filteredChats.length === 0 ? (
-                    <div className="text-center py-8 sm:py-12">
+                    <div className="text-center py-8 sm:py-12 px-2">
                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-zinc-800/50 flex items-center justify-center mx-auto mb-3 sm:mb-4">
                             <span className="text-2xl sm:text-3xl">
                                 {activeFolder || "📭"}
@@ -1096,11 +1105,49 @@ function UnifiedChatListInner({
                                 ? `No chats in ${activeFolders.find((f) => f.emoji === activeFolder)?.label || "this folder"}`
                                 : "No chats yet"}
                         </p>
-                        <p className="text-zinc-500 text-xs sm:text-sm mt-1">
+                        <p className="text-zinc-500 text-xs sm:text-sm mt-1 mb-4">
                             {activeFolder
                                 ? "Tap folder icon on a chat to move it here"
-                                : "Start a conversation with a friend"}
+                                : "Add a friend, join a channel, or create a group"}
                         </p>
+                        {!activeFolder &&
+                            (onOpenAddFriend ||
+                                onOpenBrowseChannels ||
+                                onOpenCreateGroup) && (
+                                <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
+                                    {onOpenAddFriend && (
+                                        <button
+                                            type="button"
+                                            onClick={onOpenAddFriend}
+                                            className="px-4 py-2.5 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white text-sm font-medium transition-colors flex items-center gap-2"
+                                        >
+                                            <span>👋</span>
+                                            Add friend
+                                        </button>
+                                    )}
+                                    {onOpenBrowseChannels && (
+                                        <button
+                                            type="button"
+                                            onClick={onOpenBrowseChannels}
+                                            className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors flex items-center gap-2"
+                                        >
+                                            <span>#</span>
+                                            Browse channels
+                                        </button>
+                                    )}
+                                    {onOpenCreateGroup && (
+                                        <button
+                                            type="button"
+                                            onClick={onOpenCreateGroup}
+                                            disabled={!canCreateGroup}
+                                            className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <span>👥</span>
+                                            Create group
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                     </div>
                 ) : (
                     filteredChats.map((chat) => {

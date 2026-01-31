@@ -328,7 +328,13 @@ export function ChatModal({
                 setReplyingTo(null);
                 return;
             }
-            if (showSearch || showActionsMenu || showMuteModal || showBlockModal || showReportModal) {
+            if (
+                showSearch ||
+                showActionsMenu ||
+                showMuteModal ||
+                showBlockModal ||
+                showReportModal
+            ) {
                 setShowSearch(false);
                 setShowActionsMenu(false);
                 setShowMuteModal(false);
@@ -340,7 +346,16 @@ export function ChatModal({
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen, onClose, replyingTo, showSearch, showActionsMenu, showMuteModal, showBlockModal, showReportModal]);
+    }, [
+        isOpen,
+        onClose,
+        replyingTo,
+        showSearch,
+        showActionsMenu,
+        showMuteModal,
+        showBlockModal,
+        showReportModal,
+    ]);
 
     // Save draft when message changes (debounced in hook)
     useEffect(() => {
@@ -845,11 +860,12 @@ export function ChatModal({
         }
     }, [selectedMessage]);
 
-    const handleSend = useCallback(async () => {
-        if (!newMessage.trim()) return;
+    const handleSend = useCallback(async (overrideMessage?: string) => {
+        const content = (overrideMessage ?? newMessage).trim();
+        if (!content) return;
 
         // Include reply context if replying
-        let messageContent = newMessage.trim();
+        let messageContent = content;
         if (replyingTo) {
             const replySender = replyingTo.senderAddress;
             const replyPreview =
@@ -877,7 +893,7 @@ export function ChatModal({
         setChatError(null);
         const prevMessage = newMessage;
         const prevReplyingTo = replyingTo;
-        setNewMessage("");
+        if (!overrideMessage) setNewMessage("");
         setReplyingTo(null);
         clearDraft();
         stopTyping();
@@ -1437,7 +1453,7 @@ export function ChatModal({
                                     !chatError &&
                                     messages.length === 0 && (
                                         <div className="flex items-center justify-center h-full">
-                                            <div className="text-center">
+                                            <div className="text-center px-4">
                                                 <div className="w-16 h-16 rounded-full bg-[#FF5500]/10 flex items-center justify-center mx-auto mb-4">
                                                     <svg
                                                         className="w-8 h-8 text-[#FFBBA7]"
@@ -1456,10 +1472,31 @@ export function ChatModal({
                                                 <p className="text-zinc-400">
                                                     No messages yet
                                                 </p>
-                                                <p className="text-zinc-500 text-sm mt-1">
+                                                <p className="text-zinc-500 text-sm mt-1 mb-4">
                                                     Say hello to start the
                                                     conversation!
                                                 </p>
+                                                <div className="flex flex-wrap gap-2 justify-center">
+                                                    {[
+                                                        "Hey! 👋",
+                                                        "What's up?",
+                                                        "Let's chat!",
+                                                    ].map((suggestion) => (
+                                                        <button
+                                                            key={suggestion}
+                                                            type="button"
+                                                            onClick={() =>
+                                                                handleSend(
+                                                                    suggestion,
+                                                                )
+                                                            }
+                                                            disabled={isSending}
+                                                            className="px-4 py-2 rounded-xl bg-zinc-700/80 hover:bg-zinc-600 text-zinc-200 text-sm font-medium transition-colors disabled:opacity-50"
+                                                        >
+                                                            {suggestion}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -2418,7 +2455,7 @@ export function ChatModal({
                                                 setNewMessage(val);
                                                 handleTyping();
                                             }}
-                                            onSubmit={handleSend}
+                                            onSubmit={() => handleSend()}
                                             aria-label={`Message ${displayName}`}
                                             placeholder={
                                                 isInitialized
@@ -2437,7 +2474,8 @@ export function ChatModal({
                                         />
                                         {newMessage.length > 500 && (
                                             <p className="text-xs text-zinc-500">
-                                                {newMessage.length.toLocaleString()} / 10,000
+                                                {newMessage.length.toLocaleString()}{" "}
+                                                / 10,000
                                             </p>
                                         )}
                                         {/* Emoji Picker Button */}
@@ -2467,7 +2505,7 @@ export function ChatModal({
                                         />
                                     </div>
                                     <button
-                                        onClick={handleSend}
+                                        onClick={() => handleSend()}
                                         disabled={
                                             !newMessage.trim() ||
                                             isSending ||

@@ -98,6 +98,8 @@ interface AlphaChatModalProps {
     onAddFriend?: (address: string) => Promise<boolean>;
     // Check if already a friend
     isFriend?: (address: string) => boolean;
+    // Open DM with this user (e.g. when "Message" is clicked for an already-friend)
+    onOpenDM?: (address: string) => void;
     // Admin controls
     isAdmin?: boolean;
     // Callback when a message is sent (for updating last message time)
@@ -112,6 +114,7 @@ export function AlphaChatModal({
     getUserInfo,
     onAddFriend,
     isFriend,
+    onOpenDM,
     isAdmin = false,
     onMessageSent,
 }: AlphaChatModalProps) {
@@ -344,7 +347,14 @@ export function AlphaChatModal({
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen, onClose, replyingTo, showSettings, showModerationPanel, showMembersList]);
+    }, [
+        isOpen,
+        onClose,
+        replyingTo,
+        showSettings,
+        showModerationPanel,
+        showMembersList,
+    ]);
 
     // Fetch polls when alpha chat opens
     useEffect(() => {
@@ -1416,7 +1426,10 @@ export function AlphaChatModal({
                                         className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 flex flex-col-reverse ${isFullscreen ? "px-8" : ""}`}
                                     >
                                         {isLoading ? (
-                                            <ChatSkeleton messageCount={6} className="p-4" />
+                                            <ChatSkeleton
+                                                messageCount={6}
+                                                className="p-4"
+                                            />
                                         ) : messages.length === 0 ? (
                                             <div className="flex items-center justify-center h-full">
                                                 <div className="text-center">
@@ -1881,15 +1894,28 @@ export function AlphaChatModal({
                                                                                                 }
                                                                                             />
                                                                                         </p>
-                                                                                        {detectUrls(msg.content)
-                                                                                            .slice(0, 1)
-                                                                                            .map((url) => (
-                                                                                                <LinkPreview
-                                                                                                    key={url}
-                                                                                                    url={url}
-                                                                                                    compact
-                                                                                                />
-                                                                                            ))}
+                                                                                        {detectUrls(
+                                                                                            msg.content,
+                                                                                        )
+                                                                                            .slice(
+                                                                                                0,
+                                                                                                1,
+                                                                                            )
+                                                                                            .map(
+                                                                                                (
+                                                                                                    url,
+                                                                                                ) => (
+                                                                                                    <LinkPreview
+                                                                                                        key={
+                                                                                                            url
+                                                                                                        }
+                                                                                                        url={
+                                                                                                            url
+                                                                                                        }
+                                                                                                        compact
+                                                                                                    />
+                                                                                                ),
+                                                                                            )}
                                                                                     </>
                                                                                 )}
 
@@ -2103,9 +2129,19 @@ export function AlphaChatModal({
                                                     inputRef={inputRef}
                                                     value={newMessage}
                                                     onChange={(val) => {
-                                                        if (val.length > 10000) return;
+                                                        if (val.length > 10000)
+                                                            return;
                                                         setNewMessage(val);
-                                                        saveDraft(val, replyingTo?.id, replyingTo ? replyingTo.content?.slice(0, 80) : undefined);
+                                                        saveDraft(
+                                                            val,
+                                                            replyingTo?.id,
+                                                            replyingTo
+                                                                ? replyingTo.content?.slice(
+                                                                      0,
+                                                                      80,
+                                                                  )
+                                                                : undefined,
+                                                        );
                                                         if (val.trim())
                                                             setTyping();
                                                     }}
@@ -2175,7 +2211,8 @@ export function AlphaChatModal({
                                         </div>
                                         {newMessage.length > 500 && (
                                             <p className="mt-1.5 text-right text-xs text-zinc-500">
-                                                {newMessage.length.toLocaleString()} / 10,000
+                                                {newMessage.length.toLocaleString()}{" "}
+                                                / 10,000
                                             </p>
                                         )}
                                     </div>
@@ -2281,21 +2318,54 @@ export function AlphaChatModal({
 
                                         {onAddFriend &&
                                             (isAlreadyFriend ? (
-                                                <div className="flex items-center gap-2 text-emerald-400 text-sm py-2">
-                                                    <svg
-                                                        className="w-4 h-4"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={2}
-                                                            d="M5 13l4 4L19 7"
-                                                        />
-                                                    </svg>
-                                                    Already friends
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M5 13l4 4L19 7"
+                                                            />
+                                                        </svg>
+                                                        Already friends
+                                                    </div>
+                                                    {onOpenDM && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                onOpenDM(
+                                                                    selectedUser,
+                                                                );
+                                                                setSelectedUser(
+                                                                    null,
+                                                                );
+                                                            }}
+                                                            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#FF5500]/20 hover:bg-[#FF5500]/30 text-orange-400 rounded-lg text-sm font-medium transition-colors"
+                                                        >
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                                                />
+                                                            </svg>
+                                                            Message
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <button
