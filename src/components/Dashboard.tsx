@@ -5429,6 +5429,17 @@ function DashboardContent({
                     onStartCall={handleStartGroupCall}
                     hasActiveCall={callState !== "idle" || !!currentGroupCall}
                     getUserInfo={getAlphaUserInfo}
+                    isFriend={(address) =>
+                        friends.some(
+                            (f) =>
+                                f.friend_address.toLowerCase() ===
+                                address.toLowerCase(),
+                        )
+                    }
+                    onOpenDM={(address) => {
+                        openDMByAddress(address);
+                        setSelectedGroup(null);
+                    }}
                     onMessageSent={() => {
                         // Update last message time for this group (for sorting)
                         if (selectedGroup) {

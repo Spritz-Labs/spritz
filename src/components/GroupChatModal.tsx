@@ -85,6 +85,10 @@ interface GroupChatModalProps {
         name: string | null;
         avatar: string | null;
     } | null;
+    // Check if already a friend (Message button only shown for friends)
+    isFriend?: (address: string) => boolean;
+    // Open DM with a user (e.g. when "Message" is clicked on a member; only shown when isFriend)
+    onOpenDM?: (address: string) => void;
     // Callback when message is sent (for updating chat order)
     onMessageSent?: () => void;
     // Callback when message is received (for updating chat order)
@@ -115,6 +119,8 @@ export function GroupChatModal({
     onMessageReceived,
     hasActiveCall = false,
     getUserInfo,
+    isFriend,
+    onOpenDM,
 }: GroupChatModalProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
@@ -1295,14 +1301,14 @@ export function GroupChatModal({
                                                     return (
                                                         <div
                                                             key={member.inboxId}
-                                                            className={`flex items-center justify-between px-2 py-1.5 rounded-lg ${
+                                                            className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg ${
                                                                 isMe
                                                                     ? "bg-[#FB8D22]/20"
                                                                     : "bg-zinc-700/50"
                                                             }`}
                                                         >
                                                             <span
-                                                                className={`text-xs ${
+                                                                className={`text-xs flex-1 min-w-0 truncate ${
                                                                     isMe
                                                                         ? "text-[#FFF0E0]"
                                                                         : "text-zinc-300"
@@ -1315,31 +1321,63 @@ export function GroupChatModal({
                                                                       )}
                                                             </span>
                                                             {!isMe && (
-                                                                <button
-                                                                    onClick={() =>
-                                                                        handleRemoveMember(
+                                                                <div className="flex items-center gap-0.5 shrink-0">
+                                                                    {onOpenDM &&
+                                                                        isFriend?.(
                                                                             memberAddress,
-                                                                        )
-                                                                    }
-                                                                    className="text-zinc-500 hover:text-red-400 transition-colors p-1"
-                                                                    title="Remove from group"
-                                                                >
-                                                                    <svg
-                                                                        className="w-3 h-3"
-                                                                        fill="none"
-                                                                        viewBox="0 0 24 24"
-                                                                        stroke="currentColor"
+                                                                        ) && (
+                                                                            <button
+                                                                                onClick={() =>
+                                                                                    onOpenDM(
+                                                                                        memberAddress,
+                                                                                    )
+                                                                                }
+                                                                                className="p-1.5 text-zinc-400 hover:text-[#FF5500] transition-colors rounded"
+                                                                                title="Send private message"
+                                                                            >
+                                                                                <svg
+                                                                                    className="w-3.5 h-3.5"
+                                                                                    fill="none"
+                                                                                    viewBox="0 0 24 24"
+                                                                                    stroke="currentColor"
+                                                                                >
+                                                                                    <path
+                                                                                        strokeLinecap="round"
+                                                                                        strokeLinejoin="round"
+                                                                                        strokeWidth={
+                                                                                            2
+                                                                                        }
+                                                                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                                                                    />
+                                                                                </svg>
+                                                                            </button>
+                                                                        )}
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            handleRemoveMember(
+                                                                                memberAddress,
+                                                                            )
+                                                                        }
+                                                                        className="p-1 text-zinc-500 hover:text-red-400 transition-colors rounded"
+                                                                        title="Remove from group"
                                                                     >
-                                                                        <path
-                                                                            strokeLinecap="round"
-                                                                            strokeLinejoin="round"
-                                                                            strokeWidth={
-                                                                                2
-                                                                            }
-                                                                            d="M6 18L18 6M6 6l12 12"
-                                                                        />
-                                                                    </svg>
-                                                                </button>
+                                                                        <svg
+                                                                            className="w-3 h-3"
+                                                                            fill="none"
+                                                                            viewBox="0 0 24 24"
+                                                                            stroke="currentColor"
+                                                                        >
+                                                                            <path
+                                                                                strokeLinecap="round"
+                                                                                strokeLinejoin="round"
+                                                                                strokeWidth={
+                                                                                    2
+                                                                                }
+                                                                                d="M6 18L18 6M6 6l12 12"
+                                                                            />
+                                                                        </svg>
+                                                                    </button>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     );
