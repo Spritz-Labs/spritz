@@ -9,6 +9,11 @@ import {
     getPlatformApiTools,
     getPlatformMcpServers,
 } from "@/lib/agent-capabilities";
+import {
+    estimateCostUsd,
+    sanitizeErrorMessage,
+    inferErrorCode,
+} from "@/lib/agent-cost";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -233,13 +238,13 @@ Choose the most relevant tool and fill in appropriate parameter values based on 
     return null;
 }
 
-// Call an MCP tool dynamically
+// Call an MCP tool dynamically; returns result or error for tool_errors logging
 async function callMcpTool(
     serverUrl: string,
     headers: Record<string, string>,
     toolName: string,
     args: Record<string, string>,
-): Promise<string | null> {
+): Promise<{ ok: true; result: string } | { ok: false; error: string }> {
     try {
         console.log(`[MCP] Calling tool ${toolName} with args:`, args);
 
@@ -264,34 +269,38 @@ async function callMcpTool(
         if (response.ok) {
             const data = await response.json();
 
-            // Check for error in response
             if (data.error) {
+                const errMsg =
+                    typeof data.error === "object"
+                        ? (data.error.message ?? JSON.stringify(data.error))
+                        : String(data.error);
                 console.error(
                     `[MCP] Tool ${toolName} returned error:`,
                     data.error,
                 );
-                return null;
+                return { ok: false, error: errMsg };
             }
 
-            // Extract text content from response
             const resultText =
                 data?.result?.content?.[0]?.text ||
                 JSON.stringify(data.result || data);
             console.log(
                 `[MCP] Tool ${toolName} returned ${resultText.length} chars`,
             );
-            return resultText;
-        } else {
-            const errorText = await response.text();
-            console.error(
-                `[MCP] Tool ${toolName} HTTP error: ${response.status} - ${errorText.substring(0, 300)}`,
-            );
+            return { ok: true, result: resultText };
         }
-    } catch (error) {
-        console.error(`[MCP] Error calling tool ${toolName}:`, error);
-    }
 
-    return null;
+        const errorText = await response.text();
+        const errMsg = `${response.status}: ${errorText.substring(0, 200)}`;
+        console.error(
+            `[MCP] Tool ${toolName} HTTP error: ${response.status} - ${errorText.substring(0, 300)}`,
+        );
+        return { ok: false, error: errMsg };
+    } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[MCP] Error calling tool ${toolName}:`, error);
+        return { ok: false, error: errMsg };
+    }
 }
 
 // Generate embedding for a query using Gemini
@@ -556,6 +565,17 @@ export async function POST(
 
         // Track MCP results to add BEFORE personality
         let mcpResultsSection = "";
+        // Collect MCP tool invocations and failures for admin/debug
+        const mcpToolCalls: {
+            server: string;
+            toolName: string;
+            args?: Record<string, unknown>;
+        }[] = [];
+        const mcpToolErrors: {
+            server: string;
+            toolName: string;
+            error?: string;
+        }[] = [];
 
         // MCP: platform-wide tools (e.g. The Grid) + per-agent servers when MCP is enabled
         const mcpEnabled = agent.mcp_enabled !== false; // Default true
@@ -699,14 +719,32 @@ export async function POST(
                                 `[MCP] Iteration ${i + 1}: AI selected tool "${toolCall.toolName}"`,
                             );
 
-                            // Step 3: Call the tool
-                            const result = await callMcpTool(
+                            mcpToolCalls.push({
+                                server: server.name,
+                                toolName: toolCall.toolName,
+                                args: toolCall.args,
+                            });
+
+                            const toolResult = await callMcpTool(
                                 server.url,
                                 headers,
                                 toolCall.toolName,
                                 toolCall.args,
                             );
 
+                            if (!toolResult.ok) {
+                                mcpToolErrors.push({
+                                    server: server.name,
+                                    toolName: toolCall.toolName,
+                                    error: toolResult.error.substring(0, 500),
+                                });
+                                console.log(
+                                    `[MCP] Tool ${toolCall.toolName} failed: ${toolResult.error.substring(0, 100)}`,
+                                );
+                                break;
+                            }
+
+                            const result = toolResult.result;
                             if (result) {
                                 previousResults += `\n\nResult from ${toolCall.toolName}:\n${result.substring(0, 5000)}`;
 
@@ -1887,11 +1925,53 @@ ${apiResults.join("\n")}
             config,
         };
 
+        const modelName = "gemini-2.0-flash";
+        const assistantMeta = {
+            tool_calls: mcpToolCalls.length > 0 ? mcpToolCalls : null,
+            tool_errors: mcpToolErrors.length > 0 ? mcpToolErrors : null,
+            model: modelName,
+        };
+
+        function buildAssistantRow(payload: {
+            content: string;
+            input_tokens?: number | null;
+            output_tokens?: number | null;
+            total_tokens?: number | null;
+            latency_ms?: number | null;
+            error_code?: string | null;
+            error_message?: string | null;
+        }) {
+            const estimated_cost_usd =
+                estimateCostUsd(
+                    payload.input_tokens ?? null,
+                    payload.output_tokens ?? null,
+                ) ?? null;
+            return {
+                agent_id: id,
+                user_address: normalizedAddress,
+                role: "assistant",
+                content: payload.content,
+                source: "direct",
+                ...assistantMeta,
+                input_tokens: payload.input_tokens ?? null,
+                output_tokens: payload.output_tokens ?? null,
+                total_tokens: payload.total_tokens ?? null,
+                latency_ms: payload.latency_ms ?? null,
+                estimated_cost_usd,
+                error_code: payload.error_code ?? null,
+                error_message: payload.error_message ?? null,
+            };
+        }
+
         if (streamRequested === true) {
             const encoder = new TextEncoder();
             const stream = new ReadableStream({
                 async start(controller) {
                     let fullText = "";
+                    const startMs = Date.now();
+                    let streamInputTokens: number | null = null;
+                    let streamOutputTokens: number | null = null;
+                    let streamTotalTokens: number | null = null;
                     try {
                         const streamResponse =
                             await ai.models.generateContentStream(
@@ -1910,17 +1990,39 @@ ${apiResults.join("\n")}
                                     ),
                                 );
                             }
+                            // Persist streaming usage when SDK exposes it (e.g. last chunk)
+                            const usage = (
+                                chunk as {
+                                    usageMetadata?: {
+                                        promptTokenCount?: number;
+                                        candidatesTokenCount?: number;
+                                        totalTokenCount?: number;
+                                    };
+                                }
+                            ).usageMetadata;
+                            if (usage) {
+                                streamInputTokens =
+                                    usage.promptTokenCount ?? streamInputTokens;
+                                streamOutputTokens =
+                                    usage.candidatesTokenCount ??
+                                    streamOutputTokens;
+                                streamTotalTokens =
+                                    usage.totalTokenCount ?? streamTotalTokens;
+                            }
                         }
                         const assistantMessage =
                             fullText.trim() ||
                             "I'm sorry, I couldn't generate a response.";
-                        await supabase.from("shout_agent_chats").insert({
-                            agent_id: id,
-                            user_address: normalizedAddress,
-                            role: "assistant",
-                            content: assistantMessage,
-                            source: "direct",
-                        });
+                        const latencyMs = Date.now() - startMs;
+                        await supabase.from("shout_agent_chats").insert(
+                            buildAssistantRow({
+                                content: assistantMessage,
+                                input_tokens: streamInputTokens,
+                                output_tokens: streamOutputTokens,
+                                total_tokens: streamTotalTokens,
+                                latency_ms: latencyMs,
+                            }),
+                        );
                         await supabase.rpc("increment_agent_messages", {
                             p_agent_id: id,
                         });
@@ -1935,15 +2037,17 @@ ${apiResults.join("\n")}
                         );
                     } catch (err) {
                         console.error("[Agent Chat] Stream error:", err);
-                        // Log failed interaction for usage analytics
+                        const errMessage = sanitizeErrorMessage(err);
+                        const errCode = inferErrorCode(err);
                         try {
-                            await supabase.from("shout_agent_chats").insert({
-                                agent_id: id,
-                                user_address: normalizedAddress,
-                                role: "assistant",
-                                content: "[Error: Failed to generate response]",
-                                source: "direct",
-                            });
+                            await supabase.from("shout_agent_chats").insert(
+                                buildAssistantRow({
+                                    content:
+                                        "[Error: Failed to generate response]",
+                                    error_code: errCode,
+                                    error_message: errMessage,
+                                }),
+                            );
                             await supabase.rpc("increment_agent_messages", {
                                 p_agent_id: id,
                             });
@@ -1974,17 +2078,35 @@ ${apiResults.join("\n")}
             });
         }
 
+        const startMs = Date.now();
         const response = await ai.models.generateContent(generateConfig);
         const assistantMessage =
             response.text || "I'm sorry, I couldn't generate a response.";
+        const latencyMs = Date.now() - startMs;
 
-        await supabase.from("shout_agent_chats").insert({
-            agent_id: id,
-            user_address: normalizedAddress,
-            role: "assistant",
-            content: assistantMessage,
-            source: "direct",
-        });
+        // Extract usage metadata when present (e.g. totalTokenCount, promptTokenCount, candidatesTokenCount)
+        const usage = (
+            response as {
+                usageMetadata?: {
+                    totalTokenCount?: number;
+                    promptTokenCount?: number;
+                    candidatesTokenCount?: number;
+                };
+            }
+        ).usageMetadata;
+        const inputTokens = usage?.promptTokenCount ?? null;
+        const outputTokens = usage?.candidatesTokenCount ?? null;
+        const totalTokens = usage?.totalTokenCount ?? null;
+
+        await supabase.from("shout_agent_chats").insert(
+            buildAssistantRow({
+                content: assistantMessage,
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+                total_tokens: totalTokens,
+                latency_ms: latencyMs,
+            }),
+        );
 
         await supabase.rpc("increment_agent_messages", { p_agent_id: id });
 

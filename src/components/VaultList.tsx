@@ -2,16 +2,39 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { useVaults, type VaultListItem, type VaultDetails } from "@/hooks/useVaults";
+import {
+    useVaults,
+    type VaultListItem,
+    type VaultDetails,
+} from "@/hooks/useVaults";
 import { useVaultExecution } from "@/hooks/useVaultExecution";
 import { getChainById } from "@/config/chains";
 import { QRCodeSVG } from "qrcode.react";
 import { useEnsResolver } from "@/hooks/useEnsResolver";
-import { useSendSuggestions, useAddressBook, type SendSuggestion } from "@/hooks/useSendSuggestions";
-import { useWalletClient, usePublicClient, useAccount, useSignMessage, useSignTypedData } from "wagmi";
+import {
+    useSendSuggestions,
+    useAddressBook,
+    type SendSuggestion,
+} from "@/hooks/useSendSuggestions";
+import {
+    useWalletClient,
+    usePublicClient,
+    useAccount,
+    useSignMessage,
+    useSignTypedData,
+} from "wagmi";
 import { useWalletReconnect } from "@/hooks/useWalletReconnect";
-import { deployMultiSigSafeWithEOA, deployVaultViaSponsoredGas, deployVaultViaPasskey, type PasskeyCredential, getPublicClient } from "@/lib/safeWallet";
-import type { VaultBalanceResponse, VaultTokenBalance } from "@/app/api/vault/[id]/balances/route";
+import {
+    deployMultiSigSafeWithEOA,
+    deployVaultViaSponsoredGas,
+    deployVaultViaPasskey,
+    type PasskeyCredential,
+    getPublicClient,
+} from "@/lib/safeWallet";
+import type {
+    VaultBalanceResponse,
+    VaultTokenBalance,
+} from "@/app/api/vault/[id]/balances/route";
 import type { Address, Hex } from "viem";
 
 // Timeout for waiting for AA transactions (2 minutes)
@@ -61,89 +84,150 @@ type PendingTransaction = {
 };
 
 // Common emojis for vaults
-const VAULT_EMOJIS = ["🔐", "💰", "🏦", "💎", "🚀", "🌟", "🎯", "🔒", "💼", "🏠", "🎮", "🌈"];
+const VAULT_EMOJIS = [
+    "🔐",
+    "💰",
+    "🏦",
+    "💎",
+    "🚀",
+    "🌟",
+    "🎯",
+    "🔒",
+    "💼",
+    "🏠",
+    "🎮",
+    "🌈",
+];
 
-const HIDDEN_VAULTS_STORAGE_KEY = (address: string) => `spritz-hidden-vaults-${(address || "").toLowerCase()}`;
+const HIDDEN_VAULTS_STORAGE_KEY = (address: string) =>
+    `spritz-hidden-vaults-${(address || "").toLowerCase()}`;
 
 // Tab types for vault detail view
 type VaultTab = "assets" | "send" | "receive" | "activity";
 
-export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListProps) {
-    const { vaults, isLoading, getVault, updateVault, deleteVault, getDeploymentInfo, confirmDeployment, fetchVaults } = useVaults(userAddress);
-    
+export function VaultList({
+    userAddress,
+    onCreateNew,
+    refreshKey,
+}: VaultListProps) {
+    const {
+        vaults,
+        isLoading,
+        getVault,
+        updateVault,
+        deleteVault,
+        getDeploymentInfo,
+        confirmDeployment,
+        fetchVaults,
+    } = useVaults(userAddress);
+
     // Refetch vaults when refreshKey changes (after vault creation)
     useEffect(() => {
         if (refreshKey !== undefined && refreshKey > 0) {
-            console.log("[VaultList] Refreshing vaults due to refreshKey change:", refreshKey);
+            console.log(
+                "[VaultList] Refreshing vaults due to refreshKey change:",
+                refreshKey,
+            );
             fetchVaults();
         }
     }, [refreshKey, fetchVaults]);
     // Pass the userAddress to support passkey users who don't have a wagmi wallet connected
-    const vaultExecution = useVaultExecution(userAddress as Address | undefined);
-    const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(null);
+    const vaultExecution = useVaultExecution(
+        userAddress as Address | undefined,
+    );
+    const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(
+        null,
+    );
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<VaultTab>("assets");
     const [isDeploying, setIsDeploying] = useState(false);
     const [deployError, setDeployError] = useState<string | null>(null);
-    
+
     // Balance state for selected vault
     const [balances, setBalances] = useState<VaultBalanceResponse | null>(null);
     const [isLoadingBalances, setIsLoadingBalances] = useState(false);
-    
+
     // Cache for vault list balances (keyed by vault ID)
-    const [vaultBalanceCache, setVaultBalanceCache] = useState<Record<string, { totalUsd: number; loading: boolean }>>({});
-    
+    const [vaultBalanceCache, setVaultBalanceCache] = useState<
+        Record<string, { totalUsd: number; loading: boolean }>
+    >({});
+
     // Hidden vaults (per user, persisted in localStorage)
-    const [hiddenVaultIds, setHiddenVaultIds] = useState<Set<string>>(() => new Set());
+    const [hiddenVaultIds, setHiddenVaultIds] = useState<Set<string>>(
+        () => new Set(),
+    );
     const [showHiddenVaults, setShowHiddenVaults] = useState(false);
-    
+
     useEffect(() => {
         if (!userAddress) {
             setHiddenVaultIds(new Set());
             return;
         }
         try {
-            const raw = typeof window !== "undefined" ? localStorage.getItem(HIDDEN_VAULTS_STORAGE_KEY(userAddress)) : null;
+            const raw =
+                typeof window !== "undefined"
+                    ? localStorage.getItem(
+                          HIDDEN_VAULTS_STORAGE_KEY(userAddress),
+                      )
+                    : null;
             const parsed = raw ? (JSON.parse(raw) as string[]) : [];
             setHiddenVaultIds(new Set(Array.isArray(parsed) ? parsed : []));
         } catch {
             setHiddenVaultIds(new Set());
         }
     }, [userAddress]);
-    
-    const hideVault = useCallback((vaultId: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setHiddenVaultIds((prev) => {
-            const next = new Set(prev);
-            next.add(vaultId);
-            if (userAddress) {
-                try {
-                    localStorage.setItem(HIDDEN_VAULTS_STORAGE_KEY(userAddress), JSON.stringify([...next]));
-                } catch {}
-            }
-            return next;
-        });
-    }, [userAddress]);
-    
-    const unhideVault = useCallback((vaultId: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setHiddenVaultIds((prev) => {
-            const next = new Set(prev);
-            next.delete(vaultId);
-            if (userAddress) {
-                try {
-                    localStorage.setItem(HIDDEN_VAULTS_STORAGE_KEY(userAddress), JSON.stringify([...next]));
-                } catch {}
-            }
-            return next;
-        });
-    }, [userAddress]);
-    
-    const visibleVaults = useMemo(() => vaults.filter((v) => !hiddenVaultIds.has(v.id)), [vaults, hiddenVaultIds]);
-    const hiddenVaultsList = useMemo(() => vaults.filter((v) => hiddenVaultIds.has(v.id)), [vaults, hiddenVaultIds]);
-    
+
+    const hideVault = useCallback(
+        (vaultId: string, e: React.MouseEvent) => {
+            e.stopPropagation();
+            setHiddenVaultIds((prev) => {
+                const next = new Set(prev);
+                next.add(vaultId);
+                if (userAddress) {
+                    try {
+                        localStorage.setItem(
+                            HIDDEN_VAULTS_STORAGE_KEY(userAddress),
+                            JSON.stringify([...next]),
+                        );
+                    } catch {}
+                }
+                return next;
+            });
+        },
+        [userAddress],
+    );
+
+    const unhideVault = useCallback(
+        (vaultId: string, e: React.MouseEvent) => {
+            e.stopPropagation();
+            setHiddenVaultIds((prev) => {
+                const next = new Set(prev);
+                next.delete(vaultId);
+                if (userAddress) {
+                    try {
+                        localStorage.setItem(
+                            HIDDEN_VAULTS_STORAGE_KEY(userAddress),
+                            JSON.stringify([...next]),
+                        );
+                    } catch {}
+                }
+                return next;
+            });
+        },
+        [userAddress],
+    );
+
+    const visibleVaults = useMemo(
+        () => vaults.filter((v) => !hiddenVaultIds.has(v.id)),
+        [vaults, hiddenVaultIds],
+    );
+    const hiddenVaultsList = useMemo(
+        () => vaults.filter((v) => hiddenVaultIds.has(v.id)),
+        [vaults, hiddenVaultIds],
+    );
+
     // Edit state
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState("");
@@ -151,7 +235,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     const [editEmoji, setEditEmoji] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-    
+
     // Send state
     const ensResolver = useEnsResolver();
     const [sendAmount, setSendAmount] = useState("");
@@ -159,15 +243,21 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     const [isSending, setIsSending] = useState(false);
     const [showTokenSelector, setShowTokenSelector] = useState(false);
     const [isUsdMode, setIsUsdMode] = useState(false); // Toggle between USD and token amount input
-    
+
     // Send suggestions (friends, vaults, address book)
-    const { suggestions: sendSuggestions, filter: filterSuggestions, refresh: refreshSuggestions, isLoading: suggestionsLoading } = useSendSuggestions(true);
+    const {
+        suggestions: sendSuggestions,
+        filter: filterSuggestions,
+        refresh: refreshSuggestions,
+        isLoading: suggestionsLoading,
+    } = useSendSuggestions(true);
     const { addEntry: addToAddressBook } = useAddressBook();
-    const [showRecipientSuggestions, setShowRecipientSuggestions] = useState(false);
+    const [showRecipientSuggestions, setShowRecipientSuggestions] =
+        useState(false);
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
     const [showSaveAddressDialog, setShowSaveAddressDialog] = useState(false);
     const [saveAddressLabel, setSaveAddressLabel] = useState("");
-    
+
     // Calculate token price per unit for USD conversion (Vault send)
     const vaultTokenPriceUsd = useMemo(() => {
         if (!sendToken?.balanceUsd || !sendToken?.balanceFormatted) return 0;
@@ -175,22 +265,31 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         if (balance <= 0) return 0;
         return sendToken.balanceUsd / balance;
     }, [sendToken]);
-    
+
     // Convert between USD and token amounts (Vault send)
-    const getVaultTokenAmount = useCallback((usdAmount: string): string => {
-        if (!usdAmount || !vaultTokenPriceUsd || vaultTokenPriceUsd <= 0) return "";
-        const usd = parseFloat(usdAmount);
-        if (isNaN(usd) || usd <= 0) return "";
-        return (usd / vaultTokenPriceUsd).toFixed(sendToken?.decimals || 18);
-    }, [vaultTokenPriceUsd, sendToken]);
-    
-    const getVaultUsdAmount = useCallback((tokenAmount: string): string => {
-        if (!tokenAmount || !vaultTokenPriceUsd) return "";
-        const amount = parseFloat(tokenAmount);
-        if (isNaN(amount) || amount <= 0) return "";
-        return (amount * vaultTokenPriceUsd).toFixed(2);
-    }, [vaultTokenPriceUsd]);
-    
+    const getVaultTokenAmount = useCallback(
+        (usdAmount: string): string => {
+            if (!usdAmount || !vaultTokenPriceUsd || vaultTokenPriceUsd <= 0)
+                return "";
+            const usd = parseFloat(usdAmount);
+            if (isNaN(usd) || usd <= 0) return "";
+            return (usd / vaultTokenPriceUsd).toFixed(
+                sendToken?.decimals || 18,
+            );
+        },
+        [vaultTokenPriceUsd, sendToken],
+    );
+
+    const getVaultUsdAmount = useCallback(
+        (tokenAmount: string): string => {
+            if (!tokenAmount || !vaultTokenPriceUsd) return "";
+            const amount = parseFloat(tokenAmount);
+            if (isNaN(amount) || amount <= 0) return "";
+            return (amount * vaultTokenPriceUsd).toFixed(2);
+        },
+        [vaultTokenPriceUsd],
+    );
+
     // Get the actual token amount to send (Vault send - converts from USD if needed)
     const actualVaultSendAmount = useMemo(() => {
         if (!sendAmount) return "";
@@ -199,14 +298,14 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         }
         return sendAmount;
     }, [sendAmount, isUsdMode, getVaultTokenAmount]);
-    
+
     // Toggle between USD and token mode (Vault send)
     const toggleVaultAmountMode = useCallback(() => {
         if (!sendAmount || !vaultTokenPriceUsd) {
             setIsUsdMode(!isUsdMode);
             return;
         }
-        
+
         if (isUsdMode) {
             // Converting from USD to token
             const tokenAmount = getVaultTokenAmount(sendAmount);
@@ -217,8 +316,14 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
             setSendAmount(usdAmount || "");
         }
         setIsUsdMode(!isUsdMode);
-    }, [sendAmount, isUsdMode, vaultTokenPriceUsd, getVaultTokenAmount, getVaultUsdAmount]);
-    
+    }, [
+        sendAmount,
+        isUsdMode,
+        vaultTokenPriceUsd,
+        getVaultTokenAmount,
+        getVaultUsdAmount,
+    ]);
+
     // Filter suggestions based on recipient input and selected vault's chain
     // For vaults, only show those on the same chain to prevent cross-chain mistakes
     const filteredSuggestions = useMemo(() => {
@@ -228,56 +333,81 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         }
         return filterSuggestions("", currentChainId);
     }, [ensResolver.input, filterSuggestions, selectedVault?.chainId]);
-    
+
     // Check if current address can be saved to address book
     const canSaveToAddressBook = useMemo(() => {
         if (!ensResolver.input || !ensResolver.isValid) return false;
-        const addr = (ensResolver.resolvedAddress || ensResolver.input).toLowerCase();
-        return !sendSuggestions.some(s => s.address.toLowerCase() === addr);
-    }, [ensResolver.input, ensResolver.isValid, ensResolver.resolvedAddress, sendSuggestions]);
-    
+        const addr = (
+            ensResolver.resolvedAddress || ensResolver.input
+        ).toLowerCase();
+        return !sendSuggestions.some((s) => s.address.toLowerCase() === addr);
+    }, [
+        ensResolver.input,
+        ensResolver.isValid,
+        ensResolver.resolvedAddress,
+        sendSuggestions,
+    ]);
+
     // Handle selecting a suggestion
-    const handleSelectSuggestion = useCallback((suggestion: SendSuggestion) => {
-        const targetAddress = suggestion.smartWalletAddress || suggestion.address;
-        ensResolver.setInput(targetAddress);
-        setShowRecipientSuggestions(false);
-        setSelectedSuggestionIndex(-1);
-    }, [ensResolver]);
-    
+    const handleSelectSuggestion = useCallback(
+        (suggestion: SendSuggestion) => {
+            const targetAddress =
+                suggestion.smartWalletAddress || suggestion.address;
+            ensResolver.setInput(targetAddress);
+            setShowRecipientSuggestions(false);
+            setSelectedSuggestionIndex(-1);
+        },
+        [ensResolver],
+    );
+
     // Handle keyboard navigation for suggestions
-    const handleRecipientKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (!showRecipientSuggestions || filteredSuggestions.length === 0) return;
-        
-        switch (e.key) {
-            case "ArrowDown":
-                e.preventDefault();
-                setSelectedSuggestionIndex(prev => 
-                    prev < filteredSuggestions.length - 1 ? prev + 1 : 0
-                );
-                break;
-            case "ArrowUp":
-                e.preventDefault();
-                setSelectedSuggestionIndex(prev => 
-                    prev > 0 ? prev - 1 : filteredSuggestions.length - 1
-                );
-                break;
-            case "Enter":
-                if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < filteredSuggestions.length) {
+    const handleRecipientKeyDown = useCallback(
+        (e: React.KeyboardEvent) => {
+            if (!showRecipientSuggestions || filteredSuggestions.length === 0)
+                return;
+
+            switch (e.key) {
+                case "ArrowDown":
                     e.preventDefault();
-                    handleSelectSuggestion(filteredSuggestions[selectedSuggestionIndex]);
-                }
-                break;
-            case "Escape":
-                setShowRecipientSuggestions(false);
-                setSelectedSuggestionIndex(-1);
-                break;
-        }
-    }, [showRecipientSuggestions, filteredSuggestions, selectedSuggestionIndex, handleSelectSuggestion]);
-    
+                    setSelectedSuggestionIndex((prev) =>
+                        prev < filteredSuggestions.length - 1 ? prev + 1 : 0,
+                    );
+                    break;
+                case "ArrowUp":
+                    e.preventDefault();
+                    setSelectedSuggestionIndex((prev) =>
+                        prev > 0 ? prev - 1 : filteredSuggestions.length - 1,
+                    );
+                    break;
+                case "Enter":
+                    if (
+                        selectedSuggestionIndex >= 0 &&
+                        selectedSuggestionIndex < filteredSuggestions.length
+                    ) {
+                        e.preventDefault();
+                        handleSelectSuggestion(
+                            filteredSuggestions[selectedSuggestionIndex],
+                        );
+                    }
+                    break;
+                case "Escape":
+                    setShowRecipientSuggestions(false);
+                    setSelectedSuggestionIndex(-1);
+                    break;
+            }
+        },
+        [
+            showRecipientSuggestions,
+            filteredSuggestions,
+            selectedSuggestionIndex,
+            handleSelectSuggestion,
+        ],
+    );
+
     // Handle saving address to address book
     const handleSaveToAddressBook = useCallback(async () => {
         if (!saveAddressLabel.trim() || !ensResolver.resolvedAddress) return;
-        
+
         try {
             await addToAddressBook({
                 address: ensResolver.resolvedAddress,
@@ -290,39 +420,55 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         } catch (err) {
             console.error("Failed to save to address book:", err);
         }
-    }, [saveAddressLabel, ensResolver.resolvedAddress, ensResolver.ensName, addToAddressBook, refreshSuggestions]);
-    
+    }, [
+        saveAddressLabel,
+        ensResolver.resolvedAddress,
+        ensResolver.ensName,
+        addToAddressBook,
+        refreshSuggestions,
+    ]);
+
     // Get suggestion type icon
     const getSuggestionIcon = (type: SendSuggestion["type"]) => {
         switch (type) {
-            case "friend": return "👤";
-            case "vault": return "🔐";
-            case "address_book": return "📖";
-            case "recent": return "🕐";
-            default: return "📍";
+            case "friend":
+                return "👤";
+            case "vault":
+                return "🔐";
+            case "address_book":
+                return "📖";
+            case "recent":
+                return "🕐";
+            default:
+                return "📍";
         }
     };
-    
+
     const getSuggestionLabel = (type: SendSuggestion["type"]) => {
         switch (type) {
-            case "friend": return "Friend";
-            case "vault": return "Vault";
-            case "address_book": return "Saved";
-            case "recent": return "Recent";
-            default: return "";
+            case "friend":
+                return "Friend";
+            case "vault":
+                return "Vault";
+            case "address_book":
+                return "Saved";
+            case "recent":
+                return "Recent";
+            default:
+                return "";
         }
     };
-    
+
     // Activity state
     const [transactions, setTransactions] = useState<VaultTransaction[]>([]);
     const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
-    
+
     // Pending transactions state
     const [pendingTxs, setPendingTxs] = useState<PendingTransaction[]>([]);
     const [isLoadingPendingTxs, setIsLoadingPendingTxs] = useState(false);
     const [isProposing, setIsProposing] = useState(false);
     const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
-    
+
     // Deployment toggle: default to EOA (single tx), toggle for sponsored gas (multiple signs)
     // EOA is better UX - just one "approve transaction" instead of multiple sign prompts
     const [useSponsoredGas, setUseSponsoredGas] = useState(false);
@@ -331,36 +477,45 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     const { data: walletClient } = useWalletClient();
     const publicClient = usePublicClient();
     const { address: connectedAddress, isConnected } = useAccount();
-    
+
     // Wallet reconnection for PWA persistence
     const { ensureConnected } = useWalletReconnect();
-    
+
     // Signing functions for sponsored deployment
     const { signMessageAsync } = useSignMessage();
     const { signTypedDataAsync } = useSignTypedData();
-    
+
     // Passkey credential for passkey users
-    const [passkeyCredential, setPasskeyCredential] = useState<PasskeyCredential | null>(null);
+    const [passkeyCredential, setPasskeyCredential] =
+        useState<PasskeyCredential | null>(null);
     const [isPasskeyUser, setIsPasskeyUser] = useState(false);
-    
+
     // Check if user is a passkey user (no connected wallet but has userAddress)
-    const canDeployWithPasskey = isPasskeyUser && !!passkeyCredential && useSponsoredGas;
+    const canDeployWithPasskey =
+        isPasskeyUser && !!passkeyCredential && useSponsoredGas;
     const canDeployWithWallet = isConnected && !!walletClient;
     const canDeploy = canDeployWithPasskey || canDeployWithWallet;
-    
+
     // Load passkey credential for passkey users
     useEffect(() => {
         const loadPasskeyCredential = async () => {
             if (!userAddress) return;
-            
+
             try {
-                const response = await fetch(`/api/passkey/credential?address=${userAddress}`, {
-                    credentials: "include",
-                });
-                
+                const response = await fetch(
+                    `/api/passkey/credential?address=${userAddress}`,
+                    {
+                        credentials: "include",
+                    },
+                );
+
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.credentialId && data.publicKeyX && data.publicKeyY) {
+                    if (
+                        data.credentialId &&
+                        data.publicKeyX &&
+                        data.publicKeyY
+                    ) {
                         setPasskeyCredential({
                             credentialId: data.credentialId,
                             publicKey: {
@@ -377,29 +532,38 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                     }
                 }
             } catch (err) {
-                console.error("[VaultList] Error loading passkey credential:", err);
+                console.error(
+                    "[VaultList] Error loading passkey credential:",
+                    err,
+                );
             }
         };
-        
+
         loadPasskeyCredential();
     }, [userAddress, isConnected]);
-    
+
     // Fetch balances for all deployed vaults (for list display)
     useEffect(() => {
         const fetchVaultListBalances = async () => {
             if (!vaults || vaults.length === 0) return;
-            
+
             // Only fetch for deployed vaults
-            const deployedVaults = vaults.filter(v => v.isDeployed);
+            const deployedVaults = vaults.filter((v) => v.isDeployed);
             if (deployedVaults.length === 0) return;
-            
+
             // Mark all as loading
-            const loadingState: Record<string, { totalUsd: number; loading: boolean }> = {};
-            deployedVaults.forEach(v => {
-                loadingState[v.id] = { totalUsd: vaultBalanceCache[v.id]?.totalUsd || 0, loading: true };
+            const loadingState: Record<
+                string,
+                { totalUsd: number; loading: boolean }
+            > = {};
+            deployedVaults.forEach((v) => {
+                loadingState[v.id] = {
+                    totalUsd: vaultBalanceCache[v.id]?.totalUsd || 0,
+                    loading: true,
+                };
             });
-            setVaultBalanceCache(prev => ({ ...prev, ...loadingState }));
-            
+            setVaultBalanceCache((prev) => ({ ...prev, ...loadingState }));
+
             // Fetch balances in parallel (batch of 3 at a time to avoid rate limits)
             const batchSize = 3;
             for (let i = 0; i < deployedVaults.length; i += batchSize) {
@@ -407,37 +571,53 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 const results = await Promise.all(
                     batch.map(async (vault) => {
                         try {
-                            const response = await fetch(`/api/vault/${vault.id}/balances`, {
-                                credentials: "include",
-                            });
+                            const response = await fetch(
+                                `/api/vault/${vault.id}/balances`,
+                                {
+                                    credentials: "include",
+                                },
+                            );
                             if (response.ok) {
-                                const data: VaultBalanceResponse = await response.json();
-                                return { id: vault.id, totalUsd: data.totalUsd, loading: false };
+                                const data: VaultBalanceResponse =
+                                    await response.json();
+                                return {
+                                    id: vault.id,
+                                    totalUsd: data.totalUsd,
+                                    loading: false,
+                                };
                             }
                         } catch (err) {
-                            console.error(`[VaultList] Error fetching balance for vault ${vault.id}:`, err);
+                            console.error(
+                                `[VaultList] Error fetching balance for vault ${vault.id}:`,
+                                err,
+                            );
                         }
                         return { id: vault.id, totalUsd: 0, loading: false };
-                    })
+                    }),
                 );
-                
+
                 // Update cache with results
-                setVaultBalanceCache(prev => {
+                setVaultBalanceCache((prev) => {
                     const updated = { ...prev };
-                    results.forEach(r => {
-                        updated[r.id] = { totalUsd: r.totalUsd, loading: r.loading };
+                    results.forEach((r) => {
+                        updated[r.id] = {
+                            totalUsd: r.totalUsd,
+                            loading: r.loading,
+                        };
                     });
                     return updated;
                 });
             }
         };
-        
+
         fetchVaultListBalances();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [vaults.length]); // Only re-run when vault count changes
 
     // Get gas cost estimate based on chain
-    const getDeployGasCost = (chainId: number): { cost: string; isHigh: boolean; isSponsored: boolean } => {
+    const getDeployGasCost = (
+        chainId: number,
+    ): { cost: string; isHigh: boolean; isSponsored: boolean } => {
         // Mainnet is expensive and not sponsored
         if (chainId === 1) {
             return { cost: "$50-200+", isHigh: true, isSponsored: false };
@@ -449,413 +629,623 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     // Deploy vault's Safe contract
     // Default: Use Smart Wallet with sponsored gas (L2s)
     // Toggle: Use EOA directly (pays gas from wallet)
-    const handleDeployVault = useCallback(async (vaultId: string) => {
-        if (!selectedVault) {
-            setDeployError("No vault selected");
-            return;
-        }
-
-        setIsDeploying(true);
-        setDeployError(null);
-
-        try {
-            // Get deployment info
-            const deployInfo = await getDeploymentInfo(vaultId);
-            
-            if (deployInfo.isDeployed) {
-                // Already deployed, just refresh
-                const updatedVault = await getVault(vaultId);
-                if (updatedVault) {
-                    setSelectedVault(updatedVault);
-                }
-                await fetchVaults();
-                setIsDeploying(false);
+    const handleDeployVault = useCallback(
+        async (vaultId: string) => {
+            if (!selectedVault) {
+                setDeployError("No vault selected");
                 return;
             }
 
-            const gasCost = getDeployGasCost(deployInfo.chainId);
-            console.log("[VaultList] Deploying vault Safe:", deployInfo);
-            console.log("[VaultList] Chain:", deployInfo.chainId, "Owners:", deployInfo.owners.length);
-            console.log("[VaultList] saltNonce from API:", deployInfo.saltNonce, "as BigInt:", BigInt(deployInfo.saltNonce || "0").toString());
-            console.log("[VaultList] saltNonce hex:", "0x" + BigInt(deployInfo.saltNonce || "0").toString(16));
-            console.log("[VaultList] Stored safe address:", deployInfo.safeAddress);
-            console.log("[VaultList] Sorted owners:", [...(deployInfo.owners as string[])].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
-            console.log("[VaultList] Using Sponsored:", useSponsoredGas, "Chain supports:", gasCost.isSponsored);
+            setIsDeploying(true);
+            setDeployError(null);
 
-            // Double-check on-chain status before deploying (in case previous attempt succeeded)
-            // This prevents "Create2 call failed" errors when Safe already exists
-            if (deployInfo.isDeployed) {
-                console.log("[VaultList] Safe already deployed on-chain, updating database...");
-                await confirmDeployment(vaultId, "");
-                const updatedVault = await getVault(vaultId);
-                if (updatedVault) {
-                    setSelectedVault(updatedVault);
-                }
-                await fetchVaults();
-                setIsDeploying(false);
-                return;
-            }
-
-            let txHash: Hex;
-            let safeAddress: Address;
-
-            // Deployment paths:
-            // 1. No sponsored gas OR chain doesn't support it → EOA deployment (requires connected wallet)
-            // 2. Sponsored gas + passkey user → Passkey-based Smart Wallet deployment
-            // 3. Sponsored gas + wallet connected → Wallet-based Smart Wallet deployment
-            
-            if (!useSponsoredGas || !gasCost.isSponsored) {
-                // EOA deployment - connected wallet pays gas directly
-                if (!walletClient) {
-                    setDeployError("Please connect your wallet to deploy");
-                    setIsDeploying(false);
-                    return;
-                }
-
-                console.log("[VaultList] Deploying via EOA (wallet pays gas)");
-                const result = await deployMultiSigSafeWithEOA(
-                    deployInfo.owners as Address[],
-                    deployInfo.threshold,
-                    deployInfo.chainId,
-                    walletClient as {
-                        account: { address: Address };
-                        writeContract: (args: unknown) => Promise<Hex>;
-                    },
-                    BigInt(deployInfo.saltNonce || "0")
-                );
-                txHash = result.txHash;
-                safeAddress = result.safeAddress;
-                
-            } else if (passkeyCredential && isPasskeyUser && !isConnected) {
-                // PASSKEY DEPLOYMENT - for users without a connected wallet
-                // Uses their passkey to sign via their Smart Wallet
-                console.log("[VaultList] Deploying via Passkey Smart Wallet (sponsored gas)");
-                
-                try {
-                    const result = await deployVaultViaPasskey(
-                        deployInfo.owners as Address[],
-                        deployInfo.threshold,
-                        deployInfo.chainId,
-                        passkeyCredential,
-                        BigInt(deployInfo.saltNonce || "0")
-                    );
-                    txHash = result.txHash;
-                    safeAddress = result.safeAddress;
-                } catch (passkeyError: unknown) {
-                    const errorMsg = passkeyError instanceof Error ? passkeyError.message : String(passkeyError);
-                    
-                    // If bundler simulation fails, show helpful error
-                    if (errorMsg.includes("Create2 call failed") || errorMsg.includes("simulation")) {
-                        console.log("[VaultList] Passkey bundler simulation failed:", errorMsg);
-                        throw new Error("Deployment failed. The vault may already exist - try the Sync button.");
-                    }
-                    
-                    throw passkeyError;
-                }
-                
-            } else {
-                // WALLET-BASED Smart Wallet deployment - sponsored gas via paymaster
-                // Try to ensure wallet is connected (handles PWA resume scenarios)
-                if (!connectedAddress || !isConnected) {
-                    console.log("[VaultList] Wallet appears disconnected, attempting reconnect...");
-                    const reconnected = await ensureConnected();
-                    if (!reconnected) {
-                        // If we have a passkey, suggest using that instead
-                        if (passkeyCredential) {
-                            setDeployError("Wallet not connected. Make sure 'Use sponsored gas' is checked to deploy with your passkey.");
-                        } else {
-                            setDeployError("Wallet disconnected. Please reconnect your wallet and try again.");
-                        }
-                        setIsDeploying(false);
-                        return;
-                    }
-                    console.log("[VaultList] Wallet reconnected successfully");
-                }
-
-                console.log("[VaultList] Deploying via Wallet Smart Wallet (sponsored gas)");
-                
-                try {
-                    const result = await deployVaultViaSponsoredGas(
-                        deployInfo.owners as Address[],
-                        deployInfo.threshold,
-                        deployInfo.chainId,
-                        connectedAddress as Address,
-                        async (message: string) => {
-                            // Check wallet is still connected before signing, try reconnect
-                            if (!isConnected) {
-                                const reconnected = await ensureConnected();
-                                if (!reconnected) {
-                                    throw new Error("Wallet disconnected during signing. Please reconnect.");
-                                }
-                            }
-                            return await signMessageAsync({ message }) as Hex;
-                        },
-                        async (data: unknown) => {
-                            // Check wallet is still connected before signing, try reconnect
-                            if (!isConnected) {
-                                const reconnected = await ensureConnected();
-                                if (!reconnected) {
-                                    throw new Error("Wallet disconnected during signing. Please reconnect.");
-                                }
-                            }
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            return await signTypedDataAsync(data as any) as Hex;
-                        },
-                        BigInt(deployInfo.saltNonce || "0")
-                    );
-                    txHash = result.txHash;
-                    safeAddress = result.safeAddress;
-                } catch (sponsoredError: unknown) {
-                    const errorMsg = sponsoredError instanceof Error ? sponsoredError.message : String(sponsoredError);
-                    
-                    // Handle wallet disconnection
-                    if (errorMsg.toLowerCase().includes("not connected") || 
-                        errorMsg.toLowerCase().includes("disconnected") ||
-                        errorMsg.toLowerCase().includes("no account")) {
-                        throw new Error("Wallet disconnected. Please reconnect your wallet and try again.");
-                    }
-                    
-                    // If bundler simulation fails, show helpful error (don't auto-fallback to EOA)
-                    if (errorMsg.includes("Create2 call failed") || errorMsg.includes("simulation")) {
-                        console.log("[VaultList] Bundler simulation failed:", errorMsg);
-                        throw new Error("Sponsored gas unavailable. Uncheck 'Use sponsored gas' to deploy with your wallet instead.");
-                    }
-                    
-                    // Re-throw other errors
-                    throw sponsoredError;
-                }
-            }
-
-            console.log("[VaultList] Safe deployment tx:", txHash, "Safe:", safeAddress);
-
-            // Wait for transaction confirmation
-            // For passkey users, wagmi's publicClient may not be available, so use our own
-            const waitClient = publicClient || getPublicClient(deployInfo.chainId);
-            console.log("[VaultList] Waiting for transaction confirmation (timeout: 2min)...");
-            
             try {
-                await waitClient.waitForTransactionReceipt({ 
-                    hash: txHash, 
-                    confirmations: 1,
-                    timeout: AA_TX_TIMEOUT, // 2 minute timeout for AA transactions
-                });
-                console.log("[VaultList] Transaction confirmed, verifying on-chain deployment...");
-            } catch (waitError: unknown) {
-                // Log but don't fail - the tx may have succeeded even if we timed out
-                const errorMsg = waitError instanceof Error ? waitError.message : String(waitError);
-                if (errorMsg.includes("Timed out") || errorMsg.includes("timeout")) {
-                    console.log("[VaultList] Receipt wait timed out, but tx may have succeeded. Proceeding to poll...");
-                } else {
-                    console.warn("[VaultList] Error waiting for receipt:", errorMsg);
-                }
-            }
+                // Get deployment info
+                const deployInfo = await getDeploymentInfo(vaultId);
 
-            // Poll for on-chain deployment with retries (bundler transactions can have slight delays)
-            let deployed = false;
-            let retries = 0;
-            const maxRetries = 20; // More retries for slow bundlers
-            const retryDelay = 2000; // 2 seconds between checks
-
-            console.log("[VaultList] Polling for on-chain deployment confirmation...");
-
-            while (!deployed && retries < maxRetries) {
-                // Small delay before checking
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
-                retries++;
-                
-                try {
-                    // Use the deploy API to check and update status
-                    await confirmDeployment(vaultId, txHash);
-                    deployed = true;
-                    console.log("[VaultList] Vault deployment confirmed!");
-                } catch (confirmError: unknown) {
-                    // Check if it's a "pending" response (202) vs actual error
-                    const errorMessage = confirmError instanceof Error ? confirmError.message : "";
-                    if (errorMessage.includes("pending") || errorMessage.includes("not yet deployed")) {
-                        console.log(`[VaultList] Deployment check attempt ${retries}/${maxRetries} - still pending...`);
-                    } else {
-                        console.error(`[VaultList] Deployment check error:`, confirmError);
-                    }
-                }
-            }
-            
-            // If polling timed out, do ONE final on-chain check before giving up
-            // DO NOT use force=true here - that should only be for Create2 failures
-            if (!deployed) {
-                console.log("[VaultList] Polling timed out, doing final on-chain verification...");
-                try {
-                    const finalCheckClient = publicClient || getPublicClient(deployInfo.chainId);
-                    const code = await finalCheckClient.getCode({ address: safeAddress as Address });
-                    const actuallyDeployed = code && code !== '0x' && code.length > 2;
-                    
-                    if (actuallyDeployed) {
-                        console.log("[VaultList] Contract exists on-chain! Confirming deployment...");
-                        await confirmDeployment(vaultId, txHash, false); // NOT force - verify on-chain
-                        deployed = true;
-                    } else {
-                        console.warn("[VaultList] Contract NOT deployed on-chain after timeout");
-                        setDeployError("Deployment may have failed. Please try again or check the transaction.");
-                        setIsDeploying(false);
-                        return;
-                    }
-                } catch (finalCheckError) {
-                    console.warn("[VaultList] Final verification failed:", finalCheckError);
-                    setDeployError("Transaction sent but verification timed out. Click Sync to check status.");
-                    setIsDeploying(false);
-                    return;
-                }
-            }
-
-            // Verify on-chain owners match expected owners
-            console.log("[VaultList] Verifying vault owners match expected...");
-            try {
-                const verifyClient = publicClient || getPublicClient(deployInfo.chainId);
-                const onChainOwners = await verifyClient.readContract({
-                    address: safeAddress as Address,
-                    abi: [{
-                        name: "getOwners",
-                        type: "function",
-                        inputs: [],
-                        outputs: [{ name: "", type: "address[]" }],
-                    }],
-                    functionName: "getOwners",
-                }) as Address[];
-                
-                // Normalize for comparison
-                const expectedOwners = (deployInfo.owners as string[]).map(o => o.toLowerCase()).sort();
-                const actualOwners = (onChainOwners as string[]).map(o => o.toLowerCase()).sort();
-                
-                console.log("[VaultList] Expected owners:", expectedOwners);
-                console.log("[VaultList] Actual owners:", actualOwners);
-                
-                // Check if they match
-                const ownersMatch = expectedOwners.length === actualOwners.length &&
-                    expectedOwners.every((owner, i) => owner === actualOwners[i]);
-                
-                if (!ownersMatch) {
-                    console.error("[VaultList] OWNER MISMATCH DETECTED!");
-                    console.error("[VaultList] Expected:", expectedOwners);
-                    console.error("[VaultList] Got:", actualOwners);
-                    // Don't fail deployment, but log a warning - the vault is deployed
-                    // but users might have trouble executing transactions
-                    setDeployError("Warning: Vault deployed but owners may not match expected. Try refreshing.");
-                }
-            } catch (ownerCheckError) {
-                console.warn("[VaultList] Could not verify owners:", ownerCheckError);
-            }
-            
-            // Refresh vault details
-            const updatedVault = await getVault(vaultId);
-            if (updatedVault) {
-                setSelectedVault(updatedVault);
-            }
-            
-            console.log("[VaultList] Vault deployed successfully!");
-        } catch (err) {
-            console.error("[VaultList] Deploy error:", err);
-            const errorMsg = err instanceof Error ? err.message : "Failed to deploy vault";
-            
-            // "Create2 call failed" means the Safe already exists at that address!
-            // This happens when a previous deployment succeeded but DB wasn't updated
-            if (errorMsg.includes("Create2 call failed") || errorMsg.includes("437265617465322063616c6c206661696c6564")) {
-                console.log("[VaultList] Create2 failed = Safe already exists! Marking as deployed with force=true...");
-                try {
-                    // Mark as deployed in the database, force=true bypasses on-chain check
-                    // because Create2 failure IS proof that the contract exists
-                    await confirmDeployment(vaultId, "", true);
+                if (deployInfo.isDeployed) {
+                    // Already deployed, just refresh
                     const updatedVault = await getVault(vaultId);
                     if (updatedVault) {
                         setSelectedVault(updatedVault);
                     }
                     await fetchVaults();
-                    setDeployError(null); // Clear error since we fixed it
-                    console.log("[VaultList] Vault marked as deployed successfully!");
-                } catch (syncErr) {
-                    console.error("[VaultList] Failed to mark vault as deployed:", syncErr);
-                    setDeployError("Safe is deployed but failed to update database. Try the Sync button.");
+                    setIsDeploying(false);
+                    return;
                 }
-            } else if (errorMsg.includes("User rejected") || errorMsg.includes("User denied")) {
-                setDeployError("Transaction cancelled");
-            } else {
-                setDeployError(errorMsg);
-            }
-        } finally {
-            setIsDeploying(false);
-        }
-    }, [walletClient, publicClient, selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults, useSponsoredGas, connectedAddress, isConnected, signMessageAsync, signTypedDataAsync, passkeyCredential, isPasskeyUser]);
 
-    // Sync deployment status - checks on-chain state and updates DB if needed
-    const [isSyncing, setIsSyncing] = useState(false);
-    const handleSyncStatus = useCallback(async (vaultId: string, silent: boolean = false) => {
-        if (!selectedVault) return false;
-        
-        if (!silent) setIsSyncing(true);
-        try {
-            console.log("[VaultList] Syncing deployment status for vault:", vaultId);
-            
-            // Call getDeploymentInfo which checks on-chain and auto-updates DB
-            const deployInfo = await getDeploymentInfo(vaultId);
-            console.log("[VaultList] Deploy info:", deployInfo);
-            
-            if (deployInfo.isDeployed && !selectedVault.isDeployed) {
-                // Status changed - update DB and refresh
-                console.log("[VaultList] Safe is deployed on-chain! Updating database...");
-                await confirmDeployment(vaultId, "");
-                
+                const gasCost = getDeployGasCost(deployInfo.chainId);
+                console.log("[VaultList] Deploying vault Safe:", deployInfo);
+                console.log(
+                    "[VaultList] Chain:",
+                    deployInfo.chainId,
+                    "Owners:",
+                    deployInfo.owners.length,
+                );
+                console.log(
+                    "[VaultList] saltNonce from API:",
+                    deployInfo.saltNonce,
+                    "as BigInt:",
+                    BigInt(deployInfo.saltNonce || "0").toString(),
+                );
+                console.log(
+                    "[VaultList] saltNonce hex:",
+                    "0x" + BigInt(deployInfo.saltNonce || "0").toString(16),
+                );
+                console.log(
+                    "[VaultList] Stored safe address:",
+                    deployInfo.safeAddress,
+                );
+                console.log(
+                    "[VaultList] Sorted owners:",
+                    [...(deployInfo.owners as string[])].sort((a, b) =>
+                        a.toLowerCase().localeCompare(b.toLowerCase()),
+                    ),
+                );
+                console.log(
+                    "[VaultList] Using Sponsored:",
+                    useSponsoredGas,
+                    "Chain supports:",
+                    gasCost.isSponsored,
+                );
+
+                // Double-check on-chain status before deploying (in case previous attempt succeeded)
+                // This prevents "Create2 call failed" errors when Safe already exists
+                if (deployInfo.isDeployed) {
+                    console.log(
+                        "[VaultList] Safe already deployed on-chain, updating database...",
+                    );
+                    await confirmDeployment(vaultId, "");
+                    const updatedVault = await getVault(vaultId);
+                    if (updatedVault) {
+                        setSelectedVault(updatedVault);
+                    }
+                    await fetchVaults();
+                    setIsDeploying(false);
+                    return;
+                }
+
+                let txHash: Hex;
+                let safeAddress: Address;
+
+                // Deployment paths:
+                // 1. No sponsored gas OR chain doesn't support it → EOA deployment (requires connected wallet)
+                // 2. Sponsored gas + passkey user → Passkey-based Smart Wallet deployment
+                // 3. Sponsored gas + wallet connected → Wallet-based Smart Wallet deployment
+
+                if (!useSponsoredGas || !gasCost.isSponsored) {
+                    // EOA deployment - connected wallet pays gas directly
+                    if (!walletClient) {
+                        setDeployError("Please connect your wallet to deploy");
+                        setIsDeploying(false);
+                        return;
+                    }
+
+                    console.log(
+                        "[VaultList] Deploying via EOA (wallet pays gas)",
+                    );
+                    const result = await deployMultiSigSafeWithEOA(
+                        deployInfo.owners as Address[],
+                        deployInfo.threshold,
+                        deployInfo.chainId,
+                        walletClient as {
+                            account: { address: Address };
+                            writeContract: (args: unknown) => Promise<Hex>;
+                        },
+                        BigInt(deployInfo.saltNonce || "0"),
+                    );
+                    txHash = result.txHash;
+                    safeAddress = result.safeAddress;
+                } else if (passkeyCredential && isPasskeyUser && !isConnected) {
+                    // PASSKEY DEPLOYMENT - for users without a connected wallet
+                    // Uses their passkey to sign via their Smart Wallet
+                    console.log(
+                        "[VaultList] Deploying via Passkey Smart Wallet (sponsored gas)",
+                    );
+
+                    try {
+                        const result = await deployVaultViaPasskey(
+                            deployInfo.owners as Address[],
+                            deployInfo.threshold,
+                            deployInfo.chainId,
+                            passkeyCredential,
+                            BigInt(deployInfo.saltNonce || "0"),
+                        );
+                        txHash = result.txHash;
+                        safeAddress = result.safeAddress;
+                    } catch (passkeyError: unknown) {
+                        const errorMsg =
+                            passkeyError instanceof Error
+                                ? passkeyError.message
+                                : String(passkeyError);
+
+                        // If bundler simulation fails, show helpful error
+                        if (
+                            errorMsg.includes("Create2 call failed") ||
+                            errorMsg.includes("simulation")
+                        ) {
+                            console.log(
+                                "[VaultList] Passkey bundler simulation failed:",
+                                errorMsg,
+                            );
+                            throw new Error(
+                                "Deployment failed. The vault may already exist - try the Sync button.",
+                            );
+                        }
+
+                        throw passkeyError;
+                    }
+                } else {
+                    // WALLET-BASED Smart Wallet deployment - sponsored gas via paymaster
+                    // Try to ensure wallet is connected (handles PWA resume scenarios)
+                    if (!connectedAddress || !isConnected) {
+                        console.log(
+                            "[VaultList] Wallet appears disconnected, attempting reconnect...",
+                        );
+                        const reconnected = await ensureConnected();
+                        if (!reconnected) {
+                            // If we have a passkey, suggest using that instead
+                            if (passkeyCredential) {
+                                setDeployError(
+                                    "Wallet not connected. Make sure 'Use sponsored gas' is checked to deploy with your passkey.",
+                                );
+                            } else {
+                                setDeployError(
+                                    "Wallet disconnected. Please reconnect your wallet and try again.",
+                                );
+                            }
+                            setIsDeploying(false);
+                            return;
+                        }
+                        console.log(
+                            "[VaultList] Wallet reconnected successfully",
+                        );
+                    }
+
+                    console.log(
+                        "[VaultList] Deploying via Wallet Smart Wallet (sponsored gas)",
+                    );
+
+                    try {
+                        const result = await deployVaultViaSponsoredGas(
+                            deployInfo.owners as Address[],
+                            deployInfo.threshold,
+                            deployInfo.chainId,
+                            connectedAddress as Address,
+                            async (message: string) => {
+                                // Check wallet is still connected before signing, try reconnect
+                                if (!isConnected) {
+                                    const reconnected = await ensureConnected();
+                                    if (!reconnected) {
+                                        throw new Error(
+                                            "Wallet disconnected during signing. Please reconnect.",
+                                        );
+                                    }
+                                }
+                                return (await signMessageAsync({
+                                    message,
+                                })) as Hex;
+                            },
+                            async (data: unknown) => {
+                                // Check wallet is still connected before signing, try reconnect
+                                if (!isConnected) {
+                                    const reconnected = await ensureConnected();
+                                    if (!reconnected) {
+                                        throw new Error(
+                                            "Wallet disconnected during signing. Please reconnect.",
+                                        );
+                                    }
+                                }
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                return (await signTypedDataAsync(
+                                    data as any,
+                                )) as Hex;
+                            },
+                            BigInt(deployInfo.saltNonce || "0"),
+                        );
+                        txHash = result.txHash;
+                        safeAddress = result.safeAddress;
+                    } catch (sponsoredError: unknown) {
+                        const errorMsg =
+                            sponsoredError instanceof Error
+                                ? sponsoredError.message
+                                : String(sponsoredError);
+
+                        // Handle wallet disconnection
+                        if (
+                            errorMsg.toLowerCase().includes("not connected") ||
+                            errorMsg.toLowerCase().includes("disconnected") ||
+                            errorMsg.toLowerCase().includes("no account")
+                        ) {
+                            throw new Error(
+                                "Wallet disconnected. Please reconnect your wallet and try again.",
+                            );
+                        }
+
+                        // If bundler simulation fails, show helpful error (don't auto-fallback to EOA)
+                        if (
+                            errorMsg.includes("Create2 call failed") ||
+                            errorMsg.includes("simulation")
+                        ) {
+                            console.log(
+                                "[VaultList] Bundler simulation failed:",
+                                errorMsg,
+                            );
+                            throw new Error(
+                                "Sponsored gas unavailable. Uncheck 'Use sponsored gas' to deploy with your wallet instead.",
+                            );
+                        }
+
+                        // Re-throw other errors
+                        throw sponsoredError;
+                    }
+                }
+
+                console.log(
+                    "[VaultList] Safe deployment tx:",
+                    txHash,
+                    "Safe:",
+                    safeAddress,
+                );
+
+                // Wait for transaction confirmation
+                // For passkey users, wagmi's publicClient may not be available, so use our own
+                const waitClient =
+                    publicClient || getPublicClient(deployInfo.chainId);
+                console.log(
+                    "[VaultList] Waiting for transaction confirmation (timeout: 2min)...",
+                );
+
+                try {
+                    await waitClient.waitForTransactionReceipt({
+                        hash: txHash,
+                        confirmations: 1,
+                        timeout: AA_TX_TIMEOUT, // 2 minute timeout for AA transactions
+                    });
+                    console.log(
+                        "[VaultList] Transaction confirmed, verifying on-chain deployment...",
+                    );
+                } catch (waitError: unknown) {
+                    // Log but don't fail - the tx may have succeeded even if we timed out
+                    const errorMsg =
+                        waitError instanceof Error
+                            ? waitError.message
+                            : String(waitError);
+                    if (
+                        errorMsg.includes("Timed out") ||
+                        errorMsg.includes("timeout")
+                    ) {
+                        console.log(
+                            "[VaultList] Receipt wait timed out, but tx may have succeeded. Proceeding to poll...",
+                        );
+                    } else {
+                        console.warn(
+                            "[VaultList] Error waiting for receipt:",
+                            errorMsg,
+                        );
+                    }
+                }
+
+                // Poll for on-chain deployment with retries (bundler transactions can have slight delays)
+                let deployed = false;
+                let retries = 0;
+                const maxRetries = 20; // More retries for slow bundlers
+                const retryDelay = 2000; // 2 seconds between checks
+
+                console.log(
+                    "[VaultList] Polling for on-chain deployment confirmation...",
+                );
+
+                while (!deployed && retries < maxRetries) {
+                    // Small delay before checking
+                    await new Promise((resolve) =>
+                        setTimeout(resolve, retryDelay),
+                    );
+                    retries++;
+
+                    try {
+                        // Use the deploy API to check and update status
+                        await confirmDeployment(vaultId, txHash);
+                        deployed = true;
+                        console.log("[VaultList] Vault deployment confirmed!");
+                    } catch (confirmError: unknown) {
+                        // Check if it's a "pending" response (202) vs actual error
+                        const errorMessage =
+                            confirmError instanceof Error
+                                ? confirmError.message
+                                : "";
+                        if (
+                            errorMessage.includes("pending") ||
+                            errorMessage.includes("not yet deployed")
+                        ) {
+                            console.log(
+                                `[VaultList] Deployment check attempt ${retries}/${maxRetries} - still pending...`,
+                            );
+                        } else {
+                            console.error(
+                                `[VaultList] Deployment check error:`,
+                                confirmError,
+                            );
+                        }
+                    }
+                }
+
+                // If polling timed out, do ONE final on-chain check before giving up
+                // DO NOT use force=true here - that should only be for Create2 failures
+                if (!deployed) {
+                    console.log(
+                        "[VaultList] Polling timed out, doing final on-chain verification...",
+                    );
+                    try {
+                        const finalCheckClient =
+                            publicClient || getPublicClient(deployInfo.chainId);
+                        const code = await finalCheckClient.getCode({
+                            address: safeAddress as Address,
+                        });
+                        const actuallyDeployed =
+                            code && code !== "0x" && code.length > 2;
+
+                        if (actuallyDeployed) {
+                            console.log(
+                                "[VaultList] Contract exists on-chain! Confirming deployment...",
+                            );
+                            await confirmDeployment(vaultId, txHash, false); // NOT force - verify on-chain
+                            deployed = true;
+                        } else {
+                            console.warn(
+                                "[VaultList] Contract NOT deployed on-chain after timeout",
+                            );
+                            setDeployError(
+                                "Deployment may have failed. Please try again or check the transaction.",
+                            );
+                            setIsDeploying(false);
+                            return;
+                        }
+                    } catch (finalCheckError) {
+                        console.warn(
+                            "[VaultList] Final verification failed:",
+                            finalCheckError,
+                        );
+                        setDeployError(
+                            "Transaction sent but verification timed out. Click Sync to check status.",
+                        );
+                        setIsDeploying(false);
+                        return;
+                    }
+                }
+
+                // Verify on-chain owners match expected owners
+                console.log(
+                    "[VaultList] Verifying vault owners match expected...",
+                );
+                try {
+                    const verifyClient =
+                        publicClient || getPublicClient(deployInfo.chainId);
+                    const onChainOwners = (await verifyClient.readContract({
+                        address: safeAddress as Address,
+                        abi: [
+                            {
+                                name: "getOwners",
+                                type: "function",
+                                inputs: [],
+                                outputs: [{ name: "", type: "address[]" }],
+                            },
+                        ],
+                        functionName: "getOwners",
+                    })) as Address[];
+
+                    // Normalize for comparison
+                    const expectedOwners = (deployInfo.owners as string[])
+                        .map((o) => o.toLowerCase())
+                        .sort();
+                    const actualOwners = (onChainOwners as string[])
+                        .map((o) => o.toLowerCase())
+                        .sort();
+
+                    console.log("[VaultList] Expected owners:", expectedOwners);
+                    console.log("[VaultList] Actual owners:", actualOwners);
+
+                    // Check if they match
+                    const ownersMatch =
+                        expectedOwners.length === actualOwners.length &&
+                        expectedOwners.every(
+                            (owner, i) => owner === actualOwners[i],
+                        );
+
+                    if (!ownersMatch) {
+                        console.error("[VaultList] OWNER MISMATCH DETECTED!");
+                        console.error("[VaultList] Expected:", expectedOwners);
+                        console.error("[VaultList] Got:", actualOwners);
+                        // Don't fail deployment, but log a warning - the vault is deployed
+                        // but users might have trouble executing transactions
+                        setDeployError(
+                            "Warning: Vault deployed but owners may not match expected. Try refreshing.",
+                        );
+                    }
+                } catch (ownerCheckError) {
+                    console.warn(
+                        "[VaultList] Could not verify owners:",
+                        ownerCheckError,
+                    );
+                }
+
                 // Refresh vault details
                 const updatedVault = await getVault(vaultId);
                 if (updatedVault) {
                     setSelectedVault(updatedVault);
                 }
-                await fetchVaults();
-                return true; // Deployment confirmed
-            } else if (deployInfo.isDeployed) {
-                // Just refresh to get latest state
-                const updatedVault = await getVault(vaultId);
-                if (updatedVault) {
-                    setSelectedVault(updatedVault);
+
+                console.log("[VaultList] Vault deployed successfully!");
+            } catch (err) {
+                console.error("[VaultList] Deploy error:", err);
+                const errorMsg =
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to deploy vault";
+
+                // "Create2 call failed" means the Safe already exists at that address!
+                // This happens when a previous deployment succeeded but DB wasn't updated
+                if (
+                    errorMsg.includes("Create2 call failed") ||
+                    errorMsg.includes("437265617465322063616c6c206661696c6564")
+                ) {
+                    console.log(
+                        "[VaultList] Create2 failed = Safe already exists! Marking as deployed with force=true...",
+                    );
+                    try {
+                        // Mark as deployed in the database, force=true bypasses on-chain check
+                        // because Create2 failure IS proof that the contract exists
+                        await confirmDeployment(vaultId, "", true);
+                        const updatedVault = await getVault(vaultId);
+                        if (updatedVault) {
+                            setSelectedVault(updatedVault);
+                        }
+                        await fetchVaults();
+                        setDeployError(null); // Clear error since we fixed it
+                        console.log(
+                            "[VaultList] Vault marked as deployed successfully!",
+                        );
+                    } catch (syncErr) {
+                        console.error(
+                            "[VaultList] Failed to mark vault as deployed:",
+                            syncErr,
+                        );
+                        setDeployError(
+                            "Safe is deployed but failed to update database. Try the Sync button.",
+                        );
+                    }
+                } else if (
+                    errorMsg.includes("User rejected") ||
+                    errorMsg.includes("User denied")
+                ) {
+                    setDeployError("Transaction cancelled");
+                } else {
+                    setDeployError(errorMsg);
                 }
-                return true;
-            } else {
-                console.log("[VaultList] Safe is not deployed on-chain yet");
-                return false;
+            } finally {
+                setIsDeploying(false);
             }
-        } catch (err) {
-            console.error("[VaultList] Sync error:", err);
-            return false;
-        } finally {
-            if (!silent) setIsSyncing(false);
-        }
-    }, [selectedVault, getDeploymentInfo, confirmDeployment, getVault, fetchVaults]);
+        },
+        [
+            walletClient,
+            publicClient,
+            selectedVault,
+            getDeploymentInfo,
+            confirmDeployment,
+            getVault,
+            fetchVaults,
+            useSponsoredGas,
+            connectedAddress,
+            isConnected,
+            signMessageAsync,
+            signTypedDataAsync,
+            passkeyCredential,
+            isPasskeyUser,
+        ],
+    );
+
+    // Sync deployment status - checks on-chain state and updates DB if needed
+    const [isSyncing, setIsSyncing] = useState(false);
+    const handleSyncStatus = useCallback(
+        async (vaultId: string, silent: boolean = false) => {
+            if (!selectedVault) return false;
+
+            if (!silent) setIsSyncing(true);
+            try {
+                console.log(
+                    "[VaultList] Syncing deployment status for vault:",
+                    vaultId,
+                );
+
+                // Call getDeploymentInfo which checks on-chain and auto-updates DB
+                const deployInfo = await getDeploymentInfo(vaultId);
+                console.log("[VaultList] Deploy info:", deployInfo);
+
+                if (deployInfo.isDeployed && !selectedVault.isDeployed) {
+                    // Status changed - update DB and refresh
+                    console.log(
+                        "[VaultList] Safe is deployed on-chain! Updating database...",
+                    );
+                    await confirmDeployment(vaultId, "");
+
+                    // Refresh vault details
+                    const updatedVault = await getVault(vaultId);
+                    if (updatedVault) {
+                        setSelectedVault(updatedVault);
+                    }
+                    await fetchVaults();
+                    return true; // Deployment confirmed
+                } else if (deployInfo.isDeployed) {
+                    // Just refresh to get latest state
+                    const updatedVault = await getVault(vaultId);
+                    if (updatedVault) {
+                        setSelectedVault(updatedVault);
+                    }
+                    return true;
+                } else {
+                    console.log(
+                        "[VaultList] Safe is not deployed on-chain yet",
+                    );
+                    return false;
+                }
+            } catch (err) {
+                console.error("[VaultList] Sync error:", err);
+                return false;
+            } finally {
+                if (!silent) setIsSyncing(false);
+            }
+        },
+        [
+            selectedVault,
+            getDeploymentInfo,
+            confirmDeployment,
+            getVault,
+            fetchVaults,
+        ],
+    );
 
     // Auto-sync for undeployed vaults: check every 5 seconds after deployment attempt
     const [autoSyncAttempts, setAutoSyncAttempts] = useState(0);
     useEffect(() => {
         // Only auto-sync if vault is selected, not deployed, and we're not already deploying/syncing
-        if (!selectedVault || selectedVault.isDeployed || isDeploying || isSyncing) {
+        if (
+            !selectedVault ||
+            selectedVault.isDeployed ||
+            isDeploying ||
+            isSyncing
+        ) {
             setAutoSyncAttempts(0);
             return;
         }
 
         // Limit auto-sync attempts to avoid infinite polling
-        if (autoSyncAttempts >= 12) { // 12 attempts = 1 minute of checking
+        if (autoSyncAttempts >= 12) {
+            // 12 attempts = 1 minute of checking
             console.log("[VaultList] Auto-sync: max attempts reached");
             return;
         }
 
         const timer = setTimeout(async () => {
-            console.log(`[VaultList] Auto-sync attempt ${autoSyncAttempts + 1}/12...`);
+            console.log(
+                `[VaultList] Auto-sync attempt ${autoSyncAttempts + 1}/12...`,
+            );
             const deployed = await handleSyncStatus(selectedVault.id, true);
             if (deployed) {
                 console.log("[VaultList] Auto-sync: deployment confirmed!");
                 setAutoSyncAttempts(0);
             } else {
-                setAutoSyncAttempts(prev => prev + 1);
+                setAutoSyncAttempts((prev) => prev + 1);
             }
         }, 5000); // Check every 5 seconds
 
         return () => clearTimeout(timer);
-    }, [selectedVault, isDeploying, isSyncing, autoSyncAttempts, handleSyncStatus]);
+    }, [
+        selectedVault,
+        isDeploying,
+        isSyncing,
+        autoSyncAttempts,
+        handleSyncStatus,
+    ]);
 
     // Reset auto-sync counter when vault changes
     useEffect(() => {
@@ -870,17 +1260,30 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
             const response = await fetch(`/api/vault/${vaultId}/balances`, {
                 credentials: "include",
             });
-            console.log("[VaultList] Balance response status:", response.status);
+            console.log(
+                "[VaultList] Balance response status:",
+                response.status,
+            );
             if (response.ok) {
                 const data = await response.json();
-                console.log("[VaultList] Balance data received:", JSON.stringify(data, null, 2));
-                console.log("[VaultList] Tokens count:", data.tokens?.length || 0);
+                console.log(
+                    "[VaultList] Balance data received:",
+                    JSON.stringify(data, null, 2),
+                );
+                console.log(
+                    "[VaultList] Tokens count:",
+                    data.tokens?.length || 0,
+                );
                 console.log("[VaultList] Native balance:", data.nativeBalance);
                 console.log("[VaultList] Total USD:", data.totalUsd);
                 setBalances(data);
             } else {
                 const errorText = await response.text();
-                console.error("[VaultList] Balance fetch failed:", response.status, errorText);
+                console.error(
+                    "[VaultList] Balance fetch failed:",
+                    response.status,
+                    errorText,
+                );
             }
         } catch (err) {
             console.error("[VaultList] Error fetching balances:", err);
@@ -890,90 +1293,132 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     }, []);
 
     // Fetch transaction history from Blockscout
-    const fetchTransactions = useCallback(async (safeAddress: string, chainId: number) => {
-        console.log("[VaultList] Fetching transactions for:", safeAddress, "chain:", chainId);
-        setIsLoadingTransactions(true);
-        try {
-            const blockscoutUrls: Record<number, string> = {
-                1: "https://eth.blockscout.com",
-                8453: "https://base.blockscout.com",
-                42161: "https://arbitrum.blockscout.com",
-                10: "https://optimism.blockscout.com",
-                137: "https://polygon.blockscout.com",
-            };
-            
-            const blockscoutUrl = blockscoutUrls[chainId];
-            if (!blockscoutUrl) {
-                console.log("[VaultList] No blockscout URL for chain:", chainId);
-                return;
-            }
-            
-            // Fetch both regular transactions and token transfers
-            const [txResponse, tokenResponse] = await Promise.all([
-                fetch(`${blockscoutUrl}/api/v2/addresses/${safeAddress}/transactions?filter=to%20%7C%20from`, {
-                    headers: { Accept: "application/json" },
-                }),
-                fetch(`${blockscoutUrl}/api/v2/addresses/${safeAddress}/token-transfers?type=ERC-20`, {
-                    headers: { Accept: "application/json" },
-                }),
-            ]);
-            
-            const allTransactions: VaultTransaction[] = [];
-            const safeAddrLower = safeAddress.toLowerCase();
-            
-            // Process regular transactions (ETH transfers)
-            if (txResponse.ok) {
-                const txData = await txResponse.json();
-                console.log("[VaultList] Regular transactions:", txData.items?.length || 0);
-                for (const tx of txData.items || []) {
-                    // Only include if there was actual value transfer
-                    if (tx.value && tx.value !== "0") {
+    const fetchTransactions = useCallback(
+        async (safeAddress: string, chainId: number) => {
+            console.log(
+                "[VaultList] Fetching transactions for:",
+                safeAddress,
+                "chain:",
+                chainId,
+            );
+            setIsLoadingTransactions(true);
+            try {
+                const blockscoutUrls: Record<number, string> = {
+                    1: "https://eth.blockscout.com",
+                    8453: "https://base.blockscout.com",
+                    42161: "https://arbitrum.blockscout.com",
+                    10: "https://optimism.blockscout.com",
+                    137: "https://polygon.blockscout.com",
+                };
+
+                const blockscoutUrl = blockscoutUrls[chainId];
+                if (!blockscoutUrl) {
+                    console.log(
+                        "[VaultList] No blockscout URL for chain:",
+                        chainId,
+                    );
+                    return;
+                }
+
+                // Fetch both regular transactions and token transfers
+                const [txResponse, tokenResponse] = await Promise.all([
+                    fetch(
+                        `${blockscoutUrl}/api/v2/addresses/${safeAddress}/transactions?filter=to%20%7C%20from`,
+                        {
+                            headers: { Accept: "application/json" },
+                        },
+                    ),
+                    fetch(
+                        `${blockscoutUrl}/api/v2/addresses/${safeAddress}/token-transfers?type=ERC-20`,
+                        {
+                            headers: { Accept: "application/json" },
+                        },
+                    ),
+                ]);
+
+                const allTransactions: VaultTransaction[] = [];
+                const safeAddrLower = safeAddress.toLowerCase();
+
+                // Process regular transactions (ETH transfers)
+                if (txResponse.ok) {
+                    const txData = await txResponse.json();
+                    console.log(
+                        "[VaultList] Regular transactions:",
+                        txData.items?.length || 0,
+                    );
+                    for (const tx of txData.items || []) {
+                        // Only include if there was actual value transfer
+                        if (tx.value && tx.value !== "0") {
+                            allTransactions.push({
+                                hash: tx.hash,
+                                from: tx.from?.hash || "",
+                                to: tx.to?.hash || "",
+                                value: tx.value,
+                                timestamp: tx.timestamp,
+                                type:
+                                    tx.to?.hash?.toLowerCase() === safeAddrLower
+                                        ? "incoming"
+                                        : "outgoing",
+                                status:
+                                    tx.status === "ok"
+                                        ? "confirmed"
+                                        : tx.status === "error"
+                                          ? "failed"
+                                          : "pending",
+                            });
+                        }
+                    }
+                }
+
+                // Process token transfers
+                if (tokenResponse.ok) {
+                    const tokenData = await tokenResponse.json();
+                    console.log(
+                        "[VaultList] Token transfers:",
+                        tokenData.items?.length || 0,
+                    );
+                    for (const transfer of tokenData.items || []) {
                         allTransactions.push({
-                            hash: tx.hash,
-                            from: tx.from?.hash || "",
-                            to: tx.to?.hash || "",
-                            value: tx.value,
-                            timestamp: tx.timestamp,
-                            type: tx.to?.hash?.toLowerCase() === safeAddrLower ? "incoming" : "outgoing",
-                            status: tx.status === "ok" ? "confirmed" : tx.status === "error" ? "failed" : "pending",
+                            hash: transfer.tx_hash,
+                            from: transfer.from?.hash || "",
+                            to: transfer.to?.hash || "",
+                            value: transfer.total?.value || "0",
+                            timestamp: transfer.timestamp,
+                            type:
+                                transfer.to?.hash?.toLowerCase() ===
+                                safeAddrLower
+                                    ? "incoming"
+                                    : "outgoing",
+                            status: "confirmed",
+                            tokenSymbol: transfer.token?.symbol,
+                            tokenDecimals: parseInt(
+                                transfer.token?.decimals || "18",
+                            ),
+                            tokenName: transfer.token?.name,
                         });
                     }
                 }
+
+                // Sort by timestamp descending
+                allTransactions.sort(
+                    (a, b) =>
+                        new Date(b.timestamp).getTime() -
+                        new Date(a.timestamp).getTime(),
+                );
+
+                console.log(
+                    "[VaultList] Total transactions:",
+                    allTransactions.length,
+                );
+                setTransactions(allTransactions.slice(0, 20)); // Limit to 20 most recent
+            } catch (err) {
+                console.error("[VaultList] Error fetching transactions:", err);
+            } finally {
+                setIsLoadingTransactions(false);
             }
-            
-            // Process token transfers
-            if (tokenResponse.ok) {
-                const tokenData = await tokenResponse.json();
-                console.log("[VaultList] Token transfers:", tokenData.items?.length || 0);
-                for (const transfer of tokenData.items || []) {
-                    allTransactions.push({
-                        hash: transfer.tx_hash,
-                        from: transfer.from?.hash || "",
-                        to: transfer.to?.hash || "",
-                        value: transfer.total?.value || "0",
-                        timestamp: transfer.timestamp,
-                        type: transfer.to?.hash?.toLowerCase() === safeAddrLower ? "incoming" : "outgoing",
-                        status: "confirmed",
-                        tokenSymbol: transfer.token?.symbol,
-                        tokenDecimals: parseInt(transfer.token?.decimals || "18"),
-                        tokenName: transfer.token?.name,
-                    });
-                }
-            }
-            
-            // Sort by timestamp descending
-            allTransactions.sort((a, b) => 
-                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            );
-            
-            console.log("[VaultList] Total transactions:", allTransactions.length);
-            setTransactions(allTransactions.slice(0, 20)); // Limit to 20 most recent
-        } catch (err) {
-            console.error("[VaultList] Error fetching transactions:", err);
-        } finally {
-            setIsLoadingTransactions(false);
-        }
-    }, []);
+        },
+        [],
+    );
 
     const handleViewVault = async (vault: VaultListItem) => {
         setIsLoadingDetails(true);
@@ -984,7 +1429,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         const details = await getVault(vault.id);
         setSelectedVault(details);
         setIsLoadingDetails(false);
-        
+
         // Fetch balances, transactions, and pending txs after getting vault details
         if (details) {
             fetchBalances(details.id);
@@ -995,7 +1440,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
     const handleDelete = async (vaultId: string) => {
         if (!confirm("Are you sure you want to delete this vault?")) return;
-        
+
         setIsDeleting(vaultId);
         try {
             await deleteVault(vaultId);
@@ -1003,7 +1448,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 setSelectedVault(null);
             }
         } catch (err) {
-            alert(err instanceof Error ? err.message : "Failed to delete vault");
+            alert(
+                err instanceof Error ? err.message : "Failed to delete vault",
+            );
         } finally {
             setIsDeleting(null);
         }
@@ -1015,7 +1462,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const truncateAddress = (addr: string) => 
+    const truncateAddress = (addr: string) =>
         `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
     const getTimeAgo = (date: Date): string => {
@@ -1024,7 +1471,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
-        
+
         if (diffMins < 1) return "Just now";
         if (diffMins < 60) return `${diffMins}m ago`;
         if (diffHours < 24) return `${diffHours}h ago`;
@@ -1041,7 +1488,11 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
             });
             if (response.ok) {
                 const data = await response.json();
-                setPendingTxs(data.transactions?.filter((tx: PendingTransaction) => tx.status === "pending") || []);
+                setPendingTxs(
+                    data.transactions?.filter(
+                        (tx: PendingTransaction) => tx.status === "pending",
+                    ) || [],
+                );
             }
         } catch (err) {
             console.error("[VaultList] Error fetching pending txs:", err);
@@ -1053,17 +1504,22 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     // Sign a pending transaction with actual wallet signature
     const handleSignTransaction = async (tx: PendingTransaction) => {
         if (!selectedVault) return;
-        
+
         try {
             // Find the user's Smart Wallet address from vault members
             // This is required for passkey users whose Smart Wallet is the vault owner
             const userMember = selectedVault.members.find(
-                (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+                (m) => m.address.toLowerCase() === userAddress.toLowerCase(),
             );
-            const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
-            
-            console.log("[VaultList] Signing with Smart Wallet:", userSmartWalletAddress || userAddress);
-            
+            const userSmartWalletAddress = userMember?.smartWalletAddress as
+                | Address
+                | undefined;
+
+            console.log(
+                "[VaultList] Signing with Smart Wallet:",
+                userSmartWalletAddress || userAddress,
+            );
+
             // Get the transaction details for signing
             const signResult = await vaultExecution.signTransaction({
                 safeAddress: selectedVault.safeAddress as Address,
@@ -1074,28 +1530,31 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 nonce: tx.nonce,
                 smartWalletAddress: userSmartWalletAddress, // Pass Smart Wallet address for EIP-1271 signing
             });
-            
+
             if (!signResult.success || !signResult.signature) {
                 alert(signResult.error || "Failed to sign");
                 return;
             }
-            
+
             // Store the signature in the database
-            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ 
-                    transactionId: tx.id, 
-                    action: "sign",
-                    signature: signResult.signature,
-                    signerAddress: signResult.signerAddress,
-                    safeTxHash: signResult.safeTxHash,
-                }),
-            });
-            
+            const response = await fetch(
+                `/api/vault/${selectedVault.id}/transactions`,
+                {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        transactionId: tx.id,
+                        action: "sign",
+                        signature: signResult.signature,
+                        signerAddress: signResult.signerAddress,
+                        safeTxHash: signResult.safeTxHash,
+                    }),
+                },
+            );
+
             const data = await response.json();
-            
+
             if (response.ok) {
                 alert(data.message || "✅ Signed successfully!");
                 fetchPendingTxs(selectedVault.id);
@@ -1111,24 +1570,35 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     // Execute a transaction (when threshold is met)
     const handleExecuteTransaction = async (tx: PendingTransaction) => {
         if (!selectedVault) return;
-        
+
         try {
             // Get signatures from the database (they should have real signatures now)
             const signatures = tx.confirmations
-                .filter(c => c.signature && !c.signature.startsWith("signed_by_") && !c.signature.startsWith("auto_signed"))
-                .map(c => ({
+                .filter(
+                    (c) =>
+                        c.signature &&
+                        !c.signature.startsWith("signed_by_") &&
+                        !c.signature.startsWith("auto_signed"),
+                )
+                .map((c) => ({
                     signerAddress: c.signer_address,
                     signature: c.signature!,
                 }));
-            
-            console.log("[VaultList] Executing with", signatures.length, "signatures");
-            
+
+            console.log(
+                "[VaultList] Executing with",
+                signatures.length,
+                "signatures",
+            );
+
             // Find the current user's smart wallet address (Safe owners are Smart Wallets, not EOAs)
             const userMember = selectedVault.members.find(
-                (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+                (m) => m.address.toLowerCase() === userAddress.toLowerCase(),
             );
-            const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
-            
+            const userSmartWalletAddress = userMember?.smartWalletAddress as
+                | Address
+                | undefined;
+
             // Execute on-chain with collected signatures
             const result = await vaultExecution.execute({
                 safeAddress: selectedVault.safeAddress as Address,
@@ -1139,38 +1609,55 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 signatures: signatures.length > 0 ? signatures : undefined,
                 smartWalletAddress: userSmartWalletAddress,
             });
-            
+
             if (result.success && result.txHash) {
-                alert(`✅ Transaction executed!\n\nTx Hash: ${result.txHash.slice(0, 10)}...${result.txHash.slice(-8)}`);
-                
+                alert(
+                    `✅ Transaction executed!\n\nTx Hash: ${result.txHash.slice(0, 10)}...${result.txHash.slice(-8)}`,
+                );
+
                 // Update the transaction status and hash in the database
                 await fetch(`/api/vault/${selectedVault.id}/transactions`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify({ 
-                        transactionId: tx.id, 
+                    body: JSON.stringify({
+                        transactionId: tx.id,
                         action: "executed",
-                        txHash: result.txHash 
+                        txHash: result.txHash,
                     }),
                 });
-                
+
                 fetchPendingTxs(selectedVault.id);
                 fetchBalances(selectedVault.id);
-                fetchTransactions(selectedVault.safeAddress, selectedVault.chainId);
+                fetchTransactions(
+                    selectedVault.safeAddress,
+                    selectedVault.chainId,
+                );
             } else if (result.needsMoreSignatures) {
-                alert(`Need ${result.threshold} signatures to execute.\n\nAsk other vault members to sign first.`);
+                alert(
+                    `Need ${result.threshold} signatures to execute.\n\nAsk other vault members to sign first.`,
+                );
             } else if (result.error) {
                 // Execution failed - show error and option to use Safe app
                 const safeAppUrl = `https://app.safe.global/transactions/queue?safe=${
-                    selectedVault.chainId === 1 ? "eth" : 
-                    selectedVault.chainId === 8453 ? "base" :
-                    selectedVault.chainId === 42161 ? "arb1" :
-                    selectedVault.chainId === 10 ? "oeth" :
-                    selectedVault.chainId === 137 ? "matic" : "eth"
+                    selectedVault.chainId === 1
+                        ? "eth"
+                        : selectedVault.chainId === 8453
+                          ? "base"
+                          : selectedVault.chainId === 42161
+                            ? "arb1"
+                            : selectedVault.chainId === 10
+                              ? "oeth"
+                              : selectedVault.chainId === 137
+                                ? "matic"
+                                : "eth"
                 }:${selectedVault.safeAddress}`;
-                
-                if (confirm(`${result.error}\n\nWould you like to try via the Safe app?`)) {
+
+                if (
+                    confirm(
+                        `${result.error}\n\nWould you like to try via the Safe app?`,
+                    )
+                ) {
                     window.open(safeAppUrl, "_blank");
                 }
             }
@@ -1183,18 +1670,22 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     // Cancel a pending transaction
     const cancelTransaction = async (transactionId: string) => {
         if (!selectedVault) return;
-        if (!confirm("Are you sure you want to cancel this transaction?")) return;
-        
+        if (!confirm("Are you sure you want to cancel this transaction?"))
+            return;
+
         try {
-            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ transactionId, action: "cancel" }),
-            });
-            
+            const response = await fetch(
+                `/api/vault/${selectedVault.id}/transactions`,
+                {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ transactionId, action: "cancel" }),
+                },
+            );
+
             const data = await response.json();
-            
+
             if (response.ok) {
                 alert(data.message);
                 fetchPendingTxs(selectedVault.id);
@@ -1209,49 +1700,64 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
     // Propose a new transaction
     const proposeTransaction = async () => {
-        if (!selectedVault || !sendToken || !actualVaultSendAmount || !ensResolver.resolvedAddress) {
+        if (
+            !selectedVault ||
+            !sendToken ||
+            !actualVaultSendAmount ||
+            !ensResolver.resolvedAddress
+        ) {
             alert("Please fill in all fields");
             return;
         }
 
         setIsProposing(true);
         try {
-            const displayAmount = isUsdMode 
+            const displayAmount = isUsdMode
                 ? `$${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(6)} ${sendToken.symbol})`
                 : `${actualVaultSendAmount} ${sendToken.symbol}`;
-            
-            const response = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({
-                    toAddress: ensResolver.resolvedAddress,
-                    amount: actualVaultSendAmount,
-                    tokenAddress: sendToken.contractAddress === "native" ? null : sendToken.contractAddress,
-                    tokenDecimals: sendToken.decimals,
-                    tokenSymbol: sendToken.symbol,
-                    description: `Send ${displayAmount} to ${ensResolver.input}`,
-                }),
-            });
+
+            const response = await fetch(
+                `/api/vault/${selectedVault.id}/transactions`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        toAddress: ensResolver.resolvedAddress,
+                        amount: actualVaultSendAmount,
+                        tokenAddress:
+                            sendToken.contractAddress === "native"
+                                ? null
+                                : sendToken.contractAddress,
+                        tokenDecimals: sendToken.decimals,
+                        tokenSymbol: sendToken.symbol,
+                        description: `Send ${displayAmount} to ${ensResolver.input}`,
+                    }),
+                },
+            );
 
             const data = await response.json();
-            
+
             if (response.ok && data.transaction) {
                 // Reset form
                 setSendAmount("");
                 setIsUsdMode(false);
                 setSendToken(null);
                 ensResolver.clear();
-                
+
                 // Now sign the transaction we just created
                 // This ensures the creator's signature is a real one (not a placeholder)
                 const userMember = selectedVault.members.find(
-                    (m) => m.address.toLowerCase() === userAddress.toLowerCase()
+                    (m) =>
+                        m.address.toLowerCase() === userAddress.toLowerCase(),
                 );
-                const userSmartWalletAddress = userMember?.smartWalletAddress as Address | undefined;
-                
-                console.log("[VaultList] Proposer signing their own transaction...");
-                
+                const userSmartWalletAddress =
+                    userMember?.smartWalletAddress as Address | undefined;
+
+                console.log(
+                    "[VaultList] Proposer signing their own transaction...",
+                );
+
                 const signResult = await vaultExecution.signTransaction({
                     safeAddress: selectedVault.safeAddress as Address,
                     chainId: selectedVault.chainId,
@@ -1261,32 +1767,42 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                     nonce: data.transaction.nonce,
                     smartWalletAddress: userSmartWalletAddress,
                 });
-                
+
                 if (signResult.success && signResult.signature) {
                     // Store the creator's real signature
-                    const signResponse = await fetch(`/api/vault/${selectedVault.id}/transactions`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                        body: JSON.stringify({
-                            transactionId: data.transaction.id,
-                            action: "sign",
-                            signature: signResult.signature,
-                            signerAddress: signResult.signerAddress,
-                            safeTxHash: signResult.safeTxHash,
-                        }),
-                    });
-                    
+                    const signResponse = await fetch(
+                        `/api/vault/${selectedVault.id}/transactions`,
+                        {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            credentials: "include",
+                            body: JSON.stringify({
+                                transactionId: data.transaction.id,
+                                action: "sign",
+                                signature: signResult.signature,
+                                signerAddress: signResult.signerAddress,
+                                safeTxHash: signResult.safeTxHash,
+                            }),
+                        },
+                    );
+
                     const signData = await signResponse.json();
                     if (signResponse.ok) {
-                        alert(signData.message || "Transaction proposed and signed!");
+                        alert(
+                            signData.message ||
+                                "Transaction proposed and signed!",
+                        );
                     } else {
-                        alert(`Transaction proposed but signing failed: ${signData.error}`);
+                        alert(
+                            `Transaction proposed but signing failed: ${signData.error}`,
+                        );
                     }
                 } else {
-                    alert(`Transaction proposed but signing failed: ${signResult.error || "Unknown error"}`);
+                    alert(
+                        `Transaction proposed but signing failed: ${signResult.error || "Unknown error"}`,
+                    );
                 }
-                
+
                 // Refresh pending txs and switch to activity tab
                 fetchPendingTxs(selectedVault.id);
                 setActiveTab("activity");
@@ -1302,7 +1818,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     };
 
     // Check if current user is the creator
-    const isCreator = selectedVault?.creatorAddress.toLowerCase() === userAddress.toLowerCase();
+    const isCreator =
+        selectedVault?.creatorAddress.toLowerCase() ===
+        userAddress.toLowerCase();
 
     const startEditing = () => {
         if (!selectedVault) return;
@@ -1320,7 +1838,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
     const saveEdits = async () => {
         if (!selectedVault || !editName.trim()) return;
-        
+
         setIsSaving(true);
         try {
             await updateVault(selectedVault.id, {
@@ -1328,7 +1846,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 description: editDescription.trim() || undefined,
                 emoji: editEmoji,
             });
-            
+
             // Refresh vault details
             const updated = await getVault(selectedVault.id);
             if (updated) {
@@ -1336,7 +1854,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
             }
             setIsEditing(false);
         } catch (err) {
-            alert(err instanceof Error ? err.message : "Failed to update vault");
+            alert(
+                err instanceof Error ? err.message : "Failed to update vault",
+            );
         } finally {
             setIsSaving(false);
         }
@@ -1377,21 +1897,33 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
     // Handle send (placeholder for now)
     const handleSendTransaction = async () => {
-        if (!selectedVault || !ensResolver.resolvedAddress || !sendAmount || !sendToken) return;
-        
+        if (
+            !selectedVault ||
+            !ensResolver.resolvedAddress ||
+            !sendAmount ||
+            !sendToken
+        )
+            return;
+
         setIsSending(true);
         try {
             // For now, just show a message - actual transaction creation will come later
-            const displayTo = ensResolver.ensName 
+            const displayTo = ensResolver.ensName
                 ? `${ensResolver.ensName} (${ensResolver.resolvedAddress})`
                 : ensResolver.resolvedAddress;
-            alert(`Transaction proposal feature coming soon!\n\nTo: ${displayTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`);
+            alert(
+                `Transaction proposal feature coming soon!\n\nTo: ${displayTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`,
+            );
             ensResolver.clear();
             setSendAmount("");
             setIsUsdMode(false);
             setSendToken(null);
         } catch (err) {
-            alert(err instanceof Error ? err.message : "Failed to create transaction");
+            alert(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to create transaction",
+            );
         } finally {
             setIsSending(false);
         }
@@ -1400,7 +1932,7 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     // Details view
     if (selectedVault) {
         const chainInfo = getChainById(selectedVault.chainId);
-        
+
         return (
             <div className="space-y-4">
                 {/* Back button */}
@@ -1418,8 +1950,18 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                     }}
                     className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 19l-7-7 7-7"
+                        />
                     </svg>
                     Back to Vaults
                 </button>
@@ -1431,11 +1973,15 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                         <div className="space-y-3">
                             {/* Emoji picker */}
                             <div>
-                                <label className="block text-xs text-zinc-400 mb-1">Emoji</label>
+                                <label className="block text-xs text-zinc-400 mb-1">
+                                    Emoji
+                                </label>
                                 <div className="relative">
                                     <button
                                         type="button"
-                                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                        onClick={() =>
+                                            setShowEmojiPicker(!showEmojiPicker)
+                                        }
                                         className="w-14 h-14 text-3xl bg-zinc-900 rounded-xl hover:bg-zinc-900/70 transition-colors flex items-center justify-center"
                                     >
                                         {editEmoji}
@@ -1454,10 +2000,14 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                                         type="button"
                                                         onClick={() => {
                                                             setEditEmoji(emoji);
-                                                            setShowEmojiPicker(false);
+                                                            setShowEmojiPicker(
+                                                                false,
+                                                            );
                                                         }}
                                                         className={`w-10 h-10 text-xl rounded-lg hover:bg-zinc-700 transition-colors ${
-                                                            editEmoji === emoji ? "bg-orange-500/20 ring-2 ring-orange-500" : ""
+                                                            editEmoji === emoji
+                                                                ? "bg-orange-500/20 ring-2 ring-orange-500"
+                                                                : ""
                                                         }`}
                                                     >
                                                         {emoji}
@@ -1468,33 +2018,41 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                     </AnimatePresence>
                                 </div>
                             </div>
-                            
+
                             {/* Name input */}
                             <div>
-                                <label className="block text-xs text-zinc-400 mb-1">Name</label>
+                                <label className="block text-xs text-zinc-400 mb-1">
+                                    Name
+                                </label>
                                 <input
                                     type="text"
                                     value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
+                                    onChange={(e) =>
+                                        setEditName(e.target.value)
+                                    }
                                     placeholder="Vault name"
                                     maxLength={50}
                                     className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
                                 />
                             </div>
-                            
+
                             {/* Description input */}
                             <div>
-                                <label className="block text-xs text-zinc-400 mb-1">Description (optional)</label>
+                                <label className="block text-xs text-zinc-400 mb-1">
+                                    Description (optional)
+                                </label>
                                 <input
                                     type="text"
                                     value={editDescription}
-                                    onChange={(e) => setEditDescription(e.target.value)}
+                                    onChange={(e) =>
+                                        setEditDescription(e.target.value)
+                                    }
                                     placeholder="What's this vault for?"
                                     maxLength={200}
                                     className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
                                 />
                             </div>
-                            
+
                             {/* Action buttons */}
                             <div className="flex items-center gap-2 pt-2">
                                 <button
@@ -1523,11 +2081,17 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                     ) : (
                         // View mode
                         <div className="flex items-center gap-3">
-                            <span className="text-3xl">{selectedVault.emoji}</span>
+                            <span className="text-3xl">
+                                {selectedVault.emoji}
+                            </span>
                             <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-white">{selectedVault.name}</h3>
+                                <h3 className="text-lg font-semibold text-white">
+                                    {selectedVault.name}
+                                </h3>
                                 {selectedVault.description && (
-                                    <p className="text-sm text-zinc-400">{selectedVault.description}</p>
+                                    <p className="text-sm text-zinc-400">
+                                        {selectedVault.description}
+                                    </p>
                                 )}
                             </div>
                             <div className="flex items-center gap-2">
@@ -1537,14 +2101,28 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                         className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
                                         title="Edit vault"
                                     >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                            />
                                         </svg>
                                     </button>
                                 )}
                                 <div className="flex items-center gap-1">
-                                    <span className="text-lg">{chainInfo?.icon}</span>
-                                    <span className="text-sm text-zinc-400">{chainInfo?.name}</span>
+                                    <span className="text-lg">
+                                        {chainInfo?.icon}
+                                    </span>
+                                    <span className="text-sm text-zinc-400">
+                                        {chainInfo?.name}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -1562,16 +2140,22 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                         </p>
                     )}
                     <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            selectedVault.isDeployed
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : "bg-yellow-500/20 text-yellow-400"
-                        }`}>
-                            {selectedVault.isDeployed ? "Deployed" : "Not Deployed"}
+                        <span
+                            className={`text-xs px-2 py-0.5 rounded-full ${
+                                selectedVault.isDeployed
+                                    ? "bg-emerald-500/20 text-emerald-400"
+                                    : "bg-yellow-500/20 text-yellow-400"
+                            }`}
+                        >
+                            {selectedVault.isDeployed
+                                ? "Deployed"
+                                : "Not Deployed"}
                         </span>
                         {!selectedVault.isDeployed && (
                             <button
-                                onClick={() => handleSyncStatus(selectedVault.id)}
+                                onClick={() =>
+                                    handleSyncStatus(selectedVault.id)
+                                }
                                 disabled={isSyncing}
                                 className="text-xs px-2 py-0.5 rounded-full bg-zinc-700/50 text-zinc-400 hover:bg-zinc-600/50 hover:text-white transition-colors disabled:opacity-50"
                                 title="Check on-chain deployment status"
@@ -1580,104 +2164,158 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                             </button>
                         )}
                         <span className="text-xs text-zinc-500">
-                            {selectedVault.threshold}/{selectedVault.members.length} signatures required
+                            {selectedVault.threshold}/
+                            {selectedVault.members.length} signatures required
                         </span>
                     </div>
                 </div>
 
                 {/* Deploy Vault Banner - Show if not deployed */}
-                {!selectedVault.isDeployed && (() => {
-                    const gasCost = getDeployGasCost(selectedVault.chainId);
-                    const chainInfo = getChainById(selectedVault.chainId);
-                    const willUseSponsored = gasCost.isSponsored && useSponsoredGas;
-                    
-                    return (
-                        <div className={`p-4 rounded-xl border ${gasCost.isHigh ? 'bg-amber-500/10 border-amber-500/30' : 'bg-zinc-800/50 border-zinc-700'}`}>
-                            <div className="flex items-start gap-3">
-                                <span className="text-2xl">{gasCost.isHigh ? '⚠️' : '🔧'}</span>
-                                <div className="flex-1">
-                                    <h4 className={`font-medium mb-1 ${gasCost.isHigh ? 'text-amber-400' : 'text-white'}`}>
-                                        Vault Not Yet Deployed
-                                    </h4>
-                                    <p className="text-sm text-zinc-400 mb-2">
-                                        Deploy the vault&apos;s smart contract on <span className="text-white font-medium">{chainInfo?.name || 'the network'}</span> to enable transactions.
-                                    </p>
-                                    
-                                    {/* Gas Cost Info */}
-                                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg mb-3 ${
-                                        gasCost.isHigh ? 'bg-amber-500/20' : willUseSponsored ? 'bg-emerald-500/20' : 'bg-zinc-800'
-                                    }`}>
-                                        <span className="text-xs text-zinc-400">Gas fee:</span>
-                                        <span className={`text-sm font-bold ${
-                                            gasCost.isHigh ? 'text-amber-400' : willUseSponsored ? 'text-emerald-400' : 'text-zinc-300'
-                                        }`}>
-                                            {willUseSponsored ? 'Free (Sponsored)' : gasCost.cost}
-                                        </span>
-                                    </div>
-                                    
-                                    {gasCost.isHigh && (
-                                        <p className="text-xs text-amber-300/70 mb-3">
-                                            💡 Consider creating vaults on Layer 2 networks (Base, Arbitrum) for lower gas fees.
+                {!selectedVault.isDeployed &&
+                    (() => {
+                        const gasCost = getDeployGasCost(selectedVault.chainId);
+                        const chainInfo = getChainById(selectedVault.chainId);
+                        const willUseSponsored =
+                            gasCost.isSponsored && useSponsoredGas;
+
+                        return (
+                            <div
+                                className={`p-4 rounded-xl border ${gasCost.isHigh ? "bg-amber-500/10 border-amber-500/30" : "bg-zinc-800/50 border-zinc-700"}`}
+                            >
+                                <div className="flex items-start gap-3">
+                                    <span className="text-2xl">
+                                        {gasCost.isHigh ? "⚠️" : "🔧"}
+                                    </span>
+                                    <div className="flex-1">
+                                        <h4
+                                            className={`font-medium mb-1 ${gasCost.isHigh ? "text-amber-400" : "text-white"}`}
+                                        >
+                                            Vault Not Yet Deployed
+                                        </h4>
+                                        <p className="text-sm text-zinc-400 mb-2">
+                                            Deploy the vault&apos;s smart
+                                            contract on{" "}
+                                            <span className="text-white font-medium">
+                                                {chainInfo?.name ||
+                                                    "the network"}
+                                            </span>{" "}
+                                            to enable transactions.
                                         </p>
-                                    )}
-                                    
-                                    {deployError && (
-                                        <p className="text-sm text-red-400 mb-2">{deployError}</p>
-                                    )}
-                                    
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <button
-                                            onClick={() => handleDeployVault(selectedVault.id)}
-                                            disabled={isDeploying || !canDeploy}
-                                            className={`px-4 py-2 font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                                                gasCost.isHigh 
-                                                    ? 'bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-600 text-black' 
-                                                    : 'bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-600 text-white'
+
+                                        {/* Gas Cost Info */}
+                                        <div
+                                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg mb-3 ${
+                                                gasCost.isHigh
+                                                    ? "bg-amber-500/20"
+                                                    : willUseSponsored
+                                                      ? "bg-emerald-500/20"
+                                                      : "bg-zinc-800"
                                             }`}
                                         >
-                                            {isDeploying ? (
-                                                <>
-                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                    Deploying...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    🚀 Deploy Vault
-                                                </>
-                                            )}
-                                        </button>
+                                            <span className="text-xs text-zinc-400">
+                                                Gas fee:
+                                            </span>
+                                            <span
+                                                className={`text-sm font-bold ${
+                                                    gasCost.isHigh
+                                                        ? "text-amber-400"
+                                                        : willUseSponsored
+                                                          ? "text-emerald-400"
+                                                          : "text-zinc-300"
+                                                }`}
+                                            >
+                                                {willUseSponsored
+                                                    ? "Free (Sponsored)"
+                                                    : gasCost.cost}
+                                            </span>
+                                        </div>
+
+                                        {gasCost.isHigh && (
+                                            <p className="text-xs text-amber-300/70 mb-3">
+                                                💡 Consider creating vaults on
+                                                Layer 2 networks (Base,
+                                                Arbitrum) for lower gas fees.
+                                            </p>
+                                        )}
+
+                                        {deployError && (
+                                            <p className="text-sm text-red-400 mb-2">
+                                                {deployError}
+                                            </p>
+                                        )}
+
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <button
+                                                onClick={() =>
+                                                    handleDeployVault(
+                                                        selectedVault.id,
+                                                    )
+                                                }
+                                                disabled={
+                                                    isDeploying || !canDeploy
+                                                }
+                                                className={`px-4 py-2 font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                                                    gasCost.isHigh
+                                                        ? "bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-600 text-black"
+                                                        : "bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-600 text-white"
+                                                }`}
+                                            >
+                                                {isDeploying ? (
+                                                    <>
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        Deploying...
+                                                    </>
+                                                ) : (
+                                                    <>🚀 Deploy Vault</>
+                                                )}
+                                            </button>
+                                        </div>
+
+                                        {/* Sponsored Gas Toggle - Only show on L2s where sponsorship is available */}
+                                        {gasCost.isSponsored && (
+                                            <button
+                                                onClick={() =>
+                                                    setUseSponsoredGas(
+                                                        !useSponsoredGas,
+                                                    )
+                                                }
+                                                className="text-xs text-zinc-400 hover:text-zinc-300 flex items-center gap-1.5 mb-2"
+                                            >
+                                                <span className="text-sm">
+                                                    {useSponsoredGas
+                                                        ? "☑"
+                                                        : "☐"}
+                                                </span>
+                                                <span>
+                                                    Use sponsored gas (free,
+                                                    requires multiple
+                                                    signatures)
+                                                </span>
+                                            </button>
+                                        )}
+
+                                        {!isConnected && (
+                                            <p className="text-xs text-zinc-500 mt-2">
+                                                Connect your wallet to deploy
+                                            </p>
+                                        )}
+
+                                        <p className="text-xs text-zinc-500">
+                                            {willUseSponsored
+                                                ? "Using sponsored gas - requires signing multiple messages."
+                                                : "Your wallet will approve one transaction to deploy."}
+                                        </p>
                                     </div>
-                                    
-                                    {/* Sponsored Gas Toggle - Only show on L2s where sponsorship is available */}
-                                    {gasCost.isSponsored && (
-                                        <button
-                                            onClick={() => setUseSponsoredGas(!useSponsoredGas)}
-                                            className="text-xs text-zinc-400 hover:text-zinc-300 flex items-center gap-1.5 mb-2"
-                                        >
-                                            <span className="text-sm">{useSponsoredGas ? '☑' : '☐'}</span>
-                                            <span>Use sponsored gas (free, requires multiple signatures)</span>
-                                        </button>
-                                    )}
-                                    
-                                    {!isConnected && (
-                                        <p className="text-xs text-zinc-500 mt-2">Connect your wallet to deploy</p>
-                                    )}
-                                    
-                                    <p className="text-xs text-zinc-500">
-                                        {willUseSponsored 
-                                            ? 'Using sponsored gas - requires signing multiple messages.' 
-                                            : 'Your wallet will approve one transaction to deploy.'
-                                        }
-                                    </p>
                                 </div>
                             </div>
-                        </div>
-                    );
-                })()}
+                        );
+                    })()}
 
                 {/* Tab Navigation */}
                 <div className="flex gap-1 p-1 bg-zinc-800/50 rounded-xl">
-                    {(["assets", "send", "receive", "activity"] as VaultTab[]).map((tab) => (
+                    {(
+                        ["assets", "send", "receive", "activity"] as VaultTab[]
+                    ).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -1691,7 +2329,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                             {tab === "send" && "📤"}
                             {tab === "receive" && "📥"}
                             {tab === "activity" && "📜"}
-                            <span className="ml-1.5 hidden sm:inline">{tab}</span>
+                            <span className="ml-1.5 hidden sm:inline">
+                                {tab}
+                            </span>
                             {tab === "activity" && pendingTxs.length > 0 && (
                                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 text-black text-xs font-bold rounded-full flex items-center justify-center">
                                     {pendingTxs.length}
@@ -1716,7 +2356,10 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                 {isLoadingBalances ? (
                                     <div className="space-y-2">
                                         {[1, 2, 3].map((i) => (
-                                            <div key={i} className="p-3 bg-zinc-800/50 rounded-xl animate-pulse">
+                                            <div
+                                                key={i}
+                                                className="p-3 bg-zinc-800/50 rounded-xl animate-pulse"
+                                            >
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 bg-zinc-700 rounded-full" />
                                                     <div className="flex-1">
@@ -1731,27 +2374,44 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                             </div>
                                         ))}
                                     </div>
-                                ) : balances?.nativeBalance || (balances?.tokens && balances.tokens.length > 0) ? (
+                                ) : balances?.nativeBalance ||
+                                  (balances?.tokens &&
+                                      balances.tokens.length > 0) ? (
                                     <>
                                         {/* Native Balance */}
                                         {balances?.nativeBalance && (
                                             <div className="p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-lg">
-                                                        {chainInfo?.icon || "💎"}
+                                                        {chainInfo?.icon ||
+                                                            "💎"}
                                                     </div>
                                                     <div className="flex-1">
                                                         <p className="text-sm font-medium text-white">
-                                                            {balances.nativeBalance.symbol}
+                                                            {
+                                                                balances
+                                                                    .nativeBalance
+                                                                    .symbol
+                                                            }
                                                         </p>
-                                                        <p className="text-xs text-zinc-500">Native Token</p>
+                                                        <p className="text-xs text-zinc-500">
+                                                            Native Token
+                                                        </p>
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="text-sm font-medium text-white">
-                                                            {formatBalance(balances.nativeBalance.balanceFormatted)}
+                                                            {formatBalance(
+                                                                balances
+                                                                    .nativeBalance
+                                                                    .balanceFormatted,
+                                                            )}
                                                         </p>
                                                         <p className="text-xs text-zinc-500">
-                                                            {formatUsd(balances.nativeBalance.balanceUsd)}
+                                                            {formatUsd(
+                                                                balances
+                                                                    .nativeBalance
+                                                                    .balanceUsd,
+                                                            )}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1773,21 +2433,30 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                                         />
                                                     ) : (
                                                         <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-300">
-                                                            {token.symbol.slice(0, 2)}
+                                                            {token.symbol.slice(
+                                                                0,
+                                                                2,
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className="flex-1">
                                                         <p className="text-sm font-medium text-white">
                                                             {token.symbol}
                                                         </p>
-                                                        <p className="text-xs text-zinc-500">{token.name}</p>
+                                                        <p className="text-xs text-zinc-500">
+                                                            {token.name}
+                                                        </p>
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="text-sm font-medium text-white">
-                                                            {formatBalance(token.balanceFormatted)}
+                                                            {formatBalance(
+                                                                token.balanceFormatted,
+                                                            )}
                                                         </p>
                                                         <p className="text-xs text-zinc-500">
-                                                            {formatUsd(token.balanceUsd)}
+                                                            {formatUsd(
+                                                                token.balanceUsd,
+                                                            )}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1799,12 +2468,17 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center text-3xl">
                                             💸
                                         </div>
-                                        <h4 className="text-sm font-medium text-white mb-1">No Assets Yet</h4>
+                                        <h4 className="text-sm font-medium text-white mb-1">
+                                            No Assets Yet
+                                        </h4>
                                         <p className="text-xs text-zinc-500">
-                                            Deposit funds to this vault to get started
+                                            Deposit funds to this vault to get
+                                            started
                                         </p>
                                         <button
-                                            onClick={() => setActiveTab("receive")}
+                                            onClick={() =>
+                                                setActiveTab("receive")
+                                            }
                                             className="mt-3 px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
                                         >
                                             Get Deposit Address
@@ -1814,7 +2488,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
                                 {/* Refresh button */}
                                 <button
-                                    onClick={() => fetchBalances(selectedVault.id)}
+                                    onClick={() =>
+                                        fetchBalances(selectedVault.id)
+                                    }
                                     disabled={isLoadingBalances}
                                     className="w-full p-2 text-sm text-zinc-400 hover:text-white transition-colors flex items-center justify-center gap-2"
                                 >
@@ -1842,444 +2518,835 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                 {/* Show deploy prompt if not deployed */}
                                 {!selectedVault.isDeployed && (
                                     <div className="p-6 text-center">
-                                        <span className="text-4xl mb-4 block">🔒</span>
-                                        <h4 className="text-lg font-medium text-white mb-2">Deploy Vault First</h4>
+                                        <span className="text-4xl mb-4 block">
+                                            🔒
+                                        </span>
+                                        <h4 className="text-lg font-medium text-white mb-2">
+                                            Deploy Vault First
+                                        </h4>
                                         <p className="text-sm text-zinc-400 mb-4">
-                                            You need to deploy the vault&apos;s smart contract before you can send transactions.
+                                            You need to deploy the vault&apos;s
+                                            smart contract before you can send
+                                            transactions.
                                         </p>
                                         <button
-                                            onClick={() => handleDeployVault(selectedVault.id)}
+                                            onClick={() =>
+                                                handleDeployVault(
+                                                    selectedVault.id,
+                                                )
+                                            }
                                             disabled={isDeploying || !canDeploy}
                                             className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 disabled:bg-zinc-600 text-black font-medium rounded-lg transition-colors"
                                         >
-                                            {isDeploying ? "Deploying..." : "Deploy Vault"}
+                                            {isDeploying
+                                                ? "Deploying..."
+                                                : "Deploy Vault"}
                                         </button>
                                     </div>
                                 )}
-                                
+
                                 {/* Deployed vault content */}
                                 {selectedVault.isDeployed && (
-                                <>
-                                {/* Token Selector Modal */}
-                                <AnimatePresence>
-                                    {showTokenSelector && (
-                                        <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            className="absolute inset-0 bg-zinc-900/95 z-10 flex flex-col rounded-xl"
-                                        >
-                                            <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-                                                <h4 className="text-sm font-medium text-white">Select Token</h4>
-                                                <button
-                                                    onClick={() => setShowTokenSelector(false)}
-                                                    className="p-1 text-zinc-400 hover:text-white"
+                                    <>
+                                        {/* Token Selector Modal */}
+                                        <AnimatePresence>
+                                            {showTokenSelector && (
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    exit={{ opacity: 0 }}
+                                                    className="absolute inset-0 bg-zinc-900/95 z-10 flex flex-col rounded-xl"
                                                 >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                                                        <h4 className="text-sm font-medium text-white">
+                                                            Select Token
+                                                        </h4>
+                                                        <button
+                                                            onClick={() =>
+                                                                setShowTokenSelector(
+                                                                    false,
+                                                                )
+                                                            }
+                                                            className="p-1 text-zinc-400 hover:text-white"
+                                                        >
+                                                            <svg
+                                                                className="w-5 h-5"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M6 18L18 6M6 6l12 12"
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex-1 overflow-y-auto">
+                                                        {getAllTokens()
+                                                            .length === 0 ? (
+                                                            <div className="p-8 text-center text-zinc-500 text-sm">
+                                                                No tokens with
+                                                                balance
+                                                            </div>
+                                                        ) : (
+                                                            getAllTokens().map(
+                                                                (token) => (
+                                                                    <button
+                                                                        key={
+                                                                            token.contractAddress
+                                                                        }
+                                                                        onClick={() => {
+                                                                            setSendToken(
+                                                                                token,
+                                                                            );
+                                                                            setShowTokenSelector(
+                                                                                false,
+                                                                            );
+                                                                        }}
+                                                                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors text-left border-b border-zinc-800/30 last:border-b-0"
+                                                                    >
+                                                                        <div className="relative">
+                                                                            {token.logoUrl ? (
+                                                                                <img
+                                                                                    src={
+                                                                                        token.logoUrl
+                                                                                    }
+                                                                                    alt={
+                                                                                        token.symbol
+                                                                                    }
+                                                                                    className="w-10 h-10 rounded-full"
+                                                                                />
+                                                                            ) : (
+                                                                                <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
+                                                                                    {token.symbol.slice(
+                                                                                        0,
+                                                                                        2,
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="text-sm font-medium text-white">
+                                                                                {
+                                                                                    token.symbol
+                                                                                }
+                                                                            </p>
+                                                                            <p className="text-xs text-zinc-500">
+                                                                                {
+                                                                                    token.name
+                                                                                }
+                                                                            </p>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            <p className="text-sm font-medium text-white">
+                                                                                {formatBalance(
+                                                                                    token.balanceFormatted,
+                                                                                    4,
+                                                                                )}
+                                                                            </p>
+                                                                            {token.balanceUsd !==
+                                                                                null && (
+                                                                                <p className="text-xs text-zinc-500">
+                                                                                    $
+                                                                                    {Number(
+                                                                                        token.balanceUsd,
+                                                                                    ).toFixed(
+                                                                                        2,
+                                                                                    )}
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                        {sendToken?.contractAddress ===
+                                                                            token.contractAddress && (
+                                                                            <svg
+                                                                                className="w-5 h-5 text-orange-400"
+                                                                                fill="currentColor"
+                                                                                viewBox="0 0 20 20"
+                                                                            >
+                                                                                <path
+                                                                                    fillRule="evenodd"
+                                                                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                                    clipRule="evenodd"
+                                                                                />
+                                                                            </svg>
+                                                                        )}
+                                                                    </button>
+                                                                ),
+                                                            )
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        <div className="p-4 bg-zinc-800/50 rounded-xl space-y-4">
+                                            {/* Token selector button */}
+                                            <div>
+                                                <label className="block text-xs text-zinc-400 mb-2">
+                                                    Token
+                                                </label>
+                                                <button
+                                                    onClick={() =>
+                                                        setShowTokenSelector(
+                                                            true,
+                                                        )
+                                                    }
+                                                    className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg hover:border-zinc-600 transition-colors flex items-center gap-3"
+                                                >
+                                                    {sendToken ? (
+                                                        <>
+                                                            {sendToken.logoUrl ? (
+                                                                <img
+                                                                    src={
+                                                                        sendToken.logoUrl
+                                                                    }
+                                                                    alt=""
+                                                                    className="w-8 h-8 rounded-full"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
+                                                                    {sendToken.symbol.slice(
+                                                                        0,
+                                                                        2,
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            <div className="flex-1 text-left">
+                                                                <p className="text-sm font-medium text-white">
+                                                                    {
+                                                                        sendToken.symbol
+                                                                    }
+                                                                </p>
+                                                                <p className="text-xs text-zinc-500">
+                                                                    Balance:{" "}
+                                                                    {formatBalance(
+                                                                        sendToken.balanceFormatted,
+                                                                        4,
+                                                                    )}
+                                                                </p>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center">
+                                                                <svg
+                                                                    className="w-4 h-4 text-zinc-400"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                                                                    />
+                                                                </svg>
+                                                            </div>
+                                                            <span className="flex-1 text-left text-zinc-400">
+                                                                Select token to
+                                                                send
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                    <svg
+                                                        className="w-5 h-5 text-zinc-500"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M19 9l-7 7-7-7"
+                                                        />
                                                     </svg>
                                                 </button>
                                             </div>
-                                            <div className="flex-1 overflow-y-auto">
-                                                {getAllTokens().length === 0 ? (
-                                                    <div className="p-8 text-center text-zinc-500 text-sm">
-                                                        No tokens with balance
-                                                    </div>
-                                                ) : (
-                                                    getAllTokens().map((token) => (
-                                                        <button
-                                                            key={token.contractAddress}
-                                                            onClick={() => {
-                                                                setSendToken(token);
-                                                                setShowTokenSelector(false);
-                                                            }}
-                                                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors text-left border-b border-zinc-800/30 last:border-b-0"
-                                                        >
-                                                            <div className="relative">
-                                                                {token.logoUrl ? (
-                                                                    <img src={token.logoUrl} alt={token.symbol} className="w-10 h-10 rounded-full" />
-                                                                ) : (
-                                                                    <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
-                                                                        {token.symbol.slice(0, 2)}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium text-white">{token.symbol}</p>
-                                                                <p className="text-xs text-zinc-500">{token.name}</p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="text-sm font-medium text-white">{formatBalance(token.balanceFormatted, 4)}</p>
-                                                                {token.balanceUsd !== null && (
-                                                                    <p className="text-xs text-zinc-500">
-                                                                        ${Number(token.balanceUsd).toFixed(2)}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                            {sendToken?.contractAddress === token.contractAddress && (
-                                                                <svg className="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
-                                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                                </svg>
-                                                            )}
-                                                        </button>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
 
-                                <div className="p-4 bg-zinc-800/50 rounded-xl space-y-4">
-                                    {/* Token selector button */}
-                                    <div>
-                                        <label className="block text-xs text-zinc-400 mb-2">Token</label>
-                                        <button
-                                            onClick={() => setShowTokenSelector(true)}
-                                            className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg hover:border-zinc-600 transition-colors flex items-center gap-3"
-                                        >
-                                            {sendToken ? (
-                                                <>
-                                                    {sendToken.logoUrl ? (
-                                                        <img src={sendToken.logoUrl} alt="" className="w-8 h-8 rounded-full" />
-                                                    ) : (
-                                                        <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
-                                                            {sendToken.symbol.slice(0, 2)}
+                                            {/* Amount input */}
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <label className="text-xs text-zinc-400">
+                                                        Amount
+                                                    </label>
+                                                    <div className="flex items-center gap-2">
+                                                        {/* USD/Token toggle */}
+                                                        {sendToken &&
+                                                            vaultTokenPriceUsd >
+                                                                0 && (
+                                                                <button
+                                                                    onClick={
+                                                                        toggleVaultAmountMode
+                                                                    }
+                                                                    className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                                                                    title={
+                                                                        isUsdMode
+                                                                            ? "Switch to token amount"
+                                                                            : "Switch to USD amount"
+                                                                    }
+                                                                >
+                                                                    <span
+                                                                        className={
+                                                                            isUsdMode
+                                                                                ? "text-emerald-400"
+                                                                                : "text-zinc-500"
+                                                                        }
+                                                                    >
+                                                                        $
+                                                                    </span>
+                                                                    <span className="text-zinc-500">
+                                                                        /
+                                                                    </span>
+                                                                    <span
+                                                                        className={
+                                                                            !isUsdMode
+                                                                                ? "text-emerald-400"
+                                                                                : "text-zinc-500"
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            sendToken.symbol
+                                                                        }
+                                                                    </span>
+                                                                </button>
+                                                            )}
+                                                        {sendToken && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (
+                                                                        isUsdMode &&
+                                                                        sendToken.balanceUsd
+                                                                    ) {
+                                                                        setSendAmount(
+                                                                            sendToken.balanceUsd.toFixed(
+                                                                                2,
+                                                                            ),
+                                                                        );
+                                                                    } else {
+                                                                        setSendAmount(
+                                                                            sendToken.balanceFormatted,
+                                                                        );
+                                                                    }
+                                                                }}
+                                                                className="text-xs font-medium text-orange-400 hover:text-orange-300 px-2 py-0.5 bg-orange-500/10 rounded"
+                                                            >
+                                                                MAX
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="relative">
+                                                    <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg focus-within:border-orange-500">
+                                                        {isUsdMode && (
+                                                            <span className="pl-3 text-zinc-400 text-lg">
+                                                                $
+                                                            </span>
+                                                        )}
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={sendAmount}
+                                                            onChange={(e) => {
+                                                                // Only allow valid decimal numbers
+                                                                const value =
+                                                                    e.target
+                                                                        .value;
+                                                                if (
+                                                                    value ===
+                                                                        "" ||
+                                                                    /^\d*\.?\d*$/.test(
+                                                                        value,
+                                                                    )
+                                                                ) {
+                                                                    setSendAmount(
+                                                                        value,
+                                                                    );
+                                                                }
+                                                            }}
+                                                            placeholder="0.00"
+                                                            className="flex-1 px-3 py-3 bg-transparent text-white text-lg placeholder-zinc-500 focus:outline-none"
+                                                        />
+                                                        {!isUsdMode &&
+                                                            sendToken && (
+                                                                <span className="pr-3 text-sm text-zinc-400">
+                                                                    {
+                                                                        sendToken.symbol
+                                                                    }
+                                                                </span>
+                                                            )}
+                                                    </div>
+                                                    {/* Show conversion */}
+                                                    {sendToken &&
+                                                        sendAmount && (
+                                                            <p className="mt-1 text-xs text-zinc-500">
+                                                                {isUsdMode
+                                                                    ? `≈ ${actualVaultSendAmount ? parseFloat(actualVaultSendAmount).toFixed(6) : "0"} ${sendToken.symbol}`
+                                                                    : `≈ $${getVaultUsdAmount(sendAmount) || "0.00"}`}
+                                                            </p>
+                                                        )}
+                                                </div>
+                                            </div>
+
+                                            {/* Recipient input with ENS support and suggestions */}
+                                            <div className="relative">
+                                                <label className="block text-xs text-zinc-400 mb-2">
+                                                    Recipient Address or ENS
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={
+                                                            ensResolver.input
+                                                        }
+                                                        onChange={(e) => {
+                                                            ensResolver.setInput(
+                                                                e.target.value,
+                                                            );
+                                                            setShowRecipientSuggestions(
+                                                                true,
+                                                            );
+                                                            setSelectedSuggestionIndex(
+                                                                -1,
+                                                            );
+                                                        }}
+                                                        onFocus={() =>
+                                                            setShowRecipientSuggestions(
+                                                                true,
+                                                            )
+                                                        }
+                                                        onBlur={() => {
+                                                            setTimeout(
+                                                                () =>
+                                                                    setShowRecipientSuggestions(
+                                                                        false,
+                                                                    ),
+                                                                200,
+                                                            );
+                                                        }}
+                                                        onKeyDown={
+                                                            handleRecipientKeyDown
+                                                        }
+                                                        placeholder="0x..., ENS, or select from contacts"
+                                                        spellCheck={false}
+                                                        autoComplete="off"
+                                                        autoCorrect="off"
+                                                        autoCapitalize="off"
+                                                        className={`w-full px-3 py-3 bg-zinc-900 border rounded-lg text-white placeholder-zinc-500 focus:outline-none font-mono text-sm ${
+                                                            ensResolver.error
+                                                                ? "border-red-500 focus:border-red-500"
+                                                                : ensResolver.isValid
+                                                                  ? "border-emerald-500 focus:border-emerald-500"
+                                                                  : "border-zinc-700 focus:border-orange-500"
+                                                        }`}
+                                                    />
+                                                    {/* Loading indicator */}
+                                                    {(ensResolver.isResolving ||
+                                                        suggestionsLoading) && (
+                                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                            <div className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
                                                         </div>
                                                     )}
-                                                    <div className="flex-1 text-left">
-                                                        <p className="text-sm font-medium text-white">{sendToken.symbol}</p>
-                                                        <p className="text-xs text-zinc-500">
-                                                            Balance: {formatBalance(sendToken.balanceFormatted, 4)}
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center">
-                                                        <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                                        </svg>
-                                                    </div>
-                                                    <span className="flex-1 text-left text-zinc-400">Select token to send</span>
-                                                </>
-                                            )}
-                                            <svg className="w-5 h-5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                            </svg>
-                                        </button>
-                                    </div>
-
-                                    {/* Amount input */}
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <label className="text-xs text-zinc-400">Amount</label>
-                                            <div className="flex items-center gap-2">
-                                                {/* USD/Token toggle */}
-                                                {sendToken && vaultTokenPriceUsd > 0 && (
-                                                    <button
-                                                        onClick={toggleVaultAmountMode}
-                                                        className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
-                                                        title={isUsdMode ? "Switch to token amount" : "Switch to USD amount"}
-                                                    >
-                                                        <span className={isUsdMode ? "text-emerald-400" : "text-zinc-500"}>$</span>
-                                                        <span className="text-zinc-500">/</span>
-                                                        <span className={!isUsdMode ? "text-emerald-400" : "text-zinc-500"}>{sendToken.symbol}</span>
-                                                    </button>
-                                                )}
-                                                {sendToken && (
-                                                    <button
-                                                        onClick={() => {
-                                                            if (isUsdMode && sendToken.balanceUsd) {
-                                                                setSendAmount(sendToken.balanceUsd.toFixed(2));
-                                                            } else {
-                                                                setSendAmount(sendToken.balanceFormatted);
-                                                            }
-                                                        }}
-                                                        className="text-xs font-medium text-orange-400 hover:text-orange-300 px-2 py-0.5 bg-orange-500/10 rounded"
-                                                    >
-                                                        MAX
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="relative">
-                                            <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg focus-within:border-orange-500">
-                                                {isUsdMode && <span className="pl-3 text-zinc-400 text-lg">$</span>}
-                                                <input
-                                                    type="text"
-                                                    inputMode="decimal"
-                                                    value={sendAmount}
-                                                    onChange={(e) => {
-                                                        // Only allow valid decimal numbers
-                                                        const value = e.target.value;
-                                                        if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                                                            setSendAmount(value);
-                                                        }
-                                                    }}
-                                                    placeholder="0.00"
-                                                    className="flex-1 px-3 py-3 bg-transparent text-white text-lg placeholder-zinc-500 focus:outline-none"
-                                                />
-                                                {!isUsdMode && sendToken && (
-                                                    <span className="pr-3 text-sm text-zinc-400">{sendToken.symbol}</span>
-                                                )}
-                                            </div>
-                                            {/* Show conversion */}
-                                            {sendToken && sendAmount && (
-                                                <p className="mt-1 text-xs text-zinc-500">
-                                                    {isUsdMode 
-                                                        ? `≈ ${actualVaultSendAmount ? parseFloat(actualVaultSendAmount).toFixed(6) : "0"} ${sendToken.symbol}`
-                                                        : `≈ $${getVaultUsdAmount(sendAmount) || "0.00"}`
-                                                    }
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Recipient input with ENS support and suggestions */}
-                                    <div className="relative">
-                                        <label className="block text-xs text-zinc-400 mb-2">Recipient Address or ENS</label>
-                                        <div className="relative">
-                                            <input
-                                                type="text"
-                                                value={ensResolver.input}
-                                                onChange={(e) => {
-                                                    ensResolver.setInput(e.target.value);
-                                                    setShowRecipientSuggestions(true);
-                                                    setSelectedSuggestionIndex(-1);
-                                                }}
-                                                onFocus={() => setShowRecipientSuggestions(true)}
-                                                onBlur={() => {
-                                                    setTimeout(() => setShowRecipientSuggestions(false), 200);
-                                                }}
-                                                onKeyDown={handleRecipientKeyDown}
-                                                placeholder="0x..., ENS, or select from contacts"
-                                                spellCheck={false}
-                                                autoComplete="off"
-                                                autoCorrect="off"
-                                                autoCapitalize="off"
-                                                className={`w-full px-3 py-3 bg-zinc-900 border rounded-lg text-white placeholder-zinc-500 focus:outline-none font-mono text-sm ${
-                                                    ensResolver.error 
-                                                        ? "border-red-500 focus:border-red-500" 
-                                                        : ensResolver.isValid
-                                                            ? "border-emerald-500 focus:border-emerald-500"
-                                                            : "border-zinc-700 focus:border-orange-500"
-                                                }`}
-                                            />
-                                            {/* Loading indicator */}
-                                            {(ensResolver.isResolving || suggestionsLoading) && (
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                    <div className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
-                                                </div>
-                                            )}
-                                            {/* Valid indicator */}
-                                            {!ensResolver.isResolving && !suggestionsLoading && ensResolver.isValid && (
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400">
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        {/* Suggestions dropdown */}
-                                        {showRecipientSuggestions && !showSaveAddressDialog && (filteredSuggestions.length > 0 || canSaveToAddressBook) && (
-                                            <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
-                                                {/* Save to address book option */}
-                                                {canSaveToAddressBook && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setShowSaveAddressDialog(true);
-                                                            setShowRecipientSuggestions(false);
-                                                        }}
-                                                        className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-zinc-700/50 transition-colors border-b border-zinc-700"
-                                                    >
-                                                        <span className="text-base">💾</span>
-                                                        <div className="text-left">
-                                                            <div className="text-xs font-medium text-white">Save to Address Book</div>
-                                                            <div className="text-[10px] text-zinc-400 font-mono">
-                                                                {(ensResolver.resolvedAddress || ensResolver.input).slice(0, 10)}...{(ensResolver.resolvedAddress || ensResolver.input).slice(-8)}
+                                                    {/* Valid indicator */}
+                                                    {!ensResolver.isResolving &&
+                                                        !suggestionsLoading &&
+                                                        ensResolver.isValid && (
+                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400">
+                                                                <svg
+                                                                    className="w-5 h-5"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M5 13l4 4L19 7"
+                                                                    />
+                                                                </svg>
                                                             </div>
+                                                        )}
+                                                </div>
+
+                                                {/* Suggestions dropdown */}
+                                                {showRecipientSuggestions &&
+                                                    !showSaveAddressDialog &&
+                                                    (filteredSuggestions.length >
+                                                        0 ||
+                                                        canSaveToAddressBook) && (
+                                                        <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                                                            {/* Save to address book option */}
+                                                            {canSaveToAddressBook && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setShowSaveAddressDialog(
+                                                                            true,
+                                                                        );
+                                                                        setShowRecipientSuggestions(
+                                                                            false,
+                                                                        );
+                                                                    }}
+                                                                    className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-zinc-700/50 transition-colors border-b border-zinc-700"
+                                                                >
+                                                                    <span className="text-base">
+                                                                        💾
+                                                                    </span>
+                                                                    <div className="text-left">
+                                                                        <div className="text-xs font-medium text-white">
+                                                                            Save
+                                                                            to
+                                                                            Address
+                                                                            Book
+                                                                        </div>
+                                                                        <div className="text-[10px] text-zinc-400 font-mono">
+                                                                            {(
+                                                                                ensResolver.resolvedAddress ||
+                                                                                ensResolver.input
+                                                                            ).slice(
+                                                                                0,
+                                                                                10,
+                                                                            )}
+                                                                            ...
+                                                                            {(
+                                                                                ensResolver.resolvedAddress ||
+                                                                                ensResolver.input
+                                                                            ).slice(
+                                                                                -8,
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
+                                                            )}
+
+                                                            {/* Suggestions list */}
+                                                            {filteredSuggestions.length >
+                                                                0 && (
+                                                                <div className="py-1">
+                                                                    {filteredSuggestions
+                                                                        .slice(
+                                                                            0,
+                                                                            8,
+                                                                        )
+                                                                        .map(
+                                                                            (
+                                                                                suggestion,
+                                                                                index,
+                                                                            ) => (
+                                                                                <button
+                                                                                    key={`${suggestion.type}-${suggestion.address}`}
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        handleSelectSuggestion(
+                                                                                            suggestion,
+                                                                                        )
+                                                                                    }
+                                                                                    className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${
+                                                                                        index ===
+                                                                                        selectedSuggestionIndex
+                                                                                            ? "bg-orange-600/20"
+                                                                                            : "hover:bg-zinc-700/50"
+                                                                                    }`}
+                                                                                >
+                                                                                    {/* Avatar or type icon */}
+                                                                                    <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                                                                        {suggestion.avatar ? (
+                                                                                            <img
+                                                                                                src={
+                                                                                                    suggestion.avatar
+                                                                                                }
+                                                                                                alt=""
+                                                                                                className="w-full h-full object-cover"
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <span className="text-sm">
+                                                                                                {getSuggestionIcon(
+                                                                                                    suggestion.type,
+                                                                                                )}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+
+                                                                                    {/* Info */}
+                                                                                    <div className="flex-1 min-w-0 text-left">
+                                                                                        <div className="flex items-center gap-1.5">
+                                                                                            <span className="text-xs font-medium text-white truncate">
+                                                                                                {
+                                                                                                    suggestion.label
+                                                                                                }
+                                                                                            </span>
+                                                                                            {suggestion.isFavorite && (
+                                                                                                <span className="text-yellow-400 text-[10px]">
+                                                                                                    ★
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                                                                            <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
+                                                                                                {getSuggestionLabel(
+                                                                                                    suggestion.type,
+                                                                                                )}
+                                                                                            </span>
+                                                                                            {suggestion.sublabel && (
+                                                                                                <span className="truncate">
+                                                                                                    {
+                                                                                                        suggestion.sublabel
+                                                                                                    }
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    {/* Address preview */}
+                                                                                    <div className="text-[10px] text-zinc-500 font-mono flex-shrink-0">
+                                                                                        {(
+                                                                                            suggestion.smartWalletAddress ||
+                                                                                            suggestion.address
+                                                                                        ).slice(
+                                                                                            0,
+                                                                                            6,
+                                                                                        )}
+                                                                                        ...
+                                                                                        {(
+                                                                                            suggestion.smartWalletAddress ||
+                                                                                            suggestion.address
+                                                                                        ).slice(
+                                                                                            -4,
+                                                                                        )}
+                                                                                    </div>
+                                                                                </button>
+                                                                            ),
+                                                                        )}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    </button>
-                                                )}
+                                                    )}
 
-                                                {/* Suggestions list */}
-                                                {filteredSuggestions.length > 0 && (
-                                                    <div className="py-1">
-                                                        {filteredSuggestions.slice(0, 8).map((suggestion, index) => (
+                                                {/* Save address dialog */}
+                                                {showSaveAddressDialog && (
+                                                    <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3">
+                                                        <div className="text-xs font-medium text-white mb-2">
+                                                            Save to Address Book
+                                                        </div>
+                                                        <div className="text-[10px] text-zinc-400 font-mono mb-2 break-all">
+                                                            {ensResolver.resolvedAddress ||
+                                                                ensResolver.input}
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            value={
+                                                                saveAddressLabel
+                                                            }
+                                                            onChange={(e) =>
+                                                                setSaveAddressLabel(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Label (e.g., Mom, Work, Exchange)"
+                                                            maxLength={50}
+                                                            autoFocus
+                                                            className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/50 mb-2"
+                                                        />
+                                                        <div className="flex gap-2">
                                                             <button
-                                                                key={`${suggestion.type}-${suggestion.address}`}
                                                                 type="button"
-                                                                onClick={() => handleSelectSuggestion(suggestion)}
-                                                                className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${
-                                                                    index === selectedSuggestionIndex
-                                                                        ? "bg-orange-600/20"
-                                                                        : "hover:bg-zinc-700/50"
-                                                                }`}
+                                                                onClick={() => {
+                                                                    setShowSaveAddressDialog(
+                                                                        false,
+                                                                    );
+                                                                    setSaveAddressLabel(
+                                                                        "",
+                                                                    );
+                                                                }}
+                                                                className="flex-1 px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
                                                             >
-                                                                {/* Avatar or type icon */}
-                                                                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                                                    {suggestion.avatar ? (
-                                                                        <img 
-                                                                            src={suggestion.avatar} 
-                                                                            alt="" 
-                                                                            className="w-full h-full object-cover"
-                                                                        />
-                                                                    ) : (
-                                                                        <span className="text-sm">{getSuggestionIcon(suggestion.type)}</span>
-                                                                    )}
-                                                                </div>
-                                                                
-                                                                {/* Info */}
-                                                                <div className="flex-1 min-w-0 text-left">
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <span className="text-xs font-medium text-white truncate">
-                                                                            {suggestion.label}
-                                                                        </span>
-                                                                        {suggestion.isFavorite && (
-                                                                            <span className="text-yellow-400 text-[10px]">★</span>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
-                                                                        <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
-                                                                            {getSuggestionLabel(suggestion.type)}
-                                                                        </span>
-                                                                        {suggestion.sublabel && (
-                                                                            <span className="truncate">{suggestion.sublabel}</span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* Address preview */}
-                                                                <div className="text-[10px] text-zinc-500 font-mono flex-shrink-0">
-                                                                    {(suggestion.smartWalletAddress || suggestion.address).slice(0, 6)}...
-                                                                    {(suggestion.smartWalletAddress || suggestion.address).slice(-4)}
-                                                                </div>
+                                                                Cancel
                                                             </button>
-                                                        ))}
+                                                            <button
+                                                                type="button"
+                                                                onClick={
+                                                                    handleSaveToAddressBook
+                                                                }
+                                                                disabled={
+                                                                    !saveAddressLabel.trim()
+                                                                }
+                                                                className="flex-1 px-3 py-1.5 text-xs bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 )}
-                                            </div>
-                                        )}
-                                        
-                                        {/* Save address dialog */}
-                                        {showSaveAddressDialog && (
-                                            <div className="absolute z-50 w-full mt-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl p-3">
-                                                <div className="text-xs font-medium text-white mb-2">
-                                                    Save to Address Book
-                                                </div>
-                                                <div className="text-[10px] text-zinc-400 font-mono mb-2 break-all">
-                                                    {ensResolver.resolvedAddress || ensResolver.input}
-                                                </div>
-                                                <input
-                                                    type="text"
-                                                    value={saveAddressLabel}
-                                                    onChange={(e) => setSaveAddressLabel(e.target.value)}
-                                                    placeholder="Label (e.g., Mom, Work, Exchange)"
-                                                    maxLength={50}
-                                                    autoFocus
-                                                    className="w-full px-3 py-2 bg-zinc-900/50 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/50 mb-2"
-                                                />
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setShowSaveAddressDialog(false);
-                                                            setSaveAddressLabel("");
-                                                        }}
-                                                        className="flex-1 px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleSaveToAddressBook}
-                                                        disabled={!saveAddressLabel.trim()}
-                                                        className="flex-1 px-3 py-1.5 text-xs bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                                                    >
-                                                        Save
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                        
-                                        {/* Show resolved info */}
-                                        {ensResolver.ensName && ensResolver.resolvedAddress && (
-                                            <p className="mt-1 text-xs text-emerald-400 flex items-center gap-1">
-                                                <span>✓</span>
-                                                <span className="font-medium">{ensResolver.ensName}</span>
-                                                <span className="text-zinc-500">→</span>
-                                                <span className="font-mono text-zinc-400">
-                                                    {ensResolver.resolvedAddress.slice(0, 6)}...{ensResolver.resolvedAddress.slice(-4)}
-                                                </span>
-                                            </p>
-                                        )}
-                                        {/* Error message */}
-                                        {ensResolver.error && (
-                                            <p className="mt-1 text-xs text-red-400">{ensResolver.error}</p>
-                                        )}
-                                    </div>
 
-                                    {/* Info box about signing flow */}
-                                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-2">
-                                        <p className="text-xs text-blue-300">
-                                            <span className="font-medium">📝 How it works:</span>
-                                        </p>
-                                        <ol className="text-xs text-blue-300/80 space-y-1 ml-4 list-decimal">
-                                            <li>You propose the transaction</li>
-                                            <li>Other members sign in the <span className="font-medium">Activity</span> tab</li>
-                                            <li>Once {selectedVault.threshold}/{selectedVault.members.length} sign, anyone can execute</li>
-                                        </ol>
-                                    </div>
-
-                                    {/* Transaction summary when amount entered */}
-                                    {sendToken && actualVaultSendAmount && parseFloat(actualVaultSendAmount) > 0 && (
-                                        <div className="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg space-y-2">
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-zinc-500">You send</span>
-                                                <span className="text-zinc-300 font-medium">
-                                                    {parseFloat(actualVaultSendAmount).toFixed(6)} {sendToken.symbol}
-                                                    {isUsdMode && sendAmount && <> (${sendAmount})</>}
-                                                </span>
+                                                {/* Show resolved info */}
+                                                {ensResolver.ensName &&
+                                                    ensResolver.resolvedAddress && (
+                                                        <p className="mt-1 text-xs text-emerald-400 flex items-center gap-1">
+                                                            <span>✓</span>
+                                                            <span className="font-medium">
+                                                                {
+                                                                    ensResolver.ensName
+                                                                }
+                                                            </span>
+                                                            <span className="text-zinc-500">
+                                                                →
+                                                            </span>
+                                                            <span className="font-mono text-zinc-400">
+                                                                {ensResolver.resolvedAddress.slice(
+                                                                    0,
+                                                                    6,
+                                                                )}
+                                                                ...
+                                                                {ensResolver.resolvedAddress.slice(
+                                                                    -4,
+                                                                )}
+                                                            </span>
+                                                        </p>
+                                                    )}
+                                                {/* Error message */}
+                                                {ensResolver.error && (
+                                                    <p className="mt-1 text-xs text-red-400">
+                                                        {ensResolver.error}
+                                                    </p>
+                                                )}
                                             </div>
+
+                                            {/* Info box about signing flow */}
+                                            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-2">
+                                                <p className="text-xs text-blue-300">
+                                                    <span className="font-medium">
+                                                        📝 How it works:
+                                                    </span>
+                                                </p>
+                                                <ol className="text-xs text-blue-300/80 space-y-1 ml-4 list-decimal">
+                                                    <li>
+                                                        You propose the
+                                                        transaction
+                                                    </li>
+                                                    <li>
+                                                        Other members sign in
+                                                        the{" "}
+                                                        <span className="font-medium">
+                                                            Activity
+                                                        </span>{" "}
+                                                        tab
+                                                    </li>
+                                                    <li>
+                                                        Once{" "}
+                                                        {
+                                                            selectedVault.threshold
+                                                        }
+                                                        /
+                                                        {
+                                                            selectedVault
+                                                                .members.length
+                                                        }{" "}
+                                                        sign, anyone can execute
+                                                    </li>
+                                                </ol>
+                                            </div>
+
+                                            {/* Transaction summary when amount entered */}
+                                            {sendToken &&
+                                                actualVaultSendAmount &&
+                                                parseFloat(
+                                                    actualVaultSendAmount,
+                                                ) > 0 && (
+                                                    <div className="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg space-y-2">
+                                                        <div className="flex justify-between text-xs">
+                                                            <span className="text-zinc-500">
+                                                                You send
+                                                            </span>
+                                                            <span className="text-zinc-300 font-medium">
+                                                                {parseFloat(
+                                                                    actualVaultSendAmount,
+                                                                ).toFixed(
+                                                                    6,
+                                                                )}{" "}
+                                                                {
+                                                                    sendToken.symbol
+                                                                }
+                                                                {isUsdMode &&
+                                                                    sendAmount && (
+                                                                        <>
+                                                                            {" "}
+                                                                            ($
+                                                                            {
+                                                                                sendAmount
+                                                                            }
+                                                                            )
+                                                                        </>
+                                                                    )}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                            {/* Send button */}
+                                            <button
+                                                onClick={proposeTransaction}
+                                                disabled={
+                                                    !ensResolver.isValid ||
+                                                    !actualVaultSendAmount ||
+                                                    parseFloat(
+                                                        actualVaultSendAmount,
+                                                    ) <= 0 ||
+                                                    !sendToken ||
+                                                    isProposing ||
+                                                    ensResolver.isResolving
+                                                }
+                                                className="w-full py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                            >
+                                                {isProposing ? (
+                                                    <>
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        Creating Proposal...
+                                                    </>
+                                                ) : !sendToken ? (
+                                                    "Select Token"
+                                                ) : !sendAmount ? (
+                                                    "Enter Amount"
+                                                ) : !ensResolver.input ? (
+                                                    "Enter Recipient"
+                                                ) : ensResolver.isResolving ? (
+                                                    "Resolving ENS..."
+                                                ) : !ensResolver.isValid ? (
+                                                    "Invalid Address"
+                                                ) : (
+                                                    <>
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                                                            />
+                                                        </svg>
+                                                        {isUsdMode
+                                                            ? `Propose $${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(4)} ${sendToken.symbol})`
+                                                            : `Propose ${sendAmount} ${sendToken.symbol}`}
+                                                    </>
+                                                )}
+                                            </button>
                                         </div>
-                                    )}
-
-                                    {/* Send button */}
-                                    <button
-                                        onClick={proposeTransaction}
-                                        disabled={!ensResolver.isValid || !actualVaultSendAmount || parseFloat(actualVaultSendAmount) <= 0 || !sendToken || isProposing || ensResolver.isResolving}
-                                        className="w-full py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        {isProposing ? (
-                                            <>
-                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                Creating Proposal...
-                                            </>
-                                        ) : !sendToken ? (
-                                            "Select Token"
-                                        ) : !sendAmount ? (
-                                            "Enter Amount"
-                                        ) : !ensResolver.input ? (
-                                            "Enter Recipient"
-                                        ) : ensResolver.isResolving ? (
-                                            "Resolving ENS..."
-                                        ) : !ensResolver.isValid ? (
-                                            "Invalid Address"
-                                        ) : (
-                                            <>
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                                </svg>
-                                                {isUsdMode 
-                                                    ? `Propose $${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(4)} ${sendToken.symbol})`
-                                                    : `Propose ${sendAmount} ${sendToken.symbol}`}
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                                </>
+                                    </>
                                 )}
                             </div>
                         )}
@@ -2292,7 +3359,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                         {/* QR Code */}
                                         <div className="p-4 bg-white rounded-2xl mb-4">
                                             <QRCodeSVG
-                                                value={selectedVault.safeAddress}
+                                                value={
+                                                    selectedVault.safeAddress
+                                                }
                                                 size={180}
                                                 level="H"
                                                 includeMargin={false}
@@ -2301,27 +3370,41 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
 
                                         {/* Chain badge */}
                                         <div className="flex items-center gap-2 mb-3">
-                                            <span className="text-lg">{chainInfo?.icon}</span>
-                                            <span className="text-sm text-zinc-400">{chainInfo?.name} Network</span>
+                                            <span className="text-lg">
+                                                {chainInfo?.icon}
+                                            </span>
+                                            <span className="text-sm text-zinc-400">
+                                                {chainInfo?.name} Network
+                                            </span>
                                         </div>
 
                                         {/* Address */}
                                         <button
-                                            onClick={() => copyAddress(selectedVault.safeAddress)}
+                                            onClick={() =>
+                                                copyAddress(
+                                                    selectedVault.safeAddress,
+                                                )
+                                            }
                                             className="w-full p-3 bg-zinc-900 rounded-lg hover:bg-zinc-900/70 transition-colors"
                                         >
                                             <p className="font-mono text-sm text-white break-all">
                                                 {selectedVault.safeAddress}
                                             </p>
                                             <p className="text-xs text-orange-400 mt-2">
-                                                {copied ? "✓ Copied!" : "Tap to copy"}
+                                                {copied
+                                                    ? "✓ Copied!"
+                                                    : "Tap to copy"}
                                             </p>
                                         </button>
 
                                         {/* Warning */}
                                         <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg w-full">
                                             <p className="text-xs text-yellow-300 text-center">
-                                                <span className="font-medium">⚠️ Important:</span> Only send {chainInfo?.name} network assets to this address
+                                                <span className="font-medium">
+                                                    ⚠️ Important:
+                                                </span>{" "}
+                                                Only send {chainInfo?.name}{" "}
+                                                network assets to this address
                                             </p>
                                         </div>
 
@@ -2334,8 +3417,18 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                                 className="mt-4 text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
                                             >
                                                 View on Explorer
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                                    />
                                                 </svg>
                                             </a>
                                         )}
@@ -2352,158 +3445,312 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                     <div className="space-y-2">
                                         <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
                                             <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                                            Pending Transactions ({pendingTxs.length})
+                                            Pending Transactions (
+                                            {pendingTxs.length})
                                         </h4>
                                         {pendingTxs.map((tx) => {
-                                            const hasThreshold = tx.confirmations.length >= selectedVault.threshold;
-                                            const userHasSigned = tx.confirmations.some(
-                                                (c) => c.signer_address.toLowerCase() === userAddress.toLowerCase() ||
-                                                       selectedVault.members.find(
-                                                           (m) => m.address.toLowerCase() === userAddress.toLowerCase()
-                                                       )?.smartWalletAddress?.toLowerCase() === c.signer_address.toLowerCase()
-                                            );
-                                            const isProposer = tx.created_by.toLowerCase() === userAddress.toLowerCase();
-                                            const isExpanded = expandedTxId === tx.id;
-                                            
-                                            // Find member info for each signer
-                                            const getSignerDisplay = (signerAddr: string) => {
-                                                const member = selectedVault.members.find(
-                                                    (m) => m.smartWalletAddress?.toLowerCase() === signerAddr.toLowerCase() ||
-                                                           m.address.toLowerCase() === signerAddr.toLowerCase()
+                                            const hasThreshold =
+                                                tx.confirmations.length >=
+                                                selectedVault.threshold;
+                                            const userHasSigned =
+                                                tx.confirmations.some(
+                                                    (c) =>
+                                                        c.signer_address.toLowerCase() ===
+                                                            userAddress.toLowerCase() ||
+                                                        selectedVault.members
+                                                            .find(
+                                                                (m) =>
+                                                                    m.address.toLowerCase() ===
+                                                                    userAddress.toLowerCase(),
+                                                            )
+                                                            ?.smartWalletAddress?.toLowerCase() ===
+                                                            c.signer_address.toLowerCase(),
                                                 );
-                                                if (member?.nickname) return member.nickname;
+                                            const isProposer =
+                                                tx.created_by.toLowerCase() ===
+                                                userAddress.toLowerCase();
+                                            const isExpanded =
+                                                expandedTxId === tx.id;
+
+                                            // Find member info for each signer
+                                            const getSignerDisplay = (
+                                                signerAddr: string,
+                                            ) => {
+                                                const member =
+                                                    selectedVault.members.find(
+                                                        (m) =>
+                                                            m.smartWalletAddress?.toLowerCase() ===
+                                                                signerAddr.toLowerCase() ||
+                                                            m.address.toLowerCase() ===
+                                                                signerAddr.toLowerCase(),
+                                                    );
+                                                if (member?.nickname)
+                                                    return member.nickname;
                                                 return `${signerAddr.slice(0, 6)}...${signerAddr.slice(-4)}`;
                                             };
-                                            
+
                                             return (
                                                 <div
                                                     key={tx.id}
                                                     className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl overflow-hidden"
                                                 >
                                                     {/* Main row - clickable to expand */}
-                                                    <div 
+                                                    <div
                                                         className="p-3 cursor-pointer hover:bg-yellow-500/5 transition-colors"
-                                                        onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
+                                                        onClick={() =>
+                                                            setExpandedTxId(
+                                                                isExpanded
+                                                                    ? null
+                                                                    : tx.id,
+                                                            )
+                                                        }
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
-                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                <svg
+                                                                    className="w-5 h-5"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                                    />
                                                                 </svg>
                                                             </div>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="text-sm font-medium text-white truncate">
-                                                                    {tx.description}
+                                                                    {
+                                                                        tx.description
+                                                                    }
                                                                 </p>
                                                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                                     <span className="text-xs text-zinc-500">
-                                                                        {tx.confirmations.length}/{selectedVault.threshold} signatures
+                                                                        {
+                                                                            tx
+                                                                                .confirmations
+                                                                                .length
+                                                                        }
+                                                                        /
+                                                                        {
+                                                                            selectedVault.threshold
+                                                                        }{" "}
+                                                                        signatures
                                                                     </span>
                                                                     {userHasSigned && (
                                                                         <span className="text-xs text-emerald-400 flex items-center gap-0.5">
-                                                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                            <svg
+                                                                                className="w-3 h-3"
+                                                                                fill="currentColor"
+                                                                                viewBox="0 0 20 20"
+                                                                            >
+                                                                                <path
+                                                                                    fillRule="evenodd"
+                                                                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                                    clipRule="evenodd"
+                                                                                />
                                                                             </svg>
                                                                             Signed
                                                                         </span>
                                                                     )}
-                                                                    <span className="text-xs text-zinc-600">•</span>
+                                                                    <span className="text-xs text-zinc-600">
+                                                                        •
+                                                                    </span>
                                                                     <span className="text-xs text-zinc-500">
-                                                                        {getTimeAgo(new Date(tx.created_at))}
+                                                                        {getTimeAgo(
+                                                                            new Date(
+                                                                                tx.created_at,
+                                                                            ),
+                                                                        )}
                                                                     </span>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                            <div
+                                                                className="flex items-center gap-2"
+                                                                onClick={(e) =>
+                                                                    e.stopPropagation()
+                                                                }
+                                                            >
                                                                 {hasThreshold ? (
-                                                                    <button 
-                                                                        onClick={() => handleExecuteTransaction(tx)}
-                                                                        disabled={vaultExecution.isExecuting}
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            handleExecuteTransaction(
+                                                                                tx,
+                                                                            )
+                                                                        }
+                                                                        disabled={
+                                                                            vaultExecution.isExecuting
+                                                                        }
                                                                         className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
                                                                     >
                                                                         Execute
                                                                     </button>
                                                                 ) : !userHasSigned ? (
-                                                                    <button 
-                                                                        onClick={() => handleSignTransaction(tx)}
-                                                                        disabled={vaultExecution.isSigning}
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            handleSignTransaction(
+                                                                                tx,
+                                                                            )
+                                                                        }
+                                                                        disabled={
+                                                                            vaultExecution.isSigning
+                                                                        }
                                                                         className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
                                                                     >
                                                                         Sign
                                                                     </button>
                                                                 ) : (
-                                                                    <span className="text-xs text-zinc-500">Waiting...</span>
+                                                                    <span className="text-xs text-zinc-500">
+                                                                        Waiting...
+                                                                    </span>
                                                                 )}
                                                                 {isProposer && (
-                                                                    <button 
-                                                                        onClick={() => cancelTransaction(tx.id)}
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            cancelTransaction(
+                                                                                tx.id,
+                                                                            )
+                                                                        }
                                                                         className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors"
                                                                         title="Cancel transaction"
                                                                     >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                        <svg
+                                                                            className="w-4 h-4"
+                                                                            fill="none"
+                                                                            stroke="currentColor"
+                                                                            viewBox="0 0 24 24"
+                                                                        >
+                                                                            <path
+                                                                                strokeLinecap="round"
+                                                                                strokeLinejoin="round"
+                                                                                strokeWidth={
+                                                                                    2
+                                                                                }
+                                                                                d="M6 18L18 6M6 6l12 12"
+                                                                            />
                                                                         </svg>
                                                                     </button>
                                                                 )}
                                                             </div>
                                                             {/* Expand indicator */}
-                                                            <svg 
-                                                                className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
-                                                                fill="none" 
-                                                                stroke="currentColor" 
+                                                            <svg
+                                                                className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                                                fill="none"
+                                                                stroke="currentColor"
                                                                 viewBox="0 0 24 24"
                                                             >
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M19 9l-7 7-7-7"
+                                                                />
                                                             </svg>
                                                         </div>
                                                     </div>
-                                                    
+
                                                     {/* Expanded details */}
                                                     {isExpanded && (
                                                         <div className="px-3 pb-3 border-t border-yellow-500/20">
                                                             {/* Signature progress */}
                                                             <div className="mt-3 space-y-2">
-                                                                <p className="text-xs font-medium text-zinc-400">Signatures:</p>
+                                                                <p className="text-xs font-medium text-zinc-400">
+                                                                    Signatures:
+                                                                </p>
                                                                 <div className="flex flex-wrap gap-2">
-                                                                    {selectedVault.members.map((member) => {
-                                                                        const memberSigned = tx.confirmations.some(
-                                                                            (c) => c.signer_address.toLowerCase() === member.smartWalletAddress?.toLowerCase() ||
-                                                                                   c.signer_address.toLowerCase() === member.address.toLowerCase()
-                                                                        );
-                                                                        return (
-                                                                            <div 
-                                                                                key={member.address}
-                                                                                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs ${
-                                                                                    memberSigned 
-                                                                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                                                                        : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
-                                                                                }`}
-                                                                            >
-                                                                                {memberSigned ? (
-                                                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                                                    </svg>
-                                                                                ) : (
-                                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                                    </svg>
-                                                                                )}
-                                                                                {member.nickname || `${member.address.slice(0, 6)}...`}
-                                                                            </div>
-                                                                        );
-                                                                    })}
+                                                                    {selectedVault.members.map(
+                                                                        (
+                                                                            member,
+                                                                        ) => {
+                                                                            const memberSigned =
+                                                                                tx.confirmations.some(
+                                                                                    (
+                                                                                        c,
+                                                                                    ) =>
+                                                                                        c.signer_address.toLowerCase() ===
+                                                                                            member.smartWalletAddress?.toLowerCase() ||
+                                                                                        c.signer_address.toLowerCase() ===
+                                                                                            member.address.toLowerCase(),
+                                                                                );
+                                                                            return (
+                                                                                <div
+                                                                                    key={
+                                                                                        member.address
+                                                                                    }
+                                                                                    className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs ${
+                                                                                        memberSigned
+                                                                                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                                                            : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                                                                                    }`}
+                                                                                >
+                                                                                    {memberSigned ? (
+                                                                                        <svg
+                                                                                            className="w-3 h-3"
+                                                                                            fill="currentColor"
+                                                                                            viewBox="0 0 20 20"
+                                                                                        >
+                                                                                            <path
+                                                                                                fillRule="evenodd"
+                                                                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                                                clipRule="evenodd"
+                                                                                            />
+                                                                                        </svg>
+                                                                                    ) : (
+                                                                                        <svg
+                                                                                            className="w-3 h-3"
+                                                                                            fill="none"
+                                                                                            stroke="currentColor"
+                                                                                            viewBox="0 0 24 24"
+                                                                                        >
+                                                                                            <path
+                                                                                                strokeLinecap="round"
+                                                                                                strokeLinejoin="round"
+                                                                                                strokeWidth={
+                                                                                                    2
+                                                                                                }
+                                                                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                                                            />
+                                                                                        </svg>
+                                                                                    )}
+                                                                                    {member.nickname ||
+                                                                                        `${member.address.slice(0, 6)}...`}
+                                                                                </div>
+                                                                            );
+                                                                        },
+                                                                    )}
                                                                 </div>
                                                             </div>
-                                                            
+
                                                             {/* Transaction details */}
                                                             <div className="mt-3 p-2 bg-zinc-900/50 rounded-lg">
                                                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                                                     <div>
-                                                                        <span className="text-zinc-500">To:</span>
-                                                                        <p className="text-zinc-300 font-mono truncate">{tx.to_address}</p>
+                                                                        <span className="text-zinc-500">
+                                                                            To:
+                                                                        </span>
+                                                                        <p className="text-zinc-300 font-mono truncate">
+                                                                            {
+                                                                                tx.to_address
+                                                                            }
+                                                                        </p>
                                                                     </div>
                                                                     <div>
-                                                                        <span className="text-zinc-500">Value:</span>
-                                                                        <p className="text-zinc-300">{tx.value || "0"} {tx.token_symbol || "ETH"}</p>
+                                                                        <span className="text-zinc-500">
+                                                                            Value:
+                                                                        </span>
+                                                                        <p className="text-zinc-300">
+                                                                            {tx.value ||
+                                                                                "0"}{" "}
+                                                                            {tx.token_symbol ||
+                                                                                "ETH"}
+                                                                        </p>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -2518,13 +3765,23 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                 {/* Transaction History */}
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-medium text-zinc-300">Recent Activity</h4>
+                                        <h4 className="text-sm font-medium text-zinc-300">
+                                            Recent Activity
+                                        </h4>
                                         <button
                                             onClick={() => {
-                                                fetchTransactions(selectedVault.safeAddress, selectedVault.chainId);
-                                                fetchPendingTxs(selectedVault.id);
+                                                fetchTransactions(
+                                                    selectedVault.safeAddress,
+                                                    selectedVault.chainId,
+                                                );
+                                                fetchPendingTxs(
+                                                    selectedVault.id,
+                                                );
                                             }}
-                                            disabled={isLoadingTransactions || isLoadingPendingTxs}
+                                            disabled={
+                                                isLoadingTransactions ||
+                                                isLoadingPendingTxs
+                                            }
                                             className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
                                         >
                                             <svg
@@ -2533,16 +3790,24 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                                 stroke="currentColor"
                                                 viewBox="0 0 24 24"
                                             >
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                                />
                                             </svg>
                                             Refresh
                                         </button>
                                     </div>
-                                    
+
                                     {isLoadingTransactions ? (
                                         <div className="space-y-2">
                                             {[1, 2, 3].map((i) => (
-                                                <div key={i} className="p-3 bg-zinc-800/50 rounded-xl animate-pulse">
+                                                <div
+                                                    key={i}
+                                                    className="p-3 bg-zinc-800/50 rounded-xl animate-pulse"
+                                                >
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-10 h-10 rounded-full bg-zinc-700" />
                                                         <div className="flex-1">
@@ -2556,16 +3821,32 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                     ) : transactions.length > 0 ? (
                                         <div className="space-y-2">
                                             {transactions.map((tx) => {
-                                                const chainInfo = getChainById(selectedVault.chainId);
-                                                const isToken = !!tx.tokenSymbol;
-                                                const decimals = tx.tokenDecimals || 18;
-                                                const formattedValue = (Number(tx.value) / Math.pow(10, decimals)).toFixed(
-                                                    isToken && tx.tokenDecimals === 6 ? 2 : 4
+                                                const chainInfo = getChainById(
+                                                    selectedVault.chainId,
                                                 );
-                                                const symbol = tx.tokenSymbol || chainInfo?.symbol || "ETH";
-                                                const date = new Date(tx.timestamp);
-                                                const timeAgo = getTimeAgo(date);
-                                                
+                                                const isToken =
+                                                    !!tx.tokenSymbol;
+                                                const decimals =
+                                                    tx.tokenDecimals || 18;
+                                                const formattedValue = (
+                                                    Number(tx.value) /
+                                                    Math.pow(10, decimals)
+                                                ).toFixed(
+                                                    isToken &&
+                                                        tx.tokenDecimals === 6
+                                                        ? 2
+                                                        : 4,
+                                                );
+                                                const symbol =
+                                                    tx.tokenSymbol ||
+                                                    chainInfo?.symbol ||
+                                                    "ETH";
+                                                const date = new Date(
+                                                    tx.timestamp,
+                                                );
+                                                const timeAgo =
+                                                    getTimeAgo(date);
+
                                                 return (
                                                     <a
                                                         key={tx.hash}
@@ -2575,37 +3856,94 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                                         className="block p-3 bg-zinc-800/50 border border-zinc-700 rounded-xl hover:border-zinc-600 transition-colors"
                                                     >
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                                                tx.type === "incoming" 
-                                                                    ? "bg-emerald-500/20 text-emerald-400" 
-                                                                    : "bg-orange-500/20 text-orange-400"
-                                                            }`}>
-                                                                {tx.type === "incoming" ? (
-                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                            <div
+                                                                className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                                                    tx.type ===
+                                                                    "incoming"
+                                                                        ? "bg-emerald-500/20 text-emerald-400"
+                                                                        : "bg-orange-500/20 text-orange-400"
+                                                                }`}
+                                                            >
+                                                                {tx.type ===
+                                                                "incoming" ? (
+                                                                    <svg
+                                                                        className="w-5 h-5"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        viewBox="0 0 24 24"
+                                                                    >
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={
+                                                                                2
+                                                                            }
+                                                                            d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                                                                        />
                                                                     </svg>
                                                                 ) : (
-                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                                                    <svg
+                                                                        className="w-5 h-5"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        viewBox="0 0 24 24"
+                                                                    >
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={
+                                                                                2
+                                                                            }
+                                                                            d="M5 10l7-7m0 0l7 7m-7-7v18"
+                                                                        />
                                                                     </svg>
                                                                 )}
                                                             </div>
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="flex items-center justify-between">
                                                                     <p className="text-sm font-medium text-white">
-                                                                        {tx.type === "incoming" ? "Received" : "Sent"}
+                                                                        {tx.type ===
+                                                                        "incoming"
+                                                                            ? "Received"
+                                                                            : "Sent"}
                                                                     </p>
-                                                                    <p className={`text-sm font-medium ${
-                                                                        tx.type === "incoming" ? "text-emerald-400" : "text-orange-400"
-                                                                    }`}>
-                                                                        {tx.type === "incoming" ? "+" : "-"}{formattedValue} {symbol}
+                                                                    <p
+                                                                        className={`text-sm font-medium ${
+                                                                            tx.type ===
+                                                                            "incoming"
+                                                                                ? "text-emerald-400"
+                                                                                : "text-orange-400"
+                                                                        }`}
+                                                                    >
+                                                                        {tx.type ===
+                                                                        "incoming"
+                                                                            ? "+"
+                                                                            : "-"}
+                                                                        {
+                                                                            formattedValue
+                                                                        }{" "}
+                                                                        {symbol}
                                                                     </p>
                                                                 </div>
                                                                 <div className="flex items-center justify-between mt-1">
                                                                     <p className="text-xs text-zinc-500 truncate">
-                                                                        {tx.type === "incoming" ? "From" : "To"}: {truncateAddress(tx.type === "incoming" ? tx.from : tx.to)}
+                                                                        {tx.type ===
+                                                                        "incoming"
+                                                                            ? "From"
+                                                                            : "To"}
+                                                                        :{" "}
+                                                                        {truncateAddress(
+                                                                            tx.type ===
+                                                                                "incoming"
+                                                                                ? tx.from
+                                                                                : tx.to,
+                                                                        )}
                                                                     </p>
-                                                                    <p className="text-xs text-zinc-500">{timeAgo}</p>
+                                                                    <p className="text-xs text-zinc-500">
+                                                                        {
+                                                                            timeAgo
+                                                                        }
+                                                                    </p>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -2616,13 +3954,26 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                     ) : (
                                         <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl text-center">
                                             <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-zinc-700/50 flex items-center justify-center">
-                                                <svg className="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                <svg
+                                                    className="w-6 h-6 text-zinc-500"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={1.5}
+                                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                    />
                                                 </svg>
                                             </div>
-                                            <p className="text-sm text-zinc-400">No activity yet</p>
+                                            <p className="text-sm text-zinc-400">
+                                                No activity yet
+                                            </p>
                                             <p className="text-xs text-zinc-500 mt-1">
-                                                Transaction history will appear here
+                                                Transaction history will appear
+                                                here
                                             </p>
                                         </div>
                                     )}
@@ -2644,7 +3995,12 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                             stroke="currentColor"
                             viewBox="0 0 24 24"
                         >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 9l-7 7-7-7"
+                            />
                         </svg>
                     </summary>
                     <div className="mt-2 space-y-2">
@@ -2665,13 +4021,17 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                     />
                                 ) : (
                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold">
-                                        {(member.username || member.address).slice(0, 2).toUpperCase()}
+                                        {(member.username || member.address)
+                                            .slice(0, 2)
+                                            .toUpperCase()}
                                     </div>
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                         <p className="text-sm font-medium text-white truncate">
-                                            {member.nickname || member.username || truncateAddress(member.address)}
+                                            {member.nickname ||
+                                                member.username ||
+                                                truncateAddress(member.address)}
                                         </p>
                                         {member.isCreator && (
                                             <span className="text-xs px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">
@@ -2680,7 +4040,10 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                                         )}
                                     </div>
                                     <p className="text-xs text-zinc-500 font-mono truncate">
-                                        Signer: {truncateAddress(member.smartWalletAddress)}
+                                        Signer:{" "}
+                                        {truncateAddress(
+                                            member.smartWalletAddress,
+                                        )}
                                     </p>
                                 </div>
                             </div>
@@ -2695,7 +4058,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                         disabled={isDeleting === selectedVault.id}
                         className="w-full p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm font-medium hover:bg-red-500/20 transition-colors disabled:opacity-50"
                     >
-                        {isDeleting === selectedVault.id ? "Deleting..." : "Delete Vault"}
+                        {isDeleting === selectedVault.id
+                            ? "Deleting..."
+                            : "Delete Vault"}
                     </button>
                 )}
             </div>
@@ -2718,7 +4083,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center text-3xl">
                     🔐
                 </div>
-                <h3 className="text-lg font-medium text-white mb-1">No Vaults Yet</h3>
+                <h3 className="text-lg font-medium text-white mb-1">
+                    No Vaults Yet
+                </h3>
                 <p className="text-sm text-zinc-500 mb-4">
                     Create a shared wallet with your friends
                 </p>
@@ -2733,7 +4100,10 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
     }
 
     // Render a single vault row (used for both visible and hidden lists)
-    const renderVaultRow = (vault: VaultListItem, options: { isHidden?: boolean } = {}) => {
+    const renderVaultRow = (
+        vault: VaultListItem,
+        options: { isHidden?: boolean } = {},
+    ) => {
         const chainInfo = getChainById(vault.chainId);
         const { isHidden = false } = options;
         return (
@@ -2749,7 +4119,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                     }
                 }}
                 className={`w-full p-4 bg-zinc-800/50 border rounded-xl transition-all text-left flex items-center gap-3 ${
-                    isHidden ? "border-zinc-700/70 opacity-90" : "border-zinc-700 hover:border-zinc-600 cursor-pointer"
+                    isHidden
+                        ? "border-zinc-700/70 opacity-90"
+                        : "border-zinc-700 hover:border-zinc-600 cursor-pointer"
                 } ${isLoadingDetails ? "pointer-events-none opacity-70" : ""}`}
             >
                 <span className="text-2xl">{vault.emoji}</span>
@@ -2774,7 +4146,9 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                             {vault.threshold}/{vault.memberCount} sigs
                         </span>
                         <span className="text-xs text-zinc-600">•</span>
-                        <span className={`text-xs ${vault.isDeployed ? "text-emerald-400" : "text-yellow-400"}`}>
+                        <span
+                            className={`text-xs ${vault.isDeployed ? "text-emerald-400" : "text-yellow-400"}`}
+                        >
                             {vault.isDeployed ? "Active" : "Pending"}
                         </span>
                     </div>
@@ -2785,7 +4159,10 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                             <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
                         ) : vaultBalanceCache[vault.id]?.totalUsd ? (
                             <span className="text-sm font-medium text-emerald-400">
-                                ${vaultBalanceCache[vault.id].totalUsd.toLocaleString(undefined, {
+                                $
+                                {vaultBalanceCache[
+                                    vault.id
+                                ].totalUsd.toLocaleString(undefined, {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                 })}
@@ -2802,9 +4179,24 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                         className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
                         title="Show vault"
                     >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                            />
                         </svg>
                     </button>
                 ) : (
@@ -2815,12 +4207,32 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                             className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
                             title="Hide vault"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.275 4.275M12 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m-5.858.908a3 3 0 004.275 4.275M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <svg
+                                className="w-5 h-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.275 4.275M12 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m-5.858.908a3 3 0 004.275 4.275M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
                             </svg>
                         </button>
-                        <svg className="w-5 h-5 text-zinc-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        <svg
+                            className="w-5 h-5 text-zinc-500 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                            />
                         </svg>
                     </>
                 )}
@@ -2839,28 +4251,61 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 >
                     {showHiddenVaults ? (
                         <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.275 4.275M12 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m-5.858.908a3 3 0 004.275 4.275M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.275 4.275M12 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m-5.858.908a3 3 0 004.275 4.275M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
                             </svg>
-                            Hide {hiddenVaultsList.length} hidden vault{hiddenVaultsList.length !== 1 ? "s" : ""}
+                            Hide {hiddenVaultsList.length} hidden vault
+                            {hiddenVaultsList.length !== 1 ? "s" : ""}
                         </>
                     ) : (
                         <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                />
                             </svg>
-                            Show {hiddenVaultsList.length} hidden vault{hiddenVaultsList.length !== 1 ? "s" : ""}
+                            Show {hiddenVaultsList.length} hidden vault
+                            {hiddenVaultsList.length !== 1 ? "s" : ""}
                         </>
                     )}
                 </button>
             )}
-            {visibleVaults.map((vault) => renderVaultRow(vault, { isHidden: false }))}
+            {visibleVaults.map((vault) =>
+                renderVaultRow(vault, { isHidden: false }),
+            )}
             {showHiddenVaults && hiddenVaultsList.length > 0 && (
                 <div className="pt-2 border-t border-zinc-800">
-                    <p className="text-xs font-medium text-zinc-500 mb-2">Hidden vaults</p>
+                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                        Hidden vaults
+                    </p>
                     <div className="space-y-2">
-                        {hiddenVaultsList.map((vault) => renderVaultRow(vault, { isHidden: true }))}
+                        {hiddenVaultsList.map((vault) =>
+                            renderVaultRow(vault, { isHidden: true }),
+                        )}
                     </div>
                 </div>
             )}
@@ -2869,8 +4314,18 @@ export function VaultList({ userAddress, onCreateNew, refreshKey }: VaultListPro
                 onClick={onCreateNew}
                 className="w-full p-3 border border-dashed border-zinc-700 rounded-xl text-sm text-zinc-400 hover:border-orange-500/50 hover:text-orange-400 transition-colors flex items-center justify-center gap-2"
             >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v16m8-8H4"
+                    />
                 </svg>
                 Create New Vault
             </button>

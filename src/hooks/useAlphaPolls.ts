@@ -26,7 +26,9 @@ export function useAlphaPolls(userAddress: string | null) {
             setCanCreatePoll(data.canCreatePoll || false);
         } catch (err) {
             console.error("[useAlphaPolls] Error fetching polls:", err);
-            setError(err instanceof Error ? err.message : "Failed to fetch polls");
+            setError(
+                err instanceof Error ? err.message : "Failed to fetch polls",
+            );
         } finally {
             setIsLoading(false);
         }
@@ -38,7 +40,7 @@ export function useAlphaPolls(userAddress: string | null) {
             options: string[],
             allowsMultiple = false,
             endsAt: string | null = null,
-            isAnonymous = false
+            isAnonymous = false,
         ) => {
             if (!userAddress) {
                 throw new Error("User address is required");
@@ -66,7 +68,7 @@ export function useAlphaPolls(userAddress: string | null) {
             setPolls((prev) => [data.poll, ...prev]);
             return data.poll;
         },
-        [userAddress]
+        [userAddress],
     );
 
     const vote = useCallback(
@@ -100,9 +102,14 @@ export function useAlphaPolls(userAddress: string | null) {
                             const prevOption = newUserVotes[0];
                             newVotes[prevOption] = {
                                 ...newVotes[prevOption],
-                                count: Math.max(0, newVotes[prevOption].count - 1),
+                                count: Math.max(
+                                    0,
+                                    newVotes[prevOption].count - 1,
+                                ),
                                 voters: newVotes[prevOption].voters.filter(
-                                    (v) => v.toLowerCase() !== userAddress.toLowerCase()
+                                    (v) =>
+                                        v.toLowerCase() !==
+                                        userAddress.toLowerCase(),
                                 ),
                             };
                             newTotalVotes--;
@@ -112,7 +119,10 @@ export function useAlphaPolls(userAddress: string | null) {
                         newVotes[optionIndex] = {
                             ...newVotes[optionIndex],
                             count: newVotes[optionIndex].count + 1,
-                            voters: [...newVotes[optionIndex].voters, userAddress],
+                            voters: [
+                                ...newVotes[optionIndex].voters,
+                                userAddress,
+                            ],
                         };
                         newTotalVotes++;
                     } else {
@@ -122,7 +132,9 @@ export function useAlphaPolls(userAddress: string | null) {
                             ...newVotes[optionIndex],
                             count: Math.max(0, newVotes[optionIndex].count - 1),
                             voters: newVotes[optionIndex].voters.filter(
-                                (v) => v.toLowerCase() !== userAddress.toLowerCase()
+                                (v) =>
+                                    v.toLowerCase() !==
+                                    userAddress.toLowerCase(),
                             ),
                         };
                         newTotalVotes = Math.max(0, newTotalVotes - 1);
@@ -134,12 +146,12 @@ export function useAlphaPolls(userAddress: string | null) {
                         votes: newVotes,
                         total_votes: newTotalVotes,
                     };
-                })
+                }),
             );
 
             return data;
         },
-        [userAddress]
+        [userAddress],
     );
 
     return {

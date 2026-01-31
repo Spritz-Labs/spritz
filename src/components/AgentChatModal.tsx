@@ -412,7 +412,7 @@ export function AgentChatModal({
                                         placeholder={`Message ${agent.name}...`}
                                         disabled={isSending}
                                         maxLength={10000}
-                                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
+                                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-colors disabled:opacity-50"
                                     />
                                     <button
                                         onClick={handleSend}

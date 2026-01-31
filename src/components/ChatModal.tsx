@@ -860,105 +860,108 @@ export function ChatModal({
         }
     }, [selectedMessage]);
 
-    const handleSend = useCallback(async (overrideMessage?: string) => {
-        const content = (overrideMessage ?? newMessage).trim();
-        if (!content) return;
+    const handleSend = useCallback(
+        async (overrideMessage?: string) => {
+            const content = (overrideMessage ?? newMessage).trim();
+            if (!content) return;
 
-        // Include reply context if replying
-        let messageContent = content;
-        if (replyingTo) {
-            const replySender = replyingTo.senderAddress;
-            const replyPreview =
-                replyingTo.content.slice(0, 50) +
-                (replyingTo.content.length > 50 ? "..." : "");
-            const senderDisplay =
-                replySender.toLowerCase() === userAddress.toLowerCase()
-                    ? "yourself"
-                    : peerName || formatAddress(replySender);
-            messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
-        }
+            // Include reply context if replying
+            let messageContent = content;
+            if (replyingTo) {
+                const replySender = replyingTo.senderAddress;
+                const replyPreview =
+                    replyingTo.content.slice(0, 50) +
+                    (replyingTo.content.length > 50 ? "..." : "");
+                const senderDisplay =
+                    replySender.toLowerCase() === userAddress.toLowerCase()
+                        ? "yourself"
+                        : peerName || formatAddress(replySender);
+                messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
+            }
 
-        const tempId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const tempId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        // Immediately add message to UI with pending status (optimistic update)
-        const pendingMessage: Message = {
-            id: tempId,
-            content: messageContent,
-            senderAddress: userAddress.toLowerCase(),
-            sentAt: new Date(),
-            status: "pending",
-        };
-        setMessages((prev) => [...prev, pendingMessage]);
+            // Immediately add message to UI with pending status (optimistic update)
+            const pendingMessage: Message = {
+                id: tempId,
+                content: messageContent,
+                senderAddress: userAddress.toLowerCase(),
+                sentAt: new Date(),
+                status: "pending",
+            };
+            setMessages((prev) => [...prev, pendingMessage]);
 
-        setChatError(null);
-        const prevMessage = newMessage;
-        const prevReplyingTo = replyingTo;
-        if (!overrideMessage) setNewMessage("");
-        setReplyingTo(null);
-        clearDraft();
-        stopTyping();
+            setChatError(null);
+            const prevMessage = newMessage;
+            const prevReplyingTo = replyingTo;
+            if (!overrideMessage) setNewMessage("");
+            setReplyingTo(null);
+            clearDraft();
+            stopTyping();
 
-        try {
-            const result = await sendMessage(peerAddress, messageContent);
-            if (result.success) {
-                trackMessageSent();
-                const preview = messageContent.startsWith("[GIF]")
-                    ? "🎬 GIF"
-                    : messageContent.startsWith("[PIXEL_ART]")
-                      ? "🎨 Pixel Art"
-                      : messageContent.startsWith("[LOCATION]")
-                        ? "📍 Location"
-                        : messageContent;
-                onMessageSent?.(preview);
-                setMessages((prev) =>
-                    prev.map((m) =>
-                        m.id === tempId
-                            ? {
-                                  ...m,
-                                  id: result.message?.id || tempId,
-                                  status: "sent",
-                              }
-                            : m,
-                    ),
-                );
-            } else {
+            try {
+                const result = await sendMessage(peerAddress, messageContent);
+                if (result.success) {
+                    trackMessageSent();
+                    const preview = messageContent.startsWith("[GIF]")
+                        ? "🎬 GIF"
+                        : messageContent.startsWith("[PIXEL_ART]")
+                          ? "🎨 Pixel Art"
+                          : messageContent.startsWith("[LOCATION]")
+                            ? "📍 Location"
+                            : messageContent;
+                    onMessageSent?.(preview);
+                    setMessages((prev) =>
+                        prev.map((m) =>
+                            m.id === tempId
+                                ? {
+                                      ...m,
+                                      id: result.message?.id || tempId,
+                                      status: "sent",
+                                  }
+                                : m,
+                        ),
+                    );
+                } else {
+                    setMessages((prev) =>
+                        prev.map((m) =>
+                            m.id === tempId ? { ...m, status: "failed" } : m,
+                        ),
+                    );
+                    setChatError(
+                        `Failed to send: ${result.error || "Unknown error"}`,
+                    );
+                    setNewMessage(prevMessage);
+                    setReplyingTo(prevReplyingTo);
+                }
+            } catch (error) {
+                console.error("[Chat] Send error:", error);
                 setMessages((prev) =>
                     prev.map((m) =>
                         m.id === tempId ? { ...m, status: "failed" } : m,
                     ),
                 );
                 setChatError(
-                    `Failed to send: ${result.error || "Unknown error"}`,
+                    `Failed to send: ${
+                        error instanceof Error ? error.message : "Unknown error"
+                    }`,
                 );
                 setNewMessage(prevMessage);
                 setReplyingTo(prevReplyingTo);
             }
-        } catch (error) {
-            console.error("[Chat] Send error:", error);
-            setMessages((prev) =>
-                prev.map((m) =>
-                    m.id === tempId ? { ...m, status: "failed" } : m,
-                ),
-            );
-            setChatError(
-                `Failed to send: ${
-                    error instanceof Error ? error.message : "Unknown error"
-                }`,
-            );
-            setNewMessage(prevMessage);
-            setReplyingTo(prevReplyingTo);
-        }
-    }, [
-        newMessage,
-        sendMessage,
-        peerAddress,
-        userAddress,
-        trackMessageSent,
-        stopTyping,
-        replyingTo,
-        peerName,
-        clearDraft,
-    ]);
+        },
+        [
+            newMessage,
+            sendMessage,
+            peerAddress,
+            userAddress,
+            trackMessageSent,
+            stopTyping,
+            replyingTo,
+            peerName,
+            clearDraft,
+        ],
+    );
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {

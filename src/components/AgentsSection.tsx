@@ -966,7 +966,8 @@ export function AgentsSection({
                                                 <h5 className="font-medium text-white">
                                                     {agent.name}
                                                 </h5>
-                                                {agent.visibility === "official" && (
+                                                {agent.visibility ===
+                                                    "official" && (
                                                     <span className="text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded font-medium">
                                                         ⭐ Official
                                                     </span>

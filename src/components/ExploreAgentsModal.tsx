@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { useDiscoverAgents, useFavoriteAgents, DiscoveredAgent } from "@/hooks/useAgents";
+import {
+    useDiscoverAgents,
+    useFavoriteAgents,
+    DiscoveredAgent,
+} from "@/hooks/useAgents";
 
 interface ExploreAgentsModalProps {
     isOpen: boolean;
@@ -11,28 +15,26 @@ interface ExploreAgentsModalProps {
     onSelectAgent: (agent: DiscoveredAgent) => void;
 }
 
-export function ExploreAgentsModal({ 
-    isOpen, 
-    onClose, 
+export function ExploreAgentsModal({
+    isOpen,
+    onClose,
     userAddress,
-    onSelectAgent 
+    onSelectAgent,
 }: ExploreAgentsModalProps) {
-    const {
-        agents,
-        isLoading,
-        error,
-        filter,
-        setFilter,
-        search,
-        setSearch,
-    } = useDiscoverAgents(isOpen ? userAddress : null);
+    const { agents, isLoading, error, filter, setFilter, search, setSearch } =
+        useDiscoverAgents(isOpen ? userAddress : null);
 
     const { isFavorite, toggleFavorite } = useFavoriteAgents(userAddress);
 
     const [searchInput, setSearchInput] = useState("");
-    const [togglingFavorite, setTogglingFavorite] = useState<string | null>(null);
+    const [togglingFavorite, setTogglingFavorite] = useState<string | null>(
+        null,
+    );
 
-    const handleToggleFavorite = async (e: React.MouseEvent, agentId: string) => {
+    const handleToggleFavorite = async (
+        e: React.MouseEvent,
+        agentId: string,
+    ) => {
         e.stopPropagation();
         setTogglingFavorite(agentId);
         try {
@@ -79,16 +81,31 @@ export function ExploreAgentsModal({
                                         🔍
                                     </div>
                                     <div>
-                                        <h2 className="text-lg font-bold text-white">Explore Agents</h2>
-                                        <p className="text-sm text-zinc-400">Discover AI agents from the community</p>
+                                        <h2 className="text-lg font-bold text-white">
+                                            Explore Agents
+                                        </h2>
+                                        <p className="text-sm text-zinc-400">
+                                            Discover AI agents from the
+                                            community
+                                        </p>
                                     </div>
                                 </div>
                                 <button
                                     onClick={onClose}
                                     className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
                                 >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             </div>
@@ -98,8 +115,12 @@ export function ExploreAgentsModal({
                                 <input
                                     type="text"
                                     value={searchInput}
-                                    onChange={(e) => setSearchInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                                    onChange={(e) =>
+                                        setSearchInput(e.target.value)
+                                    }
+                                    onKeyDown={(e) =>
+                                        e.key === "Enter" && handleSearch()
+                                    }
                                     placeholder="Search agents..."
                                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
                                 />
@@ -115,13 +136,27 @@ export function ExploreAgentsModal({
                             <div className="flex gap-2 flex-wrap">
                                 {[
                                     { key: "all", label: "All", icon: "🌐" },
-                                    { key: "official", label: "Official", icon: "⭐" },
-                                    { key: "friends", label: "Friends", icon: "👥" },
-                                    { key: "public", label: "Public", icon: "🌍" },
+                                    {
+                                        key: "official",
+                                        label: "Official",
+                                        icon: "⭐",
+                                    },
+                                    {
+                                        key: "friends",
+                                        label: "Friends",
+                                        icon: "👥",
+                                    },
+                                    {
+                                        key: "public",
+                                        label: "Public",
+                                        icon: "🌍",
+                                    },
                                 ].map((tab) => (
                                     <button
                                         key={tab.key}
-                                        onClick={() => setFilter(tab.key as typeof filter)}
+                                        onClick={() =>
+                                            setFilter(tab.key as typeof filter)
+                                        }
                                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                                             filter === tab.key
                                                 ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
@@ -139,9 +174,24 @@ export function ExploreAgentsModal({
                         <div className="flex-1 overflow-y-auto p-6">
                             {isLoading ? (
                                 <div className="flex items-center justify-center py-12">
-                                    <svg className="animate-spin w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    <svg
+                                        className="animate-spin w-6 h-6 text-emerald-400"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <circle
+                                            className="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                        />
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                        />
                                     </svg>
                                 </div>
                             ) : error ? (
@@ -153,13 +203,15 @@ export function ExploreAgentsModal({
                                     <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-zinc-800 flex items-center justify-center">
                                         <span className="text-3xl">🤖</span>
                                     </div>
-                                    <h3 className="text-white font-medium mb-1">No agents found</h3>
+                                    <h3 className="text-white font-medium mb-1">
+                                        No agents found
+                                    </h3>
                                     <p className="text-sm text-zinc-400">
-                                        {filter === "friends" 
+                                        {filter === "friends"
                                             ? "Your friends haven't shared any agents yet"
-                                            : search 
-                                                ? "Try a different search term"
-                                                : "Be the first to create a public agent!"}
+                                            : search
+                                              ? "Try a different search term"
+                                              : "Be the first to create a public agent!"}
                                     </p>
                                 </div>
                             ) : (
@@ -173,7 +225,10 @@ export function ExploreAgentsModal({
                                             className="w-full p-4 bg-zinc-800/50 border border-zinc-700/50 rounded-xl hover:border-emerald-500/50 hover:bg-zinc-800 transition-all text-left group cursor-pointer"
                                             role="button"
                                             tabIndex={0}
-                                            onKeyDown={(e) => e.key === "Enter" && onSelectAgent(agent)}
+                                            onKeyDown={(e) =>
+                                                e.key === "Enter" &&
+                                                onSelectAgent(agent)
+                                            }
                                         >
                                             <div className="flex items-start gap-4">
                                                 {agent.avatar_url ? (
@@ -184,13 +239,17 @@ export function ExploreAgentsModal({
                                                     />
                                                 ) : (
                                                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                                        {agent.avatar_emoji || "🤖"}
+                                                        {agent.avatar_emoji ||
+                                                            "🤖"}
                                                     </div>
                                                 )}
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                                        <h4 className="font-semibold text-white truncate">{agent.name}</h4>
-                                                        {agent.visibility === "official" && (
+                                                        <h4 className="font-semibold text-white truncate">
+                                                            {agent.name}
+                                                        </h4>
+                                                        {agent.visibility ===
+                                                            "official" && (
                                                             <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded-full font-medium">
                                                                 ⭐ Official
                                                             </span>
@@ -200,54 +259,126 @@ export function ExploreAgentsModal({
                                                                 👥 Friend
                                                             </span>
                                                         )}
-                                                        {agent.visibility === "public" && !agent.isFriendsAgent && (
-                                                            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full">
-                                                                🌍 Public
-                                                            </span>
-                                                        )}
+                                                        {agent.visibility ===
+                                                            "public" &&
+                                                            !agent.isFriendsAgent && (
+                                                                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full">
+                                                                    🌍 Public
+                                                                </span>
+                                                            )}
                                                     </div>
                                                     <p className="text-sm text-zinc-400 line-clamp-2 mb-2">
-                                                        {agent.personality || "An AI assistant"}
+                                                        {agent.personality ||
+                                                            "An AI assistant"}
                                                     </p>
                                                     {/* Tags */}
-                                                    {agent.tags && agent.tags.length > 0 && (
-                                                        <div className="flex flex-wrap gap-1 mb-2">
-                                                            {agent.tags.slice(0, 5).map(tag => (
-                                                                <span
-                                                                    key={tag}
-                                                                    className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded"
-                                                                >
-                                                                    #{tag}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                    {agent.tags &&
+                                                        agent.tags.length >
+                                                            0 && (
+                                                            <div className="flex flex-wrap gap-1 mb-2">
+                                                                {agent.tags
+                                                                    .slice(0, 5)
+                                                                    .map(
+                                                                        (
+                                                                            tag,
+                                                                        ) => (
+                                                                            <span
+                                                                                key={
+                                                                                    tag
+                                                                                }
+                                                                                className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded"
+                                                                            >
+                                                                                #
+                                                                                {
+                                                                                    tag
+                                                                                }
+                                                                            </span>
+                                                                        ),
+                                                                    )}
+                                                            </div>
+                                                        )}
                                                     <div className="flex items-center gap-3 text-xs text-zinc-500">
-                                                        <span>by {formatOwnerName(agent)}</span>
+                                                        <span>
+                                                            by{" "}
+                                                            {formatOwnerName(
+                                                                agent,
+                                                            )}
+                                                        </span>
                                                         <span>•</span>
-                                                        <span>{agent.message_count} messages</span>
+                                                        <span>
+                                                            {
+                                                                agent.message_count
+                                                            }{" "}
+                                                            messages
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div className="shrink-0 flex items-center gap-2">
                                                     {/* Favorite button */}
                                                     <button
-                                                        onClick={(e) => handleToggleFavorite(e, agent.id)}
-                                                        disabled={togglingFavorite === agent.id}
+                                                        onClick={(e) =>
+                                                            handleToggleFavorite(
+                                                                e,
+                                                                agent.id,
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            togglingFavorite ===
+                                                            agent.id
+                                                        }
                                                         className={`p-2 rounded-lg transition-all ${
                                                             isFavorite(agent.id)
                                                                 ? "text-yellow-400 bg-yellow-500/20"
                                                                 : "text-zinc-400 hover:text-yellow-400 hover:bg-yellow-500/10"
                                                         }`}
-                                                        title={isFavorite(agent.id) ? "Remove from favorites" : "Add to favorites"}
+                                                        title={
+                                                            isFavorite(agent.id)
+                                                                ? "Remove from favorites"
+                                                                : "Add to favorites"
+                                                        }
                                                     >
-                                                        {togglingFavorite === agent.id ? (
-                                                            <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                        {togglingFavorite ===
+                                                        agent.id ? (
+                                                            <svg
+                                                                className="w-5 h-5 animate-spin"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <circle
+                                                                    className="opacity-25"
+                                                                    cx="12"
+                                                                    cy="12"
+                                                                    r="10"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="4"
+                                                                />
+                                                                <path
+                                                                    className="opacity-75"
+                                                                    fill="currentColor"
+                                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                                                />
                                                             </svg>
                                                         ) : (
-                                                            <svg className="w-5 h-5" fill={isFavorite(agent.id) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                                            <svg
+                                                                className="w-5 h-5"
+                                                                fill={
+                                                                    isFavorite(
+                                                                        agent.id,
+                                                                    )
+                                                                        ? "currentColor"
+                                                                        : "none"
+                                                                }
+                                                                stroke="currentColor"
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                                                                />
                                                             </svg>
                                                         )}
                                                     </button>
@@ -266,7 +397,8 @@ export function ExploreAgentsModal({
                         {/* Footer */}
                         <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
                             <p className="text-xs text-zinc-500 text-center">
-                                {agents.length} agent{agents.length !== 1 ? "s" : ""} found
+                                {agents.length} agent
+                                {agents.length !== 1 ? "s" : ""} found
                                 {search && ` for "${search}"`}
                             </p>
                         </div>
@@ -278,4 +410,3 @@ export function ExploreAgentsModal({
 }
 
 export default ExploreAgentsModal;
-

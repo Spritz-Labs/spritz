@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 export type GroupPoll = {
@@ -25,7 +25,7 @@ export type GroupPoll = {
 // GET /api/groups/[id]/polls
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     const { id: groupId } = await params;
     const { searchParams } = new URL(request.url);
@@ -42,7 +42,7 @@ export async function GET(
             console.error("[Group Polls API] Error fetching polls:", error);
             return NextResponse.json(
                 { error: "Failed to fetch polls" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -57,7 +57,13 @@ export async function GET(
 
         let userVotes: Record<string, number[]> = {};
         if (userAddress && votes) {
-            userVotes = (votes as { poll_id: string; option_index: number; user_address: string }[])
+            userVotes = (
+                votes as {
+                    poll_id: string;
+                    option_index: number;
+                    user_address: string;
+                }[]
+            )
                 .filter((v) => v.user_address.toLowerCase() === userAddress)
                 .reduce(
                     (acc, v) => {
@@ -65,22 +71,30 @@ export async function GET(
                         acc[v.poll_id].push(v.option_index);
                         return acc;
                     },
-                    {} as Record<string, number[]>
+                    {} as Record<string, number[]>,
                 );
         }
 
         const pollsWithVotes: GroupPoll[] = (polls || []).map((poll) => {
             const pollVotes =
-                (votes as { poll_id: string; option_index: number; user_address: string }[])?.filter(
-                    (v) => v.poll_id === poll.id
-                ) || [];
+                (
+                    votes as {
+                        poll_id: string;
+                        option_index: number;
+                        user_address: string;
+                    }[]
+                )?.filter((v) => v.poll_id === poll.id) || [];
             const options = (poll.options as string[]) || [];
             const voteCounts = options.map((_, index) => {
-                const optionVotes = pollVotes.filter((v) => v.option_index === index);
+                const optionVotes = pollVotes.filter(
+                    (v) => v.option_index === index,
+                );
                 return {
                     option_index: index,
                     count: optionVotes.length,
-                    voters: poll.is_anonymous ? [] : optionVotes.map((v) => v.user_address),
+                    voters: poll.is_anonymous
+                        ? []
+                        : optionVotes.map((v) => v.user_address),
                 };
             });
             return {
@@ -108,7 +122,7 @@ export async function GET(
         console.error("[Group Polls API] Error:", e);
         return NextResponse.json(
             { error: "Failed to fetch polls" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }
@@ -116,7 +130,7 @@ export async function GET(
 // POST /api/groups/[id]/polls
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     const { id: groupId } = await params;
 
@@ -134,25 +148,25 @@ export async function POST(
         if (!userAddress) {
             return NextResponse.json(
                 { error: "User address is required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
         if (!question?.trim()) {
             return NextResponse.json(
                 { error: "Question is required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
         if (!options || !Array.isArray(options) || options.length < 2) {
             return NextResponse.json(
                 { error: "At least 2 options are required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
         if (options.length > 10) {
             return NextResponse.json(
                 { error: "Maximum 10 options allowed" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -176,7 +190,7 @@ export async function POST(
             console.error("[Group Polls API] Error creating poll:", error);
             return NextResponse.json(
                 { error: "Failed to create poll" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -205,7 +219,7 @@ export async function POST(
         console.error("[Group Polls API] Error:", e);
         return NextResponse.json(
             { error: "Failed to create poll" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }

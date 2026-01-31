@@ -3003,7 +3003,7 @@ export function ChannelChatModal({
                                                                 null,
                                                             );
                                                         }}
-                                                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-[#FF5500] hover:bg-[#E04D00] text-white text-sm rounded-lg font-medium transition-colors mb-2"
+                                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg font-medium transition-colors mb-2"
                                                     >
                                                         <svg
                                                             className="w-4 h-4"

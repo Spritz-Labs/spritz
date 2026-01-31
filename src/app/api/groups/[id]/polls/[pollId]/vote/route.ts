@@ -3,12 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string; pollId: string }> }
+    { params }: { params: Promise<{ id: string; pollId: string }> },
 ) {
     const { id: groupId, pollId } = await params;
 
@@ -19,13 +19,13 @@ export async function POST(
         if (!userAddress) {
             return NextResponse.json(
                 { error: "User address is required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
         if (optionIndex === undefined || optionIndex === null) {
             return NextResponse.json(
                 { error: "Option index is required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -41,19 +41,19 @@ export async function POST(
         if (pollError || !poll) {
             return NextResponse.json(
                 { error: "Poll not found" },
-                { status: 404 }
+                { status: 404 },
             );
         }
         if (poll.is_closed) {
             return NextResponse.json(
                 { error: "This poll is closed" },
-                { status: 400 }
+                { status: 400 },
             );
         }
         if (poll.ends_at && new Date(poll.ends_at) < new Date()) {
             return NextResponse.json(
                 { error: "This poll has ended" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -61,7 +61,7 @@ export async function POST(
         if (optionIndex < 0 || optionIndex >= options.length) {
             return NextResponse.json(
                 { error: "Invalid option index" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -71,7 +71,11 @@ export async function POST(
             .eq("poll_id", pollId)
             .eq("user_address", normalizedAddress);
 
-        if (!poll.allows_multiple && existingVotes && existingVotes.length > 0) {
+        if (
+            !poll.allows_multiple &&
+            existingVotes &&
+            existingVotes.length > 0
+        ) {
             if (existingVotes.some((v) => v.option_index === optionIndex)) {
                 const { error: deleteError } = await supabase
                     .from("shout_group_poll_votes")
@@ -82,7 +86,7 @@ export async function POST(
                 if (deleteError) {
                     return NextResponse.json(
                         { error: "Failed to remove vote" },
-                        { status: 500 }
+                        { status: 500 },
                     );
                 }
                 return NextResponse.json({ success: true, action: "removed" });
@@ -107,7 +111,7 @@ export async function POST(
             if (deleteError) {
                 return NextResponse.json(
                     { error: "Failed to remove vote" },
-                    { status: 500 }
+                    { status: 500 },
                 );
             }
             return NextResponse.json({ success: true, action: "removed" });
@@ -125,16 +129,13 @@ export async function POST(
             console.error("[Group Polls API] Error voting:", voteError);
             return NextResponse.json(
                 { error: "Failed to vote" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
         return NextResponse.json({ success: true, action: "added" });
     } catch (e) {
         console.error("[Group Polls API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to vote" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to vote" }, { status: 500 });
     }
 }

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMessage } from "viem";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,27 +11,24 @@ const supabase =
 
 async function verifyAdmin(
     request: NextRequest,
-): Promise<{ isAdmin: boolean; address: string | null }> {
+): Promise<{ isAdmin: boolean }> {
     const address = request.headers.get("x-admin-address");
     const signature = request.headers.get("x-admin-signature");
     const encodedMessage = request.headers.get("x-admin-message");
 
     if (!address || !signature || !encodedMessage || !supabase) {
-        return { isAdmin: false, address: null };
+        return { isAdmin: false };
     }
 
+    const { verifyMessage } = await import("viem");
     try {
         const message = decodeURIComponent(atob(encodedMessage));
-
         const isValidSignature = await verifyMessage({
             address: address as `0x${string}`,
             message,
             signature: signature as `0x${string}`,
         });
-
-        if (!isValidSignature) {
-            return { isAdmin: false, address: null };
-        }
+        if (!isValidSignature) return { isAdmin: false };
 
         const { data: admin } = await supabase
             .from("shout_admins")
@@ -40,15 +36,16 @@ async function verifyAdmin(
             .eq("wallet_address", address.toLowerCase())
             .single();
 
-        return { isAdmin: !!admin, address: address.toLowerCase() };
+        return { isAdmin: !!admin };
     } catch {
-        return { isAdmin: false, address: null };
+        return { isAdmin: false };
     }
 }
 
 /**
- * GET /api/admin/agent-chats
- * Returns chat rows for Official Agents only. Query params: agent_id, source, period (24h|7d|30d), limit, offset.
+ * GET /api/admin/agent-chats/summary
+ * Returns per-agent aggregates for the period: message_count, total_tokens, avg_latency_ms, tool_call_count, estimated_cost_usd, conversation_count.
+ * Query params: period (24h|7d|30d), agent_id (optional).
  */
 export async function GET(request: NextRequest) {
     if (!supabase) {
@@ -64,18 +61,8 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const agentId = searchParams.get("agent_id") || undefined;
-    const source = searchParams.get("source") || undefined;
     const period = searchParams.get("period") || "7d";
-    const role = searchParams.get("role") || undefined; // "user" | "assistant"
-    const hasToolCalls = searchParams.get("has_tool_calls") === "true";
-    const userAddress = searchParams.get("user_address")?.trim() || undefined;
-    const contentSearch = searchParams.get("content")?.trim() || undefined;
-    const limit = Math.min(
-        Math.max(parseInt(searchParams.get("limit") || "100", 10), 1),
-        500,
-    );
-    const offset = Math.max(parseInt(searchParams.get("offset") || "0", 10), 0);
+    const agentId = searchParams.get("agent_id") || undefined;
 
     const now = new Date();
     let startDate: Date;
@@ -91,7 +78,6 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // Official agent IDs only
         const { data: officialAgents, error: agentsError } = await supabase
             .from("shout_agents")
             .select("id, name, avatar_emoji")
@@ -101,9 +87,7 @@ export async function GET(request: NextRequest) {
         const officialIds = (officialAgents || []).map((a) => a.id);
         if (officialIds.length === 0) {
             return NextResponse.json({
-                chats: [],
-                agents: [],
-                total: 0,
+                byAgent: [],
                 period,
                 startDate: startDate.toISOString(),
                 endDate: now.toISOString(),
@@ -113,38 +97,17 @@ export async function GET(request: NextRequest) {
         let query = supabase
             .from("shout_agent_chats")
             .select(
-                "id, agent_id, user_address, role, content, source, channel_id, channel_type, session_id, created_at, tool_calls, tool_errors, input_tokens, output_tokens, total_tokens, model, latency_ms, estimated_cost_usd, error_code, error_message, feedback_type, feedback_at, feedback_by",
-                { count: "exact" },
+                "agent_id, role, total_tokens, latency_ms, tool_calls, estimated_cost_usd, user_address, session_id",
             )
             .in("agent_id", officialIds)
             .gte("created_at", startDate.toISOString())
-            .lte("created_at", now.toISOString())
-            .order("created_at", { ascending: false })
-            .range(offset, offset + limit - 1);
+            .lte("created_at", now.toISOString());
 
         if (agentId && officialIds.includes(agentId)) {
             query = query.eq("agent_id", agentId);
         }
-        if (source && ["direct", "public", "channel"].includes(source)) {
-            query = query.eq("source", source);
-        }
-        if (role && ["user", "assistant"].includes(role)) {
-            query = query.eq("role", role);
-        }
-        if (hasToolCalls) {
-            query = query
-                .not("tool_calls", "is", null)
-                .filter("tool_calls", "neq", "[]");
-        }
-        if (userAddress) {
-            query = query.ilike("user_address", `%${userAddress}%`);
-        }
-        if (contentSearch) {
-            query = query.ilike("content", `%${contentSearch}%`);
-        }
 
-        const { data: chats, error, count } = await query;
-
+        const { data: rows, error } = await query;
         if (error) throw error;
 
         const agentMap = new Map(
@@ -154,24 +117,79 @@ export async function GET(request: NextRequest) {
             ]),
         );
 
-        const chatsWithAgent = (chats || []).map((c) => ({
-            ...c,
-            agent_name: agentMap.get(c.agent_id)?.name ?? null,
-            agent_emoji: agentMap.get(c.agent_id)?.avatar_emoji ?? null,
+        const byAgentId = new Map<
+            string,
+            {
+                message_count: number;
+                total_tokens: number;
+                latency_sum_ms: number;
+                latency_count: number;
+                tool_call_count: number;
+                estimated_cost_usd: number;
+                conversations: Set<string>;
+            }
+        >();
+
+        for (const row of rows || []) {
+            const id = row.agent_id;
+            if (!byAgentId.has(id)) {
+                byAgentId.set(id, {
+                    message_count: 0,
+                    total_tokens: 0,
+                    latency_sum_ms: 0,
+                    latency_count: 0,
+                    tool_call_count: 0,
+                    estimated_cost_usd: 0,
+                    conversations: new Set(),
+                });
+            }
+            const agg = byAgentId.get(id)!;
+            agg.message_count += 1;
+            if (row.total_tokens != null) agg.total_tokens += row.total_tokens;
+            if (row.latency_ms != null) {
+                agg.latency_sum_ms += row.latency_ms;
+                agg.latency_count += 1;
+            }
+            const hasToolCalls =
+                row.tool_calls != null &&
+                Array.isArray(row.tool_calls) &&
+                row.tool_calls.length > 0;
+            if (hasToolCalls) agg.tool_call_count += 1;
+            if (row.estimated_cost_usd != null) {
+                agg.estimated_cost_usd += Number(row.estimated_cost_usd);
+            }
+            const convKey = row.session_id
+                ? `${row.user_address}:${row.session_id}`
+                : row.user_address;
+            agg.conversations.add(convKey);
+        }
+
+        const byAgent = Array.from(byAgentId.entries()).map(([id, agg]) => ({
+            agent_id: id,
+            agent_name: agentMap.get(id)?.name ?? null,
+            agent_emoji: agentMap.get(id)?.avatar_emoji ?? null,
+            message_count: agg.message_count,
+            total_tokens: agg.total_tokens,
+            avg_latency_ms:
+                agg.latency_count > 0
+                    ? Math.round(agg.latency_sum_ms / agg.latency_count)
+                    : null,
+            tool_call_count: agg.tool_call_count,
+            estimated_cost_usd:
+                Math.round(agg.estimated_cost_usd * 1_000_000) / 1_000_000,
+            conversation_count: agg.conversations.size,
         }));
 
         return NextResponse.json({
-            chats: chatsWithAgent,
-            agents: officialAgents || [],
-            total: count ?? chatsWithAgent.length,
+            byAgent,
             period,
             startDate: startDate.toISOString(),
             endDate: now.toISOString(),
         });
     } catch (err) {
-        console.error("[Admin agent-chats]", err);
+        console.error("[Admin agent-chats summary]", err);
         return NextResponse.json(
-            { error: "Failed to fetch agent chats" },
+            { error: "Failed to fetch summary" },
             { status: 500 },
         );
     }

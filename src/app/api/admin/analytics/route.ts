@@ -3,14 +3,17 @@ import { verifyMessage } from "viem";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey 
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase =
+    supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // Verify admin signature from headers
-async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; address: string | null }> {
+async function verifyAdmin(
+    request: NextRequest,
+): Promise<{ isAdmin: boolean; address: string | null }> {
     const address = request.headers.get("x-admin-address");
     const signature = request.headers.get("x-admin-signature");
     const encodedMessage = request.headers.get("x-admin-message");
@@ -21,7 +24,7 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; ad
 
     try {
         const message = decodeURIComponent(atob(encodedMessage));
-        
+
         const isValidSignature = await verifyMessage({
             address: address as `0x${string}`,
             message,
@@ -47,7 +50,10 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; ad
 // GET: Fetch analytics data
 export async function GET(request: NextRequest) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const { isAdmin } = await verifyAdmin(request);
@@ -133,12 +139,12 @@ export async function GET(request: NextRequest) {
             .select("created_at")
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
-        
+
         // Fetch all friendships for total count
         const { data: allFriendships } = await supabase
             .from("shout_friends")
             .select("id");
-        
+
         // Fetch friend requests in period (includes pending, accepted, rejected)
         const { data: friendRequests } = await supabase
             .from("shout_friend_requests")
@@ -169,14 +175,18 @@ export async function GET(request: NextRequest) {
         // Fetch agents created in period
         const { data: newAgents } = await supabase
             .from("shout_agents")
-            .select("created_at, owner_address, visibility, message_count, name")
+            .select(
+                "created_at, owner_address, visibility, message_count, name",
+            )
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
 
         // Fetch agent chats in period (include source, content, channel for usage analytics)
         const { data: agentChats } = await supabase
             .from("shout_agent_chats")
-            .select("created_at, agent_id, user_address, role, source, content, channel_id, channel_type")
+            .select(
+                "created_at, agent_id, user_address, role, source, content, channel_id, channel_type",
+            )
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
 
@@ -204,7 +214,9 @@ export async function GET(request: NextRequest) {
         // Fetch scheduled calls in period
         const { data: scheduledCalls } = await supabase
             .from("shout_scheduled_calls")
-            .select("created_at, recipient_wallet_address, scheduler_wallet_address, status")
+            .select(
+                "created_at, recipient_wallet_address, scheduler_wallet_address, status",
+            )
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
 
@@ -230,7 +242,7 @@ export async function GET(request: NextRequest) {
         const { count: totalChannelMessages } = await supabase
             .from("shout_channel_messages")
             .select("*", { count: "exact", head: true });
-        
+
         const { count: totalAlphaMessages } = await supabase
             .from("shout_alpha_messages")
             .select("*", { count: "exact", head: true });
@@ -245,13 +257,24 @@ export async function GET(request: NextRequest) {
         const totalUsers = allUsers?.length || 0;
         const newUsersCount = newUsers?.length || 0;
         const activeUsers = loginData?.length || 0;
-        const totalMessages = (totalDmMessages || 0) + (totalChannelMessages || 0) + (totalAlphaMessages || 0);
-        const messagesInPeriod = (alphaMessages?.length || 0) + (dmMessages?.length || 0) + (channelMessages?.length || 0);
-        const totalCalls = allUsers?.reduce((sum, u) => sum + (u.total_calls || 0), 0) || 0;
-        const totalVoiceMinutes = allUsers?.reduce((sum, u) => sum + (u.voice_minutes || 0), 0) || 0;
-        const totalVideoMinutes = allUsers?.reduce((sum, u) => sum + (u.video_minutes || 0), 0) || 0;
-        const totalPoints = allUsers?.reduce((sum, u) => sum + (u.points || 0), 0) || 0;
-        const pointsInPeriod = pointsHistory?.reduce((sum, p) => sum + (p.points || 0), 0) || 0;
+        const totalMessages =
+            (totalDmMessages || 0) +
+            (totalChannelMessages || 0) +
+            (totalAlphaMessages || 0);
+        const messagesInPeriod =
+            (alphaMessages?.length || 0) +
+            (dmMessages?.length || 0) +
+            (channelMessages?.length || 0);
+        const totalCalls =
+            allUsers?.reduce((sum, u) => sum + (u.total_calls || 0), 0) || 0;
+        const totalVoiceMinutes =
+            allUsers?.reduce((sum, u) => sum + (u.voice_minutes || 0), 0) || 0;
+        const totalVideoMinutes =
+            allUsers?.reduce((sum, u) => sum + (u.video_minutes || 0), 0) || 0;
+        const totalPoints =
+            allUsers?.reduce((sum, u) => sum + (u.points || 0), 0) || 0;
+        const pointsInPeriod =
+            pointsHistory?.reduce((sum, p) => sum + (p.points || 0), 0) || 0;
         const friendRequestsCount = friendRequests?.length || 0;
         const acceptedFriendships = (allFriendships?.length || 0) / 2; // Divided by 2 since friendships are stored bidirectionally
         const newFriendshipsInPeriod = (friendships?.length || 0) / 2;
@@ -260,7 +283,7 @@ export async function GET(request: NextRequest) {
 
         // Public profile stats
         const publicProfilesCount = publicProfiles?.length || 0;
-        
+
         // Message breakdown for display
         const dmMessagesInPeriod = dmMessages?.length || 0;
         const channelMessagesInPeriod = channelMessages?.length || 0;
@@ -269,66 +292,115 @@ export async function GET(request: NextRequest) {
         // Agent stats
         const totalAgents = allAgents?.length || 0;
         const newAgentsCount = newAgents?.length || 0;
-        const publicAgents = allAgents?.filter(a => a.visibility === "public").length || 0;
-        const friendsAgents = allAgents?.filter(a => a.visibility === "friends").length || 0;
-        const privateAgents = allAgents?.filter(a => a.visibility === "private").length || 0;
-        const officialAgents = allAgents?.filter(a => a.visibility === "official").length || 0;
-        const totalAgentMessages = allAgents?.reduce((sum, a) => sum + (a.message_count || 0), 0) || 0;
-        const agentMessagesInPeriod = agentChats?.filter(c => c.role === "user").length || 0;
-        const uniqueAgentUsers = new Set(agentChats?.map(c => c.user_address) || []).size;
+        const publicAgents =
+            allAgents?.filter((a) => a.visibility === "public").length || 0;
+        const friendsAgents =
+            allAgents?.filter((a) => a.visibility === "friends").length || 0;
+        const privateAgents =
+            allAgents?.filter((a) => a.visibility === "private").length || 0;
+        const officialAgents =
+            allAgents?.filter((a) => a.visibility === "official").length || 0;
+        const totalAgentMessages =
+            allAgents?.reduce((sum, a) => sum + (a.message_count || 0), 0) || 0;
+        const agentMessagesInPeriod =
+            agentChats?.filter((c) => c.role === "user").length || 0;
+        const uniqueAgentUsers = new Set(
+            agentChats?.map((c) => c.user_address) || [],
+        ).size;
         const knowledgeItemsCount = knowledgeItems?.length || 0;
-        const indexedKnowledgeItems = knowledgeItems?.filter(k => k.status === "indexed").length || 0;
+        const indexedKnowledgeItems =
+            knowledgeItems?.filter((k) => k.status === "indexed").length || 0;
 
         // Agent usage by source (direct 1:1, public page, channel @mentions)
-        const userChatsInPeriod = agentChats?.filter(c => c.role === "user") || [];
+        const userChatsInPeriod =
+            agentChats?.filter((c) => c.role === "user") || [];
         const agentMessagesBySource = {
-            direct: userChatsInPeriod.filter(c => c.source === "direct").length,
-            public: userChatsInPeriod.filter(c => c.source === "public").length,
-            channel: userChatsInPeriod.filter(c => c.source === "channel").length,
+            direct: userChatsInPeriod.filter((c) => c.source === "direct")
+                .length,
+            public: userChatsInPeriod.filter((c) => c.source === "public")
+                .length,
+            channel: userChatsInPeriod.filter((c) => c.source === "channel")
+                .length,
         };
         // Failed agent responses (assistant rows we log on stream/error)
-        const agentFailedInPeriod = agentChats?.filter(
-            c => c.role === "assistant" && c.content?.startsWith("[Error:")
-        ).length || 0;
+        const agentFailedInPeriod =
+            agentChats?.filter(
+                (c) =>
+                    c.role === "assistant" && c.content?.startsWith("[Error:"),
+            ).length || 0;
 
         // Streaming stats
         const streamsCreated = streams?.length || 0;
-        const streamsStarted = streams?.filter(s => s.status === "live" || s.status === "ended").length || 0;
-        const streamsEnded = streams?.filter(s => s.status === "ended").length || 0;
+        const streamsStarted =
+            streams?.filter((s) => s.status === "live" || s.status === "ended")
+                .length || 0;
+        const streamsEnded =
+            streams?.filter((s) => s.status === "ended").length || 0;
         // Calculate total streaming minutes from ended streams
-        const totalStreamingMinutes = streams?.reduce((sum, s) => {
-            if (s.started_at && s.ended_at) {
-                const durationMs = new Date(s.ended_at).getTime() - new Date(s.started_at).getTime();
-                return sum + Math.round(durationMs / (1000 * 60));
-            }
-            return sum;
-        }, 0) || 0;
+        const totalStreamingMinutes =
+            streams?.reduce((sum, s) => {
+                if (s.started_at && s.ended_at) {
+                    const durationMs =
+                        new Date(s.ended_at).getTime() -
+                        new Date(s.started_at).getTime();
+                    return sum + Math.round(durationMs / (1000 * 60));
+                }
+                return sum;
+            }, 0) || 0;
         // Get streaming stats from user analytics columns
-        const totalStreamsCreated = allUsers?.reduce((sum, u) => sum + (u.streams_created || 0), 0) || 0;
-        const totalStreamsStarted = allUsers?.reduce((sum, u) => sum + (u.streams_started || 0), 0) || 0;
-        const totalStreamsEnded = allUsers?.reduce((sum, u) => sum + (u.streams_ended || 0), 0) || 0;
-        const totalStreamingMinutesAll = allUsers?.reduce((sum, u) => sum + (u.streaming_minutes || 0), 0) || 0;
-        const totalStreamsViewed = allUsers?.reduce((sum, u) => sum + (u.streams_viewed || 0), 0) || 0;
+        const totalStreamsCreated =
+            allUsers?.reduce((sum, u) => sum + (u.streams_created || 0), 0) ||
+            0;
+        const totalStreamsStarted =
+            allUsers?.reduce((sum, u) => sum + (u.streams_started || 0), 0) ||
+            0;
+        const totalStreamsEnded =
+            allUsers?.reduce((sum, u) => sum + (u.streams_ended || 0), 0) || 0;
+        const totalStreamingMinutesAll =
+            allUsers?.reduce((sum, u) => sum + (u.streaming_minutes || 0), 0) ||
+            0;
+        const totalStreamsViewed =
+            allUsers?.reduce((sum, u) => sum + (u.streams_viewed || 0), 0) || 0;
 
         // Room stats
         const roomsCreated = rooms?.length || 0;
-        const totalRoomsCreated = allUsers?.reduce((sum, u) => sum + (u.rooms_created || 0), 0) || 0;
-        const totalRoomsJoined = allUsers?.reduce((sum, u) => sum + (u.rooms_joined || 0), 0) || 0;
+        const totalRoomsCreated =
+            allUsers?.reduce((sum, u) => sum + (u.rooms_created || 0), 0) || 0;
+        const totalRoomsJoined =
+            allUsers?.reduce((sum, u) => sum + (u.rooms_joined || 0), 0) || 0;
 
         // Scheduling stats
         const schedulesCreated = scheduledCalls?.length || 0;
-        const schedulesJoined = scheduledCalls?.filter(s => s.status === "completed").length || 0;
-        const totalSchedulesCreated = allUsers?.reduce((sum, u) => sum + (u.schedules_created || 0), 0) || 0;
-        const totalSchedulesJoined = allUsers?.reduce((sum, u) => sum + (u.schedules_joined || 0), 0) || 0;
+        const schedulesJoined =
+            scheduledCalls?.filter((s) => s.status === "completed").length || 0;
+        const totalSchedulesCreated =
+            allUsers?.reduce((sum, u) => sum + (u.schedules_created || 0), 0) ||
+            0;
+        const totalSchedulesJoined =
+            allUsers?.reduce((sum, u) => sum + (u.schedules_joined || 0), 0) ||
+            0;
 
         // Wallet stats
-        const usersWithSmartWallet = allUsers?.filter(u => u.smart_wallet_address).length || 0;
+        const usersWithSmartWallet =
+            allUsers?.filter((u) => u.smart_wallet_address).length || 0;
         const walletTypeBreakdown = {
-            wallet: allUsers?.filter(u => u.wallet_type === "wallet" || !u.wallet_type).length || 0,
-            passkey: allUsers?.filter(u => u.wallet_type === "passkey").length || 0,
-            email: allUsers?.filter(u => u.wallet_type === "email").length || 0,
-            worldId: allUsers?.filter(u => u.wallet_type?.includes("world") || u.wallet_type?.includes("alien")).length || 0,
-            solana: allUsers?.filter(u => u.wallet_type === "solana").length || 0,
+            wallet:
+                allUsers?.filter(
+                    (u) => u.wallet_type === "wallet" || !u.wallet_type,
+                ).length || 0,
+            passkey:
+                allUsers?.filter((u) => u.wallet_type === "passkey").length ||
+                0,
+            email:
+                allUsers?.filter((u) => u.wallet_type === "email").length || 0,
+            worldId:
+                allUsers?.filter(
+                    (u) =>
+                        u.wallet_type?.includes("world") ||
+                        u.wallet_type?.includes("alien"),
+                ).length || 0,
+            solana:
+                allUsers?.filter((u) => u.wallet_type === "solana").length || 0,
         };
 
         // Fetch passkey credentials stats
@@ -337,21 +409,26 @@ export async function GET(request: NextRequest) {
             .select("id, user_address, created_at, safe_signer_address");
 
         const totalPasskeys = allPasskeys?.length || 0;
-        const passkeysWithSafeSigners = allPasskeys?.filter(p => p.safe_signer_address).length || 0;
-        const passkeysInPeriod = allPasskeys?.filter(p => 
-            new Date(p.created_at) >= startDate
-        ).length || 0;
+        const passkeysWithSafeSigners =
+            allPasskeys?.filter((p) => p.safe_signer_address).length || 0;
+        const passkeysInPeriod =
+            allPasskeys?.filter((p) => new Date(p.created_at) >= startDate)
+                .length || 0;
 
         // Fetch shout_wallets table for embedded wallet stats
         const { data: allWallets } = await supabase
             .from("shout_wallets")
-            .select("id, wallet_type, is_smart_wallet, smart_wallet_deployed, created_at");
+            .select(
+                "id, wallet_type, is_smart_wallet, smart_wallet_deployed, created_at",
+            );
 
-        const embeddedWallets = allWallets?.filter(w => w.wallet_type === "embedded").length || 0;
-        const deployedSmartWallets = allWallets?.filter(w => w.smart_wallet_deployed).length || 0;
-        const walletsCreatedInPeriod = allWallets?.filter(w => 
-            new Date(w.created_at) >= startDate
-        ).length || 0;
+        const embeddedWallets =
+            allWallets?.filter((w) => w.wallet_type === "embedded").length || 0;
+        const deployedSmartWallets =
+            allWallets?.filter((w) => w.smart_wallet_deployed).length || 0;
+        const walletsCreatedInPeriod =
+            allWallets?.filter((w) => new Date(w.created_at) >= startDate)
+                .length || 0;
 
         // Beta access stats for wallet
         const { data: betaApplicants } = await supabase
@@ -360,36 +437,58 @@ export async function GET(request: NextRequest) {
             .not("beta_access_applied", "is", null);
 
         const betaApplicantsCount = betaApplicants?.length || 0;
-        const betaApprovedCount = betaApplicants?.filter(u => u.has_beta_access).length || 0;
+        const betaApprovedCount =
+            betaApplicants?.filter((u) => u.has_beta_access).length || 0;
         const betaPendingCount = betaApplicantsCount - betaApprovedCount;
 
         // Wallet transaction stats
         const { data: walletTransactions } = await supabase
             .from("shout_wallet_transactions")
-            .select("id, chain_id, chain_name, amount_usd, tx_type, status, created_at, user_address")
+            .select(
+                "id, chain_id, chain_name, amount_usd, tx_type, status, created_at, user_address",
+            )
             .order("created_at", { ascending: false });
 
         const totalWalletTransactions = walletTransactions?.length || 0;
-        const walletTxInPeriod = walletTransactions?.filter(tx => 
-            new Date(tx.created_at) >= startDate
-        ).length || 0;
-        const confirmedTransactions = walletTransactions?.filter(tx => tx.status === "confirmed").length || 0;
-        const totalVolumeUsd = walletTransactions?.reduce((sum, tx) => sum + (Number(tx.amount_usd) || 0), 0) || 0;
-        const volumeInPeriod = walletTransactions?.filter(tx => 
-            new Date(tx.created_at) >= startDate
-        ).reduce((sum, tx) => sum + (Number(tx.amount_usd) || 0), 0) || 0;
-        const uniqueTxUsers = new Set(walletTransactions?.map(tx => tx.user_address) || []).size;
+        const walletTxInPeriod =
+            walletTransactions?.filter(
+                (tx) => new Date(tx.created_at) >= startDate,
+            ).length || 0;
+        const confirmedTransactions =
+            walletTransactions?.filter((tx) => tx.status === "confirmed")
+                .length || 0;
+        const totalVolumeUsd =
+            walletTransactions?.reduce(
+                (sum, tx) => sum + (Number(tx.amount_usd) || 0),
+                0,
+            ) || 0;
+        const volumeInPeriod =
+            walletTransactions
+                ?.filter((tx) => new Date(tx.created_at) >= startDate)
+                .reduce((sum, tx) => sum + (Number(tx.amount_usd) || 0), 0) ||
+            0;
+        const uniqueTxUsers = new Set(
+            walletTransactions?.map((tx) => tx.user_address) || [],
+        ).size;
 
         // Network stats from transactions
-        const networkTxCounts: Record<string, { chainId: number; chainName: string; count: number; volume: number }> = {};
+        const networkTxCounts: Record<
+            string,
+            {
+                chainId: number;
+                chainName: string;
+                count: number;
+                volume: number;
+            }
+        > = {};
         for (const tx of walletTransactions || []) {
             const key = String(tx.chain_id);
             if (!networkTxCounts[key]) {
-                networkTxCounts[key] = { 
-                    chainId: tx.chain_id, 
-                    chainName: tx.chain_name, 
-                    count: 0, 
-                    volume: 0 
+                networkTxCounts[key] = {
+                    chainId: tx.chain_id,
+                    chainName: tx.chain_name,
+                    count: 0,
+                    volume: 0,
                 };
             }
             networkTxCounts[key].count++;
@@ -403,12 +502,22 @@ export async function GET(request: NextRequest) {
             .order("total_transactions", { ascending: false });
 
         // Calculate user wallet stats from shout_users
-        const usersWithTxHistory = allUsers?.filter(u => (u.wallet_tx_count || 0) > 0).length || 0;
-        const totalUserVolumeUsd = allUsers?.reduce((sum, u) => sum + (Number(u.wallet_volume_usd) || 0), 0) || 0;
+        const usersWithTxHistory =
+            allUsers?.filter((u) => (u.wallet_tx_count || 0) > 0).length || 0;
+        const totalUserVolumeUsd =
+            allUsers?.reduce(
+                (sum, u) => sum + (Number(u.wallet_volume_usd) || 0),
+                0,
+            ) || 0;
 
         // Top channels by agent usage (source=channel, count user messages per channel)
-        const channelAgentCounts: Record<string, { channelId: string | null; channelType: string; count: number }> = {};
-        for (const c of userChatsInPeriod.filter(c => c.source === "channel")) {
+        const channelAgentCounts: Record<
+            string,
+            { channelId: string | null; channelType: string; count: number }
+        > = {};
+        for (const c of userChatsInPeriod.filter(
+            (c) => c.source === "channel",
+        )) {
             const key = `${c.channel_type ?? "channel"}:${c.channel_id ?? "global"}`;
             if (!channelAgentCounts[key]) {
                 channelAgentCounts[key] = {
@@ -419,44 +528,59 @@ export async function GET(request: NextRequest) {
             }
             channelAgentCounts[key].count++;
         }
-        const channelIds = [...new Set(Object.values(channelAgentCounts).map(v => v.channelId).filter(Boolean))] as string[];
-        const { data: channelRows } = channelIds.length > 0
-            ? await supabase.from("shout_public_channels").select("id, name, emoji").in("id", channelIds)
-            : { data: [] };
-        const channelNameById = new Map((channelRows || []).map(c => [c.id, `${c.emoji || ""} ${c.name}`.trim()]));
+        const channelIds = [
+            ...new Set(
+                Object.values(channelAgentCounts)
+                    .map((v) => v.channelId)
+                    .filter(Boolean),
+            ),
+        ] as string[];
+        const { data: channelRows } =
+            channelIds.length > 0
+                ? await supabase
+                      .from("shout_public_channels")
+                      .select("id, name, emoji")
+                      .in("id", channelIds)
+                : { data: [] };
+        const channelNameById = new Map(
+            (channelRows || []).map((c) => [
+                c.id,
+                `${c.emoji || ""} ${c.name}`.trim(),
+            ]),
+        );
         const topChannelsByAgentUsage = Object.entries(channelAgentCounts)
             .map(([, v]) => ({
                 channelId: v.channelId,
                 channelType: v.channelType,
-                channelName: v.channelType === "global" ? "Global (Alpha)" : (v.channelId ? channelNameById.get(v.channelId) ?? "Unknown" : "Global"),
+                channelName:
+                    v.channelType === "global"
+                        ? "Global (Alpha)"
+                        : v.channelId
+                          ? (channelNameById.get(v.channelId) ?? "Unknown")
+                          : "Global",
                 count: v.count,
             }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 10);
 
         // Generate time series data
-        const timeSeriesData = generateTimeSeries(
-            startDate,
-            now,
-            groupBy,
-            {
-                newUsers: newUsers || [],
-                logins: loginData || [],
-                messages: alphaMessages || [],
-                points: pointsHistory || [],
-                friendRequests: friendRequests || [],
-                groups: groups || [],
-                invites: usedInvites || [],
-                agents: newAgents || [],
-                agentChats: agentChats || [],
-            }
-        );
+        const timeSeriesData = generateTimeSeries(startDate, now, groupBy, {
+            newUsers: newUsers || [],
+            logins: loginData || [],
+            messages: alphaMessages || [],
+            points: pointsHistory || [],
+            friendRequests: friendRequests || [],
+            groups: groups || [],
+            invites: usedInvites || [],
+            agents: newAgents || [],
+            agentChats: agentChats || [],
+        });
 
         // Top users by various metrics
         const topUsersByPoints = [...(allUsers || [])]
             .sort((a, b) => (b.points || 0) - (a.points || 0))
             .slice(0, 10)
-            .map(u => ({
+            .map((u) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
@@ -466,7 +590,7 @@ export async function GET(request: NextRequest) {
         const topUsersByMessages = [...(allUsers || [])]
             .sort((a, b) => (b.messages_sent || 0) - (a.messages_sent || 0))
             .slice(0, 10)
-            .map(u => ({
+            .map((u) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
@@ -476,7 +600,7 @@ export async function GET(request: NextRequest) {
         const topUsersByFriends = [...(allUsers || [])]
             .sort((a, b) => (b.friends_count || 0) - (a.friends_count || 0))
             .slice(0, 10)
-            .map(u => ({
+            .map((u) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
@@ -487,7 +611,7 @@ export async function GET(request: NextRequest) {
         const topAgentsByMessages = [...(allAgents || [])]
             .sort((a, b) => (b.message_count || 0) - (a.message_count || 0))
             .slice(0, 10)
-            .map(a => ({
+            .map((a) => ({
                 id: a.id,
                 name: a.name,
                 emoji: a.avatar_emoji,
@@ -498,10 +622,14 @@ export async function GET(request: NextRequest) {
 
         // Recent smart wallet users
         const recentSmartWalletUsers = [...(allUsers || [])]
-            .filter(u => u.smart_wallet_address)
-            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+            .filter((u) => u.smart_wallet_address)
+            .sort(
+                (a, b) =>
+                    new Date(b.created_at || 0).getTime() -
+                    new Date(a.created_at || 0).getTime(),
+            )
             .slice(0, 10)
-            .map(u => ({
+            .map((u) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
@@ -516,13 +644,14 @@ export async function GET(request: NextRequest) {
             { visibility: "Friends", count: friendsAgents },
             { visibility: "Public", count: publicAgents },
             { visibility: "Official", count: officialAgents },
-        ].filter(v => v.count > 0);
+        ].filter((v) => v.count > 0);
 
         // Points breakdown
         const pointsBreakdown: Record<string, number> = {};
         for (const p of pointsHistory || []) {
             const reason = p.reason || "Other";
-            pointsBreakdown[reason] = (pointsBreakdown[reason] || 0) + (p.points || 0);
+            pointsBreakdown[reason] =
+                (pointsBreakdown[reason] || 0) + (p.points || 0);
         }
 
         return NextResponse.json({
@@ -619,33 +748,36 @@ export async function GET(request: NextRequest) {
             topChannelsByAgentUsage,
             agentVisibilityBreakdown,
             // Official agents list for admin integration management
-            officialAgentsList: allAgents
-                ?.filter(a => a.visibility === "official")
-                .map(a => ({
-                    id: a.id,
-                    name: a.name,
-                    avatar_emoji: a.avatar_emoji || "🤖",
-                    avatar_url: a.avatar_url,
-                    personality: a.personality,
-                    x402_enabled: a.x402_enabled,
-                    x402_price_cents: a.x402_price_cents,
-                    message_count: a.message_count || 0,
-                    created_at: a.created_at,
-                })) || [],
-            pointsBreakdown: Object.entries(pointsBreakdown).map(([reason, points]) => ({
-                reason,
-                points,
-            })),
+            officialAgentsList:
+                allAgents
+                    ?.filter((a) => a.visibility === "official")
+                    .map((a) => ({
+                        id: a.id,
+                        name: a.name,
+                        avatar_emoji: a.avatar_emoji || "🤖",
+                        avatar_url: a.avatar_url,
+                        personality: a.personality,
+                        x402_enabled: a.x402_enabled,
+                        x402_price_cents: a.x402_price_cents,
+                        message_count: a.message_count || 0,
+                        created_at: a.created_at,
+                    })) || [],
+            pointsBreakdown: Object.entries(pointsBreakdown).map(
+                ([reason, points]) => ({
+                    reason,
+                    points,
+                }),
+            ),
             walletTypeBreakdown: [
                 { type: "EOA Wallet", count: walletTypeBreakdown.wallet },
                 { type: "Passkey", count: walletTypeBreakdown.passkey },
                 { type: "Email", count: walletTypeBreakdown.email },
                 { type: "World ID", count: walletTypeBreakdown.worldId },
                 { type: "Solana", count: walletTypeBreakdown.solana },
-            ].filter(w => w.count > 0),
+            ].filter((w) => w.count > 0),
             networkStats: Object.values(networkTxCounts)
                 .sort((a, b) => b.count - a.count)
-                .map(n => ({
+                .map((n) => ({
                     chainId: n.chainId,
                     chainName: n.chainName,
                     transactions: n.count,
@@ -658,7 +790,10 @@ export async function GET(request: NextRequest) {
         });
     } catch (error) {
         console.error("[Analytics] Error:", error);
-        return NextResponse.json({ error: "Failed to fetch analytics" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to fetch analytics" },
+            { status: 500 },
+        );
     }
 }
 
@@ -678,7 +813,7 @@ function generateTimeSeries(
     startDate: Date,
     endDate: Date,
     groupBy: "hour" | "day" | "week" | "month",
-    data: DataSources
+    data: DataSources,
 ) {
     const series: {
         date: string;
@@ -698,7 +833,7 @@ function generateTimeSeries(
     }[] = [];
 
     let current = new Date(startDate);
-    
+
     while (current <= endDate) {
         let nextDate: Date;
         let label: string;
@@ -706,48 +841,72 @@ function generateTimeSeries(
         switch (groupBy) {
             case "hour":
                 nextDate = new Date(current.getTime() + 60 * 60 * 1000);
-                label = current.toLocaleTimeString("en-US", { hour: "numeric", hour12: true });
+                label = current.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    hour12: true,
+                });
                 break;
             case "day":
                 nextDate = new Date(current.getTime() + 24 * 60 * 60 * 1000);
-                label = current.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                label = current.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                });
                 break;
             case "week":
-                nextDate = new Date(current.getTime() + 7 * 24 * 60 * 60 * 1000);
+                nextDate = new Date(
+                    current.getTime() + 7 * 24 * 60 * 60 * 1000,
+                );
                 label = `Week of ${current.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
                 break;
             case "month":
-                nextDate = new Date(current.getFullYear(), current.getMonth() + 1, 1);
-                label = current.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+                nextDate = new Date(
+                    current.getFullYear(),
+                    current.getMonth() + 1,
+                    1,
+                );
+                label = current.toLocaleDateString("en-US", {
+                    month: "short",
+                    year: "numeric",
+                });
                 break;
         }
 
-        const countInRange = <T extends { [key: string]: string | number | null }>(
+        const countInRange = <
+            T extends { [key: string]: string | number | null },
+        >(
             items: T[],
-            dateField: keyof T
+            dateField: keyof T,
         ): number => {
-            return items.filter(item => {
+            return items.filter((item) => {
                 const itemDate = new Date(item[dateField] as string);
                 return itemDate >= current && itemDate < nextDate;
             }).length;
         };
 
-        const sumInRange = <T extends { [key: string]: string | number | null }>(
+        const sumInRange = <
+            T extends { [key: string]: string | number | null },
+        >(
             items: T[],
             dateField: keyof T,
-            valueField: keyof T
+            valueField: keyof T,
         ): number => {
             return items
-                .filter(item => {
+                .filter((item) => {
                     const itemDate = new Date(item[dateField] as string);
                     return itemDate >= current && itemDate < nextDate;
                 })
-                .reduce((sum, item) => sum + (Number(item[valueField]) || 0), 0);
+                .reduce(
+                    (sum, item) => sum + (Number(item[valueField]) || 0),
+                    0,
+                );
         };
 
-        const bucketUserChats = data.agentChats.filter(c => {
+        const bucketUserChats = data.agentChats.filter((c) => {
             const itemDate = new Date(c.created_at);
-            return itemDate >= current && itemDate < nextDate && c.role === "user";
+            return (
+                itemDate >= current && itemDate < nextDate && c.role === "user"
+            );
         });
         series.push({
             date: current.toISOString(),
@@ -761,9 +920,15 @@ function generateTimeSeries(
             invites: countInRange(data.invites, "used_at"),
             agents: countInRange(data.agents, "created_at"),
             agentChats: bucketUserChats.length,
-            agentChatsDirect: bucketUserChats.filter(c => c.source === "direct").length,
-            agentChatsPublic: bucketUserChats.filter(c => c.source === "public").length,
-            agentChatsChannel: bucketUserChats.filter(c => c.source === "channel").length,
+            agentChatsDirect: bucketUserChats.filter(
+                (c) => c.source === "direct",
+            ).length,
+            agentChatsPublic: bucketUserChats.filter(
+                (c) => c.source === "public",
+            ).length,
+            agentChatsChannel: bucketUserChats.filter(
+                (c) => c.source === "channel",
+            ).length,
         });
 
         current = nextDate;
@@ -771,4 +936,3 @@ function generateTimeSeries(
 
     return series;
 }
-

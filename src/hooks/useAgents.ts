@@ -713,7 +713,9 @@ export function useDiscoverAgents(userAddress: string | null) {
     const [agents, setAgents] = useState<DiscoveredAgent[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [filter, setFilter] = useState<"all" | "public" | "friends" | "official">("all");
+    const [filter, setFilter] = useState<
+        "all" | "public" | "friends" | "official"
+    >("all");
     const [search, setSearch] = useState("");
 
     const fetchAgents = useCallback(async () => {

@@ -3,22 +3,23 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 
 const supabase =
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
         ? createClient(
               process.env.NEXT_PUBLIC_SUPABASE_URL,
-              process.env.SUPABASE_SERVICE_ROLE_KEY
+              process.env.SUPABASE_SERVICE_ROLE_KEY,
           )
         : null;
 
 // GET /api/groups/[id]/pin - Get pinned message ids for a group
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
         return NextResponse.json(
             { error: "Database not configured" },
-            { status: 500 }
+            { status: 500 },
         );
     }
     const { id: groupId } = await params;
@@ -34,7 +35,7 @@ export async function GET(
             console.error("[Groups Pin] GET error:", error);
             return NextResponse.json(
                 { error: "Failed to fetch pinned messages" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -49,7 +50,7 @@ export async function GET(
         console.error("[Groups Pin] Error:", e);
         return NextResponse.json(
             { error: "Failed to process request" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }
@@ -57,12 +58,12 @@ export async function GET(
 // POST /api/groups/[id]/pin - Pin or unpin a message (any group member)
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
         return NextResponse.json(
             { error: "Database not configured" },
-            { status: 500 }
+            { status: 500 },
         );
     }
     const { id: groupId } = await params;
@@ -72,7 +73,7 @@ export async function POST(
         if (!session?.userAddress) {
             return NextResponse.json(
                 { error: "Authentication required" },
-                { status: 401 }
+                { status: 401 },
             );
         }
         const userAddress = session.userAddress.toLowerCase();
@@ -83,7 +84,7 @@ export async function POST(
         if (!messageId || typeof pin !== "boolean") {
             return NextResponse.json(
                 { error: "messageId and pin (boolean) are required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -97,14 +98,14 @@ export async function POST(
                         pinned_by: userAddress,
                         pinned_at: new Date().toISOString(),
                     },
-                    { onConflict: "group_id,message_id" }
+                    { onConflict: "group_id,message_id" },
                 );
 
             if (error) {
                 console.error("[Groups Pin] INSERT error:", error);
                 return NextResponse.json(
                     { error: "Failed to pin message" },
-                    { status: 500 }
+                    { status: 500 },
                 );
             }
             return NextResponse.json({
@@ -125,7 +126,7 @@ export async function POST(
             console.error("[Groups Pin] DELETE error:", error);
             return NextResponse.json(
                 { error: "Failed to unpin message" },
-                { status: 500 }
+                { status: 500 },
             );
         }
         return NextResponse.json({
@@ -137,7 +138,7 @@ export async function POST(
         console.error("[Groups Pin] Error:", e);
         return NextResponse.json(
             { error: "Failed to process request" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }

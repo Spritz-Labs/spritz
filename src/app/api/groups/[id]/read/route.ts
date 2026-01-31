@@ -3,22 +3,23 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 
 const supabase =
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
         ? createClient(
               process.env.NEXT_PUBLIC_SUPABASE_URL,
-              process.env.SUPABASE_SERVICE_ROLE_KEY
+              process.env.SUPABASE_SERVICE_ROLE_KEY,
           )
         : null;
 
 // POST /api/groups/[id]/read - Set my last read message (any group member)
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
         return NextResponse.json(
             { error: "Database not configured" },
-            { status: 500 }
+            { status: 500 },
         );
     }
     const { id: groupId } = await params;
@@ -28,7 +29,7 @@ export async function POST(
         if (!session?.userAddress) {
             return NextResponse.json(
                 { error: "Authentication required" },
-                { status: 401 }
+                { status: 401 },
             );
         }
         const userAddress = session.userAddress.toLowerCase();
@@ -39,7 +40,7 @@ export async function POST(
         if (!messageId || typeof messageId !== "string") {
             return NextResponse.json(
                 { error: "messageId is required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -52,14 +53,14 @@ export async function POST(
                     last_read_message_id: messageId,
                     updated_at: new Date().toISOString(),
                 },
-                { onConflict: "group_id,user_address" }
+                { onConflict: "group_id,user_address" },
             );
 
         if (error) {
             console.error("[Groups Read] POST error:", error);
             return NextResponse.json(
                 { error: "Failed to update read receipt" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -68,7 +69,7 @@ export async function POST(
         console.error("[Groups Read] Error:", e);
         return NextResponse.json(
             { error: "Failed to process request" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }
@@ -76,12 +77,12 @@ export async function POST(
 // GET /api/groups/[id]/read - Get all members' last read message ids (for "Read by N")
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     if (!supabase) {
         return NextResponse.json(
             { error: "Database not configured" },
-            { status: 500 }
+            { status: 500 },
         );
     }
     const { id: groupId } = await params;
@@ -96,7 +97,7 @@ export async function GET(
             console.error("[Groups Read] GET error:", error);
             return NextResponse.json(
                 { error: "Failed to fetch read receipts" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -110,7 +111,7 @@ export async function GET(
         console.error("[Groups Read] Error:", e);
         return NextResponse.json(
             { error: "Failed to process request" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }

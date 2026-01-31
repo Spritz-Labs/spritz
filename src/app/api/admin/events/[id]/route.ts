@@ -163,7 +163,10 @@ export async function PATCH(
             if (field === "max_attendees") {
                 if (value === "" || value === null || value === undefined) {
                     value = null;
-                } else if (typeof value === "number" && !Number.isInteger(value)) {
+                } else if (
+                    typeof value === "number" &&
+                    !Number.isInteger(value)
+                ) {
                     value = Math.floor(value);
                 } else if (typeof value === "string") {
                     const n = parseInt(value, 10);
@@ -179,16 +182,17 @@ export async function PATCH(
                         value = [];
                     }
                 }
-                if (!Array.isArray(value) && (typeof value !== "object" || value === null)) {
+                if (
+                    !Array.isArray(value) &&
+                    (typeof value !== "object" || value === null)
+                ) {
                     value = [];
                 }
             }
             // Arrays for tags/blockchain_focus (filter empty strings)
             if (field === "tags" && Array.isArray(value)) {
                 value = value
-                    .map((s) =>
-                        typeof s === "string" ? s.trim() : String(s),
-                    )
+                    .map((s) => (typeof s === "string" ? s.trim() : String(s)))
                     .filter(Boolean);
             }
             if (
@@ -197,9 +201,7 @@ export async function PATCH(
                 Array.isArray(value)
             ) {
                 value = value
-                    .map((s) =>
-                        typeof s === "string" ? s.trim() : String(s),
-                    )
+                    .map((s) => (typeof s === "string" ? s.trim() : String(s)))
                     .filter(Boolean);
             }
 
@@ -222,7 +224,9 @@ export async function PATCH(
                         error: "Duplicate value",
                         details:
                             error.message?.includes("slug") ||
-                            (error as { details?: string }).details?.includes("slug")
+                            (error as { details?: string }).details?.includes(
+                                "slug",
+                            )
                                 ? "That slug is already used by another event. Try a different one or leave it blank."
                                 : error.message,
                         code: error.code,
