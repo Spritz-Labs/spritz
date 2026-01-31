@@ -1857,7 +1857,7 @@ ${apiResults.join("\n")}
             parts: [{ text: message }],
         });
 
-        // Store user message
+        // Store user message (shout_agent_chats = single source for AI agent usage analytics: direct, public, channel)
         await supabase.from("shout_agent_chats").insert({
             agent_id: id,
             user_address: normalizedAddress,
@@ -1935,6 +1935,24 @@ ${apiResults.join("\n")}
                         );
                     } catch (err) {
                         console.error("[Agent Chat] Stream error:", err);
+                        // Log failed interaction for usage analytics
+                        try {
+                            await supabase.from("shout_agent_chats").insert({
+                                agent_id: id,
+                                user_address: normalizedAddress,
+                                role: "assistant",
+                                content: "[Error: Failed to generate response]",
+                                source: "direct",
+                            });
+                            await supabase.rpc("increment_agent_messages", {
+                                p_agent_id: id,
+                            });
+                        } catch (logErr) {
+                            console.error(
+                                "[Agent Chat] Failed to log stream error:",
+                                logErr,
+                            );
+                        }
                         controller.enqueue(
                             encoder.encode(
                                 JSON.stringify({

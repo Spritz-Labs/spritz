@@ -527,7 +527,7 @@ You can use markdown formatting:
                     messageId: insertedMessage?.id,
                 });
 
-                // Store in shout_agent_chats for knowledge graph (all agent interactions in one place)
+                // shout_agent_chats = single source for AI agent usage analytics (direct, public, channel @mentions)
                 try {
                     await supabase.from("shout_agent_chats").insert([
                         {

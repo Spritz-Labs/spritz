@@ -854,6 +854,15 @@ export async function POST(
 
         if (streamRequested === true) {
             // Stream response: yield chunks then persist and send done
+            // Log user message at start so we track all AI interactions even on stream failure (shout_agent_chats = usage analytics)
+            await supabase.from("shout_agent_chats").insert({
+                agent_id: id,
+                user_address: payerAddress,
+                session_id: finalSessionId,
+                role: "user",
+                content: message,
+                source: "public",
+            });
             const encoder = new TextEncoder();
             const stream = new ReadableStream({
                 async start(controller) {
@@ -880,24 +889,14 @@ export async function POST(
                         const assistantMessage =
                             fullText.trim() ||
                             "I'm sorry, I couldn't generate a response.";
-                        await supabase.from("shout_agent_chats").insert([
-                            {
-                                agent_id: id,
-                                user_address: payerAddress,
-                                session_id: finalSessionId,
-                                role: "user",
-                                content: message,
-                                source: "public",
-                            },
-                            {
-                                agent_id: id,
-                                user_address: payerAddress,
-                                session_id: finalSessionId,
-                                role: "assistant",
-                                content: assistantMessage,
-                                source: "public",
-                            },
-                        ]);
+                        await supabase.from("shout_agent_chats").insert({
+                            agent_id: id,
+                            user_address: payerAddress,
+                            session_id: finalSessionId,
+                            role: "assistant",
+                            content: assistantMessage,
+                            source: "public",
+                        });
                         await supabase.rpc("increment_agent_messages", {
                             agent_id_param: id,
                         });
@@ -927,6 +926,25 @@ export async function POST(
                         );
                     } catch (err) {
                         console.error("[Public Agent Chat] Stream error:", err);
+                        // Log failed interaction for usage analytics
+                        try {
+                            await supabase.from("shout_agent_chats").insert({
+                                agent_id: id,
+                                user_address: payerAddress,
+                                session_id: finalSessionId,
+                                role: "assistant",
+                                content: "[Error: Failed to generate response]",
+                                source: "public",
+                            });
+                            await supabase.rpc("increment_agent_messages", {
+                                agent_id_param: id,
+                            });
+                        } catch (logErr) {
+                            console.error(
+                                "[Public Agent Chat] Failed to log stream error:",
+                                logErr,
+                            );
+                        }
                         controller.enqueue(
                             encoder.encode(
                                 JSON.stringify({
@@ -953,6 +971,7 @@ export async function POST(
         const assistantMessage =
             result.text || "I'm sorry, I couldn't generate a response.";
 
+        // shout_agent_chats = single source for AI agent usage analytics
         await supabase.from("shout_agent_chats").insert([
             {
                 agent_id: id,

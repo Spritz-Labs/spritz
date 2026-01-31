@@ -38,7 +38,14 @@ type TimeSeriesItem = {
     invites: number;
     agents: number;
     agentChats: number;
+    agentChatsDirect?: number;
+    agentChatsPublic?: number;
+    agentChatsChannel?: number;
 };
+
+type AgentMessagesBySource = { direct: number; public: number; channel: number };
+
+type TopChannelByAgentUsage = { channelId: string | null; channelType: string; channelName: string; count: number };
 
 type TopUser = {
     address: string;
@@ -176,6 +183,8 @@ type AnalyticsData = {
         uniqueTxUsers: number;
         usersWithTxHistory: number;
         totalUserVolumeUsd: number;
+        agentMessagesBySource?: AgentMessagesBySource;
+        agentFailedInPeriod?: number;
     };
     timeSeries: TimeSeriesItem[];
     topUsers: {
@@ -186,6 +195,7 @@ type AnalyticsData = {
     topAgents: {
         byMessages: TopAgent[];
     };
+    topChannelsByAgentUsage?: TopChannelByAgentUsage[];
     agentVisibilityBreakdown: AgentVisibility[];
     officialAgentsList: OfficialAgent[];
     pointsBreakdown: PointsBreakdown[];
@@ -754,6 +764,10 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
 }
 
 function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }) {
+    const bySource = data.summary.agentMessagesBySource;
+    const failed = data.summary.agentFailedInPeriod ?? 0;
+    const topChannels = data.topChannelsByAgentUsage ?? [];
+
     return (
         <div className="space-y-6">
             {/* Agent Stats */}
@@ -765,6 +779,22 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
                 <MetricCard label="Knowledge Items" value={data.summary.knowledgeItemsCount} icon="📚" subtext={`${data.summary.indexedKnowledgeItems} indexed`} />
                 <MetricCard label="Official Agents" value={data.summary.officialAgents} icon="⭐" subtext="platform agents" />
             </div>
+
+            {/* Usage by source + failed */}
+            {(bySource || failed > 0) && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {bySource && (
+                        <>
+                            <MetricCard label="Direct (1:1)" value={bySource.direct} icon="💬" subtext="in-app chat" />
+                            <MetricCard label="Public Page" value={bySource.public} icon="🌐" subtext="official / embed" />
+                            <MetricCard label="Channel @mentions" value={bySource.channel} icon="📢" subtext="alpha & channels" />
+                        </>
+                    )}
+                    {failed > 0 && (
+                        <MetricCard label="Failed responses" value={failed} icon="⚠️" subtext={`in ${period}`} />
+                    )}
+                </div>
+            )}
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -783,6 +813,18 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
                                         <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
                                     </linearGradient>
+                                    <linearGradient id="colorAgentDirect" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorAgentPublic" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorAgentChannel" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+                                    </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                                 <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
@@ -790,7 +832,14 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
                                 <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
                                 <Legend />
                                 <Area type="monotone" dataKey="agents" name="New Agents" stroke="#8B5CF6" fill="url(#colorAgents)" strokeWidth={2} />
-                                <Area type="monotone" dataKey="agentChats" name="Agent Chats" stroke="#06B6D4" fill="url(#colorAgentChats)" strokeWidth={2} />
+                                <Area type="monotone" dataKey="agentChats" name="Agent Chats (total)" stroke="#06B6D4" fill="url(#colorAgentChats)" strokeWidth={2} />
+                                {data.timeSeries.some(d => (d.agentChatsDirect ?? 0) + (d.agentChatsPublic ?? 0) + (d.agentChatsChannel ?? 0) > 0) && (
+                                    <>
+                                        <Area type="monotone" dataKey="agentChatsDirect" name="Direct" stroke="#3B82F6" fill="url(#colorAgentDirect)" strokeWidth={1.5} />
+                                        <Area type="monotone" dataKey="agentChatsPublic" name="Public" stroke="#10B981" fill="url(#colorAgentPublic)" strokeWidth={1.5} />
+                                        <Area type="monotone" dataKey="agentChatsChannel" name="Channel @mentions" stroke="#F59E0B" fill="url(#colorAgentChannel)" strokeWidth={1.5} />
+                                    </>
+                                )}
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -824,6 +873,25 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
                     </div>
                 </div>
             </div>
+
+            {/* Top channels by agent usage (@mentions) */}
+            {topChannels.length > 0 && (
+                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Top Channels by Agent @mentions</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {topChannels.map((ch, index) => (
+                            <div key={`${ch.channelType}-${ch.channelId ?? "global"}`} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2">
+                                <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate">{ch.channelName}</p>
+                                    <p className="text-xs text-zinc-500">{ch.channelType === "global" ? "Global" : "Channel"}</p>
+                                </div>
+                                <span className="text-amber-400 text-sm font-medium">{ch.count}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Top Agents */}
             <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">

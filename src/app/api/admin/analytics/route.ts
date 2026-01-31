@@ -173,10 +173,10 @@ export async function GET(request: NextRequest) {
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
 
-        // Fetch agent chats in period
+        // Fetch agent chats in period (include source, content, channel for usage analytics)
         const { data: agentChats } = await supabase
             .from("shout_agent_chats")
-            .select("created_at, agent_id, user_address, role")
+            .select("created_at, agent_id, user_address, role, source, content, channel_id, channel_type")
             .gte("created_at", startDate.toISOString())
             .order("created_at", { ascending: true });
 
@@ -278,6 +278,18 @@ export async function GET(request: NextRequest) {
         const uniqueAgentUsers = new Set(agentChats?.map(c => c.user_address) || []).size;
         const knowledgeItemsCount = knowledgeItems?.length || 0;
         const indexedKnowledgeItems = knowledgeItems?.filter(k => k.status === "indexed").length || 0;
+
+        // Agent usage by source (direct 1:1, public page, channel @mentions)
+        const userChatsInPeriod = agentChats?.filter(c => c.role === "user") || [];
+        const agentMessagesBySource = {
+            direct: userChatsInPeriod.filter(c => c.source === "direct").length,
+            public: userChatsInPeriod.filter(c => c.source === "public").length,
+            channel: userChatsInPeriod.filter(c => c.source === "channel").length,
+        };
+        // Failed agent responses (assistant rows we log on stream/error)
+        const agentFailedInPeriod = agentChats?.filter(
+            c => c.role === "assistant" && c.content?.startsWith("[Error:")
+        ).length || 0;
 
         // Streaming stats
         const streamsCreated = streams?.length || 0;
@@ -393,6 +405,34 @@ export async function GET(request: NextRequest) {
         // Calculate user wallet stats from shout_users
         const usersWithTxHistory = allUsers?.filter(u => (u.wallet_tx_count || 0) > 0).length || 0;
         const totalUserVolumeUsd = allUsers?.reduce((sum, u) => sum + (Number(u.wallet_volume_usd) || 0), 0) || 0;
+
+        // Top channels by agent usage (source=channel, count user messages per channel)
+        const channelAgentCounts: Record<string, { channelId: string | null; channelType: string; count: number }> = {};
+        for (const c of userChatsInPeriod.filter(c => c.source === "channel")) {
+            const key = `${c.channel_type ?? "channel"}:${c.channel_id ?? "global"}`;
+            if (!channelAgentCounts[key]) {
+                channelAgentCounts[key] = {
+                    channelId: c.channel_id ?? null,
+                    channelType: c.channel_type ?? "global",
+                    count: 0,
+                };
+            }
+            channelAgentCounts[key].count++;
+        }
+        const channelIds = [...new Set(Object.values(channelAgentCounts).map(v => v.channelId).filter(Boolean))] as string[];
+        const { data: channelRows } = channelIds.length > 0
+            ? await supabase.from("shout_public_channels").select("id, name, emoji").in("id", channelIds)
+            : { data: [] };
+        const channelNameById = new Map((channelRows || []).map(c => [c.id, `${c.emoji || ""} ${c.name}`.trim()]));
+        const topChannelsByAgentUsage = Object.entries(channelAgentCounts)
+            .map(([, v]) => ({
+                channelId: v.channelId,
+                channelType: v.channelType,
+                channelName: v.channelType === "global" ? "Global (Alpha)" : (v.channelId ? channelNameById.get(v.channelId) ?? "Unknown" : "Global"),
+                count: v.count,
+            }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
 
         // Generate time series data
         const timeSeriesData = generateTimeSeries(
@@ -523,6 +563,9 @@ export async function GET(request: NextRequest) {
                 uniqueAgentUsers,
                 knowledgeItemsCount,
                 indexedKnowledgeItems,
+                agentMessagesBySource,
+                agentFailedInPeriod,
+                topChannelsByAgentUsage,
                 // Streaming stats
                 streamsCreated,
                 streamsStarted,
@@ -573,6 +616,7 @@ export async function GET(request: NextRequest) {
             topAgents: {
                 byMessages: topAgentsByMessages,
             },
+            topChannelsByAgentUsage,
             agentVisibilityBreakdown,
             // Official agents list for admin integration management
             officialAgentsList: allAgents
@@ -627,7 +671,7 @@ interface DataSources {
     groups: { created_at: string }[];
     invites: { used_at: string }[];
     agents: { created_at: string }[];
-    agentChats: { created_at: string; role: string }[];
+    agentChats: { created_at: string; role: string; source?: string | null }[];
 }
 
 function generateTimeSeries(
@@ -648,6 +692,9 @@ function generateTimeSeries(
         invites: number;
         agents: number;
         agentChats: number;
+        agentChatsDirect: number;
+        agentChatsPublic: number;
+        agentChatsChannel: number;
     }[] = [];
 
     let current = new Date(startDate);
@@ -698,6 +745,10 @@ function generateTimeSeries(
                 .reduce((sum, item) => sum + (Number(item[valueField]) || 0), 0);
         };
 
+        const bucketUserChats = data.agentChats.filter(c => {
+            const itemDate = new Date(c.created_at);
+            return itemDate >= current && itemDate < nextDate && c.role === "user";
+        });
         series.push({
             date: current.toISOString(),
             label,
@@ -709,10 +760,10 @@ function generateTimeSeries(
             groups: countInRange(data.groups, "created_at"),
             invites: countInRange(data.invites, "used_at"),
             agents: countInRange(data.agents, "created_at"),
-            agentChats: data.agentChats.filter(c => {
-                const itemDate = new Date(c.created_at);
-                return itemDate >= current && itemDate < nextDate && c.role === "user";
-            }).length,
+            agentChats: bucketUserChats.length,
+            agentChatsDirect: bucketUserChats.filter(c => c.source === "direct").length,
+            agentChatsPublic: bucketUserChats.filter(c => c.source === "public").length,
+            agentChatsChannel: bucketUserChats.filter(c => c.source === "channel").length,
         });
 
         current = nextDate;
