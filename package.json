@@ -32,6 +32,7 @@
         "@reown/appkit-adapter-solana": "^1.8.15",
         "@reown/appkit-adapter-wagmi": "^1.8.14",
         "@safe-global/protocol-kit": "^6.1.2",
+        "@sentry/nextjs": "^10.38.0",
         "@simplewebauthn/browser": "^13.2.2",
         "@simplewebauthn/server": "^13.2.2",
         "@simplewebauthn/types": "^12.0.0",

@@ -94,6 +94,10 @@ export type ChatFolderAssignment = {
 const STORAGE_KEY = "spritz_chat_folders";
 const ASSIGNMENTS_KEY = "spritz_chat_folder_assignments";
 
+/** Virtual folder for archived (hidden) chats. Not stored in shout_chat_folders. */
+export const ARCHIVED_FOLDER_EMOJI = "📦";
+export const ARCHIVED_FOLDER_LABEL = "Archived";
+
 export function useChatFolders(userAddress: string | null) {
     // Active folders the user has created/enabled
     const [folders, setFolders] = useState<ChatFolder[]>([]);
@@ -258,10 +262,10 @@ export function useChatFolders(userAddress: string | null) {
         [userAddress, folders],
     );
 
-    // Remove a folder
+    // Remove a folder (cannot remove virtual Archived folder)
     const removeFolder = useCallback(
         async (emoji: string) => {
-            if (!userAddress) return;
+            if (!userAddress || emoji === ARCHIVED_FOLDER_EMOJI) return;
 
             const addressLower = userAddress.toLowerCase();
 
@@ -382,16 +386,25 @@ export function useChatFolders(userAddress: string | null) {
         [assignments],
     );
 
-    // Get folders that have been used (have at least one chat assigned)
+    // Get folders that have been used (have at least one chat assigned), plus virtual Archived folder
     const activeFolders = useMemo(() => {
         const usedEmojis = new Set(Object.values(assignments));
-        // Include all created folders, plus mark which ones have chats
-        return folders.map((f) => ({
+        const base = folders.map((f) => ({
             ...f,
             chatIds: Object.entries(assignments)
                 .filter(([_, emoji]) => emoji === f.emoji)
                 .map(([chatId, _]) => chatId),
         }));
+        if (usedEmojis.has(ARCHIVED_FOLDER_EMOJI)) {
+            base.push({
+                emoji: ARCHIVED_FOLDER_EMOJI,
+                label: ARCHIVED_FOLDER_LABEL,
+                chatIds: Object.entries(assignments)
+                    .filter(([_, emoji]) => emoji === ARCHIVED_FOLDER_EMOJI)
+                    .map(([chatId, _]) => chatId),
+            });
+        }
+        return base;
     }, [folders, assignments]);
 
     // Get all folders including defaults that aren't active yet (as ChatFolder shape)

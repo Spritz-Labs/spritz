@@ -377,12 +377,12 @@ function DashboardContent({
     const actualAuthMethod = isPasskeyUser
         ? "passkey"
         : isEmailUser
-          ? "email"
-          : isWorldIdUser
-            ? "world_id"
-            : isAlienIdUser
-              ? "alien_id"
-              : walletType; // Traditional wallet: evm or solana
+        ? "email"
+        : isWorldIdUser
+        ? "world_id"
+        : isAlienIdUser
+        ? "alien_id"
+        : walletType; // Traditional wallet: evm or solana
 
     const {
         dailyBonusAvailable,
@@ -758,8 +758,8 @@ function DashboardContent({
                         const name = data.user.ens_name
                             ? data.user.ens_name
                             : data.user.username
-                              ? `@${data.user.username}`
-                              : data.user.display_name || null;
+                            ? `@${data.user.username}`
+                            : data.user.display_name || null;
                         const userInfo = {
                             name,
                             avatar: data.user.avatar_url || null,
@@ -867,10 +867,10 @@ function DashboardContent({
         currentCallProvider === "agora"
             ? agoraCall
             : currentCallProvider === "huddle01"
-              ? huddle01Call
-              : useDecentralized
-                ? huddle01Call
-                : agoraCall;
+            ? huddle01Call
+            : useDecentralized
+            ? huddle01Call
+            : agoraCall;
 
     // Destructure from active provider
     const {
@@ -1509,7 +1509,9 @@ function DashboardContent({
                         ? `@${friend.reachUsername}`
                         : null) ||
                     friend.ensName ||
-                    `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`,
+                    `${friend.address.slice(0, 6)}...${friend.address.slice(
+                        -4,
+                    )}`,
                 avatar: friend.avatar,
                 lastMessage: lastMessagePreviews[addressLower] || null,
                 lastMessageAt,
@@ -2643,12 +2645,12 @@ function DashboardContent({
     const messagingAuthType = isPasskeyUser
         ? "passkey"
         : isEmailUser
-          ? "email"
-          : isWorldIdUser || isAlienIdUser
-            ? "digitalid"
-            : isSolanaUser
-              ? "solana"
-              : "wallet";
+        ? "email"
+        : isWorldIdUser || isAlienIdUser
+        ? "digitalid"
+        : isSolanaUser
+        ? "solana"
+        : "wallet";
 
     return (
         <>
@@ -2891,15 +2893,15 @@ function DashboardContent({
                                                                 reachUsername
                                                                     ? "text-emerald-400"
                                                                     : isUsernameFetching
-                                                                      ? "text-zinc-600"
-                                                                      : "text-zinc-500"
+                                                                    ? "text-zinc-600"
+                                                                    : "text-zinc-500"
                                                             }`}
                                                         >
                                                             {isUsernameFetching
                                                                 ? "Loading..."
                                                                 : reachUsername
-                                                                  ? `@${reachUsername}`
-                                                                  : "Claim a username (+10 pts)"}
+                                                                ? `@${reachUsername}`
+                                                                : "Claim a username (+10 pts)"}
                                                         </p>
                                                     </div>
                                                     {reachUsername && (
@@ -4490,6 +4492,24 @@ function DashboardContent({
                                         canCreateGroup={
                                             friendsListData.length > 0
                                         }
+                                        onMarkFolderAsRead={(
+                                            _folderEmoji,
+                                            chatsInFolder,
+                                        ) => {
+                                            for (const chat of chatsInFolder) {
+                                                if (chat.type === "global") {
+                                                    if (alphaChat.isMember)
+                                                        alphaChat.markAsRead();
+                                                } else if (
+                                                    chat.type === "dm" &&
+                                                    chat.metadata?.address
+                                                ) {
+                                                    markAsRead(
+                                                        chat.metadata.address,
+                                                    );
+                                                }
+                                            }
+                                        }}
                                     />
                                 </div>
                             </div>
@@ -4673,7 +4693,10 @@ function DashboardContent({
                                     <div className="flex items-center gap-2 bg-zinc-800/50 sm:bg-zinc-800/30 rounded-xl p-2.5 sm:p-3">
                                         <input
                                             type="text"
-                                            value={`app.spritz.chat/room/${userAddress?.slice(0, 8)}...`}
+                                            value={`app.spritz.chat/room/${userAddress?.slice(
+                                                0,
+                                                8,
+                                            )}...`}
                                             readOnly
                                             className="flex-1 min-w-0 bg-transparent text-zinc-400 text-xs sm:text-sm font-mono truncate outline-none"
                                         />
@@ -5783,10 +5806,10 @@ function DashboardContent({
                     isPasskeyUser
                         ? "passkey"
                         : isEmailUser
-                          ? "email"
-                          : walletType === "solana"
-                            ? "solana"
-                            : "wallet"
+                        ? "email"
+                        : walletType === "solana"
+                        ? "solana"
+                        : "wallet"
                 }
             />
 

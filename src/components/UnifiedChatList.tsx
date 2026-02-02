@@ -14,6 +14,8 @@ import {
     useChatFolders,
     DEFAULT_FOLDER_EMOJIS,
     FOLDER_CATEGORIES,
+    ARCHIVED_FOLDER_EMOJI,
+    ARCHIVED_FOLDER_LABEL,
     type ChatFolder,
 } from "@/hooks/useChatFolders";
 
@@ -229,6 +231,11 @@ type UnifiedChatListProps = {
     onOpenBrowseChannels?: () => void;
     onOpenCreateGroup?: () => void;
     canCreateGroup?: boolean;
+    /** Mark all chats in the current folder as read (called with activeFolder and chats in that folder) */
+    onMarkFolderAsRead?: (
+        folderEmoji: string | null,
+        chatsInFolder: UnifiedChatItem[],
+    ) => void;
 };
 
 const formatTime = (date: Date | null) => {
@@ -394,11 +401,15 @@ const ChatRow = memo(
                                         chat.type === "global"
                                             ? "bg-gradient-to-br from-orange-500 to-amber-500"
                                             : chat.type === "channel"
-                                              ? "bg-gradient-to-br from-blue-500 to-cyan-500"
-                                              : chat.type === "group"
-                                                ? "bg-gradient-to-br from-purple-500 to-pink-500"
-                                                : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
-                                    } ${chat.unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""}`}
+                                            ? "bg-gradient-to-br from-blue-500 to-cyan-500"
+                                            : chat.type === "group"
+                                            ? "bg-gradient-to-br from-purple-500 to-pink-500"
+                                            : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
+                                    } ${
+                                        chat.unreadCount > 0
+                                            ? "ring-2 ring-[#FF5500]"
+                                            : ""
+                                    }`}
                                 >
                                     <span className="text-white font-bold text-base sm:text-lg">
                                         {chat.name[0].toUpperCase()}
@@ -426,7 +437,11 @@ const ChatRow = memo(
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 sm:gap-2">
                                 <p
-                                    className={`font-medium truncate text-sm sm:text-base ${chat.unreadCount > 0 ? "text-white" : "text-zinc-200"}`}
+                                    className={`font-medium truncate text-sm sm:text-base ${
+                                        chat.unreadCount > 0
+                                            ? "text-white"
+                                            : "text-zinc-200"
+                                    }`}
                                 >
                                     {chat.name}
                                 </p>
@@ -437,14 +452,20 @@ const ChatRow = memo(
                                 )}
                             </div>
                             <p
-                                className={`text-xs sm:text-sm truncate ${chat.unreadCount > 0 ? "text-zinc-300" : "text-zinc-500"}`}
+                                className={`text-xs sm:text-sm truncate ${
+                                    chat.unreadCount > 0
+                                        ? "text-zinc-300"
+                                        : "text-zinc-500"
+                                }`}
                             >
                                 {chat.lastMessage ||
                                     (chat.type === "dm"
                                         ? "Say hello!"
                                         : chat.type === "global"
-                                          ? "Join the global conversation"
-                                          : `${chat.metadata.memberCount || 0} members`)}
+                                        ? "Join the global conversation"
+                                        : `${
+                                              chat.metadata.memberCount || 0
+                                          } members`)}
                             </p>
                         </div>
                         <div className="shrink-0 flex items-center gap-1.5 sm:gap-2">
@@ -502,7 +523,11 @@ const ChatRow = memo(
                             )}
                             {chat.lastMessageAt && (
                                 <span
-                                    className={`text-[10px] sm:text-xs ${chat.unreadCount > 0 ? "text-[#FF5500]" : "text-zinc-500"}`}
+                                    className={`text-[10px] sm:text-xs ${
+                                        chat.unreadCount > 0
+                                            ? "text-[#FF5500]"
+                                            : "text-zinc-500"
+                                    }`}
                                 >
                                     {formatTime(chat.lastMessageAt)}
                                 </span>
@@ -589,7 +614,11 @@ const ChatRow = memo(
                                         ? "auto"
                                         : folderPickerPosition.top,
                                     bottom: folderPickerPosition.openUpward
-                                        ? `${window.innerHeight - folderPickerPosition.top + 4}px`
+                                        ? `${
+                                              window.innerHeight -
+                                              folderPickerPosition.top +
+                                              4
+                                          }px`
                                         : "auto",
                                     left: folderPickerPosition.left,
                                 }}
@@ -622,7 +651,9 @@ const ChatRow = memo(
                                                 d="M6 18L18 6M6 6l12 12"
                                             />
                                         </svg>
-                                        Remove from {chatFolder}
+                                        {chatFolder === ARCHIVED_FOLDER_EMOJI
+                                            ? "Unarchive"
+                                            : `Remove from ${chatFolder}`}
                                     </button>
                                 )}
                                 <div className="grid grid-cols-5 gap-0.5 sm:gap-1 p-0.5 sm:p-1">
@@ -680,6 +711,7 @@ function UnifiedChatListInner({
     onOpenBrowseChannels,
     onOpenCreateGroup,
     canCreateGroup = false,
+    onMarkFolderAsRead,
 }: UnifiedChatListProps & {
     showSearch?: boolean;
     onSearchToggle?: () => void;
@@ -727,6 +759,19 @@ function UnifiedChatListInner({
         getChatFolder,
     } = useChatFolders(userAddress);
 
+    // Folder picker options: user folders + default folders + Archived (virtual)
+    const folderPickerOptions = useMemo(
+        () => [
+            ...allAvailableFolders,
+            {
+                emoji: ARCHIVED_FOLDER_EMOJI,
+                label: ARCHIVED_FOLDER_LABEL,
+                chatIds: [] as string[],
+            },
+        ],
+        [allAvailableFolders],
+    );
+
     // State for folder management
     const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
     const [folderLongPressTimer, setFolderLongPressTimer] =
@@ -764,8 +809,12 @@ function UnifiedChatListInner({
     const filteredChats = useMemo(() => {
         let result = sortedChats;
 
-        // Apply folder filter
-        if (activeFolder !== null) {
+        // Apply folder filter (when "All", hide archived; when "Archived", show only archived)
+        if (activeFolder === null) {
+            result = result.filter(
+                (chat) => getChatFolder(chat.id) !== ARCHIVED_FOLDER_EMOJI,
+            );
+        } else {
             result = result.filter(
                 (chat) => getChatFolder(chat.id) === activeFolder,
             );
@@ -827,8 +876,7 @@ function UnifiedChatListInner({
             emoji: string | null,
             chatType: "dm" | "group" | "channel" | "global" = "dm",
         ) => {
-            if (emoji) {
-                // Make sure folder exists
+            if (emoji && emoji !== ARCHIVED_FOLDER_EMOJI) {
                 const folder = allAvailableFolders.find(
                     (f) => f.emoji === emoji,
                 );
@@ -1018,6 +1066,23 @@ function UnifiedChatListInner({
                 )}
             </AnimatePresence>
 
+            {/* Mark folder as read - when a folder is selected and has unread */}
+            {activeFolder !== null &&
+                folderUnreadCounts[activeFolder] > 0 &&
+                onMarkFolderAsRead && (
+                    <div className="flex items-center justify-end px-1 sm:px-0 pb-1">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                onMarkFolderAsRead(activeFolder, filteredChats)
+                            }
+                            className="text-xs text-zinc-500 hover:text-orange-400 transition-colors"
+                        >
+                            Mark folder read
+                        </button>
+                    </div>
+                )}
+
             {/* Folder Tabs - Horizontal scrollable */}
             <div
                 ref={tabsRef}
@@ -1060,7 +1125,9 @@ function UnifiedChatListInner({
                         onTouchCancel={handleFolderTouchEnd}
                         onContextMenu={(e) => {
                             e.preventDefault();
-                            setFolderToDelete(folder.emoji);
+                            if (folder.emoji !== ARCHIVED_FOLDER_EMOJI) {
+                                setFolderToDelete(folder.emoji);
+                            }
                         }}
                         className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl transition-all ${
                             activeFolder === folder.emoji
@@ -1102,7 +1169,11 @@ function UnifiedChatListInner({
                         </div>
                         <p className="text-zinc-400 font-medium text-sm sm:text-base">
                             {activeFolder
-                                ? `No chats in ${activeFolders.find((f) => f.emoji === activeFolder)?.label || "this folder"}`
+                                ? `No chats in ${
+                                      activeFolders.find(
+                                          (f) => f.emoji === activeFolder,
+                                      )?.label || "this folder"
+                                  }`
                                 : "No chats yet"}
                         </p>
                         <p className="text-zinc-500 text-xs sm:text-sm mt-1 mb-4">
@@ -1167,7 +1238,7 @@ function UnifiedChatListInner({
                                 onCloseFolderPicker={() =>
                                     setShowFolderPicker(null)
                                 }
-                                allAvailableFolders={allAvailableFolders}
+                                allAvailableFolders={folderPickerOptions}
                                 setFolderButtonRef={setFolderButtonRef}
                                 onContextMenu={(e) => {
                                     e.preventDefault();
