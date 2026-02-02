@@ -37,6 +37,7 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
+import { ChatEmptyState } from "./ChatEmptyState";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
@@ -53,7 +54,7 @@ const isEmojiOnly = (text: string): boolean => {
     if (!trimmed) return false;
     if (!EMOJI_REGEX.test(trimmed)) return false;
     const emojiCount = [...trimmed].filter(
-        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char)
     ).length;
     return emojiCount >= 1 && emojiCount <= 3;
 };
@@ -77,7 +78,7 @@ interface GroupChatModalProps {
     onStartCall?: (
         groupId: string,
         groupName: string,
-        isVideo: boolean,
+        isVideo: boolean
     ) => void;
     hasActiveCall?: boolean;
     // For displaying usernames/avatars
@@ -146,12 +147,12 @@ export function GroupChatModal({
         group?.id || null,
         "group",
         userAddress,
-        getUserInfo?.(userAddress)?.name || undefined,
+        getUserInfo?.(userAddress)?.name || undefined
     );
 
     const { resolveAddresses } = useENS();
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null,
+        null
     );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [selectedMessageConfig, setSelectedMessageConfig] =
@@ -163,7 +164,7 @@ export function GroupChatModal({
         { messageId: string; pinnedBy: string; pinnedAt: string }[]
     >([]);
     const [pinningMessageId, setPinningMessageId] = useState<string | null>(
-        null,
+        null
     );
     const [readReceipts, setReadReceipts] = useState<
         { userAddress: string; lastReadMessageId: string }[]
@@ -240,7 +241,7 @@ export function GroupChatModal({
                         ?.addresses?.[0] || m.senderInboxId,
                 sentAt: m.sentAt,
             })),
-        [messages, members],
+        [messages, members]
     );
 
     const handleSelectSearchMessage = useCallback((messageId: string) => {
@@ -255,7 +256,7 @@ export function GroupChatModal({
     const messageOrderMap = useMemo(() => {
         const sorted = [...messages].sort(
             (a, b) =>
-                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
         );
         const map: Record<string, number> = {};
         sorted.forEach((m, i) => {
@@ -268,7 +269,7 @@ export function GroupChatModal({
         if (!group?.id) return;
         try {
             const res = await fetch(
-                `/api/groups/${encodeURIComponent(group.id)}/pin`,
+                `/api/groups/${encodeURIComponent(group.id)}/pin`
             );
             const data = await res.json();
             if (res.ok && data.pinned) setPinnedList(data.pinned);
@@ -288,7 +289,7 @@ export function GroupChatModal({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ messageId, pin }),
-                    },
+                    }
                 );
                 const data = await res.json();
                 if (res.ok) {
@@ -303,7 +304,7 @@ export function GroupChatModal({
                         ]);
                     } else {
                         setPinnedList((prev) =>
-                            prev.filter((p) => p.messageId !== messageId),
+                            prev.filter((p) => p.messageId !== messageId)
                         );
                     }
                 }
@@ -313,7 +314,7 @@ export function GroupChatModal({
                 setPinningMessageId(null);
             }
         },
-        [group?.id],
+        [group?.id]
     );
 
     // Handle mention click
@@ -329,7 +330,7 @@ export function GroupChatModal({
     const { draft, saveDraft, clearDraft } = useDraftMessages(
         "group",
         group?.id || "",
-        userAddress,
+        userAddress
     );
 
     // Apply draft when modal opens
@@ -371,6 +372,34 @@ export function GroupChatModal({
         showMembers,
         showAddMember,
     ]);
+
+    const modalRef = useRef<HTMLDivElement>(null);
+    // Focus trap: keep Tab inside modal
+    useEffect(() => {
+        if (!isOpen || !modalRef.current) return;
+        const el = modalRef.current;
+        const focusables =
+            'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])';
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Tab") return;
+            const list = el.querySelectorAll<HTMLElement>(focusables);
+            const first = list[0];
+            const last = list[list.length - 1];
+            if (e.shiftKey) {
+                if (document.activeElement === first) {
+                    e.preventDefault();
+                    last?.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    first?.focus();
+                }
+            }
+        };
+        el.addEventListener("keydown", handleKeyDown);
+        return () => el.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen]);
 
     // Scroll to bottom with unread badge
     const {
@@ -463,7 +492,7 @@ export function GroupChatModal({
                     .filter(
                         (msg: any) =>
                             typeof msg.content === "string" &&
-                            msg.content.trim() !== "",
+                            msg.content.trim() !== ""
                     )
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     .map((msg: any) => ({
@@ -481,7 +510,7 @@ export function GroupChatModal({
                 // Fetch pinned messages
                 try {
                     const pinRes = await fetch(
-                        `/api/groups/${encodeURIComponent(group.id)}/pin`,
+                        `/api/groups/${encodeURIComponent(group.id)}/pin`
                     );
                     const pinData = await pinRes.json();
                     if (pinRes.ok && pinData.pinned)
@@ -493,7 +522,7 @@ export function GroupChatModal({
                 // Fetch read receipts
                 try {
                     const readRes = await fetch(
-                        `/api/groups/${encodeURIComponent(group.id)}/read`,
+                        `/api/groups/${encodeURIComponent(group.id)}/read`
                     );
                     const readData = await readRes.json();
                     if (readRes.ok && readData.receipts)
@@ -510,7 +539,7 @@ export function GroupChatModal({
                     const sortedByTime = [...formattedMessages].sort(
                         (a, b) =>
                             new Date(a.sentAt).getTime() -
-                            new Date(b.sentAt).getTime(),
+                            new Date(b.sentAt).getTime()
                     );
                     const latestId = sortedByTime[sortedByTime.length - 1]?.id;
                     if (latestId) {
@@ -520,7 +549,7 @@ export function GroupChatModal({
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ messageId: latestId }),
-                            },
+                            }
                         ).catch(() => {});
                     }
                 }
@@ -550,7 +579,9 @@ export function GroupChatModal({
                             onMessageReceived?.();
                             // Post my last read (new message id)
                             fetch(
-                                `/api/groups/${encodeURIComponent(group.id)}/read`,
+                                `/api/groups/${encodeURIComponent(
+                                    group.id
+                                )}/read`,
                                 {
                                     method: "POST",
                                     headers: {
@@ -559,17 +590,19 @@ export function GroupChatModal({
                                     body: JSON.stringify({
                                         messageId: newMsg.id,
                                     }),
-                                },
+                                }
                             )
                                 .then(() => {
                                     fetch(
-                                        `/api/groups/${encodeURIComponent(group.id)}/read`,
+                                        `/api/groups/${encodeURIComponent(
+                                            group.id
+                                        )}/read`
                                     )
                                         .then((r) => r.json())
                                         .then(
                                             (d) =>
                                                 d.receipts &&
-                                                setReadReceipts(d.receipts),
+                                                setReadReceipts(d.receipts)
                                         )
                                         .catch(() => {});
                                 })
@@ -577,7 +610,7 @@ export function GroupChatModal({
                             return [...prev, newMsg];
                         });
                         markGroupAsRead(group.id);
-                    },
+                    }
                 );
                 streamRef.current = stream;
             } catch (err) {
@@ -631,7 +664,7 @@ export function GroupChatModal({
         if (addressesToResolve.length === 0) return;
 
         console.log(
-            `[GroupChat] Resolving ENS for ${addressesToResolve.length} members`,
+            `[GroupChat] Resolving ENS for ${addressesToResolve.length} members`
         );
 
         resolveAddresses(addressesToResolve).then((results) => {
@@ -660,7 +693,7 @@ export function GroupChatModal({
             let messageContent = newMessage.trim();
             if (replyingTo) {
                 const replySender = members.find(
-                    (m) => m.inboxId === replyingTo.senderInboxId,
+                    (m) => m.inboxId === replyingTo.senderInboxId
                 )?.addresses[0];
                 const replyPreview =
                     replyingTo.content.slice(0, 50) +
@@ -673,7 +706,7 @@ export function GroupChatModal({
                     senderInfo?.name ||
                     (replySender
                         ? `${replySender.slice(0, 6)}...${replySender.slice(
-                              -4,
+                              -4
                           )}`
                         : "Unknown");
                 messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
@@ -738,7 +771,7 @@ export function GroupChatModal({
                 const pixelArtMessage = `[PIXEL_ART]${uploadResult.ipfsUrl}`;
                 const result = await sendGroupMessage(
                     group.id,
-                    pixelArtMessage,
+                    pixelArtMessage
                 );
 
                 if (!result.success) {
@@ -752,13 +785,13 @@ export function GroupChatModal({
                 setError(
                     `Failed to send pixel art: ${
                         err instanceof Error ? err.message : "Unknown error"
-                    }`,
+                    }`
                 );
             } finally {
                 setIsUploadingPixelArt(false);
             }
         },
-        [group, userAddress, sendGroupMessage, onMessageSent],
+        [group, userAddress, sendGroupMessage, onMessageSent]
     );
 
     // Handle GIF send
@@ -770,7 +803,7 @@ export function GroupChatModal({
             try {
                 const result = await sendGroupMessage(
                     group.id,
-                    `[GIF]${gifUrl}`,
+                    `[GIF]${gifUrl}`
                 );
                 if (result.success) {
                     onMessageSent?.();
@@ -781,7 +814,7 @@ export function GroupChatModal({
                 setIsSending(false);
             }
         },
-        [group, isSending, sendGroupMessage, onMessageSent],
+        [group, isSending, sendGroupMessage, onMessageSent]
     );
 
     // Check if message is a GIF
@@ -825,8 +858,8 @@ export function GroupChatModal({
         const friendAddressLower = friend.address.toLowerCase();
         return !members.some((m) =>
             m.addresses.some(
-                (addr) => addr.toLowerCase() === friendAddressLower,
-            ),
+                (addr) => addr.toLowerCase() === friendAddressLower
+            )
         );
     });
 
@@ -859,7 +892,7 @@ export function GroupChatModal({
         if (!group) return;
 
         const confirmed = window.confirm(
-            "Are you sure you want to leave this group? You won't be able to see messages anymore.",
+            "Are you sure you want to leave this group? You won't be able to see messages anymore."
         );
         if (!confirmed) return;
 
@@ -880,7 +913,7 @@ export function GroupChatModal({
         } catch (err) {
             console.error("[GroupChat] Leave error:", err);
             setError(
-                err instanceof Error ? err.message : "Failed to leave group",
+                err instanceof Error ? err.message : "Failed to leave group"
             );
         } finally {
             setIsLeavingGroup(false);
@@ -947,11 +980,14 @@ export function GroupChatModal({
                         }`}
                     >
                         <div
+                            ref={modalRef}
                             className={`bg-zinc-900 h-full min-h-0 flex flex-col overflow-hidden ${
                                 isFullscreen
                                     ? ""
                                     : "border border-zinc-800 rounded-2xl shadow-2xl"
                             }`}
+                            role="dialog"
+                            aria-modal="true"
                             style={
                                 isFullscreen
                                     ? {
@@ -981,14 +1017,14 @@ export function GroupChatModal({
                                     options,
                                     allowsMultiple,
                                     endsAt,
-                                    isAnonymous,
+                                    isAnonymous
                                 ) => {
                                     await createPoll(
                                         question,
                                         options,
                                         allowsMultiple,
                                         endsAt,
-                                        isAnonymous,
+                                        isAnonymous
                                     );
                                 }}
                             />
@@ -1048,7 +1084,7 @@ export function GroupChatModal({
                                         <button
                                             onClick={() =>
                                                 setShowPinnedMessages(
-                                                    !showPinnedMessages,
+                                                    !showPinnedMessages
                                                 )
                                             }
                                             className={`p-2.5 rounded-xl flex items-center gap-1 transition-colors ${
@@ -1078,7 +1114,7 @@ export function GroupChatModal({
                                                     onStartCall(
                                                         group.id,
                                                         group.name,
-                                                        false,
+                                                        false
                                                     )
                                                 }
                                                 disabled={hasActiveCall}
@@ -1104,7 +1140,7 @@ export function GroupChatModal({
                                                     onStartCall(
                                                         group.id,
                                                         group.name,
-                                                        true,
+                                                        true
                                                     )
                                                 }
                                                 disabled={hasActiveCall}
@@ -1133,7 +1169,7 @@ export function GroupChatModal({
                                         <button
                                             onClick={() =>
                                                 setShowManageMenu(
-                                                    !showManageMenu,
+                                                    !showManageMenu
                                                 )
                                             }
                                             className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
@@ -1177,10 +1213,10 @@ export function GroupChatModal({
                                                     <button
                                                         onClick={() => {
                                                             setShowManageMenu(
-                                                                false,
+                                                                false
                                                             );
                                                             setShowAddMember(
-                                                                true,
+                                                                true
                                                             );
                                                         }}
                                                         disabled={
@@ -1207,7 +1243,7 @@ export function GroupChatModal({
                                                     <button
                                                         onClick={() => {
                                                             setShowManageMenu(
-                                                                false,
+                                                                false
                                                             );
                                                             handleLeaveGroup();
                                                         }}
@@ -1317,19 +1353,19 @@ export function GroupChatModal({
                                                                 {isMe
                                                                     ? "You"
                                                                     : formatAddress(
-                                                                          memberAddress,
+                                                                          memberAddress
                                                                       )}
                                                             </span>
                                                             {!isMe && (
                                                                 <div className="flex items-center gap-0.5 shrink-0">
                                                                     {onOpenDM &&
                                                                         isFriend?.(
-                                                                            memberAddress,
+                                                                            memberAddress
                                                                         ) && (
                                                                             <button
                                                                                 onClick={() =>
                                                                                     onOpenDM(
-                                                                                        memberAddress,
+                                                                                        memberAddress
                                                                                     )
                                                                                 }
                                                                                 className="p-1.5 text-zinc-400 hover:text-[#FF5500] transition-colors rounded"
@@ -1355,7 +1391,7 @@ export function GroupChatModal({
                                                                     <button
                                                                         onClick={() =>
                                                                             handleRemoveMember(
-                                                                                memberAddress,
+                                                                                memberAddress
                                                                             )
                                                                         }
                                                                         className="p-1 text-zinc-500 hover:text-red-400 transition-colors rounded"
@@ -1420,13 +1456,13 @@ export function GroupChatModal({
                                                             messages.find(
                                                                 (m) =>
                                                                     m.id ===
-                                                                    p.messageId,
+                                                                    p.messageId
                                                             );
                                                         const senderAddr =
                                                             members.find(
                                                                 (m) =>
                                                                     m.inboxId ===
-                                                                    msg?.senderInboxId,
+                                                                    msg?.senderInboxId
                                                             )?.addresses[0];
                                                         return (
                                                             <div
@@ -1440,11 +1476,11 @@ export function GroupChatModal({
                                                                         {senderAddr
                                                                             ? senderAddr.slice(
                                                                                   0,
-                                                                                  6,
+                                                                                  6
                                                                               ) +
                                                                               "…" +
                                                                               senderAddr.slice(
-                                                                                  -4,
+                                                                                  -4
                                                                               )
                                                                             : "Unknown"}
                                                                     </p>
@@ -1452,15 +1488,15 @@ export function GroupChatModal({
                                                                         {msg?.content
                                                                             ?.replace(
                                                                                 /^\[GIF\]/,
-                                                                                "🎬 GIF",
+                                                                                "🎬 GIF"
                                                                             )
                                                                             .replace(
                                                                                 /^\[PIXEL_ART\]/,
-                                                                                "🎨 Pixel Art",
+                                                                                "🎨 Pixel Art"
                                                                             )
                                                                             .slice(
                                                                                 0,
-                                                                                80,
+                                                                                80
                                                                             ) ??
                                                                             "—"}
                                                                         {(msg
@@ -1476,7 +1512,7 @@ export function GroupChatModal({
                                                                     onClick={() =>
                                                                         togglePin(
                                                                             p.messageId,
-                                                                            false,
+                                                                            false
                                                                         )
                                                                     }
                                                                     disabled={
@@ -1524,52 +1560,47 @@ export function GroupChatModal({
                                 className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 flex flex-col-reverse"
                             >
                                 {isLoading ? (
-                                    <div className="flex items-center justify-center h-full">
-                                        <div className="w-8 h-8 border-2 border-[#FB8D22] border-t-transparent rounded-full animate-spin" />
-                                    </div>
+                                    <ChatSkeleton
+                                        messageCount={5}
+                                        className="p-4"
+                                    />
                                 ) : error ? (
                                     <div className="flex items-center justify-center h-full">
                                         <p className="text-red-400">{error}</p>
                                     </div>
                                 ) : messages.length === 0 ? (
-                                    <div className="flex items-center justify-center h-full">
-                                        <div className="text-center">
-                                            <div className="w-16 h-16 rounded-full bg-[#FB8D22]/10 flex items-center justify-center mx-auto mb-4">
-                                                <svg
-                                                    className="w-8 h-8 text-[#FFBBA7]"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        strokeWidth={1.5}
-                                                        d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"
-                                                    />
-                                                </svg>
-                                            </div>
-                                            <p className="text-zinc-400">
-                                                No messages yet
-                                            </p>
-                                            <p className="text-zinc-500 text-sm mt-1">
-                                                Start the conversation!
-                                            </p>
-                                        </div>
-                                    </div>
+                                    <ChatEmptyState
+                                        icon={
+                                            <svg
+                                                className="w-8 h-8 text-[#FFBBA7]"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={1.5}
+                                                    d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"
+                                                />
+                                            </svg>
+                                        }
+                                        title="No messages yet"
+                                        subtitle="Start the conversation!"
+                                    />
                                 ) : (
                                     <div className="space-y-3">
                                         {messages
                                             .filter(
                                                 (msg) =>
                                                     msg.content !==
-                                                    DECRYPTION_FAILED_MARKER,
+                                                    DECRYPTION_FAILED_MARKER
                                             )
                                             .map(
                                                 (
                                                     msg,
                                                     msgIndex,
-                                                    filteredMsgs,
+                                                    filteredMsgs
                                                 ) => {
                                                     // Compare addresses case-insensitively
                                                     const isOwn = userAddress
@@ -1578,38 +1609,38 @@ export function GroupChatModal({
                                                         : false;
                                                     const isPixelArt =
                                                         isPixelArtMessage(
-                                                            msg.content,
+                                                            msg.content
                                                         );
                                                     const isGif = isGifMessage(
-                                                        msg.content,
+                                                        msg.content
                                                     );
                                                     const isLocation =
                                                         isLocationMessage(
-                                                            msg.content,
+                                                            msg.content
                                                         );
                                                     const locationData =
                                                         isLocation
                                                             ? parseLocationMessage(
-                                                                  msg.content,
+                                                                  msg.content
                                                               )
                                                             : null;
                                                     const senderAddress =
                                                         members.find(
                                                             (m) =>
                                                                 m.inboxId ===
-                                                                msg.senderInboxId,
+                                                                msg.senderInboxId
                                                         )?.addresses[0];
 
                                                     const senderAvatar =
                                                         senderAddress
                                                             ? getMemberAvatar(
-                                                                  senderAddress,
+                                                                  senderAddress
                                                               )
                                                             : null;
 
                                                     // Check if we need a date divider
                                                     const msgDate = new Date(
-                                                        msg.sentAt,
+                                                        msg.sentAt
                                                     );
                                                     const prevMsg =
                                                         msgIndex > 0
@@ -1619,7 +1650,7 @@ export function GroupChatModal({
                                                             : null;
                                                     const prevMsgDate = prevMsg
                                                         ? new Date(
-                                                              prevMsg.sentAt,
+                                                              prevMsg.sentAt
                                                           )
                                                         : null;
                                                     const showDateDivider =
@@ -1672,11 +1703,11 @@ export function GroupChatModal({
                                                                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold">
                                                                                 {senderAddress
                                                                                     ? formatAddress(
-                                                                                          senderAddress,
+                                                                                          senderAddress
                                                                                       )
                                                                                           .slice(
                                                                                               0,
-                                                                                              2,
+                                                                                              2
                                                                                           )
                                                                                           .toUpperCase()
                                                                                     : "?"}
@@ -1697,7 +1728,7 @@ export function GroupChatModal({
                                                                             selectedMessage ===
                                                                                 msg.id
                                                                                 ? null
-                                                                                : msg.id,
+                                                                                : msg.id
                                                                         );
                                                                         setSelectedMessageConfig(
                                                                             selectedMessage ===
@@ -1712,10 +1743,10 @@ export function GroupChatModal({
                                                                                       isPinned:
                                                                                           pinnedList.some(
                                                                                               (
-                                                                                                  p,
+                                                                                                  p
                                                                                               ) =>
                                                                                                   p.messageId ===
-                                                                                                  msg.id,
+                                                                                                  msg.id
                                                                                           ),
                                                                                       hasMedia:
                                                                                           isPixelArt ||
@@ -1724,14 +1755,14 @@ export function GroupChatModal({
                                                                                       mediaUrl:
                                                                                           isPixelArt
                                                                                               ? getPixelArtUrl(
-                                                                                                    msg.content,
+                                                                                                    msg.content
                                                                                                 )
                                                                                               : isGif
-                                                                                                ? getGifUrl(
-                                                                                                      msg.content,
-                                                                                                  )
-                                                                                                : undefined,
-                                                                                  },
+                                                                                              ? getGifUrl(
+                                                                                                    msg.content
+                                                                                                )
+                                                                                              : undefined,
+                                                                                  }
                                                                         );
                                                                     }}
                                                                 >
@@ -1752,7 +1783,7 @@ export function GroupChatModal({
                                                                             <p className="text-xs text-zinc-400 mb-1">
                                                                                 {senderAddress
                                                                                     ? formatAddress(
-                                                                                          senderAddress,
+                                                                                          senderAddress
                                                                                       )
                                                                                     : "Unknown"}
                                                                             </p>
@@ -1760,10 +1791,10 @@ export function GroupChatModal({
 
                                                                         {/* Reply Preview - Check for reply pattern in message content */}
                                                                         {msg.content.startsWith(
-                                                                            "↩️ ",
+                                                                            "↩️ "
                                                                         ) &&
                                                                             msg.content.includes(
-                                                                                "\n\n",
+                                                                                "\n\n"
                                                                             ) && (
                                                                                 <div
                                                                                     className={`mb-2 p-2 rounded-lg ${
@@ -1797,11 +1828,11 @@ export function GroupChatModal({
                                                                                         >
                                                                                             {msg.content
                                                                                                 .split(
-                                                                                                    ":",
+                                                                                                    ":"
                                                                                                 )[0]
                                                                                                 .replace(
                                                                                                     "↩️ ",
-                                                                                                    "",
+                                                                                                    ""
                                                                                                 )}
                                                                                         </span>
                                                                                     </div>
@@ -1814,14 +1845,14 @@ export function GroupChatModal({
                                                                                     >
                                                                                         {msg.content
                                                                                             .split(
-                                                                                                "\n\n",
+                                                                                                "\n\n"
                                                                                             )[0]
                                                                                             .split(
-                                                                                                ': "',
+                                                                                                ': "'
                                                                                             )[1]
                                                                                             ?.replace(
                                                                                                 /\"$/,
-                                                                                                "",
+                                                                                                ""
                                                                                             ) ||
                                                                                             ""}
                                                                                     </p>
@@ -1832,7 +1863,7 @@ export function GroupChatModal({
                                                                             <div className="relative group">
                                                                                 <PixelArtImage
                                                                                     src={getPixelArtUrl(
-                                                                                        msg.content,
+                                                                                        msg.content
                                                                                     )}
                                                                                     size="md"
                                                                                 />
@@ -1840,14 +1871,14 @@ export function GroupChatModal({
                                                                                 <div
                                                                                     className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                                     onClick={(
-                                                                                        e,
+                                                                                        e
                                                                                     ) =>
                                                                                         e.stopPropagation()
                                                                                     }
                                                                                 >
                                                                                     <PixelArtShare
                                                                                         imageUrl={getPixelArtUrl(
-                                                                                            msg.content,
+                                                                                            msg.content
                                                                                         )}
                                                                                         showQuickActions
                                                                                     />
@@ -1857,7 +1888,7 @@ export function GroupChatModal({
                                                                             <div className="relative max-w-[280px] rounded-xl overflow-hidden">
                                                                                 <img
                                                                                     src={getGifUrl(
-                                                                                        msg.content,
+                                                                                        msg.content
                                                                                     )}
                                                                                     alt="GIF"
                                                                                     className="w-full h-auto rounded-xl"
@@ -1878,27 +1909,27 @@ export function GroupChatModal({
                                                                             (() => {
                                                                                 const displayContent =
                                                                                     msg.content.startsWith(
-                                                                                        "↩️ ",
+                                                                                        "↩️ "
                                                                                     ) &&
                                                                                     msg.content.includes(
-                                                                                        "\n\n",
+                                                                                        "\n\n"
                                                                                     )
                                                                                         ? msg.content
                                                                                               .split(
-                                                                                                  "\n\n",
+                                                                                                  "\n\n"
                                                                                               )
                                                                                               .slice(
-                                                                                                  1,
+                                                                                                  1
                                                                                               )
                                                                                               .join(
-                                                                                                  "\n\n",
+                                                                                                  "\n\n"
                                                                                               )
                                                                                         : msg.content;
 
                                                                                 // Use ChatMarkdown for code blocks and other markdown
                                                                                 if (
                                                                                     hasMarkdown(
-                                                                                        displayContent,
+                                                                                        displayContent
                                                                                     )
                                                                                 ) {
                                                                                     return (
@@ -1916,7 +1947,13 @@ export function GroupChatModal({
                                                                                 return (
                                                                                     <>
                                                                                         <p
-                                                                                            className={`break-words ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : ""}`}
+                                                                                            className={`break-words ${
+                                                                                                isEmojiOnly(
+                                                                                                    displayContent
+                                                                                                )
+                                                                                                    ? "text-4xl leading-tight"
+                                                                                                    : ""
+                                                                                            }`}
                                                                                         >
                                                                                             <MentionText
                                                                                                 text={
@@ -1931,15 +1968,15 @@ export function GroupChatModal({
                                                                                             />
                                                                                         </p>
                                                                                         {detectUrls(
-                                                                                            displayContent,
+                                                                                            displayContent
                                                                                         )
                                                                                             .slice(
                                                                                                 0,
-                                                                                                1,
+                                                                                                1
                                                                                             )
                                                                                             .map(
                                                                                                 (
-                                                                                                    url,
+                                                                                                    url
                                                                                                 ) => (
                                                                                                     <LinkPreview
                                                                                                         key={
@@ -1950,7 +1987,7 @@ export function GroupChatModal({
                                                                                                         }
                                                                                                         compact
                                                                                                     />
-                                                                                                ),
+                                                                                                )
                                                                                             )}
                                                                                     </>
                                                                                 );
@@ -1967,14 +2004,14 @@ export function GroupChatModal({
                                                                                 []
                                                                             }
                                                                             onReaction={(
-                                                                                emoji,
+                                                                                emoji
                                                                             ) => {
                                                                                 toggleMsgReaction(
                                                                                     msg.id,
-                                                                                    emoji,
+                                                                                    emoji
                                                                                 );
                                                                                 setSelectedMessage(
-                                                                                    null,
+                                                                                    null
                                                                                 );
                                                                             }}
                                                                             isOwnMessage={
@@ -1994,14 +2031,14 @@ export function GroupChatModal({
                                                                                 {
                                                                                     hour: "2-digit",
                                                                                     minute: "2-digit",
-                                                                                },
+                                                                                }
                                                                             )}
                                                                             {isOwn &&
                                                                                 (() => {
                                                                                     const readByCount =
                                                                                         readReceipts.filter(
                                                                                             (
-                                                                                                r,
+                                                                                                r
                                                                                             ) =>
                                                                                                 r.userAddress.toLowerCase() !==
                                                                                                     userAddress.toLowerCase() &&
@@ -2014,7 +2051,7 @@ export function GroupChatModal({
                                                                                                         msg
                                                                                                             .id
                                                                                                     ] ??
-                                                                                                        -1),
+                                                                                                        -1)
                                                                                         ).length;
                                                                                     return readByCount >
                                                                                         0 ? (
@@ -2033,7 +2070,7 @@ export function GroupChatModal({
                                                             </motion.div>
                                                         </div>
                                                     );
-                                                },
+                                                }
                                             )}
                                     </div>
                                 )}
@@ -2053,9 +2090,9 @@ export function GroupChatModal({
                                                       members.find(
                                                           (m) =>
                                                               m.inboxId ===
-                                                              replyingTo.senderInboxId,
+                                                              replyingTo.senderInboxId
                                                       )?.addresses[0] ||
-                                                          "Unknown",
+                                                          "Unknown"
                                                   )}
                                         </p>
                                         <p className="text-xs text-zinc-400 truncate">
@@ -2090,7 +2127,7 @@ export function GroupChatModal({
                                         users={typingUsers.map(
                                             (u) =>
                                                 u.name ||
-                                                `${u.address.slice(0, 6)}...`,
+                                                `${u.address.slice(0, 6)}...`
                                         )}
                                         className="border-t border-zinc-800/50"
                                     />
@@ -2099,7 +2136,9 @@ export function GroupChatModal({
 
                             {/* Input - with safe area padding for bottom */}
                             <div
-                                className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
+                                className={`border-t border-zinc-800 ${
+                                    isFullscreen ? "px-4 pt-4" : "p-4"
+                                }`}
                                 style={
                                     isFullscreen
                                         ? {
@@ -2126,7 +2165,7 @@ export function GroupChatModal({
                                                 formatLocationMessage(location);
                                             await sendGroupMessage(
                                                 group.id,
-                                                locationMsg,
+                                                locationMsg
                                             );
                                             onMessageSent?.();
                                         }}
@@ -2263,7 +2302,7 @@ export function GroupChatModal({
                                                     key={friend.id}
                                                     onClick={() =>
                                                         handleAddMember(
-                                                            friend.address,
+                                                            friend.address
                                                         )
                                                     }
                                                     disabled={isAddingMember}
@@ -2273,14 +2312,14 @@ export function GroupChatModal({
                                                         <img
                                                             src={friend.avatar}
                                                             alt={getDisplayName(
-                                                                friend,
+                                                                friend
                                                             )}
                                                             className="w-8 h-8 rounded-full object-cover"
                                                         />
                                                     ) : (
                                                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center text-white text-xs font-bold">
                                                             {getDisplayName(
-                                                                friend,
+                                                                friend
                                                             )
                                                                 .slice(0, 2)
                                                                 .toUpperCase()}
@@ -2353,7 +2392,7 @@ export function GroupChatModal({
                                 ? (emoji) =>
                                       toggleMsgReaction(
                                           selectedMessageConfig.messageId,
-                                          emoji,
+                                          emoji
                                       )
                                 : undefined,
                             onReply: selectedMessageConfig
@@ -2361,7 +2400,7 @@ export function GroupChatModal({
                                       const msg = messages.find(
                                           (m) =>
                                               m.id ===
-                                              selectedMessageConfig.messageId,
+                                              selectedMessageConfig.messageId
                                       );
                                       if (msg) setReplyingTo(msg);
                                   }
@@ -2373,14 +2412,14 @@ export function GroupChatModal({
                                     ? () =>
                                           togglePin(
                                               selectedMessageConfig.messageId,
-                                              true,
+                                              true
                                           )
                                     : undefined,
                             onUnpin: selectedMessageConfig?.isPinned
                                 ? () =>
                                       togglePin(
                                           selectedMessageConfig.messageId,
-                                          false,
+                                          false
                                       )
                                 : undefined,
                             onDelete: selectedMessageConfig?.isOwn
@@ -2389,8 +2428,8 @@ export function GroupChatModal({
                                           prev.filter(
                                               (m) =>
                                                   m.id !==
-                                                  selectedMessageConfig?.messageId,
-                                          ),
+                                                  selectedMessageConfig?.messageId
+                                          )
                                       );
                                   }
                                 : undefined,

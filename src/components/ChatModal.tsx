@@ -53,6 +53,7 @@ import {
 } from "./MuteBlockReportModals";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
+import { ChatEmptyState } from "./ChatEmptyState";
 import { DateDivider } from "./UnreadDivider";
 import {
     ImageGallery,
@@ -100,7 +101,7 @@ const isEmojiOnly = (text: string): boolean => {
     if (!EMOJI_REGEX.test(trimmed)) return false;
     // Count actual emoji characters (excluding spaces and modifiers)
     const emojiCount = [...trimmed].filter(
-        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char)
     ).length;
     // Only enlarge if 1-3 emojis
     return emojiCount >= 1 && emojiCount <= 3;
@@ -125,12 +126,12 @@ export function ChatModal({
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null,
+        null
     );
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [showMsgReactions, setShowMsgReactions] = useState<string | null>(
-        null,
+        null
     );
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showSearch, setShowSearch] = useState(false);
@@ -155,7 +156,7 @@ export function ChatModal({
             fetchOnlineStatuses([peerAddress.toLowerCase()]).then(
                 (statuses) => {
                     setPeerOnline(statuses[peerAddress.toLowerCase()] || false);
-                },
+                }
             );
         }
     }, [peerAddress]);
@@ -173,7 +174,7 @@ export function ChatModal({
     // New chat features
     const { peerTyping, handleTyping, stopTyping } = useTypingIndicator(
         userAddress,
-        conversationId,
+        conversationId
     );
     const { markMessagesRead, getMessageStatus, getReadAt, fetchReadReceipts } =
         useReadReceipts(userAddress, conversationId);
@@ -199,6 +200,7 @@ export function ChatModal({
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const isInitialLoadRef = useRef(true);
     const draftAppliedRef = useRef(false);
+    const modalRef = useRef<HTMLDivElement>(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef = useRef<any>(null);
 
@@ -206,7 +208,7 @@ export function ChatModal({
     const { draft, saveDraft, clearDraft } = useDraftMessages(
         "dm",
         peerAddress,
-        userAddress,
+        userAddress
     );
 
     // Image gallery for viewing multiple images
@@ -312,7 +314,7 @@ export function ChatModal({
             draftAppliedRef.current = true;
             if (draft.replyToId) {
                 const replyTarget = messages.find(
-                    (m) => m.id === draft.replyToId,
+                    (m) => m.id === draft.replyToId
                 );
                 if (replyTarget) setReplyingTo(replyTarget);
             }
@@ -357,13 +359,40 @@ export function ChatModal({
         showReportModal,
     ]);
 
+    // Focus trap: keep Tab inside modal
+    useEffect(() => {
+        if (!isOpen || !modalRef.current) return;
+        const el = modalRef.current;
+        const focusables =
+            'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])';
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Tab") return;
+            const list = el.querySelectorAll<HTMLElement>(focusables);
+            const first = list[0];
+            const last = list[list.length - 1];
+            if (e.shiftKey) {
+                if (document.activeElement === first) {
+                    e.preventDefault();
+                    last?.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    first?.focus();
+                }
+            }
+        };
+        el.addEventListener("keydown", handleKeyDown);
+        return () => el.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen]);
+
     // Save draft when message changes (debounced in hook)
     useEffect(() => {
         if (isOpen) {
             saveDraft(
                 newMessage,
                 replyingTo?.id,
-                replyingTo?.content?.slice(0, 50),
+                replyingTo?.content?.slice(0, 50)
             );
         }
     }, [newMessage, replyingTo, isOpen, saveDraft]);
@@ -426,7 +455,7 @@ export function ChatModal({
                 previousPeerRef.current,
                 "to",
                 peerAddress,
-                "- clearing messages",
+                "- clearing messages"
             );
             setMessages([]);
             setChatError(null);
@@ -450,7 +479,7 @@ export function ChatModal({
             console.log(
                 "[Chat] Opened chat with",
                 peerAddress,
-                "- marking as read",
+                "- marking as read"
             );
         } else {
             setMessages([]);
@@ -481,7 +510,7 @@ export function ChatModal({
                         if (!canChat) {
                             setChatState("error");
                             setChatError(
-                                `${displayName} hasn't enabled chat yet. They need to click "Enable Chat" in Spritz first.`,
+                                `${displayName} hasn't enabled chat yet. They need to click "Enable Chat" in Spritz first.`
                             );
                         }
                     });
@@ -494,7 +523,7 @@ export function ChatModal({
                     const existingMessages = await getMessages(peerAddress);
                     console.log(
                         "[Chat] Got messages:",
-                        existingMessages.length,
+                        existingMessages.length
                     );
 
                     // Filter and format messages
@@ -521,7 +550,7 @@ export function ChatModal({
                             .filter(
                                 (m: Message) =>
                                     m.senderAddress.toLowerCase() ===
-                                    userAddress.toLowerCase(),
+                                    userAddress.toLowerCase()
                             )
                             .map((m: Message) => m.id);
                         if (myMessageIds.length > 0) {
@@ -530,13 +559,13 @@ export function ChatModal({
 
                         // Mark all loaded messages as read in the database
                         markMessagesRead(
-                            formattedMessages.map((m: Message) => m.id),
+                            formattedMessages.map((m: Message) => m.id)
                         );
                     }
                 } catch (loadErr) {
                     console.log(
                         "[Chat] Failed to load messages, continuing anyway:",
-                        loadErr,
+                        loadErr
                     );
                 }
 
@@ -552,7 +581,7 @@ export function ChatModal({
                         (message: unknown) => {
                             console.log(
                                 "[Chat] Received streamed message:",
-                                message,
+                                message
                             );
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const msg = message as any;
@@ -569,7 +598,7 @@ export function ChatModal({
                                 content: msg.content,
                                 senderAddress: msg.senderInboxId,
                                 sentAt: new Date(
-                                    Number(msg.sentAtNs) / 1000000,
+                                    Number(msg.sentAtNs) / 1000000
                                 ),
                             };
                             setMessages((prev) => {
@@ -580,14 +609,14 @@ export function ChatModal({
                             markAsRead(peerAddress);
                             // Mark the new message as read in the database
                             markMessagesRead([newMsg.id]);
-                        },
+                        }
                     );
                     log.debug("[Chat] Stream setup complete:", stream);
                     streamRef.current = stream;
                 } catch (streamErr) {
                     console.log(
                         "[Chat] Failed to setup stream, relying on polling:",
-                        streamErr,
+                        streamErr
                     );
                 }
             } catch (error) {
@@ -628,7 +657,7 @@ export function ChatModal({
                 console.log(
                     "[Chat] Polling returned",
                     newMessages.length,
-                    "messages",
+                    "messages"
                 );
 
                 if (newMessages.length > 0) {
@@ -643,7 +672,7 @@ export function ChatModal({
                                     "[Chat] Filtered out message with invalid content:",
                                     msg.id,
                                     "content type:",
-                                    typeof msg.content,
+                                    typeof msg.content
                                 );
                             }
                             return valid;
@@ -658,14 +687,14 @@ export function ChatModal({
                     console.log(
                         "[Chat] After content filter:",
                         formattedMessages.length,
-                        "messages",
+                        "messages"
                     );
 
                     setMessages((prev) => {
                         // Merge new messages, avoiding duplicates
                         const existingIds = new Set(prev.map((m) => m.id));
                         const newOnes = formattedMessages.filter(
-                            (m) => !existingIds.has(m.id),
+                            (m) => !existingIds.has(m.id)
                         );
 
                         console.log(
@@ -674,7 +703,7 @@ export function ChatModal({
                             "formatted:",
                             formattedMessages.length,
                             "new messages:",
-                            newOnes.length,
+                            newOnes.length
                         );
 
                         if (newOnes.length > 0) {
@@ -684,7 +713,7 @@ export function ChatModal({
                                 newOnes.map((m) => ({
                                     id: m.id,
                                     from: m.senderAddress?.slice(0, 10),
-                                })),
+                                }))
                             );
 
                             // Mark new messages as read immediately since chat is open
@@ -692,7 +721,7 @@ export function ChatModal({
 
                             return [...prev, ...newOnes].sort(
                                 (a, b) =>
-                                    a.sentAt.getTime() - b.sentAt.getTime(),
+                                    a.sentAt.getTime() - b.sentAt.getTime()
                             );
                         }
                         return prev;
@@ -703,7 +732,7 @@ export function ChatModal({
                         .filter(
                             (m) =>
                                 m.senderAddress.toLowerCase() ===
-                                userAddress.toLowerCase(),
+                                userAddress.toLowerCase()
                         )
                         .map((m) => m.id);
                     if (myMsgIds.length > 0) {
@@ -715,7 +744,7 @@ export function ChatModal({
                         .filter(
                             (m) =>
                                 m.senderAddress.toLowerCase() !==
-                                userAddress.toLowerCase(),
+                                userAddress.toLowerCase()
                         )
                         .map((m) => m.id);
                     if (peerMsgIds.length > 0) {
@@ -752,7 +781,7 @@ export function ChatModal({
         const myMsgIds = messages
             .filter(
                 (m) =>
-                    m.senderAddress.toLowerCase() === userAddress.toLowerCase(),
+                    m.senderAddress.toLowerCase() === userAddress.toLowerCase()
             )
             .filter((m) => m.status !== "pending" && m.status !== "failed")
             .map((m) => m.id);
@@ -761,7 +790,7 @@ export function ChatModal({
         const peerMsgIds = messages
             .filter(
                 (m) =>
-                    m.senderAddress.toLowerCase() !== userAddress.toLowerCase(),
+                    m.senderAddress.toLowerCase() !== userAddress.toLowerCase()
             )
             .map((m) => m.id);
         peerMessageIdsRef.current = peerMsgIds;
@@ -777,7 +806,7 @@ export function ChatModal({
                 log.debug(
                     "[Chat] Checking read receipts for",
                     myMsgIds.length,
-                    "sent messages",
+                    "sent messages"
                 );
                 fetchReadReceipts(myMsgIds);
             }
@@ -806,7 +835,7 @@ export function ChatModal({
                 log.debug(
                     "[Chat] Marking",
                     peerMsgIds.length,
-                    "peer messages as read",
+                    "peer messages as read"
                 );
                 markMessagesRead(peerMsgIds);
                 // Also clear unread count in Waku provider
@@ -838,7 +867,7 @@ export function ChatModal({
             }
             setShowMsgReactions(null);
         },
-        [selectedMessage],
+        [selectedMessage]
     );
 
     // Close selected message when clicking outside
@@ -879,7 +908,9 @@ export function ChatModal({
                 messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
             }
 
-            const tempId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const tempId = `pending-${Date.now()}-${Math.random()
+                .toString(36)
+                .substr(2, 9)}`;
 
             // Immediately add message to UI with pending status (optimistic update)
             const pendingMessage: Message = {
@@ -906,10 +937,10 @@ export function ChatModal({
                     const preview = messageContent.startsWith("[GIF]")
                         ? "🎬 GIF"
                         : messageContent.startsWith("[PIXEL_ART]")
-                          ? "🎨 Pixel Art"
-                          : messageContent.startsWith("[LOCATION]")
-                            ? "📍 Location"
-                            : messageContent;
+                        ? "🎨 Pixel Art"
+                        : messageContent.startsWith("[LOCATION]")
+                        ? "📍 Location"
+                        : messageContent;
                     onMessageSent?.(preview);
                     setMessages((prev) =>
                         prev.map((m) =>
@@ -919,17 +950,17 @@ export function ChatModal({
                                       id: result.message?.id || tempId,
                                       status: "sent",
                                   }
-                                : m,
-                        ),
+                                : m
+                        )
                     );
                 } else {
                     setMessages((prev) =>
                         prev.map((m) =>
-                            m.id === tempId ? { ...m, status: "failed" } : m,
-                        ),
+                            m.id === tempId ? { ...m, status: "failed" } : m
+                        )
                     );
                     setChatError(
-                        `Failed to send: ${result.error || "Unknown error"}`,
+                        `Failed to send: ${result.error || "Unknown error"}`
                     );
                     setNewMessage(prevMessage);
                     setReplyingTo(prevReplyingTo);
@@ -938,13 +969,13 @@ export function ChatModal({
                 console.error("[Chat] Send error:", error);
                 setMessages((prev) =>
                     prev.map((m) =>
-                        m.id === tempId ? { ...m, status: "failed" } : m,
-                    ),
+                        m.id === tempId ? { ...m, status: "failed" } : m
+                    )
                 );
                 setChatError(
                     `Failed to send: ${
                         error instanceof Error ? error.message : "Unknown error"
-                    }`,
+                    }`
                 );
                 setNewMessage(prevMessage);
                 setReplyingTo(prevReplyingTo);
@@ -960,7 +991,7 @@ export function ChatModal({
             replyingTo,
             peerName,
             clearDraft,
-        ],
+        ]
     );
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -981,7 +1012,7 @@ export function ChatModal({
                 console.error("Failed to send GIF:", err);
             }
         },
-        [sendMessage, peerAddress],
+        [sendMessage, peerAddress]
     );
 
     // Handle sending pixel art
@@ -1037,13 +1068,13 @@ export function ChatModal({
                 setChatError(
                     `Failed to send pixel art: ${
                         error instanceof Error ? error.message : "Unknown error"
-                    }`,
+                    }`
                 );
             } finally {
                 setIsUploadingPixelArt(false);
             }
         },
-        [userAddress, peerAddress, sendMessage, trackMessageSent],
+        [userAddress, peerAddress, sendMessage, trackMessageSent]
     );
 
     // Check if a message is pixel art
@@ -1193,7 +1224,7 @@ export function ChatModal({
                 <div className="flex gap-1">
                     {reactionEmojis.map((emoji) => {
                         const currentReaction = reactions?.find(
-                            (r: any) => r.emoji === emoji,
+                            (r: any) => r.emoji === emoji
                         );
                         return (
                             <button
@@ -1239,6 +1270,9 @@ export function ChatModal({
                         }`}
                     >
                         <div
+                            ref={modalRef}
+                            role="dialog"
+                            aria-modal="true"
                             className={`bg-zinc-900 flex flex-col min-h-0 h-full overflow-hidden ${
                                 isFullscreen
                                     ? ""
@@ -1455,30 +1489,25 @@ export function ChatModal({
                                 {isInitialized &&
                                     !chatError &&
                                     messages.length === 0 && (
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className="text-center px-4">
-                                                <div className="w-16 h-16 rounded-full bg-[#FF5500]/10 flex items-center justify-center mx-auto mb-4">
-                                                    <svg
-                                                        className="w-8 h-8 text-[#FFBBA7]"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={1.5}
-                                                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                                        />
-                                                    </svg>
-                                                </div>
-                                                <p className="text-zinc-400">
-                                                    No messages yet
-                                                </p>
-                                                <p className="text-zinc-500 text-sm mt-1 mb-4">
-                                                    Say hello to start the
-                                                    conversation!
-                                                </p>
+                                        <ChatEmptyState
+                                            icon={
+                                                <svg
+                                                    className="w-8 h-8 text-[#FFBBA7]"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={1.5}
+                                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                                    />
+                                                </svg>
+                                            }
+                                            title="No messages yet"
+                                            subtitle="Say hello to start the conversation!"
+                                            cta={
                                                 <div className="flex flex-wrap gap-2 justify-center">
                                                     {[
                                                         "Hey! 👋",
@@ -1490,7 +1519,7 @@ export function ChatModal({
                                                             type="button"
                                                             onClick={() =>
                                                                 handleSend(
-                                                                    suggestion,
+                                                                    suggestion
                                                                 )
                                                             }
                                                             disabled={isSending}
@@ -1500,8 +1529,8 @@ export function ChatModal({
                                                         </button>
                                                     ))}
                                                 </div>
-                                            </div>
-                                        </div>
+                                            }
+                                        />
                                     )}
 
                                 {/* Messages container - flows bottom to top with column-reverse */}
@@ -1514,10 +1543,10 @@ export function ChatModal({
                                                     .filter(
                                                         (m) =>
                                                             m.content !==
-                                                            DECRYPTION_FAILED_MARKER,
+                                                            DECRYPTION_FAILED_MARKER
                                                     )
-                                                    .map((m) => [m.id, m]),
-                                            ).values(),
+                                                    .map((m) => [m.id, m])
+                                            ).values()
                                         );
                                         let lastDate: string | null = null;
 
@@ -1530,13 +1559,13 @@ export function ChatModal({
                                             const isPixelArt =
                                                 isPixelArtMessage(msg.content);
                                             const isGif = isGifMessage(
-                                                msg.content,
+                                                msg.content
                                             );
                                             const isLocation =
                                                 isLocationMessage(msg.content);
                                             const locationData = isLocation
                                                 ? parseLocationMessage(
-                                                      msg.content,
+                                                      msg.content
                                                   )
                                                 : null;
 
@@ -1618,7 +1647,7 @@ export function ChatModal({
                                                                                 peerAddress
                                                                                     .slice(
                                                                                         2,
-                                                                                        4,
+                                                                                        4
                                                                                     )
                                                                                     .toUpperCase()}
                                                                         </div>
@@ -1626,21 +1655,30 @@ export function ChatModal({
                                                                 </div>
                                                             )}
                                                             <div
-                                                                className={`${isFullscreen ? "max-w-[85%]" : "max-w-[70%]"} rounded-2xl px-4 py-2 ${
+                                                                className={`${
+                                                                    isFullscreen
+                                                                        ? "max-w-[85%]"
+                                                                        : "max-w-[70%]"
+                                                                } rounded-2xl px-4 py-2 ${
                                                                     isOwn
                                                                         ? msg.status ===
                                                                           "failed"
                                                                             ? "bg-red-500/80 text-white rounded-br-md"
                                                                             : msg.status ===
-                                                                                "pending"
-                                                                              ? "bg-[#FF5500]/70 text-white rounded-br-md"
-                                                                              : "bg-[#FF5500] text-white rounded-br-md"
+                                                                              "pending"
+                                                                            ? "bg-[#FF5500]/70 text-white rounded-br-md"
+                                                                            : "bg-[#FF5500] text-white rounded-br-md"
                                                                         : "bg-zinc-800 text-white rounded-bl-md"
                                                                 }`}
                                                             >
                                                                 {isPixelArt ? (
                                                                     <div
-                                                                        className={`pixel-art-message relative group cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl" : ""}`}
+                                                                        className={`pixel-art-message relative group cursor-pointer ${
+                                                                            selectedMessage ===
+                                                                            msg.id
+                                                                                ? "ring-2 ring-[#FB8D22]/50 rounded-2xl"
+                                                                                : ""
+                                                                        }`}
                                                                         onClick={() =>
                                                                             handleMessageTap(
                                                                                 msg.id,
@@ -1650,25 +1688,27 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
-                                                                                    hasMedia: true,
-                                                                                    isPixelArt: true,
+                                                                                    hasMedia:
+                                                                                        true,
+                                                                                    isPixelArt:
+                                                                                        true,
                                                                                     mediaUrl:
                                                                                         getPixelArtUrl(
-                                                                                            msg.content,
+                                                                                            msg.content
                                                                                         ),
-                                                                                },
+                                                                                }
                                                                             )
                                                                         }
                                                                     >
                                                                         <PixelArtImage
                                                                             src={getPixelArtUrl(
-                                                                                msg.content,
+                                                                                msg.content
                                                                             )}
                                                                             onClick={() => {
                                                                                 setViewingImage(
                                                                                     getPixelArtUrl(
-                                                                                        msg.content,
-                                                                                    ),
+                                                                                        msg.content
+                                                                                    )
                                                                                 );
                                                                             }}
                                                                             size="md"
@@ -1678,14 +1718,14 @@ export function ChatModal({
                                                                         <div
                                                                             className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                             onClick={(
-                                                                                e,
+                                                                                e
                                                                             ) =>
                                                                                 e.stopPropagation()
                                                                             }
                                                                         >
                                                                             <PixelArtShare
                                                                                 imageUrl={getPixelArtUrl(
-                                                                                    msg.content,
+                                                                                    msg.content
                                                                                 )}
                                                                                 showQuickActions
                                                                             />
@@ -1694,31 +1734,31 @@ export function ChatModal({
                                                                         {/* Reactions Display - Mobile Friendly */}
                                                                         {reactions[
                                                                             getPixelArtUrl(
-                                                                                msg.content,
+                                                                                msg.content
                                                                             )
                                                                         ]?.some(
                                                                             (
-                                                                                r,
+                                                                                r
                                                                             ) =>
                                                                                 r.count >
-                                                                                0,
+                                                                                0
                                                                         ) && (
                                                                             <div className="flex flex-wrap gap-1.5 mt-2">
                                                                                 {reactions[
                                                                                     getPixelArtUrl(
-                                                                                        msg.content,
+                                                                                        msg.content
                                                                                     )
                                                                                 ]
                                                                                     ?.filter(
                                                                                         (
-                                                                                            r,
+                                                                                            r
                                                                                         ) =>
                                                                                             r.count >
-                                                                                            0,
+                                                                                            0
                                                                                     )
                                                                                     .map(
                                                                                         (
-                                                                                            reaction,
+                                                                                            reaction
                                                                                         ) => (
                                                                                             <button
                                                                                                 key={
@@ -1727,9 +1767,9 @@ export function ChatModal({
                                                                                                 onClick={() =>
                                                                                                     handleReaction(
                                                                                                         getPixelArtUrl(
-                                                                                                            msg.content,
+                                                                                                            msg.content
                                                                                                         ),
-                                                                                                        reaction.emoji,
+                                                                                                        reaction.emoji
                                                                                                     )
                                                                                                 }
                                                                                                 className={`
@@ -1755,7 +1795,7 @@ export function ChatModal({
                                                                                                     }
                                                                                                 </span>
                                                                                             </button>
-                                                                                        ),
+                                                                                        )
                                                                                     )}
                                                                             </div>
                                                                         )}
@@ -1767,12 +1807,12 @@ export function ChatModal({
                                                                                     setShowReactionPicker(
                                                                                         showReactionPicker ===
                                                                                             getPixelArtUrl(
-                                                                                                msg.content,
+                                                                                                msg.content
                                                                                             )
                                                                                             ? null
                                                                                             : getPixelArtUrl(
-                                                                                                  msg.content,
-                                                                                              ),
+                                                                                                  msg.content
+                                                                                              )
                                                                                     )
                                                                                 }
                                                                                 className={`
@@ -1799,26 +1839,26 @@ export function ChatModal({
                                                                             <AnimatePresence>
                                                                                 {showReactionPicker ===
                                                                                     getPixelArtUrl(
-                                                                                        msg.content,
+                                                                                        msg.content
                                                                                     ) && (
                                                                                     <PixelArtReactionPickerWrapper
                                                                                         isOwn={
                                                                                             isOwn
                                                                                         }
                                                                                         onReaction={(
-                                                                                            emoji,
+                                                                                            emoji
                                                                                         ) =>
                                                                                             handleReaction(
                                                                                                 getPixelArtUrl(
-                                                                                                    msg.content,
+                                                                                                    msg.content
                                                                                                 ),
-                                                                                                emoji,
+                                                                                                emoji
                                                                                             )
                                                                                         }
                                                                                         reactions={
                                                                                             reactions[
                                                                                                 getPixelArtUrl(
-                                                                                                    msg.content,
+                                                                                                    msg.content
                                                                                                 )
                                                                                             ]
                                                                                         }
@@ -1846,13 +1886,18 @@ export function ChatModal({
                                                                                 {
                                                                                     hour: "2-digit",
                                                                                     minute: "2-digit",
-                                                                                },
+                                                                                }
                                                                             )}
                                                                         </p>
                                                                     </div>
                                                                 ) : isGif ? (
                                                                     <div
-                                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl p-1" : ""}`}
+                                                                        className={`relative cursor-pointer ${
+                                                                            selectedMessage ===
+                                                                            msg.id
+                                                                                ? "ring-2 ring-[#FB8D22]/50 rounded-2xl p-1"
+                                                                                : ""
+                                                                        }`}
                                                                         onClick={() =>
                                                                             handleMessageTap(
                                                                                 msg.id,
@@ -1862,18 +1907,19 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
-                                                                                    hasMedia: true,
+                                                                                    hasMedia:
+                                                                                        true,
                                                                                     mediaUrl:
                                                                                         getGifUrl(
-                                                                                            msg.content,
+                                                                                            msg.content
                                                                                         ),
-                                                                                },
+                                                                                }
                                                                             )
                                                                         }
                                                                     >
                                                                         <img
                                                                             src={getGifUrl(
-                                                                                msg.content,
+                                                                                msg.content
                                                                             )}
                                                                             alt="GIF"
                                                                             className="max-w-[280px] h-auto rounded-xl"
@@ -1894,7 +1940,7 @@ export function ChatModal({
                                                                                 {
                                                                                     hour: "2-digit",
                                                                                     minute: "2-digit",
-                                                                                },
+                                                                                }
                                                                             )}
                                                                         </p>
                                                                     </div>
@@ -1923,7 +1969,7 @@ export function ChatModal({
                                                                                     canEdit:
                                                                                         isOwn &&
                                                                                         canEditMessage(
-                                                                                            msg.sentAt,
+                                                                                            msg.sentAt
                                                                                         ),
                                                                                     hasMedia:
                                                                                         isPixelArt ||
@@ -1932,24 +1978,29 @@ export function ChatModal({
                                                                                     mediaUrl:
                                                                                         isPixelArt
                                                                                             ? getPixelArtUrl(
-                                                                                                  msg.content,
+                                                                                                  msg.content
                                                                                               )
                                                                                             : isGif
-                                                                                              ? getGifUrl(
-                                                                                                    msg.content,
-                                                                                                )
-                                                                                              : undefined,
-                                                                                },
+                                                                                            ? getGifUrl(
+                                                                                                  msg.content
+                                                                                              )
+                                                                                            : undefined,
+                                                                                }
                                                                             )
                                                                         }
-                                                                        className={`relative cursor-pointer ${selectedMessage === msg.id ? "ring-2 ring-[#FB8D22]/50 rounded-2xl" : ""}`}
+                                                                        className={`relative cursor-pointer ${
+                                                                            selectedMessage ===
+                                                                            msg.id
+                                                                                ? "ring-2 ring-[#FB8D22]/50 rounded-2xl"
+                                                                                : ""
+                                                                        }`}
                                                                     >
                                                                         {/* Reply Preview - Check for reply pattern in message content */}
                                                                         {msg.content.startsWith(
-                                                                            "↩️ ",
+                                                                            "↩️ "
                                                                         ) &&
                                                                             msg.content.includes(
-                                                                                "\n\n",
+                                                                                "\n\n"
                                                                             ) && (
                                                                                 <div
                                                                                     className={`mb-2 p-2 rounded-lg ${
@@ -1983,27 +2034,31 @@ export function ChatModal({
                                                                                         >
                                                                                             {msg.content
                                                                                                 .split(
-                                                                                                    ":",
+                                                                                                    ":"
                                                                                                 )[0]
                                                                                                 .replace(
                                                                                                     "↩️ ",
-                                                                                                    "",
+                                                                                                    ""
                                                                                                 )}
                                                                                         </span>
                                                                                     </div>
                                                                                     <p
-                                                                                        className={`text-xs mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}
+                                                                                        className={`text-xs mt-1 line-clamp-2 ${
+                                                                                            isOwn
+                                                                                                ? "text-white/70"
+                                                                                                : "text-zinc-400"
+                                                                                        }`}
                                                                                     >
                                                                                         {msg.content
                                                                                             .split(
-                                                                                                "\n\n",
+                                                                                                "\n\n"
                                                                                             )[0]
                                                                                             .split(
-                                                                                                ': "',
+                                                                                                ': "'
                                                                                             )[1]
                                                                                             ?.replace(
                                                                                                 /\"$/,
-                                                                                                "",
+                                                                                                ""
                                                                                             ) ||
                                                                                             ""}
                                                                                     </p>
@@ -2014,31 +2069,31 @@ export function ChatModal({
                                                                         {(() => {
                                                                             const displayContent =
                                                                                 msg.content.startsWith(
-                                                                                    "↩️ ",
+                                                                                    "↩️ "
                                                                                 ) &&
                                                                                 msg.content.includes(
-                                                                                    "\n\n",
+                                                                                    "\n\n"
                                                                                 )
                                                                                     ? msg.content
                                                                                           .split(
-                                                                                              "\n\n",
+                                                                                              "\n\n"
                                                                                           )
                                                                                           .slice(
-                                                                                              1,
+                                                                                              1
                                                                                           )
                                                                                           .join(
-                                                                                              "\n\n",
+                                                                                              "\n\n"
                                                                                           )
                                                                                     : msg.content;
                                                                             const emojiOnly =
                                                                                 isEmojiOnly(
-                                                                                    displayContent,
+                                                                                    displayContent
                                                                                 );
 
                                                                             // Use ChatMarkdown for code blocks and other markdown
                                                                             if (
                                                                                 hasMarkdown(
-                                                                                    displayContent,
+                                                                                    displayContent
                                                                                 )
                                                                             ) {
                                                                                 return (
@@ -2055,7 +2110,11 @@ export function ChatModal({
 
                                                                             return (
                                                                                 <p
-                                                                                    className={`break-words whitespace-pre-wrap ${emojiOnly ? "text-4xl leading-tight" : ""}`}
+                                                                                    className={`break-words whitespace-pre-wrap ${
+                                                                                        emojiOnly
+                                                                                            ? "text-4xl leading-tight"
+                                                                                            : ""
+                                                                                    }`}
                                                                                 >
                                                                                     {
                                                                                         displayContent
@@ -2066,15 +2125,15 @@ export function ChatModal({
 
                                                                         {/* Link Previews */}
                                                                         {detectUrls(
-                                                                            msg.content,
+                                                                            msg.content
                                                                         )
                                                                             .slice(
                                                                                 0,
-                                                                                1,
+                                                                                1
                                                                             )
                                                                             .map(
                                                                                 (
-                                                                                    url,
+                                                                                    url
                                                                                 ) => (
                                                                                     <LinkPreview
                                                                                         key={
@@ -2085,7 +2144,7 @@ export function ChatModal({
                                                                                         }
                                                                                         compact
                                                                                     />
-                                                                                ),
+                                                                                )
                                                                             )}
 
                                                                         {/* Message Reactions */}
@@ -2094,15 +2153,15 @@ export function ChatModal({
                                                                                 .id
                                                                         ]?.some(
                                                                             (
-                                                                                r,
+                                                                                r
                                                                             ) =>
                                                                                 r.count >
-                                                                                0,
+                                                                                0
                                                                         ) && (
                                                                             <div
                                                                                 className="flex flex-wrap gap-1 mt-1"
                                                                                 onClick={(
-                                                                                    e,
+                                                                                    e
                                                                                 ) =>
                                                                                     e.stopPropagation()
                                                                                 }
@@ -2113,14 +2172,14 @@ export function ChatModal({
                                                                                 ]
                                                                                     ?.filter(
                                                                                         (
-                                                                                            r,
+                                                                                            r
                                                                                         ) =>
                                                                                             r.count >
-                                                                                            0,
+                                                                                            0
                                                                                     )
                                                                                     .map(
                                                                                         (
-                                                                                            reaction,
+                                                                                            reaction
                                                                                         ) => (
                                                                                             <button
                                                                                                 key={
@@ -2129,10 +2188,10 @@ export function ChatModal({
                                                                                                 onClick={() => {
                                                                                                     toggleMsgReaction(
                                                                                                         msg.id,
-                                                                                                        reaction.emoji,
+                                                                                                        reaction.emoji
                                                                                                     );
                                                                                                     setSelectedMessage(
-                                                                                                        null,
+                                                                                                        null
                                                                                                     );
                                                                                                 }}
                                                                                                 className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
@@ -2152,7 +2211,7 @@ export function ChatModal({
                                                                                                     }
                                                                                                 </span>
                                                                                             </button>
-                                                                                        ),
+                                                                                        )
                                                                                     )}
                                                                             </div>
                                                                         )}
@@ -2177,27 +2236,54 @@ export function ChatModal({
                                                                                     {
                                                                                         hour: "2-digit",
                                                                                         minute: "2-digit",
-                                                                                    },
+                                                                                    }
                                                                                 )}
                                                                             </p>
-                                                                            {isOwn && (() => {
-                                                                                const status =
-                                                                                    msg.status === "pending" || msg.status === "failed"
-                                                                                        ? msg.status
-                                                                                        : getMessageStatus(msg.id, true, peerAddress);
-                                                                                const readAt = status === "read" ? getReadAt(msg.id, peerAddress) : null;
-                                                                                return (
-                                                                                    <span
-                                                                                        title={
-                                                                                            readAt
-                                                                                                ? `Read at ${new Date(readAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                                                                                                : undefined
-                                                                                        }
-                                                                                    >
-                                                                                        <MessageStatusIndicator status={status} />
-                                                                                    </span>
-                                                                                );
-                                                                            })()}
+                                                                            {isOwn &&
+                                                                                (() => {
+                                                                                    const status =
+                                                                                        msg.status ===
+                                                                                            "pending" ||
+                                                                                        msg.status ===
+                                                                                            "failed"
+                                                                                            ? msg.status
+                                                                                            : getMessageStatus(
+                                                                                                  msg.id,
+                                                                                                  true,
+                                                                                                  peerAddress
+                                                                                              );
+                                                                                    const readAt =
+                                                                                        status ===
+                                                                                        "read"
+                                                                                            ? getReadAt(
+                                                                                                  msg.id,
+                                                                                                  peerAddress
+                                                                                              )
+                                                                                            : null;
+                                                                                    return (
+                                                                                        <span
+                                                                                            title={
+                                                                                                readAt
+                                                                                                    ? `Read at ${new Date(
+                                                                                                          readAt
+                                                                                                      ).toLocaleTimeString(
+                                                                                                          [],
+                                                                                                          {
+                                                                                                              hour: "numeric",
+                                                                                                              minute: "2-digit",
+                                                                                                          }
+                                                                                                      )}`
+                                                                                                    : undefined
+                                                                                            }
+                                                                                        >
+                                                                                            <MessageStatusIndicator
+                                                                                                status={
+                                                                                                    status
+                                                                                                }
+                                                                                            />
+                                                                                        </span>
+                                                                                    );
+                                                                                })()}
                                                                             {/* Retry button for failed messages */}
                                                                             {isOwn &&
                                                                                 msg.status ===
@@ -2207,18 +2293,18 @@ export function ChatModal({
                                                                                             // Remove failed message and resend
                                                                                             setMessages(
                                                                                                 (
-                                                                                                    prev,
+                                                                                                    prev
                                                                                                 ) =>
                                                                                                     prev.filter(
                                                                                                         (
-                                                                                                            m,
+                                                                                                            m
                                                                                                         ) =>
                                                                                                             m.id !==
-                                                                                                            msg.id,
-                                                                                                    ),
+                                                                                                            msg.id
+                                                                                                    )
                                                                                             );
                                                                                             setNewMessage(
-                                                                                                msg.content,
+                                                                                                msg.content
                                                                                             );
                                                                                         }}
                                                                                         className="ml-2 text-xs text-red-400 hover:text-red-300 underline"
@@ -2247,7 +2333,7 @@ export function ChatModal({
                                                                                         scale: 0.9,
                                                                                     }}
                                                                                     onClick={(
-                                                                                        e,
+                                                                                        e
                                                                                     ) =>
                                                                                         e.stopPropagation()
                                                                                     }
@@ -2264,7 +2350,7 @@ export function ChatModal({
                                                                                                 showMsgReactions ===
                                                                                                     msg.id
                                                                                                     ? null
-                                                                                                    : msg.id,
+                                                                                                    : msg.id
                                                                                             )
                                                                                         }
                                                                                         className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center text-sm shadow-lg border border-zinc-600"
@@ -2276,10 +2362,10 @@ export function ChatModal({
                                                                                     <button
                                                                                         onClick={() => {
                                                                                             setReplyingTo(
-                                                                                                msg,
+                                                                                                msg
                                                                                             );
                                                                                             setSelectedMessage(
-                                                                                                null,
+                                                                                                null
                                                                                             );
                                                                                         }}
                                                                                         className="w-8 h-8 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center shadow-lg border border-zinc-600"
@@ -2315,7 +2401,7 @@ export function ChatModal({
                                                                                         : "left-0"
                                                                                 } -top-12 z-20`}
                                                                                 onClick={(
-                                                                                    e,
+                                                                                    e
                                                                                 ) =>
                                                                                     e.stopPropagation()
                                                                                 }
@@ -2326,29 +2412,29 @@ export function ChatModal({
                                                                                     }
                                                                                     onClose={() =>
                                                                                         setShowMsgReactions(
-                                                                                            null,
+                                                                                            null
                                                                                         )
                                                                                     }
                                                                                     onSelect={async (
-                                                                                        emoji,
+                                                                                        emoji
                                                                                     ) => {
                                                                                         const success =
                                                                                             await toggleMsgReaction(
                                                                                                 msg.id,
-                                                                                                emoji,
+                                                                                                emoji
                                                                                             );
                                                                                         if (
                                                                                             success
                                                                                         ) {
                                                                                             setShowMsgReactions(
-                                                                                                null,
+                                                                                                null
                                                                                             );
                                                                                             setSelectedMessage(
-                                                                                                null,
+                                                                                                null
                                                                                             );
                                                                                         } else {
                                                                                             console.error(
-                                                                                                "[ChatModal] Failed to save reaction",
+                                                                                                "[ChatModal] Failed to save reaction"
                                                                                             );
                                                                                         }
                                                                                     }}
@@ -2422,7 +2508,9 @@ export function ChatModal({
 
                             {/* Input - with safe area padding for bottom */}
                             <div
-                                className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
+                                className={`border-t border-zinc-800 ${
+                                    isFullscreen ? "px-4 pt-4" : "p-4"
+                                }`}
                                 style={
                                     isFullscreen
                                         ? {
@@ -2433,7 +2521,9 @@ export function ChatModal({
                                 }
                             >
                                 <div
-                                    className={`flex items-center ${isFullscreen ? "gap-3" : "gap-2"}`}
+                                    className={`flex items-center ${
+                                        isFullscreen ? "gap-3" : "gap-2"
+                                    }`}
                                 >
                                     {/* Consolidated attachment menu */}
                                     <ChatAttachmentMenu
@@ -2444,7 +2534,7 @@ export function ChatModal({
                                                 formatLocationMessage(location);
                                             await sendMessage(
                                                 peerAddress,
-                                                locationMsg,
+                                                locationMsg
                                             );
                                             onMessageSent?.("📍 Location");
                                         }}
@@ -2488,7 +2578,7 @@ export function ChatModal({
                                             type="button"
                                             onClick={() =>
                                                 setShowEmojiPicker(
-                                                    !showEmojiPicker,
+                                                    !showEmojiPicker
                                                 )
                                             }
                                             className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
@@ -2503,7 +2593,7 @@ export function ChatModal({
                                             }
                                             onSelect={(emoji) => {
                                                 setNewMessage(
-                                                    (prev) => prev + emoji,
+                                                    (prev) => prev + emoji
                                                 );
                                             }}
                                             position="top"
@@ -2517,11 +2607,17 @@ export function ChatModal({
                                             !isInitialized ||
                                             !!chatError
                                         }
-                                        className={`rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isFullscreen ? "p-4" : "p-3"}`}
+                                        className={`rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                            isFullscreen ? "p-4" : "p-3"
+                                        }`}
                                     >
                                         {isSending ? (
                                             <svg
-                                                className={`${isFullscreen ? "w-6 h-6" : "w-5 h-5"} animate-spin`}
+                                                className={`${
+                                                    isFullscreen
+                                                        ? "w-6 h-6"
+                                                        : "w-5 h-5"
+                                                } animate-spin`}
                                                 viewBox="0 0 24 24"
                                                 fill="none"
                                             >
@@ -2691,7 +2787,7 @@ export function ChatModal({
                         onSelectMessage={(msgId) => {
                             // Scroll to message (could implement smooth scrolling)
                             const element = document.getElementById(
-                                `msg-${msgId}`,
+                                `msg-${msgId}`
                             );
                             element?.scrollIntoView({
                                 behavior: "smooth",
@@ -2726,14 +2822,14 @@ export function ChatModal({
                             const success = await muteConversation(
                                 "dm",
                                 peerAddress,
-                                duration,
+                                duration
                             );
                             return success;
                         }}
                         onUnmute={async () => {
                             const success = await unmuteConversation(
                                 "dm",
-                                peerAddress,
+                                peerAddress
                             );
                             return success;
                         }}
@@ -2790,7 +2886,7 @@ export function ChatModal({
                                 ? (emoji) =>
                                       toggleMsgReaction(
                                           selectedMessageConfig.messageId,
-                                          emoji,
+                                          emoji
                                       )
                                 : undefined,
                             onReply: selectedMessageConfig
@@ -2798,7 +2894,7 @@ export function ChatModal({
                                       const msg = messages.find(
                                           (m) =>
                                               m.id ===
-                                              selectedMessageConfig.messageId,
+                                              selectedMessageConfig.messageId
                                       );
                                       if (msg) setReplyingTo(msg);
                                   }
@@ -2810,8 +2906,8 @@ export function ChatModal({
                                           prev.filter(
                                               (m) =>
                                                   m.id !==
-                                                  selectedMessageConfig?.messageId,
-                                          ),
+                                                  selectedMessageConfig?.messageId
+                                          )
                                       );
                                   }
                                 : undefined,
