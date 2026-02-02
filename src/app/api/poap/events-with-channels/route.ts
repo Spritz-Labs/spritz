@@ -12,19 +12,34 @@ export type PoapEventWithChannel = {
     eventName: string;
     imageUrl: string | null;
     /** Full channel if one exists for this POAP event; null if not yet created */
-    channel: (Record<string, unknown> & { id: string; is_member?: boolean }) | null;
+    channel:
+        | (Record<string, unknown> & { id: string; is_member?: boolean })
+        | null;
 };
 
 /**
- * GET /api/poap/events-with-channels?address=0x...
- * Returns user's POAP events (deduplicated) with channel status: existing channel or null.
- * One request for "From my POAPs" UX in Browse Channels.
+ * GET /api/poap/events-with-channels?address=0x...  (single)
+ *   or ?addresses=0x1,0x2  (multiple: e.g. Smart Wallet + identity; POAPs merged, deduped)
+ * Optional: &memberAddress=0x...  for is_member lookup (default: first address)
+ * Returns user's POAP events (deduplicated) with channel status.
  */
 export async function GET(request: NextRequest) {
-    const address = request.nextUrl.searchParams.get("address");
-    if (!address?.trim()) {
+    const addressParam = request.nextUrl.searchParams.get("address");
+    const addressesParam = request.nextUrl.searchParams.get("addresses");
+    const memberAddressParam =
+        request.nextUrl.searchParams.get("memberAddress");
+
+    const rawAddresses: string[] = addressesParam
+        ? addressesParam
+              .split(",")
+              .map((a) => a.trim())
+              .filter(Boolean)
+        : addressParam?.trim()
+        ? [addressParam.trim()]
+        : [];
+    if (rawAddresses.length === 0) {
         return NextResponse.json(
-            { error: "address query parameter is required" },
+            { error: "address or addresses query parameter is required" },
             { status: 400 }
         );
     }
@@ -37,51 +52,68 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    const userAddress = address.trim().toLowerCase();
+    const memberAddress = (
+        memberAddressParam?.trim() || rawAddresses[0]
+    ).toLowerCase();
 
     try {
-        // 1) Fetch user's POAPs from POAP API
-        const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(address.trim())}`;
-        const scanRes = await fetch(scanUrl, {
-            headers: { "X-API-Key": apiKey },
-            next: { revalidate: 300 },
-        });
+        const seen = new Map<
+            number,
+            { eventName: string; imageUrl: string | null }
+        >();
 
-        if (!scanRes.ok) {
-            console.error("[POAP] Scan failed:", scanRes.status);
-            return NextResponse.json(
-                { error: "Failed to fetch POAPs", events: [] },
-                { status: 200 }
-            );
-        }
-
-        const rawList = await scanRes.json();
-        const list = Array.isArray(rawList) ? rawList : rawList?.tokens ?? rawList?.poaps ?? [];
-        const seen = new Map<number, { eventName: string; imageUrl: string | null }>();
-
-        for (const item of list) {
-            const event = item?.event ?? item;
-            const eventId =
-                typeof event?.id === "number"
-                    ? event.id
-                    : typeof event?.id === "string"
-                      ? parseInt(event.id, 10)
-                      : null;
-            if (eventId == null || Number.isNaN(eventId) || seen.has(eventId)) continue;
-            const eventName =
-                typeof event?.name === "string"
-                    ? event.name.trim()
-                    : event?.event_name ?? `Event ${eventId}`;
-            const imageUrl =
-                typeof item?.image_url === "string"
-                    ? item.image_url
-                    : typeof event?.image_url === "string"
-                      ? event.image_url
-                      : null;
-            seen.set(eventId, {
-                eventName: eventName || `Event ${eventId}`,
-                imageUrl,
+        for (const addr of rawAddresses) {
+            const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
+                addr
+            )}`;
+            const scanRes = await fetch(scanUrl, {
+                headers: { "X-API-Key": apiKey },
+                next: { revalidate: 300 },
             });
+
+            if (!scanRes.ok) {
+                console.error(
+                    "[POAP] Scan failed for",
+                    addr.slice(0, 10) + "...",
+                    scanRes.status
+                );
+                continue;
+            }
+
+            const rawList = await scanRes.json();
+            const list = Array.isArray(rawList)
+                ? rawList
+                : rawList?.tokens ?? rawList?.poaps ?? [];
+
+            for (const item of list) {
+                const event = item?.event ?? item;
+                const eventId =
+                    typeof event?.id === "number"
+                        ? event.id
+                        : typeof event?.id === "string"
+                        ? parseInt(event.id, 10)
+                        : null;
+                if (
+                    eventId == null ||
+                    Number.isNaN(eventId) ||
+                    seen.has(eventId)
+                )
+                    continue;
+                const eventName =
+                    typeof event?.name === "string"
+                        ? event.name.trim()
+                        : event?.event_name ?? `Event ${eventId}`;
+                const imageUrl =
+                    typeof item?.image_url === "string"
+                        ? item.image_url
+                        : typeof event?.image_url === "string"
+                        ? event.image_url
+                        : null;
+                seen.set(eventId, {
+                    eventName: eventName || `Event ${eventId}`,
+                    imageUrl,
+                });
+            }
         }
 
         const eventIds = Array.from(seen.keys());
@@ -104,14 +136,12 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 3) User's memberships for is_member
+        // 3) User's memberships for is_member (use identity address, not Smart Wallet)
         const { data: memberships } = await supabase
             .from("shout_channel_members")
             .select("channel_id")
-            .eq("user_address", userAddress);
-        const memberSet = new Set(
-            (memberships ?? []).map((m) => m.channel_id)
-        );
+            .eq("user_address", memberAddress);
+        const memberSet = new Set((memberships ?? []).map((m) => m.channel_id));
 
         const channelByEventId = new Map(
             (channels ?? []).map((c) => [

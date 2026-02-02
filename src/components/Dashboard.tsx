@@ -30,6 +30,7 @@ import { useCallHistory } from "@/hooks/useCallHistory";
 import { BrowseChannelsModal } from "./BrowseChannelsModal";
 import { ChannelChatModal } from "./ChannelChatModal";
 import { useChannels } from "@/hooks/useChannels";
+import { useSmartWallet } from "@/hooks/useSmartWallet";
 import type { PublicChannel } from "@/app/api/channels/route";
 import { UsernameClaimModal } from "./UsernameClaimModal";
 import { PasskeyPromptModal } from "./PasskeyPromptModal";
@@ -182,7 +183,7 @@ function DashboardContent({
     const [currentCallFriend, setCurrentCallFriend] =
         useState<FriendsListFriend | null>(null);
     const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(
-        null,
+        null
     );
     const [userENS, setUserENS] = useState<{
         ensName: string | null;
@@ -209,7 +210,7 @@ function DashboardContent({
         const sb = supabase;
         if (!sb) {
             console.warn(
-                "[Dashboard] Supabase not configured, cannot fetch passkey credential",
+                "[Dashboard] Supabase not configured, cannot fetch passkey credential"
             );
             return;
         }
@@ -230,7 +231,7 @@ function DashboardContent({
             } catch (err) {
                 console.warn(
                     "[Dashboard] Could not fetch passkey credential:",
-                    err,
+                    err
                 );
             }
         };
@@ -521,7 +522,7 @@ function DashboardContent({
         // Award points for existing username if not already claimed
         if (reachUsername && !hasClaimed("username_claimed")) {
             console.log(
-                "[Points] Awarding retroactive points for existing username",
+                "[Points] Awarding retroactive points for existing username"
             );
             awardUserPoints("username_claimed");
         }
@@ -531,7 +532,7 @@ function DashboardContent({
         // Award points for existing socials if not already claimed
         if (socialCount > 0 && !hasClaimed("social_added")) {
             console.log(
-                "[Points] Awarding retroactive points for existing socials",
+                "[Points] Awarding retroactive points for existing socials"
             );
             awardUserPoints("social_added");
         }
@@ -566,7 +567,7 @@ function DashboardContent({
     const handleSyncContacts = async () => {
         if (!isPWA) {
             alert(
-                "Contacts sync is only available in the PWA app. Please install the app first.",
+                "Contacts sync is only available in the PWA app. Please install the app first."
             );
             return;
         }
@@ -594,7 +595,7 @@ function DashboardContent({
                     await shareInvite(firstInvite.code);
                 } else {
                     alert(
-                        "No available invite codes. Please generate more invites first.",
+                        "No available invite codes. Please generate more invites first."
                     );
                 }
             }
@@ -606,7 +607,7 @@ function DashboardContent({
                 await shareInvite(firstInvite.code);
             } else {
                 alert(
-                    "Failed to sync contacts. Please try sharing an invite manually.",
+                    "Failed to sync contacts. Please try sharing an invite manually."
                 );
             }
         } finally {
@@ -691,7 +692,7 @@ function DashboardContent({
                 const { data } = await client
                     .from("shout_user_settings")
                     .select(
-                        "wallet_address, custom_avatar_url, use_custom_avatar",
+                        "wallet_address, custom_avatar_url, use_custom_avatar"
                     )
                     .in("wallet_address", addresses);
 
@@ -710,14 +711,14 @@ function DashboardContent({
                                 avatars[row.wallet_address] =
                                     row.custom_avatar_url;
                             }
-                        },
+                        }
                     );
                     setFriendCustomAvatars(avatars);
                 }
             } catch (err) {
                 console.error(
                     "[Dashboard] Error fetching custom avatars:",
-                    err,
+                    err
                 );
             }
         };
@@ -731,7 +732,7 @@ function DashboardContent({
             const customAvatar = friendCustomAvatars[address.toLowerCase()];
             return customAvatar || ensAvatar;
         },
-        [friendCustomAvatars],
+        [friendCustomAvatars]
     );
 
     // Fetch user info for all unique senders in alpha chat messages (including friends for effective avatar)
@@ -749,7 +750,7 @@ function DashboardContent({
 
         // Only fetch for senders not in cache
         const sendersToFetch = Array.from(uniqueSenders).filter(
-            (address) => !userInfoCache.has(address),
+            (address) => !userInfoCache.has(address)
         );
 
         // Fetch user info for all unique senders not in cache
@@ -775,7 +776,7 @@ function DashboardContent({
                             }
                             return new Map(prev).set(
                                 address.toLowerCase(),
-                                userInfo,
+                                userInfo
                             );
                         });
                     }
@@ -784,7 +785,7 @@ function DashboardContent({
                     console.error(
                         "[Dashboard] Error fetching user info for",
                         address,
-                        err,
+                        err
                     );
                 });
         });
@@ -952,6 +953,18 @@ function DashboardContent({
         onNewChannelMessage,
         setActiveChannel,
     } = useChannels(userAddress);
+    const { smartWallet } = useSmartWallet(
+        isSolanaUser ? null : (userAddress as string)
+    );
+    // For POAP scan: use Smart Wallet (passkey) + identity so we check both
+    const poapAddresses = useMemo(() => {
+        if (!userAddress || isSolanaUser) return [userAddress].filter(Boolean);
+        const set = new Set<string>();
+        const smart = smartWallet?.smartWalletAddress;
+        if (smart) set.add(smart.toLowerCase());
+        set.add(userAddress.toLowerCase());
+        return Array.from(set);
+    }, [userAddress, isSolanaUser, smartWallet?.smartWalletAddress]);
     const [isBrowseChannelsOpen, setIsBrowseChannelsOpen] = useState(false);
     const [browseChannelsInitialCreate, setBrowseChannelsInitialCreate] =
         useState(false);
@@ -961,7 +974,7 @@ function DashboardContent({
 
     // Global chat icon from app settings
     const [globalChatIconUrl, setGlobalChatIconUrl] = useState<string | null>(
-        null,
+        null
     );
 
     // Fetch global chat icon
@@ -969,7 +982,7 @@ function DashboardContent({
         async function fetchGlobalChatIcon() {
             try {
                 const res = await fetch(
-                    "/api/admin/settings?key=global_chat_icon",
+                    "/api/admin/settings?key=global_chat_icon"
                 );
                 if (res.ok) {
                     const data = await res.json();
@@ -994,7 +1007,7 @@ function DashboardContent({
 
             // Check for pending channel join (from invite link when not logged in)
             const pendingChannelId = localStorage.getItem(
-                "spritz_pending_channel_join",
+                "spritz_pending_channel_join"
             );
             if (pendingChannelId) {
                 localStorage.removeItem("spritz_pending_channel_join");
@@ -1003,7 +1016,7 @@ function DashboardContent({
                     await fetchJoinedChannels();
                     // Find the channel and open it
                     const allChannels = await fetch(
-                        `/api/public/channels/${pendingChannelId}`,
+                        `/api/public/channels/${pendingChannelId}`
                     ).then((r) => r.json());
                     if (allChannels.channel) {
                         setSelectedChannel(allChannels.channel);
@@ -1011,7 +1024,7 @@ function DashboardContent({
                 } catch (err) {
                     console.error(
                         "[Dashboard] Error joining pending channel:",
-                        err,
+                        err
                     );
                 }
             }
@@ -1022,7 +1035,7 @@ function DashboardContent({
                 localStorage.removeItem("spritz_open_channel");
                 // Find the channel in joinedChannels or fetch it
                 const channel = joinedChannels.find(
-                    (c) => c.id === openChannelId,
+                    (c) => c.id === openChannelId
                 );
                 if (channel) {
                     setSelectedChannel(channel);
@@ -1030,7 +1043,7 @@ function DashboardContent({
                     // Fetch and set it
                     try {
                         const res = await fetch(
-                            `/api/public/channels/${openChannelId}`,
+                            `/api/public/channels/${openChannelId}`
                         );
                         const data = await res.json();
                         if (data.channel) {
@@ -1039,7 +1052,7 @@ function DashboardContent({
                     } catch (err) {
                         console.error(
                             "[Dashboard] Error opening channel:",
-                            err,
+                            err
                         );
                     }
                 }
@@ -1065,7 +1078,7 @@ function DashboardContent({
             console.log(
                 "[Dashboard] Wake lock:",
                 isWakeLockActive ? "active" : "inactive",
-                { isInActiveCall, isInActiveChat },
+                { isInActiveCall, isInActiveChat }
             );
         }
     }, [isWakeLockActive, isWakeLockSupported, isInActiveCall, isInActiveChat]);
@@ -1087,7 +1100,7 @@ function DashboardContent({
         if (typeof window === "undefined") return {};
         try {
             const stored = localStorage.getItem(
-                `spritz_last_msg_times_${userAddress?.toLowerCase()}`,
+                `spritz_last_msg_times_${userAddress?.toLowerCase()}`
             );
             return stored ? JSON.parse(stored) : {};
         } catch {
@@ -1102,7 +1115,7 @@ function DashboardContent({
         if (typeof window === "undefined") return {};
         try {
             const stored = localStorage.getItem(
-                `spritz_last_msg_previews_${userAddress?.toLowerCase()}`,
+                `spritz_last_msg_previews_${userAddress?.toLowerCase()}`
             );
             return stored ? JSON.parse(stored) : {};
         } catch {
@@ -1161,7 +1174,7 @@ function DashboardContent({
                             .filter((a) => a.startsWith("0x"));
                         // Find the peer address (not our address)
                         const peerAddr = addresses.find(
-                            (a) => a.toLowerCase() !== userAddrLower,
+                            (a) => a.toLowerCase() !== userAddrLower
                         );
                         if (peerAddr) {
                             const key = peerAddr.toLowerCase();
@@ -1192,7 +1205,7 @@ function DashboardContent({
                 console.log(
                     "[Dashboard] Loaded message times from storage:",
                     Object.keys(updates).length,
-                    "conversations",
+                    "conversations"
                 );
                 setLastMessageTimes((prev) => ({ ...prev, ...updates }));
             }
@@ -1207,7 +1220,7 @@ function DashboardContent({
             try {
                 localStorage.setItem(
                     `spritz_last_msg_times_${userAddress.toLowerCase()}`,
-                    JSON.stringify(lastMessageTimes),
+                    JSON.stringify(lastMessageTimes)
                 );
             } catch {
                 // Ignore storage errors
@@ -1221,7 +1234,7 @@ function DashboardContent({
             try {
                 localStorage.setItem(
                     `spritz_last_msg_previews_${userAddress.toLowerCase()}`,
-                    JSON.stringify(lastMessagePreviews),
+                    JSON.stringify(lastMessagePreviews)
                 );
             } catch {
                 // Ignore storage errors
@@ -1247,7 +1260,7 @@ function DashboardContent({
 
         if (Object.keys(updates).length > 0) {
             startTransition(() =>
-                setLastMessageTimes((prev) => ({ ...prev, ...updates })),
+                setLastMessageTimes((prev) => ({ ...prev, ...updates }))
             );
         }
 
@@ -1262,7 +1275,7 @@ function DashboardContent({
                 setLastMessageTimes((prev) => ({
                     ...prev,
                     "global-spritz": Date.now(),
-                })),
+                }))
             );
         }
         prevAlphaUnreadRef.current = alphaUnreadCount;
@@ -1422,7 +1435,7 @@ function DashboardContent({
 
             // Check friends list for name info
             const friend = friends.find(
-                (f) => f.friend_address.toLowerCase() === normalizedAddress,
+                (f) => f.friend_address.toLowerCase() === normalizedAddress
             );
 
             // Build display name with priority: local nickname > ENS > username
@@ -1464,7 +1477,7 @@ function DashboardContent({
             userENS,
             effectiveAvatar,
             userInfoCache,
-        ],
+        ]
     );
 
     // Convert friends to the format FriendsList expects - memoized to prevent unnecessary re-renders
@@ -1480,7 +1493,7 @@ function DashboardContent({
                 reachUsername: f.reachUsername || null,
                 addedAt: f.created_at,
             })),
-        [friends, getEffectiveAvatar],
+        [friends, getEffectiveAvatar]
     );
 
     // Normalize to a valid Date or null (invalid/missing values sort to bottom)
@@ -1514,7 +1527,7 @@ function DashboardContent({
                         : null) ||
                     friend.ensName ||
                     `${friend.address.slice(0, 6)}...${friend.address.slice(
-                        -4,
+                        -4
                     )}`,
                 avatar: friend.avatar,
                 lastMessage: lastMessagePreviews[addressLower] || null,
@@ -1633,7 +1646,7 @@ function DashboardContent({
                 }
             });
         },
-        [],
+        []
     );
 
     // Open chat from URL parameter (e.g., ?chat=0x123...)
@@ -1647,13 +1660,13 @@ function DashboardContent({
         if (chatAddress && friendsListData.length > 0) {
             // Find the friend with this address
             const friend = friendsListData.find(
-                (f) => f.address.toLowerCase() === chatAddress.toLowerCase(),
+                (f) => f.address.toLowerCase() === chatAddress.toLowerCase()
             );
 
             if (friend) {
                 console.log(
                     "[Dashboard] Opening chat from URL param:",
-                    chatAddress,
+                    chatAddress
                 );
                 setChatFriend(friend);
 
@@ -1674,7 +1687,7 @@ function DashboardContent({
         if (addParam) {
             console.log(
                 "[Dashboard] Opening Add Friend modal from URL param:",
-                addParam,
+                addParam
             );
             setIsAddFriendOpen(true);
 
@@ -1692,14 +1705,14 @@ function DashboardContent({
             if (event.data?.type === "OPEN_CHAT" && event.data.senderAddress) {
                 console.log(
                     "[Dashboard] Received OPEN_CHAT from SW:",
-                    event.data.senderAddress,
+                    event.data.senderAddress
                 );
 
                 // Find the friend with this address
                 const friend = friendsListData.find(
                     (f) =>
                         f.address.toLowerCase() ===
-                        event.data.senderAddress.toLowerCase(),
+                        event.data.senderAddress.toLowerCase()
                 );
 
                 if (friend) {
@@ -1710,13 +1723,13 @@ function DashboardContent({
 
         navigator.serviceWorker?.addEventListener(
             "message",
-            handleServiceWorkerMessage,
+            handleServiceWorkerMessage
         );
 
         return () => {
             navigator.serviceWorker?.removeEventListener(
                 "message",
-                handleServiceWorkerMessage,
+                handleServiceWorkerMessage
             );
         };
     }, [friendsListData]);
@@ -1773,7 +1786,7 @@ function DashboardContent({
     const handleCreateGroup = async (
         memberAddresses: string[],
         groupName: string,
-        emoji?: string,
+        emoji?: string
     ): Promise<boolean> => {
         setIsCreatingGroup(true);
         try {
@@ -1783,7 +1796,7 @@ function DashboardContent({
             if (!result.success || !result.groupId) {
                 console.error(
                     "[Dashboard] Failed to create group:",
-                    result.error,
+                    result.error
                 );
                 return false;
             }
@@ -1795,7 +1808,7 @@ function DashboardContent({
                 groupName,
                 memberAddresses,
                 result.symmetricKey,
-                result.members,
+                result.members
             );
             if (!invitesSent) {
                 console.warn("[Dashboard] Failed to send some invitations");
@@ -1817,7 +1830,7 @@ function DashboardContent({
     // Handler to join a group after accepting an invitation
     const handleJoinGroupFromInvite = async (
         groupId: string,
-        groupData?: { name: string; symmetricKey: string; members: string[] },
+        groupData?: { name: string; symmetricKey: string; members: string[] }
     ) => {
         try {
             // Join the Waku group with group data (needed for invited users)
@@ -1872,11 +1885,11 @@ function DashboardContent({
     const handleStartGroupCall = async (
         groupId: string,
         groupName: string,
-        isVideo: boolean,
+        isVideo: boolean
     ) => {
         if (!isCallConfigured) {
             alert(
-                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.",
+                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID."
             );
             return;
         }
@@ -1918,7 +1931,7 @@ function DashboardContent({
     const handleJoinGroupCall = async (groupId: string) => {
         if (!isCallConfigured) {
             alert(
-                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.",
+                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID."
             );
             return;
         }
@@ -1940,7 +1953,7 @@ function DashboardContent({
         const success = await joinCall(
             call.channelName,
             undefined,
-            call.isVideo,
+            call.isVideo
         );
         if (success && userSettings.soundEnabled) {
             notifyCallConnected();
@@ -1965,7 +1978,7 @@ function DashboardContent({
         const success = await joinCall(
             call.channelName,
             undefined,
-            call.isVideo,
+            call.isVideo
         );
         if (success && userSettings.soundEnabled) {
             notifyCallConnected();
@@ -2001,7 +2014,7 @@ function DashboardContent({
         ? friendsListData.find(
               (f) =>
                   f.address.toLowerCase() ===
-                  incomingCall.caller_address.toLowerCase(),
+                  incomingCall.caller_address.toLowerCase()
           )
         : null;
 
@@ -2060,14 +2073,14 @@ function DashboardContent({
                 setLastMessageTimes((prev) => ({
                     ...prev,
                     [senderAddressLower]: Date.now(),
-                })),
+                }))
             );
 
             // Skip notification if we're already viewing this conversation
             if (chatFriend?.address.toLowerCase() === senderAddressLower) {
                 console.log(
                     "[Dashboard] Skipping notification - chat is open for:",
-                    senderAddress,
+                    senderAddress
                 );
                 return;
             }
@@ -2078,7 +2091,7 @@ function DashboardContent({
 
             // Find friend info for the sender
             const friend = friendsListData.find(
-                (f) => f.address.toLowerCase() === senderAddressLower,
+                (f) => f.address.toLowerCase() === senderAddressLower
             );
             // Priority: nickname > Spritz username > ENS > shortened address
             const senderName =
@@ -2125,14 +2138,14 @@ function DashboardContent({
                     setLastMessageTimes((prev) => ({
                         ...prev,
                         [channelKey]: Date.now(),
-                    })),
+                    }))
                 );
 
                 // Skip notification if we're already viewing this channel
                 if (selectedChannel?.id === channelId) {
                     console.log(
                         "[Dashboard] Skipping notification - channel chat is open:",
-                        channelName,
+                        channelName
                     );
                     return;
                 }
@@ -2158,7 +2171,7 @@ function DashboardContent({
 
                 // Auto-hide after 4 seconds
                 setTimeout(() => setToast(null), 4000);
-            },
+            }
         );
 
         return unsubscribe;
@@ -2171,18 +2184,18 @@ function DashboardContent({
     ]);
 
     const handleSendFriendRequest = async (
-        addressOrENS: string,
+        addressOrENS: string
     ): Promise<boolean> => {
         return await sendFriendRequest(addressOrENS);
     };
 
     const handleCall = async (
         friend: FriendsListFriend,
-        withVideo: boolean = false,
+        withVideo: boolean = false
     ) => {
         if (!isCallConfigured) {
             alert(
-                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.",
+                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID."
             );
             return;
         }
@@ -2210,7 +2223,7 @@ function DashboardContent({
                 setCurrentCallFriend(null);
                 setCurrentCallProvider(null);
                 alert(
-                    "Failed to create decentralized call room. Please try again or disable decentralized calls.",
+                    "Failed to create decentralized call room. Please try again or disable decentralized calls."
                 );
                 return;
             }
@@ -2224,7 +2237,7 @@ function DashboardContent({
             ].sort();
             channelName = `spritz_${addresses[0].slice(
                 2,
-                10,
+                10
             )}_${addresses[1].slice(2, 10)}`;
         }
 
@@ -2236,7 +2249,7 @@ function DashboardContent({
             friend.address,
             channelName,
             callerDisplayName,
-            withVideo ? "video" : "audio",
+            withVideo ? "video" : "audio"
         );
 
         if (!callRecord) {
@@ -2252,7 +2265,7 @@ function DashboardContent({
         // Check if the call was rejected during the wait
         if (remoteHangup) {
             console.log(
-                "[Dashboard] Call was rejected (likely DND) - not joining",
+                "[Dashboard] Call was rejected (likely DND) - not joining"
             );
             // Log as missed call - they didn't answer
             await logCall({
@@ -2278,13 +2291,13 @@ function DashboardContent({
             success = await huddle01Call.joinCall(
                 channelName,
                 undefined,
-                withVideo,
+                withVideo
             );
 
             // If Huddle01 fails, fall back to Agora
             if (!success && isAgoraConfigured) {
                 console.log(
-                    "[Dashboard] Huddle01 failed, falling back to Agora...",
+                    "[Dashboard] Huddle01 failed, falling back to Agora..."
                 );
                 setCurrentCallProvider("agora");
 
@@ -2295,7 +2308,7 @@ function DashboardContent({
                 ].sort();
                 const agoraChannelName = `spritz_${addresses[0].slice(
                     2,
-                    10,
+                    10
                 )}_${addresses[1].slice(2, 10)}`;
 
                 // Update the signaling record with the new channel name
@@ -2304,14 +2317,14 @@ function DashboardContent({
                     friend.address,
                     agoraChannelName,
                     callerDisplayName,
-                    withVideo ? "video" : "audio",
+                    withVideo ? "video" : "audio"
                 );
 
                 if (fallbackRecord) {
                     success = await agoraCall.joinCall(
                         agoraChannelName,
                         undefined,
-                        withVideo,
+                        withVideo
                     );
                     if (success) {
                         setToast({
@@ -2327,7 +2340,7 @@ function DashboardContent({
             success = await agoraCall.joinCall(
                 channelName,
                 undefined,
-                withVideo,
+                withVideo
             );
         }
 
@@ -2377,7 +2390,7 @@ function DashboardContent({
                 "withVideo:",
                 withVideo,
                 "isDecentralized:",
-                isDecentralizedCall,
+                isDecentralizedCall
             );
 
             // Set the provider BEFORE joining so UI uses correct state
@@ -2393,13 +2406,13 @@ function DashboardContent({
                 success = await huddle01Call.joinCall(
                     channelName,
                     undefined,
-                    withVideo,
+                    withVideo
                 );
 
                 // If Huddle01 fails, fall back to Agora (caller will need to retry with Agora)
                 if (!success && isAgoraConfigured) {
                     console.log(
-                        "[Dashboard] Huddle01 failed to accept, falling back to Agora...",
+                        "[Dashboard] Huddle01 failed to accept, falling back to Agora..."
                     );
                     setCurrentCallProvider("agora");
                     provider = "agora";
@@ -2419,7 +2432,7 @@ function DashboardContent({
                 success = await agoraCall.joinCall(
                     channelName,
                     undefined,
-                    withVideo,
+                    withVideo
                 );
             }
 
@@ -2475,7 +2488,7 @@ function DashboardContent({
 
         const timeout = setTimeout(async () => {
             console.log(
-                "[Dashboard] Outgoing call timed out - marking as missed",
+                "[Dashboard] Outgoing call timed out - marking as missed"
             );
             // Log as missed call
             await logCall({
@@ -2519,7 +2532,7 @@ function DashboardContent({
             const endTime = new Date();
             const durationSeconds = callStartTime
                 ? Math.round(
-                      (endTime.getTime() - callStartTime.getTime()) / 1000,
+                      (endTime.getTime() - callStartTime.getTime()) / 1000
                   )
                 : duration;
             await updateCall(currentCallId, {
@@ -2562,7 +2575,7 @@ function DashboardContent({
     const openDMByAddress = useCallback(
         (address: string) => {
             const existing = friendsListData.find(
-                (f) => f.address.toLowerCase() === address.toLowerCase(),
+                (f) => f.address.toLowerCase() === address.toLowerCase()
             );
             if (existing) {
                 setChatFriend(existing);
@@ -2580,7 +2593,7 @@ function DashboardContent({
                 });
             }
         },
-        [friendsListData, getAlphaUserInfo, markAsRead],
+        [friendsListData, getAlphaUserInfo, markAsRead]
     );
 
     // Handle unified chat item click
@@ -2590,7 +2603,7 @@ function DashboardContent({
                 case "dm":
                     // Find the friend and open chat
                     const friend = friendsListData.find(
-                        (f) => `dm-${f.address}` === chat.id,
+                        (f) => `dm-${f.address}` === chat.id
                     );
                     if (friend) {
                         setChatFriend(friend);
@@ -2603,7 +2616,7 @@ function DashboardContent({
                 case "channel":
                     const channelId = chat.id.replace("channel-", "");
                     const channel = joinedChannels.find(
-                        (c) => c.id === channelId,
+                        (c) => c.id === channelId
                     );
                     if (channel) {
                         setSelectedChannel(channel);
@@ -2618,7 +2631,7 @@ function DashboardContent({
                     break;
             }
         },
-        [friendsListData, joinedChannels, groups, markAsRead],
+        [friendsListData, joinedChannels, groups, markAsRead]
     );
 
     // Handle call from unified chat
@@ -2626,13 +2639,13 @@ function DashboardContent({
         (chat: UnifiedChatItem) => {
             if (chat.type !== "dm") return;
             const friend = friendsListData.find(
-                (f) => `dm-${f.address}` === chat.id,
+                (f) => `dm-${f.address}` === chat.id
             );
             if (friend) {
                 handleCall(friend);
             }
         },
-        [friendsListData, handleCall],
+        [friendsListData, handleCall]
     );
 
     // Handle video call from unified chat
@@ -2640,13 +2653,13 @@ function DashboardContent({
         (chat: UnifiedChatItem) => {
             if (chat.type !== "dm") return;
             const friend = friendsListData.find(
-                (f) => `dm-${f.address}` === chat.id,
+                (f) => `dm-${f.address}` === chat.id
             );
             if (friend) {
                 handleVideoCall(friend);
             }
         },
-        [friendsListData, handleVideoCall],
+        [friendsListData, handleVideoCall]
     );
 
     // Determine auth type for messaging key
@@ -2752,7 +2765,7 @@ function DashboardContent({
                                     <button
                                         onClick={() =>
                                             setIsProfileMenuOpen(
-                                                !isProfileMenuOpen,
+                                                !isProfileMenuOpen
                                             )
                                         }
                                         className="text-left hover:opacity-80 transition-opacity"
@@ -2822,10 +2835,10 @@ function DashboardContent({
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
-                                                            false,
+                                                            false
                                                         );
                                                         setIsQRCodeModalOpen(
-                                                            true,
+                                                            true
                                                         );
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
@@ -2859,10 +2872,10 @@ function DashboardContent({
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
-                                                            false,
+                                                            false
                                                         );
                                                         setIsUsernameModalOpen(
-                                                            true,
+                                                            true
                                                         );
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -2933,10 +2946,10 @@ function DashboardContent({
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
-                                                            false,
+                                                            false
                                                         );
                                                         setIsEmailModalOpen(
-                                                            true,
+                                                            true
                                                         );
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -3003,10 +3016,10 @@ function DashboardContent({
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
-                                                            false,
+                                                            false
                                                         );
                                                         setIsPhoneModalOpen(
-                                                            true,
+                                                            true
                                                         );
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -3073,10 +3086,10 @@ function DashboardContent({
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
-                                                            false,
+                                                            false
                                                         );
                                                         setIsSocialsModalOpen(
-                                                            true,
+                                                            true
                                                         );
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -3148,7 +3161,7 @@ function DashboardContent({
                                                         rel="noopener noreferrer"
                                                         onClick={() =>
                                                             setIsProfileMenuOpen(
-                                                                false,
+                                                                false
                                                             )
                                                         }
                                                         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -3231,7 +3244,7 @@ function DashboardContent({
                                                         rel="noopener noreferrer"
                                                         onClick={() =>
                                                             setIsProfileMenuOpen(
-                                                                false,
+                                                                false
                                                             )
                                                         }
                                                         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -3268,10 +3281,10 @@ function DashboardContent({
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
-                                                            false,
+                                                            false
                                                         );
                                                         setActiveNavTab(
-                                                            "leaderboard",
+                                                            "leaderboard"
                                                         );
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -3312,7 +3325,7 @@ function DashboardContent({
                                                         href="/admin"
                                                         onClick={() =>
                                                             setIsProfileMenuOpen(
-                                                                false,
+                                                                false
                                                             )
                                                         }
                                                         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
@@ -3963,7 +3976,7 @@ function DashboardContent({
                                             {contacts.map((contact, idx) => {
                                                 const firstInvite =
                                                     invites.find(
-                                                        (inv) => !inv.used_by,
+                                                        (inv) => !inv.used_by
                                                     );
 
                                                 return (
@@ -3995,7 +4008,7 @@ function DashboardContent({
                                                             <button
                                                                 onClick={async () => {
                                                                     await shareInvite(
-                                                                        firstInvite.code,
+                                                                        firstInvite.code
                                                                     );
                                                                 }}
                                                                 className="ml-2 px-3 py-1.5 bg-[#FF5500] hover:bg-[#E04D00] text-white text-xs rounded-lg transition-colors whitespace-nowrap"
@@ -4098,7 +4111,7 @@ function DashboardContent({
                                             {liveStreams.map((stream) => {
                                                 const streamerInfo =
                                                     getAlphaUserInfo(
-                                                        stream.user_address,
+                                                        stream.user_address
                                                     );
                                                 return (
                                                     <a
@@ -4123,7 +4136,7 @@ function DashboardContent({
                                                                     )
                                                                         .slice(
                                                                             0,
-                                                                            2,
+                                                                            2
                                                                         )
                                                                         .toUpperCase()}
                                                                 </div>
@@ -4134,7 +4147,7 @@ function DashboardContent({
                                                             {streamerInfo?.name ||
                                                                 `${stream.user_address.slice(
                                                                     0,
-                                                                    6,
+                                                                    6
                                                                 )}...`}
                                                         </p>
                                                     </a>
@@ -4169,7 +4182,7 @@ function DashboardContent({
                                             {/* Mark all as read - show when any unread */}
                                             {(alphaUnreadCount > 0 ||
                                                 unifiedChats.some(
-                                                    (c) => c.unreadCount > 0,
+                                                    (c) => c.unreadCount > 0
                                                 )) && (
                                                 <button
                                                     onClick={async () => {
@@ -4201,7 +4214,7 @@ function DashboardContent({
                                             <button
                                                 onClick={() =>
                                                     setIsChatSearchOpen(
-                                                        !isChatSearchOpen,
+                                                        !isChatSearchOpen
                                                     )
                                                 }
                                                 className={`w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl transition-all flex items-center justify-center sm:justify-start gap-2 ${
@@ -4257,10 +4270,10 @@ function DashboardContent({
                                             <button
                                                 onClick={() => {
                                                     setBrowseChannelsInitialCreate(
-                                                        false,
+                                                        false
                                                     );
                                                     setIsBrowseChannelsOpen(
-                                                        true,
+                                                        true
                                                     );
                                                 }}
                                                 className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
@@ -4288,7 +4301,7 @@ function DashboardContent({
                                                 <button
                                                     onClick={() =>
                                                         setShowNewChatMenu(
-                                                            !showNewChatMenu,
+                                                            !showNewChatMenu
                                                         )
                                                     }
                                                     className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2"
@@ -4343,7 +4356,7 @@ function DashboardContent({
                                                                 className="fixed inset-0 z-40"
                                                                 onClick={() =>
                                                                     setShowNewChatMenu(
-                                                                        false,
+                                                                        false
                                                                     )
                                                                 }
                                                             />
@@ -4370,13 +4383,13 @@ function DashboardContent({
                                                                     <button
                                                                         onClick={() => {
                                                                             setShowNewChatMenu(
-                                                                                false,
+                                                                                false
                                                                             );
                                                                             setBrowseChannelsInitialCreate(
-                                                                                true,
+                                                                                true
                                                                             );
                                                                             setIsBrowseChannelsOpen(
-                                                                                true,
+                                                                                true
                                                                             );
                                                                         }}
                                                                         className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
@@ -4414,10 +4427,10 @@ function DashboardContent({
                                                                         <button
                                                                             onClick={() => {
                                                                                 setShowNewChatMenu(
-                                                                                    false,
+                                                                                    false
                                                                                 );
                                                                                 setIsCreateGroupOpen(
-                                                                                    true,
+                                                                                    true
                                                                                 );
                                                                             }}
                                                                             disabled={
@@ -4482,7 +4495,7 @@ function DashboardContent({
                                         showSearch={isChatSearchOpen}
                                         onSearchToggle={() =>
                                             setIsChatSearchOpen(
-                                                !isChatSearchOpen,
+                                                !isChatSearchOpen
                                             )
                                         }
                                         onOpenAddFriend={() =>
@@ -4490,7 +4503,7 @@ function DashboardContent({
                                         }
                                         onOpenBrowseChannels={() => {
                                             setBrowseChannelsInitialCreate(
-                                                true,
+                                                true
                                             );
                                             setIsBrowseChannelsOpen(true);
                                         }}
@@ -4502,7 +4515,7 @@ function DashboardContent({
                                         }
                                         onMarkFolderAsRead={(
                                             _folderEmoji,
-                                            chatsInFolder,
+                                            chatsInFolder
                                         ) => {
                                             for (const chat of chatsInFolder) {
                                                 if (chat.type === "global") {
@@ -4513,7 +4526,7 @@ function DashboardContent({
                                                     chat.metadata?.address
                                                 ) {
                                                     markAsRead(
-                                                        chat.metadata.address,
+                                                        chat.metadata.address
                                                     );
                                                 }
                                             }
@@ -4534,14 +4547,14 @@ function DashboardContent({
                                             onAccept={acceptInvitation}
                                             onDecline={async (
                                                 invitationId: string,
-                                                groupId: string,
+                                                groupId: string
                                             ) => {
                                                 // First leave/hide the Waku group
                                                 await leaveGroup(groupId);
                                                 // Then mark the invitation as declined
                                                 const result =
                                                     await declineInvitation(
-                                                        invitationId,
+                                                        invitationId
                                                     );
                                                 // Refresh groups list
                                                 const fetchedGroups =
@@ -4582,20 +4595,20 @@ function DashboardContent({
                                                                     hostWalletAddress:
                                                                         userAddress,
                                                                     title: "Quick Meeting",
-                                                                },
+                                                                }
                                                             ),
-                                                        },
+                                                        }
                                                     );
                                                     const data =
                                                         await res.json();
                                                     if (res.ok && data.room) {
                                                         trackRoomCreated();
                                                         navigator.clipboard.writeText(
-                                                            data.room.joinUrl,
+                                                            data.room.joinUrl
                                                         );
                                                         const isStandalone =
                                                             window.matchMedia(
-                                                                "(display-mode: standalone)",
+                                                                "(display-mode: standalone)"
                                                             ).matches ||
                                                             (
                                                                 window.navigator as any
@@ -4608,18 +4621,18 @@ function DashboardContent({
                                                             window.open(
                                                                 data.room
                                                                     .joinUrl,
-                                                                "_blank",
+                                                                "_blank"
                                                             );
                                                         }
                                                     } else {
                                                         alert(
                                                             data.error ||
-                                                                "Failed to create room",
+                                                                "Failed to create room"
                                                         );
                                                     }
                                                 } catch {
                                                     alert(
-                                                        "Failed to create room",
+                                                        "Failed to create room"
                                                     );
                                                 }
                                             }}
@@ -4666,7 +4679,7 @@ function DashboardContent({
                                             onClick={async () => {
                                                 try {
                                                     const res = await fetch(
-                                                        `/api/rooms/permanent?wallet_address=${userAddress}`,
+                                                        `/api/rooms/permanent?wallet_address=${userAddress}`
                                                     );
                                                     if (res.ok) {
                                                         const roomUrl = `${window.location.origin}/room/${userAddress}`;
@@ -4674,16 +4687,16 @@ function DashboardContent({
                                                             roomUrl;
                                                     } else {
                                                         alert(
-                                                            "Failed to open room",
+                                                            "Failed to open room"
                                                         );
                                                     }
                                                 } catch (err) {
                                                     console.error(
                                                         "Failed to open room:",
-                                                        err,
+                                                        err
                                                     );
                                                     alert(
-                                                        "Failed to open room",
+                                                        "Failed to open room"
                                                     );
                                                 }
                                             }}
@@ -4706,7 +4719,7 @@ function DashboardContent({
                                             type="text"
                                             value={`app.spritz.chat/room/${userAddress?.slice(
                                                 0,
-                                                8,
+                                                8
                                             )}...`}
                                             readOnly
                                             className="flex-1 min-w-0 bg-transparent text-zinc-400 text-xs sm:text-sm font-mono truncate outline-none"
@@ -4719,11 +4732,11 @@ function DashboardContent({
                                                     window.location.origin
                                                 }/room/${userAddress.toLowerCase()}`;
                                                 navigator.clipboard.writeText(
-                                                    link,
+                                                    link
                                                 );
                                                 const btn =
                                                     document.querySelector(
-                                                        "[data-room-copy-btn]",
+                                                        "[data-room-copy-btn]"
                                                     ) as HTMLElement;
                                                 if (btn) {
                                                     const original =
@@ -4910,7 +4923,7 @@ function DashboardContent({
                                 {/* Unread indicator */}
                                 {unreadCounts &&
                                     Object.values(unreadCounts).some(
-                                        (c) => c > 0,
+                                        (c) => c > 0
                                     ) && (
                                         <span className="absolute top-0 right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                                     )}
@@ -5010,7 +5023,7 @@ function DashboardContent({
                 initialValue={
                     typeof window !== "undefined"
                         ? new URLSearchParams(window.location.search).get(
-                              "add",
+                              "add"
                           ) || undefined
                         : undefined
                 }
@@ -5100,7 +5113,7 @@ function DashboardContent({
                         if (chatFriend) {
                             updateLastMessageTime(
                                 chatFriend.address.toLowerCase(),
-                                preview,
+                                preview
                             );
                         }
                     }}
@@ -5129,7 +5142,7 @@ function DashboardContent({
                                 "/api/passkey/credentials",
                                 {
                                     credentials: "include",
-                                },
+                                }
                             );
                             if (res.ok) {
                                 const data = await res.json();
@@ -5329,11 +5342,11 @@ function DashboardContent({
                                                     key={friend.id}
                                                     onClick={() => {
                                                         setShowNewCallModal(
-                                                            false,
+                                                            false
                                                         );
                                                         handleCall(
                                                             friend,
-                                                            false,
+                                                            false
                                                         );
                                                     }}
                                                     disabled={
@@ -5363,9 +5376,9 @@ function DashboardContent({
                                                                 friend.ensName ||
                                                                 `${friend.address.slice(
                                                                     0,
-                                                                    6,
+                                                                    6
                                                                 )}...${friend.address.slice(
-                                                                    -4,
+                                                                    -4
                                                                 )}`}
                                                         </p>
                                                         {(friend.reachUsername ||
@@ -5373,11 +5386,11 @@ function DashboardContent({
                                                             <p className="text-xs text-zinc-500">
                                                                 {friend.address.slice(
                                                                     0,
-                                                                    6,
+                                                                    6
                                                                 )}
                                                                 ...
                                                                 {friend.address.slice(
-                                                                    -4,
+                                                                    -4
                                                                 )}
                                                             </p>
                                                         )}
@@ -5455,7 +5468,7 @@ function DashboardContent({
                     friends.some(
                         (f) =>
                             f.friend_address.toLowerCase() ===
-                            address.toLowerCase(),
+                            address.toLowerCase()
                     )
                 }
                 onOpenDM={(address) => {
@@ -5498,7 +5511,7 @@ function DashboardContent({
                         friends.some(
                             (f) =>
                                 f.friend_address.toLowerCase() ===
-                                address.toLowerCase(),
+                                address.toLowerCase()
                         )
                     }
                     onOpenDM={(address) => {
@@ -5531,6 +5544,7 @@ function DashboardContent({
                     fetchJoinedChannels();
                 }}
                 userAddress={userAddress}
+                poapAddresses={poapAddresses}
                 onJoinChannel={async (channel) => {
                     setIsBrowseChannelsOpen(false);
                     setBrowseChannelsInitialCreate(false);
@@ -5562,7 +5576,7 @@ function DashboardContent({
                         friends.some(
                             (f) =>
                                 f.friend_address.toLowerCase() ===
-                                address.toLowerCase(),
+                                address.toLowerCase()
                         )
                     }
                     onOpenDM={(address) => {
@@ -5570,7 +5584,7 @@ function DashboardContent({
                         setSelectedChannel(null);
                     }}
                     notificationsEnabled={isNotificationsEnabled(
-                        selectedChannel.id,
+                        selectedChannel.id
                     )}
                     onToggleNotifications={() =>
                         toggleChannelNotifications(selectedChannel.id)
@@ -5718,7 +5732,7 @@ function DashboardContent({
                                         f.ensName === toast.sender ||
                                         f.nickname === toast.sender ||
                                         formatAddress(f.address) ===
-                                            toast.sender,
+                                            toast.sender
                                 );
                                 if (friend) {
                                     handleChat(friend);
@@ -5801,7 +5815,7 @@ function DashboardContent({
                 userAddress={userAddress}
                 onOpenChannel={(channelId) => {
                     const channel = joinedChannels.find(
-                        (c) => c.id === channelId,
+                        (c) => c.id === channelId
                     );
                     if (channel) setSelectedChannel(channel);
                 }}
@@ -5872,14 +5886,14 @@ function DashboardContent({
                                             <p className="text-zinc-400 text-xs">
                                                 {betaAppliedAt
                                                     ? `Applied on ${new Date(
-                                                          betaAppliedAt,
+                                                          betaAppliedAt
                                                       ).toLocaleDateString(
                                                           "en-US",
                                                           {
                                                               month: "long",
                                                               day: "numeric",
                                                               year: "numeric",
-                                                          },
+                                                          }
                                                       )}`
                                                     : "Your application is being reviewed"}
                                             </p>
@@ -5912,7 +5926,7 @@ function DashboardContent({
                                                                 method: "POST",
                                                                 credentials:
                                                                     "include",
-                                                            },
+                                                            }
                                                         );
                                                     const data =
                                                         await response.json();
@@ -5923,28 +5937,28 @@ function DashboardContent({
                                                             // User already has access, refresh and open wallet
                                                             refreshBetaAccess();
                                                             setShowWalletBetaPrompt(
-                                                                false,
+                                                                false
                                                             );
                                                             setIsWalletModalOpen(
-                                                                true,
+                                                                true
                                                             );
                                                         } else {
                                                             setWalletBetaApplied(
-                                                                true,
+                                                                true
                                                             );
                                                             setBetaAppliedAt(
-                                                                new Date().toISOString(),
+                                                                new Date().toISOString()
                                                             );
                                                         }
                                                     }
                                                 } catch (error) {
                                                     console.error(
                                                         "[Dashboard] Error applying for wallet beta:",
-                                                        error,
+                                                        error
                                                     );
                                                 } finally {
                                                     setIsApplyingWalletBeta(
-                                                        false,
+                                                        false
                                                     );
                                                 }
                                             }}

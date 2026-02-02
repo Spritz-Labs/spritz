@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChannels } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
@@ -11,6 +11,8 @@ type BrowseChannelsModalProps = {
     isOpen: boolean;
     onClose: () => void;
     userAddress: string;
+    /** Addresses to scan for POAPs (e.g. Smart Wallet + identity). If not set, uses userAddress only. */
+    poapAddresses?: string[];
     onJoinChannel: (channel: PublicChannel) => void;
     initialShowCreate?: boolean; // Auto-open the create form
 };
@@ -59,6 +61,7 @@ export function BrowseChannelsModal({
     isOpen,
     onClose,
     userAddress,
+    poapAddresses,
     onJoinChannel,
     initialShowCreate = false,
 }: BrowseChannelsModalProps) {
@@ -72,7 +75,9 @@ export function BrowseChannelsModal({
     const [poapEvents, setPoapEvents] = useState<PoapEventWithChannel[]>([]);
     const [poapLoading, setPoapLoading] = useState(false);
     const [poapError, setPoapError] = useState<string | null>(null);
-    const [creatingPoapEventId, setCreatingPoapEventId] = useState<number | null>(null);
+    const [creatingPoapEventId, setCreatingPoapEventId] = useState<
+        number | null
+    >(null);
 
     // Reset showCreateModal when the modal opens/closes
     useEffect(() => {
@@ -82,13 +87,29 @@ export function BrowseChannelsModal({
     }, [isOpen, initialShowCreate]);
 
     // Fetch POAP events with channel status when "From my POAPs" is selected
+    const addressesForPoap = useMemo(
+        () =>
+            poapAddresses?.length
+                ? poapAddresses
+                : userAddress
+                ? [userAddress]
+                : [],
+        [poapAddresses, userAddress]
+    );
     const fetchPoapEvents = useCallback(async () => {
-        if (!userAddress?.trim()) return;
+        if (addressesForPoap.length === 0) return;
         setPoapLoading(true);
         setPoapError(null);
         try {
+            const params = new URLSearchParams();
+            if (addressesForPoap.length === 1) {
+                params.set("address", addressesForPoap[0]);
+            } else {
+                params.set("addresses", addressesForPoap.join(","));
+            }
+            params.set("memberAddress", userAddress);
             const res = await fetch(
-                `/api/poap/events-with-channels?address=${encodeURIComponent(userAddress)}`
+                `/api/poap/events-with-channels?${params.toString()}`
             );
             const data = await res.json();
             if (!res.ok) {
@@ -103,7 +124,7 @@ export function BrowseChannelsModal({
         } finally {
             setPoapLoading(false);
         }
-    }, [userAddress]);
+    }, [userAddress, addressesForPoap]);
 
     useEffect(() => {
         if (isOpen && view === "poap") {
@@ -168,7 +189,9 @@ export function BrowseChannelsModal({
                 );
             }
         } catch (e) {
-            setPoapError(e instanceof Error ? e.message : "Failed to create channel");
+            setPoapError(
+                e instanceof Error ? e.message : "Failed to create channel"
+            );
         } finally {
             setCreatingPoapEventId(null);
         }
@@ -203,7 +226,7 @@ export function BrowseChannelsModal({
             }
         } catch (e) {
             setCreateError(
-                e instanceof Error ? e.message : "Failed to create channel",
+                e instanceof Error ? e.message : "Failed to create channel"
             );
         }
     };
@@ -348,10 +371,14 @@ export function BrowseChannelsModal({
                             {view === "poap"
                                 ? poapLoading
                                     ? "Loading your POAPs..."
-                                    : `${poapEvents.length} POAP${poapEvents.length !== 1 ? "s" : ""} you hold`
+                                    : `${poapEvents.length} POAP${
+                                          poapEvents.length !== 1 ? "s" : ""
+                                      } you hold`
                                 : isLoading
-                                  ? "Loading..."
-                                  : `${filteredChannels.length} channel${filteredChannels.length !== 1 ? "s" : ""}`}
+                                ? "Loading..."
+                                : `${filteredChannels.length} channel${
+                                      filteredChannels.length !== 1 ? "s" : ""
+                                  }`}
                         </p>
                         <div className="p-3 sm:p-4 overflow-y-auto flex-1 min-h-0">
                             {view === "poap" ? (
@@ -362,9 +389,12 @@ export function BrowseChannelsModal({
                                         </div>
                                     ) : poapError ? (
                                         <div className="text-center py-8">
-                                            <p className="text-zinc-400 text-sm mb-2">{poapError}</p>
+                                            <p className="text-zinc-400 text-sm mb-2">
+                                                {poapError}
+                                            </p>
                                             <p className="text-zinc-500 text-xs mb-4">
-                                                Add POAP_API_KEY to enable POAP channels.{" "}
+                                                Add POAP_API_KEY to enable POAP
+                                                channels.{" "}
                                                 <a
                                                     href="https://documentation.poap.tech/docs/getting-started"
                                                     target="_blank"
@@ -388,7 +418,8 @@ export function BrowseChannelsModal({
                                                 No POAPs found for your wallet.
                                             </p>
                                             <p className="text-zinc-600 text-xs mt-1">
-                                                Hold POAPs to create or join event channels on Logos.
+                                                Hold POAPs to create or join
+                                                event channels on Logos.
                                             </p>
                                         </div>
                                     ) : (
@@ -396,8 +427,14 @@ export function BrowseChannelsModal({
                                             {poapEvents.map((event) => (
                                                 <motion.div
                                                     key={event.eventId}
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
+                                                    initial={{
+                                                        opacity: 0,
+                                                        y: 10,
+                                                    }}
+                                                    animate={{
+                                                        opacity: 1,
+                                                        y: 0,
+                                                    }}
                                                     className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -414,16 +451,32 @@ export function BrowseChannelsModal({
                                                         )}
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-white font-medium truncate">
-                                                                {event.eventName}
+                                                                {
+                                                                    event.eventName
+                                                                }
                                                             </p>
                                                             {event.channel ? (
                                                                 <p className="text-zinc-500 text-xs mt-0.5">
-                                                                    {Number((event.channel as { member_count?: number }).member_count ?? 0)} members
-                                                                    {event.channel.is_member && " • You’re in"}
+                                                                    {Number(
+                                                                        (
+                                                                            event.channel as {
+                                                                                member_count?: number;
+                                                                            }
+                                                                        )
+                                                                            .member_count ??
+                                                                            0
+                                                                    )}{" "}
+                                                                    members
+                                                                    {event
+                                                                        .channel
+                                                                        .is_member &&
+                                                                        " • You’re in"}
                                                                 </p>
                                                             ) : (
                                                                 <p className="text-zinc-500 text-xs mt-0.5">
-                                                                    No channel yet • Create on Logos
+                                                                    No channel
+                                                                    yet • Create
+                                                                    on Logos
                                                                 </p>
                                                             )}
                                                         </div>
@@ -431,20 +484,35 @@ export function BrowseChannelsModal({
                                                             <button
                                                                 type="button"
                                                                 onClick={() =>
-                                                                    event.channel!.is_member
-                                                                        ? onJoinChannel(event.channel as PublicChannel)
-                                                                        : handleJoin(event.channel as PublicChannel)
+                                                                    event.channel!
+                                                                        .is_member
+                                                                        ? onJoinChannel(
+                                                                              event.channel as PublicChannel
+                                                                          )
+                                                                        : handleJoin(
+                                                                              event.channel as PublicChannel
+                                                                          )
                                                                 }
-                                                                disabled={joiningChannel === event.channel!.id}
+                                                                disabled={
+                                                                    joiningChannel ===
+                                                                    event.channel!
+                                                                        .id
+                                                                }
                                                                 className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex-shrink-0 ${
-                                                                    event.channel!.is_member
+                                                                    event.channel!
+                                                                        .is_member
                                                                         ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
                                                                         : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
                                                                 }`}
                                                             >
-                                                                {joiningChannel === event.channel!.id ? (
-                                                                    <span className="animate-pulse">...</span>
-                                                                ) : event.channel!.is_member ? (
+                                                                {joiningChannel ===
+                                                                event.channel!
+                                                                    .id ? (
+                                                                    <span className="animate-pulse">
+                                                                        ...
+                                                                    </span>
+                                                                ) : event.channel!
+                                                                      .is_member ? (
                                                                     "Open"
                                                                 ) : (
                                                                     "Join"
@@ -453,12 +521,22 @@ export function BrowseChannelsModal({
                                                         ) : (
                                                             <button
                                                                 type="button"
-                                                                onClick={() => handleCreatePoapChannel(event)}
-                                                                disabled={creatingPoapEventId === event.eventId}
+                                                                onClick={() =>
+                                                                    handleCreatePoapChannel(
+                                                                        event
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    creatingPoapEventId ===
+                                                                    event.eventId
+                                                                }
                                                                 className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50 flex-shrink-0"
                                                             >
-                                                                {creatingPoapEventId === event.eventId ? (
-                                                                    <span className="animate-pulse">Creating...</span>
+                                                                {creatingPoapEventId ===
+                                                                event.eventId ? (
+                                                                    <span className="animate-pulse">
+                                                                        Creating...
+                                                                    </span>
                                                                 ) : (
                                                                     "Create channel"
                                                                 )}
@@ -523,10 +601,10 @@ export function BrowseChannelsModal({
                                                     onClick={() =>
                                                         channel.is_member
                                                             ? handleLeave(
-                                                                  channel.id,
+                                                                  channel.id
                                                               )
                                                             : handleJoin(
-                                                                  channel,
+                                                                  channel
                                                               )
                                                     }
                                                     disabled={
