@@ -418,7 +418,7 @@ export function BrowseChannelsModal({
                                                             </p>
                                                             {event.channel ? (
                                                                 <p className="text-zinc-500 text-xs mt-0.5">
-                                                                    {event.channel.member_count} members
+                                                                    {Number((event.channel as { member_count?: number }).member_count ?? 0)} members
                                                                     {event.channel.is_member && " • You’re in"}
                                                                 </p>
                                                             ) : (
