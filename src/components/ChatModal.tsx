@@ -175,7 +175,7 @@ export function ChatModal({
         userAddress,
         conversationId,
     );
-    const { markMessagesRead, getMessageStatus, fetchReadReceipts } =
+    const { markMessagesRead, getMessageStatus, getReadAt, fetchReadReceipts } =
         useReadReceipts(userAddress, conversationId);
     const {
         reactions: msgReactions,
@@ -2180,22 +2180,24 @@ export function ChatModal({
                                                                                     },
                                                                                 )}
                                                                             </p>
-                                                                            {isOwn && (
-                                                                                <MessageStatusIndicator
-                                                                                    status={
-                                                                                        msg.status ===
-                                                                                            "pending" ||
-                                                                                        msg.status ===
-                                                                                            "failed"
-                                                                                            ? msg.status
-                                                                                            : getMessageStatus(
-                                                                                                  msg.id,
-                                                                                                  true,
-                                                                                                  peerAddress,
-                                                                                              )
-                                                                                    }
-                                                                                />
-                                                                            )}
+                                                                            {isOwn && (() => {
+                                                                                const status =
+                                                                                    msg.status === "pending" || msg.status === "failed"
+                                                                                        ? msg.status
+                                                                                        : getMessageStatus(msg.id, true, peerAddress);
+                                                                                const readAt = status === "read" ? getReadAt(msg.id, peerAddress) : null;
+                                                                                return (
+                                                                                    <span
+                                                                                        title={
+                                                                                            readAt
+                                                                                                ? `Read at ${new Date(readAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                                                                                                : undefined
+                                                                                        }
+                                                                                    >
+                                                                                        <MessageStatusIndicator status={status} />
+                                                                                    </span>
+                                                                                );
+                                                                            })()}
                                                                             {/* Retry button for failed messages */}
                                                                             {isOwn &&
                                                                                 msg.status ===

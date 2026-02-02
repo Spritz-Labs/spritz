@@ -11,9 +11,6 @@ export function MessageStatusIndicator({
     status,
     className = "",
 }: MessageStatusIndicatorProps) {
-    // Debug: log status
-    console.log("[MessageStatus] Rendering status:", status);
-    
     return (
         <span className={`inline-flex items-center ${className}`}>
             {/* Pending/Sending - pulsing circle */}

@@ -91,6 +91,10 @@ type ChannelChatModalProps = {
     isAdmin?: boolean;
     // Callback when message is sent (for updating chat order)
     onMessageSent?: () => void;
+    // Forward message to global chat (when user is alpha member)
+    onForwardToGlobal?: (content: string) => Promise<boolean>;
+    // Global chat icon URL for forward target list
+    globalChatIconUrl?: string | null;
 };
 
 export function ChannelChatModal({
@@ -108,6 +112,8 @@ export function ChannelChatModal({
     onToggleNotifications,
     onSetActiveChannel,
     isAdmin = false,
+    onForwardToGlobal,
+    globalChatIconUrl,
 }: ChannelChatModalProps) {
     // Determine if this is a Waku channel
     const isWakuChannel = channel.messaging_type === "waku";
@@ -507,6 +513,7 @@ export function ChannelChatModal({
     const [threadRootMessage, setThreadRootMessage] =
         useState<ChannelMessage | null>(null);
     const [threadInputValue, setThreadInputValue] = useState("");
+    const threadInputRef = useRef<HTMLInputElement>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const [forwardingMessage, setForwardingMessage] =
@@ -584,6 +591,14 @@ export function ChannelChatModal({
         resetUnreadCount,
         scrollToBottom: scrollToBottomFn,
     } = useScrollToBottom(messagesContainerRef);
+
+    // Focus thread reply input when thread drawer opens
+    useEffect(() => {
+        if (threadRootMessage && threadInputRef.current) {
+            const t = setTimeout(() => threadInputRef.current?.focus(), 150);
+            return () => clearTimeout(t);
+        }
+    }, [threadRootMessage]);
 
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1398,6 +1413,7 @@ export function ChannelChatModal({
                                     </div>
                                     <div className="p-3 border-t border-zinc-800 shrink-0 flex gap-2">
                                         <input
+                                            ref={threadInputRef}
                                             type="text"
                                             value={threadInputValue}
                                             onChange={(e) =>
@@ -2690,43 +2706,55 @@ export function ChannelChatModal({
                                                                                 ).length;
                                                                             return replyCount >
                                                                                 0 ? (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() =>
-                                                                                        setThreadRootMessage(
-                                                                                            msg,
-                                                                                        )
-                                                                                    }
-                                                                                    className="mt-1.5 text-xs text-zinc-500 hover:text-orange-400 transition-colors flex items-center gap-1"
-                                                                                >
-                                                                                    <svg
-                                                                                        className="w-3.5 h-3.5"
-                                                                                        fill="none"
-                                                                                        viewBox="0 0 24 24"
-                                                                                        stroke="currentColor"
+                                                                                <div className="mt-1.5 flex items-center gap-2">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setThreadRootMessage(
+                                                                                                msg,
+                                                                                            )
+                                                                                        }
+                                                                                        className="text-xs text-zinc-500 hover:text-orange-400 transition-colors flex items-center gap-1"
                                                                                     >
-                                                                                        <path
-                                                                                            strokeLinecap="round"
-                                                                                            strokeLinejoin="round"
-                                                                                            strokeWidth={
-                                                                                                2
-                                                                                            }
-                                                                                            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-                                                                                        />
-                                                                                    </svg>
-                                                                                    View
-                                                                                    thread
-                                                                                    (
-                                                                                    {
-                                                                                        replyCount
-                                                                                    }{" "}
-                                                                                    {replyCount ===
-                                                                                    1
-                                                                                        ? "reply"
-                                                                                        : "replies"}
-
-                                                                                    )
-                                                                                </button>
+                                                                                        <svg
+                                                                                            className="w-3.5 h-3.5"
+                                                                                            fill="none"
+                                                                                            viewBox="0 0 24 24"
+                                                                                            stroke="currentColor"
+                                                                                        >
+                                                                                            <path
+                                                                                                strokeLinecap="round"
+                                                                                                strokeLinejoin="round"
+                                                                                                strokeWidth={
+                                                                                                    2
+                                                                                                }
+                                                                                                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                                            />
+                                                                                        </svg>
+                                                                                        View
+                                                                                        thread
+                                                                                        (
+                                                                                        {
+                                                                                            replyCount
+                                                                                        }{" "}
+                                                                                        {replyCount ===
+                                                                                        1
+                                                                                            ? "reply"
+                                                                                            : "replies"}
+                                                                                        )
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setThreadRootMessage(
+                                                                                                msg,
+                                                                                            )
+                                                                                        }
+                                                                                        className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+                                                                                    >
+                                                                                        Reply in thread
+                                                                                    </button>
+                                                                                </div>
                                                                             ) : null;
                                                                         })()}
                                                                 </div>
@@ -3220,20 +3248,33 @@ export function ChannelChatModal({
                     }
                     onForward={async (targetId, targetType) => {
                         if (!forwardingMessage) return false;
-                        // For now, we'll just send a forwarded message to the current channel
-                        // In a full implementation, this would send to the target chat
                         const forwardedContent = `↩️ Forwarded from ${formatSender(forwardingMessage.sender_address)}:\n\n"${forwardingMessage.content}"`;
-                        await sendMessage(forwardedContent, "text");
-                        return true;
+                        if (targetType === "global" && onForwardToGlobal) {
+                            return onForwardToGlobal(forwardedContent);
+                        }
+                        if (targetType === "channel" && targetId === channel.id) {
+                            await sendMessage(forwardedContent, "text");
+                            return true;
+                        }
+                        return false;
                     }}
                     chats={[
-                        // Current channel as the only option for now
                         {
                             id: channel.id,
                             type: "channel",
                             name: `#${channel.name}`,
                             icon: channel.emoji,
                         },
+                        ...(onForwardToGlobal
+                            ? [
+                                  {
+                                      id: "global",
+                                      type: "global" as const,
+                                      name: "Global Chat",
+                                      avatar: globalChatIconUrl ?? undefined,
+                                  },
+                              ]
+                            : []),
                     ]}
                 />
 

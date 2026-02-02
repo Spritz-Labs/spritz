@@ -186,11 +186,16 @@ export function useTypingIndicator(
 
 export type MessageStatus = "pending" | "sending" | "sent" | "delivered" | "read" | "failed";
 
+export type ReadReceiptWithTime = { reader_address: string; read_at: string };
+
 export function useReadReceipts(
     userAddress: string | null,
     conversationId: string | null
 ) {
     const [readReceipts, setReadReceipts] = useState<Record<string, string[]>>({});
+    const [readAtByMessage, setReadAtByMessage] = useState<
+        Record<string, Record<string, string>>
+    >({});
 
     // Mark messages as read
     const markMessagesRead = useCallback(
@@ -229,7 +234,7 @@ export function useReadReceipts(
             try {
                 const { data, error } = await supabase
                     .from("shout_read_receipts")
-                    .select("message_id, reader_address")
+                    .select("message_id, reader_address, read_at")
                     .in("message_id", messageIds);
 
                 if (error) {
@@ -239,16 +244,27 @@ export function useReadReceipts(
 
                 if (data && data.length > 0) {
                     console.log("[ReadReceipts] Fetched", data.length, "receipts for", messageIds.length, "messages");
-                    // Merge with existing receipts instead of replacing
+                    const rows = data as { message_id: string; reader_address: string; read_at?: string }[];
                     setReadReceipts((prev) => {
                         const updated = { ...prev };
-                        data.forEach((row) => {
+                        rows.forEach((row) => {
                             if (!updated[row.message_id]) {
                                 updated[row.message_id] = [];
                             }
-                            // Avoid duplicates
                             if (!updated[row.message_id].includes(row.reader_address)) {
                                 updated[row.message_id].push(row.reader_address);
+                            }
+                        });
+                        return updated;
+                    });
+                    setReadAtByMessage((prev) => {
+                        const updated = { ...prev };
+                        rows.forEach((row) => {
+                            if (!updated[row.message_id]) {
+                                updated[row.message_id] = {};
+                            }
+                            if (row.read_at) {
+                                updated[row.message_id][row.reader_address.toLowerCase()] = row.read_at;
                             }
                         });
                         return updated;
@@ -277,7 +293,7 @@ export function useReadReceipts(
                     filter: `conversation_id=eq.${conversationId}`,
                 },
                 (payload) => {
-                    const data = payload.new as any;
+                    const data = payload.new as { message_id: string; reader_address: string; read_at?: string };
                     if (data) {
                         setReadReceipts((prev) => ({
                             ...prev,
@@ -286,6 +302,16 @@ export function useReadReceipts(
                                 data.reader_address,
                             ],
                         }));
+                        if (data.read_at) {
+                            const at = data.read_at;
+                            setReadAtByMessage((prev) => ({
+                                ...prev,
+                                [data.message_id]: {
+                                    ...(prev[data.message_id] || {}),
+                                    [data.reader_address.toLowerCase()]: at,
+                                } as Record<string, string>,
+                            }));
+                        }
                     }
                 }
             )
@@ -295,6 +321,17 @@ export function useReadReceipts(
             client.removeChannel(channel);
         };
     }, [conversationId]);
+
+    // Get read-at time for a message (for tooltip)
+    const getReadAt = useCallback(
+        (messageId: string, peerAddress: string): string | null => {
+            const byReader = readAtByMessage[messageId];
+            if (!byReader) return null;
+            const at = byReader[peerAddress.toLowerCase()];
+            return at || null;
+        },
+        [readAtByMessage]
+    );
 
     // Get status for a message
     const getMessageStatus = useCallback(
@@ -319,6 +356,7 @@ export function useReadReceipts(
         markMessagesRead,
         fetchReadReceipts,
         getMessageStatus,
+        getReadAt,
     };
 }
 

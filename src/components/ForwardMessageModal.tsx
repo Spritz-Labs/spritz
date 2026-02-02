@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 
 type Chat = {
     id: string;
-    type: "channel" | "dm" | "group";
+    type: "channel" | "dm" | "group" | "global";
     name: string;
     icon?: string;
     avatar?: string;
@@ -21,7 +21,7 @@ type ForwardMessageModalProps = {
         senderName: string;
         senderAddress: string;
     } | null;
-    onForward: (targetId: string, targetType: "channel" | "dm" | "group") => Promise<boolean>;
+    onForward: (targetId: string, targetType: "channel" | "dm" | "group" | "global") => Promise<boolean>;
     chats: Chat[];
 };
 
@@ -35,7 +35,7 @@ export function ForwardMessageModal({
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
     const [isForwarding, setIsForwarding] = useState(false);
-    const [filter, setFilter] = useState<"all" | "channel" | "dm" | "group">("all");
+    const [filter, setFilter] = useState<"all" | "channel" | "dm" | "group" | "global">("all");
 
     // Reset state when closed
     useEffect(() => {
@@ -95,6 +95,8 @@ export function ForwardMessageModal({
                 return <span className="text-lg">💬</span>;
             case "group":
                 return <span className="text-lg">👥</span>;
+            case "global":
+                return <span className="text-lg">🌐</span>;
         }
     };
 
@@ -154,12 +156,13 @@ export function ForwardMessageModal({
                             </div>
 
                             {/* Filter Pills */}
-                            <div className="flex gap-2 mt-3">
+                            <div className="flex gap-2 mt-3 flex-wrap">
                                 {[
                                     { value: "all", label: "All" },
                                     { value: "channel", label: "Channels" },
                                     { value: "dm", label: "DMs" },
                                     { value: "group", label: "Groups" },
+                                    { value: "global", label: "Global" },
                                 ].map((tab) => (
                                     <button
                                         key={tab.value}
@@ -203,7 +206,11 @@ export function ForwardMessageModal({
                                                     {chat.name}
                                                 </p>
                                                 <p className="text-xs text-zinc-500 capitalize">
-                                                    {chat.type === "dm" ? "Direct Message" : chat.type}
+                                                    {chat.type === "dm"
+                                                        ? "Direct Message"
+                                                        : chat.type === "global"
+                                                          ? "Global Chat"
+                                                          : chat.type}
                                                 </p>
                                             </div>
                                             {selectedChat?.id === chat.id && selectedChat?.type === chat.type && (

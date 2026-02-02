@@ -4156,6 +4156,37 @@ function DashboardContent({
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-1 sm:gap-2">
+                                            {/* Mark all as read - show when any unread */}
+                                            {(alphaUnreadCount > 0 ||
+                                                unifiedChats.some(
+                                                    (c) => c.unreadCount > 0,
+                                                )) && (
+                                                <button
+                                                    onClick={async () => {
+                                                        if (alphaChat.isMember)
+                                                            await alphaChat.markAsRead();
+                                                    }}
+                                                    className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
+                                                    title="Mark all as read"
+                                                >
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M5 13l4 4L19 7"
+                                                        />
+                                                    </svg>
+                                                    <span className="hidden sm:inline text-sm font-medium">
+                                                        Mark read
+                                                    </span>
+                                                </button>
+                                            )}
                                             {/* Search Toggle Button */}
                                             <button
                                                 onClick={() =>
@@ -5517,6 +5548,15 @@ function DashboardContent({
                         const channelKey = `channel-${selectedChannel.id}`;
                         updateLastMessageTime(channelKey);
                     }}
+                    onForwardToGlobal={
+                        alphaChat.isMember
+                            ? async (content) => {
+                                  await alphaChat.sendMessage(content);
+                                  return true;
+                              }
+                            : undefined
+                    }
+                    globalChatIconUrl={globalChatIconUrl}
                 />
             )}
 

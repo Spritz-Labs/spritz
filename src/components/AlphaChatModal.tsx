@@ -41,6 +41,7 @@ import { ChatMembersList } from "./ChatMembersList";
 import { PollCreator } from "./PollCreator";
 import { PollDisplay } from "./PollDisplay";
 import { useAlphaPolls } from "@/hooks/useAlphaPolls";
+import { MessageSearch } from "./MessageSearch";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -143,6 +144,7 @@ export function AlphaChatModal({
 
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);
+    const [showSearch, setShowSearch] = useState(false);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const [showModerationPanel, setShowModerationPanel] = useState(false);
@@ -157,6 +159,34 @@ export function AlphaChatModal({
 
     const { polls, canCreatePoll, fetchPolls, createPoll, vote } =
         useAlphaPolls(userAddress);
+
+    // Message search: map alpha messages to MessageSearch shape (exclude system/pixel/gif markers for search)
+    const alphaSearchMessages = useMemo(
+        () =>
+            messages
+                .filter(
+                    (m) =>
+                        m.message_type === "text" &&
+                        !m.content.startsWith("[PIXEL_ART]") &&
+                        !m.content.startsWith("[GIF]"),
+                )
+                .map((m) => ({
+                    id: m.id,
+                    content: m.content,
+                    senderAddress: m.sender_address,
+                    sentAt: new Date(m.created_at),
+                })),
+        [messages],
+    );
+
+    const handleSelectSearchMessage = useCallback((messageId: string) => {
+        setShowSearch(false);
+        setTimeout(() => {
+            document
+                .querySelector(`[data-message-id="${messageId}"]`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+    }, []);
 
     // Typing indicator for global chat
     const { typingUsers, setTyping, stopTyping } = useTypingIndicator(
@@ -1006,6 +1036,27 @@ export function AlphaChatModal({
                                         </button>
                                     )}
 
+                                    {/* Search */}
+                                    <button
+                                        onClick={() => setShowSearch(true)}
+                                        className="p-2.5 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                                        aria-label="Search messages"
+                                    >
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                            />
+                                        </svg>
+                                    </button>
+
                                     {/* Moderation - admin only, hidden on small mobile */}
                                     {isAdmin && (
                                         <button
@@ -1257,6 +1308,15 @@ export function AlphaChatModal({
                                     </button>
                                 </div>
                             </div>
+
+                            <MessageSearch
+                                isOpen={showSearch}
+                                onClose={() => setShowSearch(false)}
+                                onSelectMessage={handleSelectSearchMessage}
+                                messages={alphaSearchMessages}
+                                userAddress={userAddress}
+                                peerName="Global Chat"
+                            />
 
                             {/* Not a member state */}
                             {!isMember && !isLoading && (
@@ -1521,6 +1581,9 @@ export function AlphaChatModal({
                                                                 return (
                                                                     <div
                                                                         key={
+                                                                            msg.id
+                                                                        }
+                                                                        data-message-id={
                                                                             msg.id
                                                                         }
                                                                     >
