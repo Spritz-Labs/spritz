@@ -34,6 +34,14 @@ export default function LandingPage() {
                     </Link>
                     <div className="hidden sm:flex items-center gap-8">
                         <a
+                            href="https://docs.spritz.chat/blog"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-zinc-400 hover:text-white font-medium transition-colors"
+                        >
+                            Why Spritz
+                        </a>
+                        <a
                             href="#features"
                             className="text-zinc-400 hover:text-white font-medium transition-colors"
                         >
@@ -142,8 +150,8 @@ export default function LandingPage() {
                             Built for Freedom
                         </h2>
                         <p className="text-zinc-400 text-lg max-w-[500px] mx-auto">
-                            Everything you need for private, censorship-resistant
-                            communication
+                            Everything you need for private,
+                            censorship-resistant communication
                         </p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -189,43 +197,103 @@ export default function LandingPage() {
                     </h3>
                     <div className="flex justify-center items-center gap-6 sm:gap-10 flex-wrap">
                         <TechLogo name="Waku" href="https://waku.org">
-                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
-                                <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" strokeWidth="2"/>
+                            <svg
+                                viewBox="0 0 32 32"
+                                className="w-8 h-8"
+                                fill="currentColor"
+                            >
+                                <circle
+                                    cx="16"
+                                    cy="16"
+                                    r="14"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                />
                                 <circle cx="16" cy="10" r="3" />
                                 <circle cx="10" cy="20" r="3" />
                                 <circle cx="22" cy="20" r="3" />
-                                <line x1="16" y1="13" x2="12" y2="18" stroke="currentColor" strokeWidth="2"/>
-                                <line x1="16" y1="13" x2="20" y2="18" stroke="currentColor" strokeWidth="2"/>
+                                <line
+                                    x1="16"
+                                    y1="13"
+                                    x2="12"
+                                    y2="18"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                />
+                                <line
+                                    x1="16"
+                                    y1="13"
+                                    x2="20"
+                                    y2="18"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                />
                             </svg>
                         </TechLogo>
                         <TechLogo name="Livepeer" href="https://livepeer.org">
-                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
-                                <path d="M8 6h4v20H8V6zm6 4h4v16h-4V10zm6 4h4v12h-4V14z"/>
+                            <svg
+                                viewBox="0 0 32 32"
+                                className="w-8 h-8"
+                                fill="currentColor"
+                            >
+                                <path d="M8 6h4v20H8V6zm6 4h4v16h-4V10zm6 4h4v12h-4V14z" />
                             </svg>
                         </TechLogo>
                         <TechLogo name="Huddle01" href="https://huddle01.com">
-                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
-                                <rect x="4" y="8" width="24" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="2"/>
-                                <circle cx="12" cy="16" r="3"/>
-                                <circle cx="20" cy="16" r="3"/>
+                            <svg
+                                viewBox="0 0 32 32"
+                                className="w-8 h-8"
+                                fill="currentColor"
+                            >
+                                <rect
+                                    x="4"
+                                    y="8"
+                                    width="24"
+                                    height="16"
+                                    rx="3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                />
+                                <circle cx="12" cy="16" r="3" />
+                                <circle cx="20" cy="16" r="3" />
                             </svg>
                         </TechLogo>
                         <TechLogo name="Next.js" href="https://nextjs.org">
-                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
-                                <path d="M16 2C8.3 2 2 8.3 2 16s6.3 14 14 14 14-6.3 14-14S23.7 2 16 2zm5.9 20.1l-8.4-11v8.4h-1.3V10.3h1.1l8.1 10.6V10.5h1.3v11.6h-.8z"/>
+                            <svg
+                                viewBox="0 0 32 32"
+                                className="w-8 h-8"
+                                fill="currentColor"
+                            >
+                                <path d="M16 2C8.3 2 2 8.3 2 16s6.3 14 14 14 14-6.3 14-14S23.7 2 16 2zm5.9 20.1l-8.4-11v8.4h-1.3V10.3h1.1l8.1 10.6V10.5h1.3v11.6h-.8z" />
                             </svg>
                         </TechLogo>
                         <TechLogo name="Ethereum" href="https://ethereum.org">
-                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
-                                <path d="M16 2l-9 14.5L16 21l9-4.5L16 2z" opacity="0.6"/>
-                                <path d="M7 16.5L16 30l9-13.5L16 21l-9-4.5z"/>
-                                <path d="M16 2v19l9-4.5L16 2z" opacity="0.8"/>
-                                <path d="M16 21v9l9-13.5L16 21z" opacity="0.8"/>
+                            <svg
+                                viewBox="0 0 32 32"
+                                className="w-8 h-8"
+                                fill="currentColor"
+                            >
+                                <path
+                                    d="M16 2l-9 14.5L16 21l9-4.5L16 2z"
+                                    opacity="0.6"
+                                />
+                                <path d="M7 16.5L16 30l9-13.5L16 21l-9-4.5z" />
+                                <path d="M16 2v19l9-4.5L16 2z" opacity="0.8" />
+                                <path
+                                    d="M16 21v9l9-13.5L16 21z"
+                                    opacity="0.8"
+                                />
                             </svg>
                         </TechLogo>
                         <TechLogo name="Solana" href="https://solana.com">
-                            <svg viewBox="0 0 32 32" className="w-8 h-8" fill="currentColor">
-                                <path d="M6 22.5l3.5-3.5h16l-3.5 3.5H6zm0-6.5l3.5-3.5h16L22 16H6zm16-6.5L18.5 6h-16L6 9.5h16z"/>
+                            <svg
+                                viewBox="0 0 32 32"
+                                className="w-8 h-8"
+                                fill="currentColor"
+                            >
+                                <path d="M6 22.5l3.5-3.5h16l-3.5 3.5H6zm0-6.5l3.5-3.5h16L22 16H6zm16-6.5L18.5 6h-16L6 9.5h16z" />
                             </svg>
                         </TechLogo>
                     </div>
@@ -243,7 +311,8 @@ export default function LandingPage() {
                             Your Data, Your Control
                         </h2>
                         <p className="text-zinc-400 text-lg max-w-[500px] mx-auto">
-                            Transparency about how Spritz handles your information
+                            Transparency about how Spritz handles your
+                            information
                         </p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -252,12 +321,15 @@ export default function LandingPage() {
                             title="Google Calendar Integration"
                             description={
                                 <>
-                                    <strong className="text-[#FF5500]">Optional feature:</strong>{" "}
-                                    Connect your Google Calendar to let others schedule calls
-                                    with you. Spritz only reads your calendar availability to
-                                    show open time slots - we never access event details,
-                                    attendees, or other private information. You can disconnect
-                                    at any time.
+                                    <strong className="text-[#FF5500]">
+                                        Optional feature:
+                                    </strong>{" "}
+                                    Connect your Google Calendar to let others
+                                    schedule calls with you. Spritz only reads
+                                    your calendar availability to show open time
+                                    slots - we never access event details,
+                                    attendees, or other private information. You
+                                    can disconnect at any time.
                                 </>
                             }
                         />
@@ -367,7 +439,9 @@ function FeatureCard({
                 {icon}
             </div>
             <h3 className="text-xl font-semibold mb-3">{title}</h3>
-            <p className="text-zinc-400 text-sm leading-relaxed">{description}</p>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+                {description}
+            </p>
         </div>
     );
 }
@@ -395,4 +469,3 @@ function TechLogo({
         </a>
     );
 }
-
