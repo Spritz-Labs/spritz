@@ -236,6 +236,8 @@ type UnifiedChatListProps = {
         folderEmoji: string | null,
         chatsInFolder: UnifiedChatItem[],
     ) => void;
+    /** Pin or unpin a chat to the top of the list */
+    onPinChat?: (chat: UnifiedChatItem, pinned: boolean) => void;
 };
 
 const formatTime = (date: Date | null) => {
@@ -320,6 +322,7 @@ function chatItemEqual(a: UnifiedChatItem, b: UnifiedChatItem): boolean {
         a.avatar === b.avatar &&
         a.lastMessage === b.lastMessage &&
         a.unreadCount === b.unreadCount &&
+        (a.isPinned ?? false) === (b.isPinned ?? false) &&
         (a.lastMessageAt?.getTime() ?? 0) === (b.lastMessageAt?.getTime() ?? 0)
     );
 }
@@ -346,6 +349,7 @@ type ChatRowProps = {
     onContextMenu?: (e: React.MouseEvent) => void;
     onCallClick?: (chat: UnifiedChatItem) => void;
     onVideoClick?: (chat: UnifiedChatItem) => void;
+    onPinChat?: (chat: UnifiedChatItem, pinned: boolean) => void;
 };
 
 const ChatRow = memo(
@@ -363,6 +367,7 @@ const ChatRow = memo(
         onContextMenu,
         onCallClick,
         onVideoClick,
+        onPinChat,
     }: ChatRowProps) {
         return (
             <div className="relative select-none" onContextMenu={onContextMenu}>
@@ -445,6 +450,13 @@ const ChatRow = memo(
                                 >
                                     {chat.name}
                                 </p>
+                                {chat.isPinned && (
+                                    <span className="shrink-0 text-zinc-500" title="Pinned">
+                                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                        </svg>
+                                    </span>
+                                )}
                                 {chatFolder && (
                                     <span className="text-xs sm:text-sm shrink-0">
                                         {chatFolder}
@@ -626,6 +638,31 @@ const ChatRow = memo(
                                 <p className="text-[10px] sm:text-xs text-zinc-500 px-1.5 sm:px-2 py-0.5 sm:py-1 mb-0.5 sm:mb-1">
                                     Move to folder
                                 </p>
+                                {onPinChat && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            onPinChat(chat, !chat.isPinned);
+                                        }}
+                                        className="w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-zinc-300 hover:bg-zinc-700/50 transition-colors text-xs sm:text-sm mb-1"
+                                    >
+                                        {chat.isPinned ? (
+                                            <>
+                                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                                </svg>
+                                                Unpin from top
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                                </svg>
+                                                Pin to top
+                                            </>
+                                        )}
+                                    </button>
+                                )}
                                 {chatFolder && (
                                     <button
                                         type="button"
@@ -692,7 +729,8 @@ const ChatRow = memo(
             prev.chatFolder === next.chatFolder &&
             prev.isFolderPickerOpen === next.isFolderPickerOpen &&
             (prev.folderPickerPosition === next.folderPickerPosition ||
-                !next.isFolderPickerOpen)
+                !next.isFolderPickerOpen) &&
+            prev.onPinChat === next.onPinChat
         );
     },
 );
@@ -712,6 +750,7 @@ function UnifiedChatListInner({
     onOpenCreateGroup,
     canCreateGroup = false,
     onMarkFolderAsRead,
+    onPinChat,
 }: UnifiedChatListProps & {
     showSearch?: boolean;
     onSearchToggle?: () => void;
@@ -777,6 +816,11 @@ function UnifiedChatListInner({
     const [folderLongPressTimer, setFolderLongPressTimer] =
         useState<NodeJS.Timeout | null>(null);
 
+    // Sort mode: recent (default), unread first, or A-Z
+    const [sortMode, setSortMode] = useState<
+        "recent" | "unread" | "az"
+    >("recent");
+
     // Get sortable timestamp (0 for null/invalid so those sort to bottom)
     const getSortTime = useCallback((chat: UnifiedChatItem): number => {
         if (!chat.lastMessageAt) return 0;
@@ -784,26 +828,39 @@ function UnifiedChatListInner({
         return Number.isFinite(t) ? t : 0;
     }, []);
 
-    // Sort chats by last message date (most recent first), with stable secondary sort by id
+    // Sort chats by selected mode; pinned always first
     const sortedChats = useMemo(() => {
         return [...chats].sort((a, b) => {
             // Pinned chats come first
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
 
-            // Then by unread count (chats with unreads first)
+            if (sortMode === "unread") {
+                // Unread first, then by recent
+                if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+                if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+                const aTime = getSortTime(a);
+                const bTime = getSortTime(b);
+                if (aTime !== bTime) return bTime - aTime;
+                return a.id.localeCompare(b.id, "en");
+            }
+
+            if (sortMode === "az") {
+                // A-Z by name, then by id for stability
+                const cmp = (a.name || "").localeCompare(b.name || "", "en");
+                if (cmp !== 0) return cmp;
+                return a.id.localeCompare(b.id, "en");
+            }
+
+            // recent: unread first, then by last message time
             if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
             if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
-
-            // Then by last message time (most recent first); null/invalid = 0 → bottom
             const aTime = getSortTime(a);
             const bTime = getSortTime(b);
-            if (aTime !== bTime) return bTime - aTime; // Most recent first
-
-            // Stable sort: same time → order by id so order is deterministic
+            if (aTime !== bTime) return bTime - aTime;
             return a.id.localeCompare(b.id, "en");
         });
-    }, [chats, getSortTime]);
+    }, [chats, getSortTime, sortMode]);
 
     // Filter chats by active folder, search query, and type filter
     const filteredChats = useMemo(() => {
@@ -1083,6 +1140,42 @@ function UnifiedChatListInner({
                     </div>
                 )}
 
+            {/* Sort options */}
+            <div className="flex items-center gap-1 px-1 sm:px-0 pb-1">
+                <span className="text-[10px] sm:text-xs text-zinc-500 mr-0.5">
+                    Sort:
+                </span>
+                {(
+                    [
+                        {
+                            value: "recent" as const,
+                            label: "Recent",
+                        },
+                        {
+                            value: "unread" as const,
+                            label: "Unread",
+                        },
+                        {
+                            value: "az" as const,
+                            label: "A–Z",
+                        },
+                    ] as const
+                ).map((opt) => (
+                    <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setSortMode(opt.value)}
+                        className={`px-1.5 py-0.5 sm:px-2 sm:py-1 text-[10px] sm:text-xs font-medium rounded transition-all ${
+                            sortMode === opt.value
+                                ? "bg-[#FF5500]/20 text-[#FF5500]"
+                                : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+
             {/* Folder Tabs - Horizontal scrollable */}
             <div
                 ref={tabsRef}
@@ -1246,6 +1339,7 @@ function UnifiedChatListInner({
                                 }}
                                 onCallClick={onCallClick}
                                 onVideoClick={onVideoClick}
+                                onPinChat={onPinChat}
                             />
                         );
                     })

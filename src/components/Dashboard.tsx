@@ -84,6 +84,7 @@ import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
 import { WalletModal } from "./WalletModal";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
+import { useChatPinned } from "@/hooks/useChatPinned";
 import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
 import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
 import { useWakeLock } from "@/hooks/useWakeLock";
@@ -277,6 +278,9 @@ function DashboardContent({
         acceptInvitation,
         declineInvitation,
     } = useGroupInvitations(userAddress);
+
+    // Pinned chats (pin to top of list)
+    const { pinnedIds, setChatPinned } = useChatPinned(userAddress);
 
     // iOS Chrome detection (Chrome on iOS doesn't support WebRTC properly)
     const [isIOSChrome, setIsIOSChrome] = useState(false);
@@ -1517,6 +1521,7 @@ function DashboardContent({
                 lastMessageAt,
                 unreadCount: unreadCounts[addressLower] || 0,
                 isOnline: false, // Will be updated by FriendsList logic
+                isPinned: pinnedIds.has(`dm-${friend.address}`),
                 metadata: {
                     address: friend.address,
                     ensName: friend.ensName,
@@ -1536,7 +1541,7 @@ function DashboardContent({
                 lastMessagePreviews["global-spritz"] || "Community chat",
             lastMessageAt: toValidLastMessageAt(globalLastMsgTime),
             unreadCount: alphaUnreadCount,
-            isPinned: true,
+            isPinned: pinnedIds.has("global-spritz"),
             metadata: {
                 isAlpha: isAlphaMember,
             },
@@ -1560,6 +1565,7 @@ function DashboardContent({
                     `${channel.member_count} members`,
                 lastMessageAt,
                 unreadCount: 0,
+                isPinned: pinnedIds.has(channelKey),
                 metadata: {
                     memberCount: channel.member_count,
                     isPublic: true,
@@ -1584,6 +1590,7 @@ function DashboardContent({
                     `${group.memberCount || 0} members`,
                 lastMessageAt,
                 unreadCount: 0,
+                isPinned: pinnedIds.has(groupKey),
                 metadata: {
                     memberCount: group.memberCount,
                     isPublic: false,
@@ -1599,6 +1606,7 @@ function DashboardContent({
         lastMessagePreviews,
         joinedChannels,
         groups,
+        pinnedIds,
         alphaUnreadCount,
         isAlphaMember,
         globalChatIconUrl,
@@ -4510,6 +4518,9 @@ function DashboardContent({
                                                 }
                                             }
                                         }}
+                                        onPinChat={(chat, pinned) =>
+                                            setChatPinned(chat.id, pinned)
+                                        }
                                     />
                                 </div>
                             </div>
