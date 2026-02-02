@@ -28,13 +28,53 @@ export type PublicChannel = {
     messaging_type: "standard" | "waku";
     waku_symmetric_key?: string | null;
     waku_content_topic?: string | null;
+    // POAP-linked channel (one channel per POAP event)
+    poap_event_id?: number | null;
+    poap_event_name?: string | null;
+    poap_image_url?: string | null;
 };
 
-// GET /api/channels - List all public channels
+// GET /api/channels - List all public channels (optional: ?poapEventId= for channel by POAP event)
 export async function GET(request: NextRequest) {
     const userAddress = request.nextUrl.searchParams.get("userAddress");
     const category = request.nextUrl.searchParams.get("category");
     const joined = request.nextUrl.searchParams.get("joined") === "true";
+    const poapEventIdParam = request.nextUrl.searchParams.get("poapEventId");
+
+    // Single channel by POAP event id
+    if (poapEventIdParam != null && poapEventIdParam !== "") {
+        const poapEventId = parseInt(poapEventIdParam, 10);
+        if (!Number.isNaN(poapEventId)) {
+            const { data: channel, error } = await supabase
+                .from("shout_public_channels")
+                .select("*")
+                .eq("is_active", true)
+                .eq("poap_event_id", poapEventId)
+                .maybeSingle();
+            if (error) {
+                console.error("[Channels API] Error fetching POAP channel:", error);
+                return NextResponse.json(
+                    { error: "Failed to fetch channel" },
+                    { status: 500 }
+                );
+            }
+            let isMember = false;
+            if (channel && userAddress) {
+                const { data: membership } = await supabase
+                    .from("shout_channel_members")
+                    .select("channel_id")
+                    .eq("channel_id", channel.id)
+                    .eq("user_address", userAddress.toLowerCase())
+                    .maybeSingle();
+                isMember = !!membership;
+            }
+            return NextResponse.json({
+                channel: channel
+                    ? { ...channel, is_member: isMember }
+                    : null,
+            });
+        }
+    }
 
     let query = supabase
         .from("shout_public_channels")
@@ -108,21 +148,38 @@ export async function POST(request: NextRequest) {
         const session = await getAuthenticatedUser(request);
         
         const body = await request.json();
-        const { 
-            name, 
-            description, 
-            emoji, 
-            category, 
+        const {
+            name,
+            description,
+            emoji,
+            category,
             creatorAddress: bodyCreatorAddress,
-            messagingType = "standard" // "standard" or "waku"
+            messagingType: bodyMessagingType,
+            poapEventId,
+            poapEventName,
+            poapImageUrl,
         } = body;
+
+        // POAP channels always use Waku/Logos
+        const messagingType =
+            poapEventId != null
+                ? "waku"
+                : bodyMessagingType ?? "standard";
         
         // Use session address, fall back to body for backward compatibility
         const creatorAddress = session?.userAddress || bodyCreatorAddress;
 
-        if (!name || !creatorAddress) {
+        const hasName = name && String(name).trim();
+        const hasPoap = poapEventId != null && (poapEventName || name);
+        if (!creatorAddress) {
             return NextResponse.json(
-                { error: "Name and authentication are required" },
+                { error: "Authentication is required" },
+                { status: 400 }
+            );
+        }
+        if (!hasName && !hasPoap) {
+            return NextResponse.json(
+                { error: "Name or POAP event details are required" },
                 { status: 400 }
             );
         }
@@ -140,41 +197,84 @@ export async function POST(request: NextRequest) {
             console.warn("[Channels] Using unauthenticated creatorAddress - migrate to session auth");
         }
 
-        // Sanitize inputs
-        const sanitizedName = sanitizeInput(name, INPUT_LIMITS.SHORT_TEXT);
-        const sanitizedDescription = description ? sanitizeInput(description, INPUT_LIMITS.MEDIUM_TEXT) : null;
+        // For POAP channels: unique name and link to POAP event
+        const isPoapChannel =
+            poapEventId != null &&
+            typeof poapEventId === "number" &&
+            !Number.isNaN(poapEventId);
+        const baseName = (name || poapEventName || "").trim() || "POAP";
+        const sanitizedName = sanitizeInput(
+            isPoapChannel ? `POAP: ${baseName}` : baseName,
+            INPUT_LIMITS.SHORT_TEXT
+        );
+        const sanitizedDescription = description
+            ? sanitizeInput(description, INPUT_LIMITS.MEDIUM_TEXT)
+            : isPoapChannel
+              ? `Community channel for holders of this POAP.`
+              : null;
 
         // Check if channel name already exists
-        const { data: existing } = await supabase
+        const { data: existingByName } = await supabase
             .from("shout_public_channels")
             .select("id")
             .eq("name", sanitizedName)
             .single();
 
-        if (existing) {
+        if (existingByName) {
             return NextResponse.json(
                 { error: "A channel with this name already exists" },
                 { status: 400 }
             );
         }
 
+        // POAP: at most one channel per POAP event
+        if (isPoapChannel) {
+            const { data: existingByPoap } = await supabase
+                .from("shout_public_channels")
+                .select("id, name")
+                .eq("poap_event_id", poapEventId)
+                .maybeSingle();
+            if (existingByPoap) {
+                return NextResponse.json(
+                    {
+                        error: "A channel for this POAP already exists",
+                        existingChannelId: existingByPoap.id,
+                    },
+                    { status: 400 }
+                );
+            }
+        }
+
         // Prepare channel data
         const channelData: Record<string, unknown> = {
             name: sanitizedName.trim(),
             description: sanitizedDescription?.trim() || null,
-            emoji: emoji || "💬",
-            category: category || "community",
+            emoji: emoji || "🎫",
+            category: category || "events",
             creator_address: creatorAddress.toLowerCase(),
             is_official: false,
             member_count: 1,
             messaging_type: messagingType,
         };
 
+        if (isPoapChannel) {
+            channelData.poap_event_id = poapEventId;
+            channelData.poap_event_name =
+                typeof poapEventName === "string" ? poapEventName.trim() : null;
+            channelData.poap_image_url =
+                typeof poapImageUrl === "string" && poapImageUrl.trim()
+                    ? poapImageUrl.trim()
+                    : null;
+        }
+
         // For Waku channels, generate encryption key and content topic
         if (messagingType === "waku") {
             const tempId = crypto.randomUUID();
             channelData.waku_symmetric_key = generateSymmetricKey();
-            channelData.waku_content_topic = generateContentTopic(tempId, sanitizedName);
+            channelData.waku_content_topic = generateContentTopic(
+                tempId,
+                sanitizedName
+            );
         }
 
         const { data: channel, error } = await supabase

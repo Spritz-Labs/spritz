@@ -163,6 +163,10 @@ export function useChannels(userAddress: string | null) {
             emoji?: string;
             category?: string;
             messagingType?: "standard" | "waku";
+            /** Create a POAP-linked channel (Logos/Waku); one channel per POAP event */
+            poapEventId?: number;
+            poapEventName?: string;
+            poapImageUrl?: string;
         }) => {
             if (!userAddress) return null;
 
@@ -174,7 +178,10 @@ export function useChannels(userAddress: string | null) {
                     body: JSON.stringify({
                         ...params,
                         creatorAddress: userAddress,
-                        messagingType: params.messagingType || "standard",
+                        messagingType:
+                            params.poapEventId != null
+                                ? "waku"
+                                : params.messagingType || "standard",
                     }),
                 });
 
