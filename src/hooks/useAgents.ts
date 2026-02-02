@@ -99,7 +99,7 @@ export type ChatMessage = {
 
 export function useAgents(
     userAddress: string | null,
-    isAdmin: boolean = false,
+    isAdmin: boolean = false
 ) {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -119,7 +119,9 @@ export function useAgents(
         try {
             // Build URL with optional includeOfficial param for admins
             const url = isAdmin
-                ? `/api/agents?userAddress=${encodeURIComponent(userAddress)}&includeOfficial=true`
+                ? `/api/agents?userAddress=${encodeURIComponent(
+                      userAddress
+                  )}&includeOfficial=true`
                 : `/api/agents?userAddress=${encodeURIComponent(userAddress)}`;
 
             const res = await fetch(url);
@@ -133,7 +135,7 @@ export function useAgents(
         } catch (err) {
             console.error("[useAgents] Error:", err);
             setError(
-                err instanceof Error ? err.message : "Failed to fetch agents",
+                err instanceof Error ? err.message : "Failed to fetch agents"
             );
         } finally {
             setIsLoading(false);
@@ -147,7 +149,7 @@ export function useAgents(
             personality?: string,
             avatarEmoji?: string,
             visibility?: "private" | "friends" | "public" | "official",
-            tags?: string[],
+            tags?: string[]
         ): Promise<Agent | null> => {
             if (!userAddress) return null;
 
@@ -181,7 +183,7 @@ export function useAgents(
                 throw err;
             }
         },
-        [userAddress, fetchAgents],
+        [userAddress, fetchAgents]
     );
 
     // Update an agent
@@ -210,7 +212,7 @@ export function useAgents(
                 x402PricingMode?: "global" | "per_tool";
                 mcpServers?: MCPServer[];
                 apiTools?: APITool[];
-            },
+            }
         ): Promise<Agent | null> => {
             if (!userAddress) return null;
 
@@ -239,7 +241,7 @@ export function useAgents(
                 throw err;
             }
         },
-        [userAddress, fetchAgents],
+        [userAddress, fetchAgents]
     );
 
     // Delete an agent
@@ -249,8 +251,10 @@ export function useAgents(
 
             try {
                 const res = await fetch(
-                    `/api/agents/${agentId}?userAddress=${encodeURIComponent(userAddress)}`,
-                    { method: "DELETE" },
+                    `/api/agents/${agentId}?userAddress=${encodeURIComponent(
+                        userAddress
+                    )}`,
+                    { method: "DELETE" }
                 );
 
                 if (!res.ok) {
@@ -267,7 +271,7 @@ export function useAgents(
                 throw err;
             }
         },
-        [userAddress, fetchAgents],
+        [userAddress, fetchAgents]
     );
 
     // Load agents on mount
@@ -289,7 +293,7 @@ export function useAgents(
 // Separate hook for agent chat
 export function useAgentChat(
     userAddress: string | null,
-    agentId: string | null,
+    agentId: string | null
 ) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -308,7 +312,9 @@ export function useAgentChat(
 
         try {
             const res = await fetch(
-                `/api/agents/${agentId}/chat?userAddress=${encodeURIComponent(userAddress)}`,
+                `/api/agents/${agentId}/chat?userAddress=${encodeURIComponent(
+                    userAddress
+                )}`
             );
             const data = await res.json();
 
@@ -322,7 +328,7 @@ export function useAgentChat(
             setError(
                 err instanceof Error
                     ? err.message
-                    : "Failed to fetch chat history",
+                    : "Failed to fetch chat history"
             );
         } finally {
             setIsLoading(false);
@@ -427,7 +433,9 @@ export function useAgentChat(
                                             if (last?.id === respId)
                                                 next[next.length - 1] = {
                                                     ...last,
-                                                    content: `❌ ${data.error || "Error"}`,
+                                                    content: `❌ ${
+                                                        data.error || "Error"
+                                                    }`,
                                                 };
                                             return next;
                                         });
@@ -463,18 +471,18 @@ export function useAgentChat(
                 setError(
                     err instanceof Error
                         ? err.message
-                        : "Failed to send message",
+                        : "Failed to send message"
                 );
                 // Remove optimistic message on error
                 setMessages((prev) =>
-                    prev.filter((m) => m.id !== tempUserMessage.id),
+                    prev.filter((m) => m.id !== tempUserMessage.id)
                 );
                 return null;
             } finally {
                 setIsSending(false);
             }
         },
-        [userAddress, agentId],
+        [userAddress, agentId]
     );
 
     // Clear chat history
@@ -483,8 +491,10 @@ export function useAgentChat(
 
         try {
             const res = await fetch(
-                `/api/agents/${agentId}/chat?userAddress=${encodeURIComponent(userAddress)}`,
-                { method: "DELETE" },
+                `/api/agents/${agentId}/chat?userAddress=${encodeURIComponent(
+                    userAddress
+                )}`,
+                { method: "DELETE" }
             );
 
             if (!res.ok) {
@@ -500,6 +510,30 @@ export function useAgentChat(
         }
     }, [userAddress, agentId]);
 
+    // Regenerate: remove last assistant message and resend last user message
+    const regenerateLastResponse = useCallback(async (): Promise<
+        string | null
+    > => {
+        if (!userAddress || !agentId || messages.length < 2) return null;
+        const last = messages[messages.length - 1];
+        const secondLast = messages[messages.length - 2];
+        if (last.role !== "assistant" || secondLast.role !== "user")
+            return null;
+        setMessages((prev) => prev.slice(0, -1));
+        return sendMessage(secondLast.content);
+    }, [userAddress, agentId, messages, sendMessage]);
+
+    // Edit last: remove last user + assistant, return user content so caller can put in input
+    const removeLastPairAndGetUserContent = useCallback((): string | null => {
+        if (messages.length < 2) return null;
+        const last = messages[messages.length - 1];
+        const secondLast = messages[messages.length - 2];
+        if (last.role !== "assistant" || secondLast.role !== "user")
+            return null;
+        setMessages((prev) => prev.slice(0, -2));
+        return secondLast.content;
+    }, [messages]);
+
     // Load history when agent changes
     useEffect(() => {
         fetchHistory();
@@ -513,7 +547,41 @@ export function useAgentChat(
         sendMessage,
         clearHistory,
         fetchHistory,
+        regenerateLastResponse,
+        removeLastPairAndGetUserContent,
     };
+}
+
+const AGENT_LAST_USED_KEY = "spritz_agent_last_used";
+
+/** Track last-used timestamp per agent (for "Last used X ago" on cards). */
+export function useAgentLastUsed() {
+    const getLastUsed = useCallback((agentId: string): number | null => {
+        if (typeof window === "undefined") return null;
+        try {
+            const raw = localStorage.getItem(AGENT_LAST_USED_KEY);
+            if (!raw) return null;
+            const map = JSON.parse(raw) as Record<string, number>;
+            const t = map[agentId];
+            return typeof t === "number" && Number.isFinite(t) ? t : null;
+        } catch {
+            return null;
+        }
+    }, []);
+
+    const setLastUsed = useCallback((agentId: string) => {
+        if (typeof window === "undefined") return;
+        try {
+            const raw = localStorage.getItem(AGENT_LAST_USED_KEY);
+            const map = (raw ? JSON.parse(raw) : {}) as Record<string, number>;
+            map[agentId] = Date.now();
+            localStorage.setItem(AGENT_LAST_USED_KEY, JSON.stringify(map));
+        } catch {
+            // ignore
+        }
+    }, []);
+
+    return { getLastUsed, setLastUsed };
 }
 
 // Types for knowledge items
@@ -533,7 +601,7 @@ export type AgentKnowledge = {
 // Hook for managing agent knowledge base
 export function useAgentKnowledge(
     userAddress: string | null,
-    agentId: string | null,
+    agentId: string | null
 ) {
     const [knowledgeItems, setKnowledgeItems] = useState<AgentKnowledge[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -551,7 +619,9 @@ export function useAgentKnowledge(
 
         try {
             const res = await fetch(
-                `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}`,
+                `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(
+                    userAddress
+                )}`
             );
             const data = await res.json();
 
@@ -563,9 +633,7 @@ export function useAgentKnowledge(
         } catch (err) {
             console.error("[useAgentKnowledge] Error:", err);
             setError(
-                err instanceof Error
-                    ? err.message
-                    : "Failed to fetch knowledge",
+                err instanceof Error ? err.message : "Failed to fetch knowledge"
             );
         } finally {
             setIsLoading(false);
@@ -577,7 +645,7 @@ export function useAgentKnowledge(
         async (
             title: string,
             url: string,
-            contentType?: string,
+            contentType?: string
         ): Promise<AgentKnowledge | null> => {
             if (!userAddress || !agentId) return null;
 
@@ -597,7 +665,7 @@ export function useAgentKnowledge(
 
                 if (!res.ok) {
                     throw new Error(
-                        data.error || "Failed to add knowledge item",
+                        data.error || "Failed to add knowledge item"
                     );
                 }
 
@@ -608,7 +676,7 @@ export function useAgentKnowledge(
                 throw err;
             }
         },
-        [userAddress, agentId, fetchKnowledge],
+        [userAddress, agentId, fetchKnowledge]
     );
 
     // Delete a knowledge item
@@ -618,14 +686,16 @@ export function useAgentKnowledge(
 
             try {
                 const res = await fetch(
-                    `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(userAddress)}&knowledgeId=${encodeURIComponent(knowledgeId)}`,
-                    { method: "DELETE" },
+                    `/api/agents/${agentId}/knowledge?userAddress=${encodeURIComponent(
+                        userAddress
+                    )}&knowledgeId=${encodeURIComponent(knowledgeId)}`,
+                    { method: "DELETE" }
                 );
 
                 if (!res.ok) {
                     const data = await res.json();
                     throw new Error(
-                        data.error || "Failed to delete knowledge item",
+                        data.error || "Failed to delete knowledge item"
                     );
                 }
 
@@ -636,7 +706,7 @@ export function useAgentKnowledge(
                 throw err;
             }
         },
-        [userAddress, agentId, fetchKnowledge],
+        [userAddress, agentId, fetchKnowledge]
     );
 
     // Index a knowledge item (generate embeddings)
@@ -649,8 +719,8 @@ export function useAgentKnowledge(
                 prev.map((item) =>
                     item.id === knowledgeId
                         ? { ...item, status: "processing" as const }
-                        : item,
-                ),
+                        : item
+                )
             );
 
             try {
@@ -660,14 +730,14 @@ export function useAgentKnowledge(
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ userAddress, knowledgeId }),
-                    },
+                    }
                 );
 
                 const data = await res.json();
 
                 if (!res.ok) {
                     throw new Error(
-                        data.error || "Failed to index knowledge item",
+                        data.error || "Failed to index knowledge item"
                     );
                 }
 
@@ -681,7 +751,7 @@ export function useAgentKnowledge(
                 throw err;
             }
         },
-        [userAddress, agentId, fetchKnowledge],
+        [userAddress, agentId, fetchKnowledge]
     );
 
     // Load knowledge when agent changes
@@ -746,9 +816,7 @@ export function useDiscoverAgents(userAddress: string | null) {
         } catch (err) {
             console.error("[useDiscoverAgents] Error:", err);
             setError(
-                err instanceof Error
-                    ? err.message
-                    : "Failed to discover agents",
+                err instanceof Error ? err.message : "Failed to discover agents"
             );
         } finally {
             setIsLoading(false);
@@ -796,7 +864,9 @@ export function useFavoriteAgents(userAddress: string | null) {
 
         try {
             const res = await fetch(
-                `/api/agents/favorites?userAddress=${encodeURIComponent(userAddress)}`,
+                `/api/agents/favorites?userAddress=${encodeURIComponent(
+                    userAddress
+                )}`
             );
             const data = await res.json();
 
@@ -807,17 +877,13 @@ export function useFavoriteAgents(userAddress: string | null) {
             setFavorites(data.favorites || []);
             setFavoriteIds(
                 new Set(
-                    (data.favorites || []).map(
-                        (f: FavoriteAgent) => f.agent.id,
-                    ),
-                ),
+                    (data.favorites || []).map((f: FavoriteAgent) => f.agent.id)
+                )
             );
         } catch (err) {
             console.error("[useFavoriteAgents] Error:", err);
             setError(
-                err instanceof Error
-                    ? err.message
-                    : "Failed to fetch favorites",
+                err instanceof Error ? err.message : "Failed to fetch favorites"
             );
         } finally {
             setIsLoading(false);
@@ -851,7 +917,7 @@ export function useFavoriteAgents(userAddress: string | null) {
                 throw err;
             }
         },
-        [userAddress, fetchFavorites],
+        [userAddress, fetchFavorites]
     );
 
     const removeFavorite = useCallback(
@@ -860,8 +926,10 @@ export function useFavoriteAgents(userAddress: string | null) {
 
             try {
                 const res = await fetch(
-                    `/api/agents/favorites?userAddress=${encodeURIComponent(userAddress)}&agentId=${encodeURIComponent(agentId)}`,
-                    { method: "DELETE" },
+                    `/api/agents/favorites?userAddress=${encodeURIComponent(
+                        userAddress
+                    )}&agentId=${encodeURIComponent(agentId)}`,
+                    { method: "DELETE" }
                 );
 
                 if (!res.ok) {
@@ -876,7 +944,7 @@ export function useFavoriteAgents(userAddress: string | null) {
                     return newSet;
                 });
                 setFavorites((prev) =>
-                    prev.filter((f) => f.agent.id !== agentId),
+                    prev.filter((f) => f.agent.id !== agentId)
                 );
                 return true;
             } catch (err) {
@@ -884,14 +952,14 @@ export function useFavoriteAgents(userAddress: string | null) {
                 throw err;
             }
         },
-        [userAddress],
+        [userAddress]
     );
 
     const isFavorite = useCallback(
         (agentId: string) => {
             return favoriteIds.has(agentId);
         },
-        [favoriteIds],
+        [favoriteIds]
     );
 
     const toggleFavorite = useCallback(
@@ -902,7 +970,7 @@ export function useFavoriteAgents(userAddress: string | null) {
                 return addFavorite(agentId);
             }
         },
-        [isFavorite, addFavorite, removeFavorite],
+        [isFavorite, addFavorite, removeFavorite]
     );
 
     useEffect(() => {

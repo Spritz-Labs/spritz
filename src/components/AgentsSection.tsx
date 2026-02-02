@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
     useAgents,
     useFavoriteAgents,
+    useAgentLastUsed,
     Agent,
     DiscoveredAgent,
     MCPServer,
@@ -36,6 +37,20 @@ export function AgentsSection({
         removeFavorite,
         refresh: refreshFavorites,
     } = useFavoriteAgents(userAddress);
+    const { getLastUsed } = useAgentLastUsed();
+
+    function formatLastUsed(agentId: string): string | null {
+        const ts = getLastUsed(agentId);
+        if (ts == null) return null;
+        const diff = Date.now() - ts;
+        if (diff < 60_000) return "Just now";
+        const min = Math.floor(diff / 60_000);
+        if (min < 60) return `${min}m ago`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `${hr}h ago`;
+        const d = Math.floor(hr / 24);
+        return `${d}d ago`;
+    }
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isKnowledgeModalOpen, setIsKnowledgeModalOpen] = useState(false);
@@ -84,7 +99,7 @@ export function AgentsSection({
             .catch((err) => {
                 console.error(
                     "[AgentsSection] Error checking beta status:",
-                    err,
+                    err
                 );
             })
             .finally(() => {
@@ -97,7 +112,7 @@ export function AgentsSection({
         personality: string,
         emoji: string,
         visibility: "private" | "friends" | "public" | "official",
-        tags: string[],
+        tags: string[]
     ) => {
         await createAgent(name, personality, emoji, visibility, tags);
     };
@@ -131,7 +146,7 @@ export function AgentsSection({
 
     const handleRemoveFavorite = async (
         e: React.MouseEvent,
-        agentId: string,
+        agentId: string
     ) => {
         e.stopPropagation();
         if (confirm("Remove from favorites?")) {
@@ -164,7 +179,7 @@ export function AgentsSection({
             x402PricingMode?: "global" | "per_tool";
             mcpServers?: MCPServer[];
             apiTools?: APITool[];
-        },
+        }
     ) => {
         await updateAgent(agentId, updates);
     };
@@ -192,7 +207,7 @@ export function AgentsSection({
         } catch (error) {
             console.error(
                 "[AgentsSection] Error applying for beta access:",
-                error,
+                error
             );
             alert("Failed to submit application. Please try again.");
         } finally {
@@ -220,7 +235,9 @@ export function AgentsSection({
                         </h2>
                         <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
                             {isAdmin
-                                ? `${agents.length} agent${agents.length !== 1 ? "s" : ""}`
+                                ? `${agents.length} agent${
+                                      agents.length !== 1 ? "s" : ""
+                                  }`
                                 : `${agents.length}/5 created`}
                             {favorites.length > 0 && (
                                 <span className="ml-1.5 text-amber-400">
@@ -357,14 +374,14 @@ export function AgentsSection({
                                             <p className="text-zinc-400 text-[10px] sm:text-xs">
                                                 {appliedAt
                                                     ? `Applied on ${new Date(
-                                                          appliedAt,
+                                                          appliedAt
                                                       ).toLocaleDateString(
                                                           "en-US",
                                                           {
                                                               month: "long",
                                                               day: "numeric",
                                                               year: "numeric",
-                                                          },
+                                                          }
                                                       )}`
                                                     : "Your application is being reviewed"}
                                             </p>
@@ -473,15 +490,18 @@ export function AgentsSection({
                                                             "friends"
                                                                 ? "👥"
                                                                 : agent.visibility ===
-                                                                    "official"
-                                                                  ? "⭐"
-                                                                  : "🌍"}
+                                                                  "official"
+                                                                ? "⭐"
+                                                                : "🌍"}
                                                         </span>
                                                     )}
                                                     {agent.x402_enabled && (
                                                         <span
                                                             className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-emerald-500/20 rounded text-emerald-400 font-medium"
-                                                            title={`x402 API: $${((agent.x402_price_cents || 1) / 100).toFixed(2)}/msg`}
+                                                            title={`x402 API: $${(
+                                                                (agent.x402_price_cents ||
+                                                                    1) / 100
+                                                            ).toFixed(2)}/msg`}
                                                         >
                                                             💰
                                                         </span>
@@ -491,6 +511,14 @@ export function AgentsSection({
                                                     {agent.personality ||
                                                         "AI Assistant"}
                                                 </p>
+                                                {formatLastUsed(agent.id) && (
+                                                    <p className="text-[10px] text-zinc-600 mt-0.5">
+                                                        Last used{" "}
+                                                        {formatLastUsed(
+                                                            agent.id
+                                                        )}
+                                                    </p>
+                                                )}
                                             </div>
                                             {/* Action buttons - always visible */}
                                             <div className="flex items-center gap-0.5 sm:gap-1">
@@ -520,7 +548,7 @@ export function AgentsSection({
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleOpenKnowledge(
-                                                            agent,
+                                                            agent
                                                         );
                                                     }}
                                                     className="hidden sm:block p-1.5 sm:p-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors"
@@ -566,7 +594,7 @@ export function AgentsSection({
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDeleteAgent(
-                                                            agent,
+                                                            agent
                                                         );
                                                     }}
                                                     className="hidden sm:block p-1.5 sm:p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -597,7 +625,7 @@ export function AgentsSection({
                                             <span>
                                                 Created{" "}
                                                 {new Date(
-                                                    agent.created_at,
+                                                    agent.created_at
                                                 ).toLocaleDateString()}
                                             </span>
                                         </div>
@@ -623,7 +651,7 @@ export function AgentsSection({
                                                 className="group p-2.5 sm:p-3 bg-zinc-800/20 sm:bg-zinc-800/30 border border-yellow-500/10 sm:border-yellow-500/20 rounded-xl cursor-pointer"
                                                 onClick={() =>
                                                     handleOpenFavoriteChat(
-                                                        fav.agent,
+                                                        fav.agent
                                                     )
                                                 }
                                             >
@@ -664,7 +692,7 @@ export function AgentsSection({
                                                                 ? `@${fav.agent.owner.username}`
                                                                 : fav.agent.owner_address.slice(
                                                                       0,
-                                                                      10,
+                                                                      10
                                                                   ) + "..."}
                                                         </p>
                                                         {/* Tags - hidden on mobile */}
@@ -675,11 +703,11 @@ export function AgentsSection({
                                                                     {fav.agent.tags
                                                                         .slice(
                                                                             0,
-                                                                            3,
+                                                                            3
                                                                         )
                                                                         .map(
                                                                             (
-                                                                                tag,
+                                                                                tag
                                                                             ) => (
                                                                                 <span
                                                                                     key={
@@ -692,7 +720,7 @@ export function AgentsSection({
                                                                                         tag
                                                                                     }
                                                                                 </span>
-                                                                            ),
+                                                                            )
                                                                         )}
                                                                     {fav.agent
                                                                         .tags
@@ -715,7 +743,7 @@ export function AgentsSection({
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 handleOpenFavoriteChat(
-                                                                    fav.agent,
+                                                                    fav.agent
                                                                 );
                                                             }}
                                                             className="p-1.5 sm:p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
@@ -741,8 +769,7 @@ export function AgentsSection({
                                                             onClick={(e) =>
                                                                 handleRemoveFavorite(
                                                                     e,
-                                                                    fav.agent
-                                                                        .id,
+                                                                    fav.agent.id
                                                                 )
                                                             }
                                                             className="p-1.5 sm:p-2 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 rounded-lg transition-colors"
@@ -851,7 +878,7 @@ export function AgentsSection({
                                     .reduce(
                                         (sum, a) =>
                                             sum + (a.message_count || 0),
-                                        0,
+                                        0
                                     )
                                     .toLocaleString()}
                             </p>
@@ -865,7 +892,7 @@ export function AgentsSection({
                                     agents.filter(
                                         (a) =>
                                             a.visibility === "public" ||
-                                            a.visibility === "official",
+                                            a.visibility === "official"
                                     ).length
                                 }
                             </p>
@@ -884,7 +911,7 @@ export function AgentsSection({
                     {agents.some(
                         (a) =>
                             a.x402_enabled &&
-                            (a.x402_total_earnings_cents || 0) > 0,
+                            (a.x402_total_earnings_cents || 0) > 0
                     ) && (
                         <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20 rounded-xl">
                             <div className="flex items-center justify-between">
@@ -901,7 +928,7 @@ export function AgentsSection({
                                                     (a.x402_total_earnings_cents ||
                                                         0) /
                                                         100,
-                                                0,
+                                                0
                                             )
                                             .toFixed(2)}
                                     </p>
@@ -917,7 +944,7 @@ export function AgentsSection({
                                                     sum +
                                                     (a.x402_message_count_paid ||
                                                         0),
-                                                0,
+                                                0
                                             )
                                             .toLocaleString()}
                                     </p>
@@ -930,7 +957,7 @@ export function AgentsSection({
                     {agents.filter(
                         (a) =>
                             a.visibility === "public" ||
-                            a.visibility === "official",
+                            a.visibility === "official"
                     ).length > 0 && (
                         <div className="hidden sm:block space-y-4">
                             <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
@@ -941,10 +968,14 @@ export function AgentsSection({
                                 .filter(
                                     (a) =>
                                         a.visibility === "public" ||
-                                        a.visibility === "official",
+                                        a.visibility === "official"
                                 )
                                 .map((agent) => {
-                                    const publicUrl = `${typeof window !== "undefined" ? window.location.origin : "https://app.spritz.chat"}/agent/${agent.id}`;
+                                    const publicUrl = `${
+                                        typeof window !== "undefined"
+                                            ? window.location.origin
+                                            : "https://app.spritz.chat"
+                                    }/agent/${agent.id}`;
                                     const embedCode = `<iframe 
   src="${publicUrl}"
   width="100%"
@@ -995,7 +1026,7 @@ export function AgentsSection({
                                                         onClick={async () => {
                                                             try {
                                                                 await navigator.clipboard.writeText(
-                                                                    publicUrl,
+                                                                    publicUrl
                                                                 );
                                                                 // Brief feedback
                                                                 const btn =
@@ -1014,13 +1045,13 @@ export function AgentsSection({
                                                                                     original ||
                                                                                     "Copy";
                                                                         },
-                                                                        2000,
+                                                                        2000
                                                                     );
                                                                 }
                                                             } catch (err) {
                                                                 console.error(
                                                                     "Copy failed:",
-                                                                    err,
+                                                                    err
                                                                 );
                                                             }
                                                         }}
@@ -1045,7 +1076,7 @@ export function AgentsSection({
                                                                         ...prev,
                                                                         [agent.id]:
                                                                             "iframe",
-                                                                    }),
+                                                                    })
                                                                 )
                                                             }
                                                             className={`px-2 py-1 text-xs rounded transition-colors ${
@@ -1067,7 +1098,7 @@ export function AgentsSection({
                                                                         ...prev,
                                                                         [agent.id]:
                                                                             "js",
-                                                                    }),
+                                                                    })
                                                                 )
                                                             }
                                                             className={`px-2 py-1 text-xs rounded transition-colors ${
@@ -1087,7 +1118,7 @@ export function AgentsSection({
                                                                         ...prev,
                                                                         [agent.id]:
                                                                             "react",
-                                                                    }),
+                                                                    })
                                                                 )
                                                             }
                                                             className={`px-2 py-1 text-xs rounded transition-colors ${
@@ -1107,7 +1138,7 @@ export function AgentsSection({
                                                                         ...prev,
                                                                         [agent.id]:
                                                                             "nextjs",
-                                                                    }),
+                                                                    })
                                                                 )
                                                             }
                                                             className={`px-2 py-1 text-xs rounded transition-colors ${
@@ -1140,7 +1171,7 @@ export function AgentsSection({
                                                                 onClick={async () => {
                                                                     try {
                                                                         await navigator.clipboard.writeText(
-                                                                            embedCode,
+                                                                            embedCode
                                                                         );
                                                                         const btn =
                                                                             document.activeElement as HTMLElement;
@@ -1160,13 +1191,13 @@ export function AgentsSection({
                                                                                             original ||
                                                                                             "Copy";
                                                                                 },
-                                                                                2000,
+                                                                                2000
                                                                             );
                                                                         }
                                                                     } catch (err) {
                                                                         console.error(
                                                                             "Copy failed:",
-                                                                            err,
+                                                                            err
                                                                         );
                                                                     }
                                                                 }}
@@ -1226,7 +1257,7 @@ export function AgentsSection({
   })();
 </script>`;
                                                                         await navigator.clipboard.writeText(
-                                                                            jsCode,
+                                                                            jsCode
                                                                         );
                                                                         const btn =
                                                                             document.activeElement as HTMLElement;
@@ -1246,13 +1277,13 @@ export function AgentsSection({
                                                                                             original ||
                                                                                             "Copy";
                                                                                 },
-                                                                                2000,
+                                                                                2000
                                                                             );
                                                                         }
                                                                     } catch (err) {
                                                                         console.error(
                                                                             "Copy failed:",
-                                                                            err,
+                                                                            err
                                                                         );
                                                                     }
                                                                 }}
@@ -1545,7 +1576,7 @@ export function SpritzAgent() {
   );
 }`;
                                                                         await navigator.clipboard.writeText(
-                                                                            reactCode,
+                                                                            reactCode
                                                                         );
                                                                         const btn =
                                                                             document.activeElement as HTMLElement;
@@ -1565,13 +1596,13 @@ export function SpritzAgent() {
                                                                                             original ||
                                                                                             "Copy";
                                                                                 },
-                                                                                2000,
+                                                                                2000
                                                                             );
                                                                         }
                                                                     } catch (err) {
                                                                         console.error(
                                                                             "Copy failed:",
-                                                                            err,
+                                                                            err
                                                                         );
                                                                     }
                                                                 }}
@@ -1793,7 +1824,7 @@ export default function SpritzAgent() {
   );
 }`;
                                                                         await navigator.clipboard.writeText(
-                                                                            nextjsCode,
+                                                                            nextjsCode
                                                                         );
                                                                         const btn =
                                                                             document.activeElement as HTMLElement;
@@ -1813,13 +1844,13 @@ export default function SpritzAgent() {
                                                                                             original ||
                                                                                             "Copy";
                                                                                 },
-                                                                                2000,
+                                                                                2000
                                                                             );
                                                                         }
                                                                     } catch (err) {
                                                                         console.error(
                                                                             "Copy failed:",
-                                                                            err,
+                                                                            err
                                                                         );
                                                                     }
                                                                 }}
@@ -1872,7 +1903,7 @@ export default function SpritzAgent() {
                                                                             "optional-session-id",
                                                                     },
                                                                     null,
-                                                                    2,
+                                                                    2
                                                                 )}
                                                                 readOnly
                                                                 rows={4}
@@ -1890,10 +1921,10 @@ export default function SpritzAgent() {
                                                                                         "optional-session-id",
                                                                                 },
                                                                                 null,
-                                                                                2,
+                                                                                2
                                                                             );
                                                                         await navigator.clipboard.writeText(
-                                                                            requestBody,
+                                                                            requestBody
                                                                         );
                                                                         const btn =
                                                                             document.activeElement as HTMLElement;
@@ -1913,13 +1944,13 @@ export default function SpritzAgent() {
                                                                                             original ||
                                                                                             "Copy";
                                                                                 },
-                                                                                2000,
+                                                                                2000
                                                                             );
                                                                         }
                                                                     } catch (err) {
                                                                         console.error(
                                                                             "Copy failed:",
-                                                                            err,
+                                                                            err
                                                                         );
                                                                     }
                                                                 }}
@@ -1943,7 +1974,7 @@ export default function SpritzAgent() {
                                                                             "Agent's response text here",
                                                                     },
                                                                     null,
-                                                                    2,
+                                                                    2
                                                                 )}
                                                                 readOnly
                                                                 rows={3}
@@ -1959,10 +1990,10 @@ export default function SpritzAgent() {
                                                                                         "Agent's response text here",
                                                                                 },
                                                                                 null,
-                                                                                2,
+                                                                                2
                                                                             );
                                                                         await navigator.clipboard.writeText(
-                                                                            responseBody,
+                                                                            responseBody
                                                                         );
                                                                         const btn =
                                                                             document.activeElement as HTMLElement;
@@ -1982,13 +2013,13 @@ export default function SpritzAgent() {
                                                                                             original ||
                                                                                             "Copy";
                                                                                 },
-                                                                                2000,
+                                                                                2000
                                                                             );
                                                                         }
                                                                     } catch (err) {
                                                                         console.error(
                                                                             "Copy failed:",
-                                                                            err,
+                                                                            err
                                                                         );
                                                                     }
                                                                 }}
@@ -2026,7 +2057,7 @@ export default function SpritzAgent() {
     "sessionId": "my-session-id"
   }'`;
                                                                         await navigator.clipboard.writeText(
-                                                                            curlExample,
+                                                                            curlExample
                                                                         );
                                                                         const btn =
                                                                             document.activeElement as HTMLElement;
@@ -2046,13 +2077,13 @@ export default function SpritzAgent() {
                                                                                             original ||
                                                                                             "Copy";
                                                                                 },
-                                                                                2000,
+                                                                                2000
                                                                             );
                                                                         }
                                                                     } catch (err) {
                                                                         console.error(
                                                                             "Copy failed:",
-                                                                            err,
+                                                                            err
                                                                         );
                                                                     }
                                                                 }}
@@ -2087,7 +2118,7 @@ export default function SpritzAgent() {
                                                                             0) /
                                                                         100
                                                                     ).toFixed(
-                                                                        2,
+                                                                        2
                                                                     )}
                                                                 </span>{" "}
                                                                 per message
@@ -2147,7 +2178,7 @@ export default function SpritzAgent() {
                     {agents.filter(
                         (a) =>
                             a.visibility === "public" ||
-                            a.visibility === "official",
+                            a.visibility === "official"
                     ).length === 0 && (
                         <div className="hidden sm:block p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl text-center">
                             <p className="text-sm text-zinc-400">

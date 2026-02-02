@@ -29,7 +29,9 @@ function MarkdownImage({ src, alt }: { src?: string | Blob; alt?: string }) {
                 alt={alt || ""}
                 onError={() => setError(true)}
                 onLoad={() => setLoaded(true)}
-                className={`max-w-full h-auto max-h-32 rounded-lg border border-zinc-700 bg-zinc-800 object-contain transition-opacity ${loaded ? "opacity-100" : "opacity-0"}`}
+                className={`max-w-full h-auto max-h-32 rounded-lg border border-zinc-700 bg-zinc-800 object-contain transition-opacity ${
+                    loaded ? "opacity-100" : "opacity-0"
+                }`}
             />
             {alt && (
                 <span className="block text-xs text-zinc-500 mt-1 text-center">
@@ -79,7 +81,9 @@ function getOrCreateSessionId(agentId: string): string {
     const key = `${SESSION_STORAGE_KEY}-${agentId}`;
     let sessionId = localStorage.getItem(key);
     if (!sessionId) {
-        sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        sessionId = `session-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2)}`;
         localStorage.setItem(key, sessionId);
     }
     return sessionId;
@@ -96,6 +100,7 @@ export default function PublicAgentPage() {
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
     const [paymentRequired, setPaymentRequired] = useState(false);
+    const [showWhatCanYouDo, setShowWhatCanYouDo] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Fetch agent details
@@ -133,7 +138,9 @@ export default function PublicAgentPage() {
         const fetchHistory = async () => {
             try {
                 const res = await fetch(
-                    `/api/public/agents/${id}/history?sessionId=${encodeURIComponent(sessionId)}`,
+                    `/api/public/agents/${id}/history?sessionId=${encodeURIComponent(
+                        sessionId
+                    )}`
                 );
                 if (res.ok) {
                     const data = await res.json();
@@ -143,8 +150,8 @@ export default function PublicAgentPage() {
                                 (m: { role: string; content: string }) => ({
                                     role: m.role as "user" | "assistant",
                                     content: m.content,
-                                }),
-                            ),
+                                })
+                            )
                         );
                     }
                 }
@@ -191,7 +198,11 @@ export default function PublicAgentPage() {
                     ...prev,
                     {
                         role: "assistant",
-                        content: `💰 **Payment Required**\n\nThis agent requires a payment of **$${(price / 100).toFixed(2)}** per message.\n\nTo use this agent programmatically with x402 payments, use the embed code from the agent owner.`,
+                        content: `💰 **Payment Required**\n\nThis agent requires a payment of **$${(
+                            price / 100
+                        ).toFixed(
+                            2
+                        )}** per message.\n\nTo use this agent programmatically with x402 payments, use the embed code from the agent owner.`,
                     },
                 ]);
                 setPaymentRequired(true);
@@ -247,7 +258,7 @@ export default function PublicAgentPage() {
                                     ) {
                                         localStorage.setItem(
                                             `${SESSION_STORAGE_KEY}-${id}`,
-                                            data.sessionId,
+                                            data.sessionId
                                         );
                                     }
                                     if (data.message) {
@@ -271,7 +282,9 @@ export default function PublicAgentPage() {
                                         if (last?.role === "assistant")
                                             next[next.length - 1] = {
                                                 ...last,
-                                                content: `❌ ${data.error || "Error"}`,
+                                                content: `❌ ${
+                                                    data.error || "Error"
+                                                }`,
                                             };
                                         return next;
                                     });
@@ -293,7 +306,7 @@ export default function PublicAgentPage() {
                 if (data.sessionId && typeof window !== "undefined") {
                     localStorage.setItem(
                         `${SESSION_STORAGE_KEY}-${id}`,
-                        data.sessionId,
+                        data.sessionId
                     );
                 }
                 const responseText =
@@ -308,7 +321,9 @@ export default function PublicAgentPage() {
                     ...prev,
                     {
                         role: "assistant",
-                        content: `❌ Error: ${data.error || "Failed to get response"}`,
+                        content: `❌ Error: ${
+                            data.error || "Failed to get response"
+                        }`,
                     },
                 ]);
             }
@@ -389,7 +404,7 @@ export default function PublicAgentPage() {
                                     <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-medium">
                                         💰 $
                                         {(agent.x402_price_cents / 100).toFixed(
-                                            2,
+                                            2
                                         )}
                                         /msg
                                     </span>
@@ -449,9 +464,31 @@ export default function PublicAgentPage() {
                             <h2 className="text-xl font-semibold text-white mb-2">
                                 Chat with {agent.name}
                             </h2>
-                            <p className="text-zinc-400 mb-6 max-w-md mx-auto">
+                            <p className="text-zinc-400 mb-4 max-w-md mx-auto">
                                 {agent.personality || "Ask me anything!"}
                             </p>
+                            {agent.personality && (
+                                <div className="mb-6 max-w-md mx-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setShowWhatCanYouDo(
+                                                !showWhatCanYouDo
+                                            )
+                                        }
+                                        className="text-xs text-zinc-500 hover:text-orange-400 transition-colors"
+                                    >
+                                        {showWhatCanYouDo
+                                            ? "Hide"
+                                            : "What can you do?"}
+                                    </button>
+                                    {showWhatCanYouDo && (
+                                        <p className="text-xs text-zinc-400 mt-2 text-left bg-zinc-800/50 rounded-lg p-3">
+                                            {agent.personality}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Suggested Questions */}
                             {agent.suggested_questions &&
@@ -477,11 +514,11 @@ export default function PublicAgentPage() {
                                                                             content:
                                                                                 question,
                                                                         },
-                                                                    ],
+                                                                    ]
                                                                 );
                                                                 setInput("");
                                                                 setSending(
-                                                                    true,
+                                                                    true
                                                                 );
                                                                 fetch(
                                                                     `/api/public/agents/${id}/chat`,
@@ -496,13 +533,13 @@ export default function PublicAgentPage() {
                                                                             {
                                                                                 message:
                                                                                     question,
-                                                                            },
+                                                                            }
                                                                         ),
-                                                                    },
+                                                                    }
                                                                 )
                                                                     .then(
                                                                         async (
-                                                                            res,
+                                                                            res
                                                                         ) => {
                                                                             if (
                                                                                 res.ok
@@ -511,7 +548,7 @@ export default function PublicAgentPage() {
                                                                                     await res.json();
                                                                                 setMessages(
                                                                                     (
-                                                                                        prev,
+                                                                                        prev
                                                                                     ) => [
                                                                                         ...prev,
                                                                                         {
@@ -521,30 +558,33 @@ export default function PublicAgentPage() {
                                                                                                 data.response ||
                                                                                                 "No response",
                                                                                         },
-                                                                                    ],
+                                                                                    ]
                                                                                 );
                                                                             } else {
                                                                                 const data =
                                                                                     await res.json();
                                                                                 setMessages(
                                                                                     (
-                                                                                        prev,
+                                                                                        prev
                                                                                     ) => [
                                                                                         ...prev,
                                                                                         {
                                                                                             role: "assistant",
-                                                                                            content: `❌ Error: ${data.error || "Failed to get response"}`,
+                                                                                            content: `❌ Error: ${
+                                                                                                data.error ||
+                                                                                                "Failed to get response"
+                                                                                            }`,
                                                                                         },
-                                                                                    ],
+                                                                                    ]
                                                                                 );
                                                                             }
-                                                                        },
+                                                                        }
                                                                     )
                                                                     .catch(
                                                                         () => {
                                                                             setMessages(
                                                                                 (
-                                                                                    prev,
+                                                                                    prev
                                                                                 ) => [
                                                                                     ...prev,
                                                                                     {
@@ -552,16 +592,16 @@ export default function PublicAgentPage() {
                                                                                         content:
                                                                                             "❌ Failed to connect to the agent",
                                                                                     },
-                                                                                ],
+                                                                                ]
                                                                             );
-                                                                        },
+                                                                        }
                                                                     )
                                                                     .finally(
                                                                         () => {
                                                                             setSending(
-                                                                                false,
+                                                                                false
                                                                             );
-                                                                        },
+                                                                        }
                                                                     );
                                                             }, 100);
                                                         }}
@@ -569,7 +609,7 @@ export default function PublicAgentPage() {
                                                     >
                                                         {question}
                                                     </button>
-                                                ),
+                                                )
                                             )}
                                         </div>
                                     </div>
@@ -583,7 +623,7 @@ export default function PublicAgentPage() {
                                     <p className="text-zinc-400 text-xs mt-1">
                                         $
                                         {(agent.x402_price_cents / 100).toFixed(
-                                            2,
+                                            2
                                         )}{" "}
                                         per message on {agent.x402_network}
                                     </p>
@@ -647,7 +687,11 @@ export default function PublicAgentPage() {
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0 }}
-                                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                                        className={`flex ${
+                                            msg.role === "user"
+                                                ? "justify-end"
+                                                : "justify-start"
+                                        }`}
                                     >
                                         <div
                                             className={`max-w-[85%] rounded-2xl px-4 py-3 ${
