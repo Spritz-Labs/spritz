@@ -165,9 +165,9 @@ function DashboardContent({
     const [showSolanaBanner, setShowSolanaBanner] = useState(true);
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
-    // Live streaming state
-    const [isGoLiveModalOpen, setIsGoLiveModalOpen] = useState(false);
-    // watchingStream state removed - now using /live/[id] page instead
+    // Profile / Go Live modal (avatar click: two tabs)
+    const [isProfileAvatarModalOpen, setIsProfileAvatarModalOpen] = useState(false);
+    const [profileAvatarInitialTab, setProfileAvatarInitialTab] = useState<"profile" | "goLive">("profile");
 
     // Bottom navigation tab state - default to chats
     type NavTab =

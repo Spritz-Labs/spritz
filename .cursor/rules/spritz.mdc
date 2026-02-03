@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+# Build, Git and Vercel deploy
+
+Always try to run `npm run build`, commit a recap of all changes, push them to main and then run `npm run vercel` to get the app deployed in one command line.
