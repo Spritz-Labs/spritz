@@ -221,24 +221,38 @@ export async function POST(request: NextRequest) {
         // Send to host (recipient)
         if (hostEmailAddress) {
             try {
+                // When no guest (e.g. create-shareable from Calls tab), send "your call is ready" email
+                const isSelfCreated = !guestEmailAddress;
                 await resend.emails.send({
                     from: "Spritz <noreply@spritz.chat>",
                     to: hostEmailAddress,
-                    subject: `📅 New booking: ${guestName} scheduled a call`,
-                    html: generateHostEmail({
-                        guestName,
-                        guestEmail: guestEmailAddress,
-                        hostName,
-                        formattedDate,
-                        formattedTime,
-                        duration,
-                        isPaid,
-                        amount: call.payment_amount_cents,
-                        inviteToken,
-                        notes: call.notes,
-                        timezone,
-                        scheduledTime,
-                    }),
+                    subject: isSelfCreated
+                        ? `✅ Your scheduled call is ready`
+                        : `📅 New booking: ${guestName} scheduled a call`,
+                    html: isSelfCreated
+                        ? generateHostSelfCreatedEmail({
+                              hostName,
+                              formattedDate,
+                              formattedTime,
+                              duration,
+                              inviteToken,
+                              timezone,
+                              scheduledTime,
+                          })
+                        : generateHostEmail({
+                              guestName,
+                              guestEmail: guestEmailAddress,
+                              hostName,
+                              formattedDate,
+                              formattedTime,
+                              duration,
+                              isPaid,
+                              amount: call.payment_amount_cents,
+                              inviteToken,
+                              notes: call.notes,
+                              timezone,
+                              scheduledTime,
+                            }),
                     attachments: [icsAttachment],
                 });
                 emailsSent.push({ email: hostEmailAddress, type: "host" });
@@ -264,6 +278,79 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+interface HostSelfCreatedEmailParams {
+    hostName: string;
+    formattedDate: string;
+    formattedTime: string;
+    duration: number;
+    inviteToken: string;
+    timezone: string;
+    scheduledTime: Date;
+}
+
+function generateHostSelfCreatedEmail({
+    hostName,
+    formattedDate,
+    formattedTime,
+    duration,
+    inviteToken,
+    scheduledTime,
+}: HostSelfCreatedEmailParams): string {
+    const endTime = addMinutes(scheduledTime, duration);
+    const gcalStart = scheduledTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalEnd = endTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalTitle = encodeURIComponent(`Spritz Call`);
+    const gcalDetails = encodeURIComponent(`Join your Spritz video call at: ${BASE_URL}/join/${inviteToken}`);
+    const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${gcalTitle}&dates=${gcalStart}/${gcalEnd}&details=${gcalDetails}`;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+    <div style="max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <img src="${LOGO_URL}" alt="Spritz" width="180" height="77" style="display: block; margin: 0 auto; max-width: 180px; height: auto;" />
+        </div>
+        <div style="background: linear-gradient(135deg, #18181b 0%, #1f1f23 100%); border-radius: 20px; padding: 32px; border: 1px solid #27272a;">
+            <div style="text-align: center; margin-bottom: 24px;">
+                <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 8px 16px; border-radius: 100px; font-size: 14px; font-weight: 600;">
+                    <span style="font-size: 16px;">✓</span> Scheduled Call Ready
+                </div>
+            </div>
+            <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0 0 8px 0; text-align: center;">
+                Hi ${hostName}!
+            </h1>
+            <p style="color: #a1a1aa; font-size: 16px; margin: 0 0 32px 0; text-align: center; line-height: 1.5;">
+                Your scheduled call is ready. Share the link below or join when it's time.
+            </p>
+            <div style="background: #09090b; border-radius: 16px; padding: 24px; margin-bottom: 24px; text-align: center;">
+                <p style="color: #ffffff; font-size: 20px; font-weight: 600; margin: 0 0 8px 0;">${formattedDate}</p>
+                <p style="color: #FF5500; font-size: 18px; font-weight: 600; margin: 0 0 4px 0;">${formattedTime}</p>
+                <p style="color: #71717a; font-size: 14px; margin: 0;">${duration} minutes</p>
+            </div>
+            <a href="${BASE_URL}/join/${inviteToken}" style="display: block; background: linear-gradient(135deg, #FF5500, #FB8D22); color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 16px;">
+                Join Call When It's Time
+            </a>
+            <p style="color: #71717a; font-size: 13px; text-align: center; margin: 0;">
+                <span style="color: #52525b;">📎 Calendar invite attached</span> ·
+                <a href="${googleCalendarUrl}" style="color: #FF5500; text-decoration: none;">Add to Google Calendar</a>
+            </p>
+        </div>
+        <div style="text-align: center; margin-top: 32px;">
+            <p style="color: #52525b; font-size: 12px; margin: 0;">
+                Sent via <a href="${BASE_URL}" style="color: #FF5500; text-decoration: none;">Spritz</a> · Web3 Video Calls
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+    `;
 }
 
 interface GuestEmailParams {

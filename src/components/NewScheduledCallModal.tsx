@@ -18,14 +18,16 @@ export function NewScheduledCallModal({
 }: NewScheduledCallModalProps) {
     const { trackScheduleCreated } = useAnalytics(userAddress);
     const [title, setTitle] = useState("");
-    const [scheduledDate, setScheduledDate] = useState("");
-    const [scheduledTime, setScheduledTime] = useState("");
+    // Initialize date/time to defaults so "Create & Get Link" is enabled once title is filled (state was "" before, so button stayed disabled)
+    const [scheduledDate, setScheduledDate] = useState(() =>
+        format(addDays(new Date(), 1), "yyyy-MM-dd")
+    );
+    const [scheduledTime, setScheduledTime] = useState("09:00");
     const [duration, setDuration] = useState(30);
     const [isCreating, setIsCreating] = useState(false);
     const [shareUrl, setShareUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Set default date to tomorrow
     const tomorrow = addDays(new Date(), 1);
     const defaultDate = format(tomorrow, "yyyy-MM-dd");
     const defaultTime = "09:00";
@@ -106,8 +108,8 @@ export function NewScheduledCallModal({
 
     const handleReset = () => {
         setTitle("");
-        setScheduledDate("");
-        setScheduledTime("");
+        setScheduledDate(format(addDays(new Date(), 1), "yyyy-MM-dd"));
+        setScheduledTime("09:00");
         setDuration(30);
         setShareUrl(null);
         setError(null);

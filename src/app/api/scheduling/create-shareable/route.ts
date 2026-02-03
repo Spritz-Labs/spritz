@@ -5,6 +5,15 @@ import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
 
+function getAppUrl(request: NextRequest): string {
+    if (process.env.NEXT_PUBLIC_APP_URL) {
+        return process.env.NEXT_PUBLIC_APP_URL;
+    }
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
+    return `${proto}://${host}`;
+}
+
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -89,6 +98,20 @@ export async function POST(request: NextRequest) {
                 { error: "Failed to create scheduled call" },
                 { status: 500 }
             );
+        }
+
+        // Send email to the user (host) with join link and calendar invite
+        try {
+            const inviteRes = await fetch(`${getAppUrl(request)}/api/scheduling/invite`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scheduledCallId: scheduledCall.id }),
+            });
+            if (!inviteRes.ok) {
+                console.warn("[CreateShareable] Invite email failed (user may not have email on file)");
+            }
+        } catch (inviteErr) {
+            console.warn("[CreateShareable] Invite email error:", inviteErr);
         }
 
         return NextResponse.json({
