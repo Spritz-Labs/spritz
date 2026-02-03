@@ -18,6 +18,7 @@ import {
     ARCHIVED_FOLDER_LABEL,
     type ChatFolder,
 } from "@/hooks/useChatFolders";
+import { ChatListItemSkeleton } from "./ChatSkeleton";
 
 // Create Folder Modal Component
 function CreateFolderModal({
@@ -34,7 +35,7 @@ function CreateFolderModal({
     const [activeCategory, setActiveCategory] = useState("popular");
 
     const filteredEmojis = DEFAULT_FOLDER_EMOJIS.filter(
-        (f) => f.category === activeCategory,
+        (f) => f.category === activeCategory
     );
     const isCustomValid = customEmoji.trim().length > 0;
 
@@ -124,7 +125,7 @@ function CreateFolderModal({
                 <div className="grid grid-cols-5 gap-2 mb-4">
                     {filteredEmojis.map((folder) => {
                         const isActive = activeFolders.some(
-                            (f) => f.emoji === folder.emoji,
+                            (f) => f.emoji === folder.emoji
                         );
                         return (
                             <button
@@ -234,10 +235,12 @@ type UnifiedChatListProps = {
     /** Mark all chats in the current folder as read (called with activeFolder and chats in that folder) */
     onMarkFolderAsRead?: (
         folderEmoji: string | null,
-        chatsInFolder: UnifiedChatItem[],
+        chatsInFolder: UnifiedChatItem[]
     ) => void;
     /** Pin or unpin a chat to the top of the list */
     onPinChat?: (chat: UnifiedChatItem, pinned: boolean) => void;
+    /** When true, show loading skeleton instead of chat list */
+    isChatsLoading?: boolean;
 };
 
 const formatTime = (date: Date | null) => {
@@ -341,7 +344,7 @@ type ChatRowProps = {
     onAssignFolder: (
         chatId: string,
         emoji: string | null,
-        chatType: "dm" | "group" | "channel" | "global",
+        chatType: "dm" | "group" | "channel" | "global"
     ) => void;
     onCloseFolderPicker: () => void;
     allAvailableFolders: ChatFolder[];
@@ -451,9 +454,22 @@ const ChatRow = memo(
                                     {chat.name}
                                 </p>
                                 {chat.isPinned && (
-                                    <span className="shrink-0 text-zinc-500" title="Pinned">
-                                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                    <span
+                                        className="shrink-0 text-zinc-500"
+                                        title="Pinned"
+                                    >
+                                        <svg
+                                            className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M5 10l7-7m0 0l7 7m-7-7v18"
+                                            />
                                         </svg>
                                     </span>
                                 )}
@@ -648,15 +664,35 @@ const ChatRow = memo(
                                     >
                                         {chat.isPinned ? (
                                             <>
-                                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                                <svg
+                                                    className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M5 15l7-7 7 7"
+                                                    />
                                                 </svg>
                                                 Unpin from top
                                             </>
                                         ) : (
                                             <>
-                                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                                <svg
+                                                    className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M5 10l7-7m0 0l7 7m-7-7v18"
+                                                    />
                                                 </svg>
                                                 Pin to top
                                             </>
@@ -670,7 +706,7 @@ const ChatRow = memo(
                                             onAssignFolder(
                                                 chat.id,
                                                 null,
-                                                chat.type,
+                                                chat.type
                                             )
                                         }
                                         className="w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-md sm:rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-xs sm:text-sm"
@@ -702,7 +738,7 @@ const ChatRow = memo(
                                                 onAssignFolder(
                                                     chat.id,
                                                     folder.emoji,
-                                                    chat.type,
+                                                    chat.type
                                                 )
                                             }
                                             className={`w-8 h-8 sm:w-10 sm:h-10 rounded-md sm:rounded-lg flex items-center justify-center text-base sm:text-lg transition-all ${
@@ -732,8 +768,10 @@ const ChatRow = memo(
                 !next.isFolderPickerOpen) &&
             prev.onPinChat === next.onPinChat
         );
-    },
+    }
 );
+
+const CHAT_SEARCH_DEBOUNCE_MS = 250;
 
 function UnifiedChatListInner({
     chats,
@@ -751,13 +789,14 @@ function UnifiedChatListInner({
     canCreateGroup = false,
     onMarkFolderAsRead,
     onPinChat,
+    isChatsLoading = false,
 }: UnifiedChatListProps & {
     showSearch?: boolean;
     onSearchToggle?: () => void;
 }) {
     const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = "All"
     const [showFolderPicker, setShowFolderPicker] = useState<string | null>(
-        null,
+        null
     );
     const [folderPickerPosition, setFolderPickerPosition] = useState<{
         top: number;
@@ -766,13 +805,22 @@ function UnifiedChatListInner({
     } | null>(null);
     const tabsRef = useRef<HTMLDivElement>(null);
     const folderButtonRefs = useRef<Record<string, HTMLButtonElement | null>>(
-        {},
+        {}
     );
     const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState<
         "all" | "dms" | "groups" | "channels"
     >("all");
     const searchInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const t = setTimeout(
+            () => setDebouncedSearchQuery(searchQuery),
+            CHAT_SEARCH_DEBOUNCE_MS
+        );
+        return () => clearTimeout(t);
+    }, [searchQuery]);
 
     // Focus search input when shown
     useEffect(() => {
@@ -808,7 +856,7 @@ function UnifiedChatListInner({
                 chatIds: [] as string[],
             },
         ],
-        [allAvailableFolders],
+        [allAvailableFolders]
     );
 
     // State for folder management
@@ -817,9 +865,9 @@ function UnifiedChatListInner({
         useState<NodeJS.Timeout | null>(null);
 
     // Sort mode: recent (default), unread first, or A-Z
-    const [sortMode, setSortMode] = useState<
-        "recent" | "unread" | "az"
-    >("recent");
+    const [sortMode, setSortMode] = useState<"recent" | "unread" | "az">(
+        "recent"
+    );
 
     // Get sortable timestamp (0 for null/invalid so those sort to bottom)
     const getSortTime = useCallback((chat: UnifiedChatItem): number => {
@@ -869,11 +917,11 @@ function UnifiedChatListInner({
         // Apply folder filter (when "All", hide archived; when "Archived", show only archived)
         if (activeFolder === null) {
             result = result.filter(
-                (chat) => getChatFolder(chat.id) !== ARCHIVED_FOLDER_EMOJI,
+                (chat) => getChatFolder(chat.id) !== ARCHIVED_FOLDER_EMOJI
             );
         } else {
             result = result.filter(
-                (chat) => getChatFolder(chat.id) === activeFolder,
+                (chat) => getChatFolder(chat.id) === activeFolder
             );
         }
 
@@ -888,9 +936,9 @@ function UnifiedChatListInner({
             });
         }
 
-        // Apply search filter
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
+        // Apply search filter (debounced)
+        if (debouncedSearchQuery.trim()) {
+            const query = debouncedSearchQuery.toLowerCase();
             result = result.filter((chat) => {
                 const name = chat.name.toLowerCase();
                 const lastMessage = chat.lastMessage?.toLowerCase() || "";
@@ -907,7 +955,13 @@ function UnifiedChatListInner({
         }
 
         return result;
-    }, [sortedChats, activeFolder, getChatFolder, searchQuery, typeFilter]);
+    }, [
+        sortedChats,
+        activeFolder,
+        getChatFolder,
+        debouncedSearchQuery,
+        typeFilter,
+    ]);
 
     // Get unread count per folder
     const folderUnreadCounts = useMemo(() => {
@@ -931,11 +985,11 @@ function UnifiedChatListInner({
         (
             chatId: string,
             emoji: string | null,
-            chatType: "dm" | "group" | "channel" | "global" = "dm",
+            chatType: "dm" | "group" | "channel" | "global" = "dm"
         ) => {
             if (emoji && emoji !== ARCHIVED_FOLDER_EMOJI) {
                 const folder = allAvailableFolders.find(
-                    (f) => f.emoji === emoji,
+                    (f) => f.emoji === emoji
                 );
                 if (folder) {
                     addFolder(folder.emoji, folder.label);
@@ -944,14 +998,14 @@ function UnifiedChatListInner({
             assignChat(chatId, emoji, chatType);
             setShowFolderPicker(null);
         },
-        [allAvailableFolders, addFolder, assignChat],
+        [allAvailableFolders, addFolder, assignChat]
     );
 
     // Scroll tabs to show active folder
     useEffect(() => {
         if (tabsRef.current && activeFolder) {
             const activeTab = tabsRef.current.querySelector(
-                `[data-folder="${activeFolder}"]`,
+                `[data-folder="${activeFolder}"]`
             );
             activeTab?.scrollIntoView({
                 behavior: "smooth",
@@ -979,7 +1033,7 @@ function UnifiedChatListInner({
                     top: openUpward ? rect.top : rect.bottom + 4,
                     left: Math.max(
                         8,
-                        Math.min(rect.right - 200, window.innerWidth - 208),
+                        Math.min(rect.right - 200, window.innerWidth - 208)
                     ), // Keep within viewport
                     openUpward,
                 });
@@ -1014,14 +1068,14 @@ function UnifiedChatListInner({
                 setActiveFolder(null);
             }
         },
-        [removeFolder, activeFolder],
+        [removeFolder, activeFolder]
     );
 
     const setFolderButtonRef = useCallback(
         (id: string, el: HTMLButtonElement | null) => {
             folderButtonRefs.current[id] = el;
         },
-        [],
+        []
     );
 
     return (
@@ -1104,7 +1158,7 @@ function UnifiedChatListInner({
                                         key={filter.value}
                                         onClick={() =>
                                             setTypeFilter(
-                                                filter.value as typeof typeFilter,
+                                                filter.value as typeof typeFilter
                                             )
                                         }
                                         className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
@@ -1253,28 +1307,45 @@ function UnifiedChatListInner({
 
             {/* Chat List */}
             <div className="space-y-1 sm:space-y-2">
-                {filteredChats.length === 0 ? (
+                {isChatsLoading ? (
+                    <ChatListItemSkeleton count={5} />
+                ) : filteredChats.length === 0 ? (
                     <div className="text-center py-8 sm:py-12 px-2">
                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-zinc-800/50 flex items-center justify-center mx-auto mb-3 sm:mb-4">
                             <span className="text-2xl sm:text-3xl">
-                                {activeFolder || "📭"}
+                                {searchQuery.trim()
+                                    ? "🔍"
+                                    : activeFolder || "📭"}
                             </span>
                         </div>
                         <p className="text-zinc-400 font-medium text-sm sm:text-base">
-                            {activeFolder
+                            {searchQuery.trim()
+                                ? `No chats match "${searchQuery.trim()}"`
+                                : activeFolder
                                 ? `No chats in ${
                                       activeFolders.find(
-                                          (f) => f.emoji === activeFolder,
+                                          (f) => f.emoji === activeFolder
                                       )?.label || "this folder"
                                   }`
                                 : "No chats yet"}
                         </p>
                         <p className="text-zinc-500 text-xs sm:text-sm mt-1 mb-4">
-                            {activeFolder
+                            {searchQuery.trim()
+                                ? "Try a different search or clear to see all chats"
+                                : activeFolder
                                 ? "Tap folder icon on a chat to move it here"
                                 : "Add a friend, join a channel, or create a group"}
                         </p>
-                        {!activeFolder &&
+                        {searchQuery.trim() ? (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                                className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                            >
+                                Clear search
+                            </button>
+                        ) : (
+                            !activeFolder &&
                             (onOpenAddFriend ||
                                 onOpenBrowseChannels ||
                                 onOpenCreateGroup) && (
@@ -1311,7 +1382,8 @@ function UnifiedChatListInner({
                                         </button>
                                     )}
                                 </div>
-                            )}
+                            )
+                        )}
                     </div>
                 ) : (
                     filteredChats.map((chat) => {
@@ -1399,7 +1471,7 @@ function UnifiedChatListInner({
                                     Delete the{" "}
                                     <strong>
                                         {activeFolders.find(
-                                            (f) => f.emoji === folderToDelete,
+                                            (f) => f.emoji === folderToDelete
                                         )?.label || folderToDelete}
                                     </strong>{" "}
                                     folder? Chats in this folder will be moved

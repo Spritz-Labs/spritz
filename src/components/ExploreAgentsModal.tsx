@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
     useDiscoverAgents,
@@ -28,12 +28,12 @@ export function ExploreAgentsModal({
 
     const [searchInput, setSearchInput] = useState("");
     const [togglingFavorite, setTogglingFavorite] = useState<string | null>(
-        null,
+        null
     );
 
     const handleToggleFavorite = async (
         e: React.MouseEvent,
-        agentId: string,
+        agentId: string
     ) => {
         e.stopPropagation();
         setTogglingFavorite(agentId);
@@ -50,10 +50,19 @@ export function ExploreAgentsModal({
         setSearch(searchInput);
     };
 
+    // Live debounced search (250ms)
+    useEffect(() => {
+        const t = setTimeout(() => setSearch(searchInput), 250);
+        return () => clearTimeout(t);
+    }, [searchInput, setSearch]);
+
     const formatOwnerName = (agent: DiscoveredAgent) => {
         if (agent.owner.username) return `@${agent.owner.username}`;
         if (agent.owner.ensName) return agent.owner.ensName;
-        return `${agent.owner_address.slice(0, 6)}...${agent.owner_address.slice(-4)}`;
+        return `${agent.owner_address.slice(
+            0,
+            6
+        )}...${agent.owner_address.slice(-4)}`;
     };
 
     return (
@@ -110,7 +119,7 @@ export function ExploreAgentsModal({
                                 </button>
                             </div>
 
-                            {/* Search */}
+                            {/* Search - live debounced; Enter submits immediately */}
                             <div className="flex gap-2 mb-4">
                                 <input
                                     type="text"
@@ -125,8 +134,9 @@ export function ExploreAgentsModal({
                                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
                                 />
                                 <button
+                                    type="button"
                                     onClick={handleSearch}
-                                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl transition-colors"
+                                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl transition-colors shrink-0"
                                 >
                                     Search
                                 </button>
@@ -210,8 +220,8 @@ export function ExploreAgentsModal({
                                         {filter === "friends"
                                             ? "Your friends haven't shared any agents yet"
                                             : search
-                                              ? "Try a different search term"
-                                              : "Be the first to create a public agent!"}
+                                            ? "Try a different search term"
+                                            : "Be the first to create a public agent!"}
                                     </p>
                                 </div>
                             ) : (
@@ -280,7 +290,7 @@ export function ExploreAgentsModal({
                                                                     .slice(0, 5)
                                                                     .map(
                                                                         (
-                                                                            tag,
+                                                                            tag
                                                                         ) => (
                                                                             <span
                                                                                 key={
@@ -293,7 +303,7 @@ export function ExploreAgentsModal({
                                                                                     tag
                                                                                 }
                                                                             </span>
-                                                                        ),
+                                                                        )
                                                                     )}
                                                             </div>
                                                         )}
@@ -301,7 +311,7 @@ export function ExploreAgentsModal({
                                                         <span>
                                                             by{" "}
                                                             {formatOwnerName(
-                                                                agent,
+                                                                agent
                                                             )}
                                                         </span>
                                                         <span>•</span>
@@ -319,7 +329,7 @@ export function ExploreAgentsModal({
                                                         onClick={(e) =>
                                                             handleToggleFavorite(
                                                                 e,
-                                                                agent.id,
+                                                                agent.id
                                                             )
                                                         }
                                                         disabled={
@@ -363,7 +373,7 @@ export function ExploreAgentsModal({
                                                                 className="w-5 h-5"
                                                                 fill={
                                                                     isFavorite(
-                                                                        agent.id,
+                                                                        agent.id
                                                                     )
                                                                         ? "currentColor"
                                                                         : "none"

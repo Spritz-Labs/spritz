@@ -9,7 +9,11 @@ import { type SocialLinks } from "@/hooks/useSocials";
 import { SocialLinksDisplay } from "./SocialsModal";
 import { FriendTagModal, getTagColorConfig } from "./FriendTagModal";
 import { useFriendTags, type FriendTag } from "@/hooks/useFriendTags";
-import { formatAddress, getDisplayName as getBaseDisplayName, getSecondaryDisplayText } from "@/utils/address";
+import {
+    formatAddress,
+    getDisplayName as getBaseDisplayName,
+    getSecondaryDisplayText,
+} from "@/utils/address";
 
 export type Friend = {
     id: string;
@@ -43,9 +47,15 @@ type FriendsListProps = {
     unreadCounts?: Record<string, number>;
     hideChat?: boolean;
     friendsWakuStatus?: Record<string, boolean>;
+    /** When no friends, show "Add your first friend" and call this on click */
+    onAddFriendClick?: () => void;
+    /** When no friends and > 0, show "View friend requests (X)" and call this on click */
+    pendingRequestsCount?: number;
+    onViewRequestsClick?: () => void;
 };
 
 const FAVORITES_STORAGE_KEY = "spritz_favorite_friends";
+const SEARCH_DEBOUNCE_MS = 250;
 
 // Helper functions (moved outside component)
 const formatPhoneNumber = (phone: string) => {
@@ -59,25 +69,34 @@ const formatPhoneNumber = (phone: string) => {
 // Get display name with local nickname support
 // Priority: nickname > ENS > username > address
 const getDisplayName = (friend: Friend) => {
-    return getBaseDisplayName({
-        address: friend.address,
-        ensName: friend.ensName,
-        username: friend.reachUsername,
-        nickname: friend.nickname,
-    }, true); // includeNickname = true for friends list
+    return getBaseDisplayName(
+        {
+            address: friend.address,
+            ensName: friend.ensName,
+            username: friend.reachUsername,
+            nickname: friend.nickname,
+        },
+        true
+    ); // includeNickname = true for friends list
 };
 
 const getSecondaryText = (friend: Friend) => {
-    return getSecondaryDisplayText({
-        address: friend.address,
-        ensName: friend.ensName,
-        username: friend.reachUsername,
-        nickname: friend.nickname,
-    }, getDisplayName(friend));
+    return getSecondaryDisplayText(
+        {
+            address: friend.address,
+            ensName: friend.ensName,
+            username: friend.reachUsername,
+            nickname: friend.nickname,
+        },
+        getDisplayName(friend)
+    );
 };
 
 // Get effective avatar - custom avatar if enabled, otherwise ENS avatar
-const getEffectiveAvatar = (friend: Friend, customAvatars: Record<string, string | null>) => {
+const getEffectiveAvatar = (
+    friend: Friend,
+    customAvatars: Record<string, string | null>
+) => {
     const customAvatar = customAvatars[friend.address.toLowerCase()];
     if (customAvatar) {
         return customAvatar;
@@ -142,10 +161,12 @@ const FriendCard = memo(function FriendCard({
     style,
 }: FriendCardProps) {
     const hasUnread = unreadCount > 0;
-    
+
     // Detect mobile/touch device for click behavior
-    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
-    
+    const isMobile =
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 640px)").matches;
+
     return (
         <div className="group select-none" style={style}>
             <div
@@ -192,7 +213,11 @@ const FriendCard = memo(function FriendCard({
                             // On desktop, open chat if available
                             if (isMobile) {
                                 onToggleExpand(friend.id);
-                            } else if (onChat && !hideChat && wakuStatus !== false) {
+                            } else if (
+                                onChat &&
+                                !hideChat &&
+                                wakuStatus !== false
+                            ) {
                                 onChat(friend);
                             } else {
                                 onToggleExpand(friend.id);
@@ -207,17 +232,23 @@ const FriendCard = memo(function FriendCard({
                                     src={effectiveAvatar}
                                     alt={getDisplayName(friend)}
                                     className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover ${
-                                        unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""
+                                        unreadCount > 0
+                                            ? "ring-2 ring-[#FF5500]"
+                                            : ""
                                     }`}
                                 />
                             ) : (
                                 <div
                                     className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center ${
-                                        unreadCount > 0 ? "ring-2 ring-[#FF5500]" : ""
+                                        unreadCount > 0
+                                            ? "ring-2 ring-[#FF5500]"
+                                            : ""
                                     }`}
                                 >
                                     <span className="text-white font-bold text-base sm:text-lg">
-                                        {getDisplayName(friend)[0].toUpperCase()}
+                                        {getDisplayName(
+                                            friend
+                                        )[0].toUpperCase()}
                                     </span>
                                 </div>
                             )}
@@ -236,7 +267,11 @@ const FriendCard = memo(function FriendCard({
                             {/* Favorite indicator on mobile */}
                             {isFavorite && (
                                 <div className="sm:hidden absolute -bottom-0.5 -left-0.5 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center border-2 border-zinc-900">
-                                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <svg
+                                        className="w-2.5 h-2.5 text-white"
+                                        fill="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
                                         <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                                     </svg>
                                 </div>
@@ -464,17 +499,39 @@ const FriendCard = memo(function FriendCard({
                         {friend.nickname && (
                             <div className="mb-3 p-3 bg-zinc-800/50 rounded-lg">
                                 <div className="flex items-start gap-2">
-                                    <svg className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    <svg
+                                        className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                        />
                                     </svg>
-                                    <p className="text-zinc-300 text-sm flex-1">{friend.nickname}</p>
+                                    <p className="text-zinc-300 text-sm flex-1">
+                                        {friend.nickname}
+                                    </p>
                                     <button
                                         onClick={onEditNote}
                                         className="text-zinc-500 hover:text-zinc-300 transition-colors"
                                         title="Edit nickname"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -663,7 +720,11 @@ const FriendCard = memo(function FriendCard({
                                         ? "bg-amber-500/20 text-amber-400"
                                         : "bg-zinc-700/50 hover:bg-zinc-700 text-zinc-400"
                                 }`}
-                                title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                                title={
+                                    isFavorite
+                                        ? "Remove from favorites"
+                                        : "Add to favorites"
+                                }
                             >
                                 <svg
                                     className="w-4 h-4 shrink-0"
@@ -744,7 +805,9 @@ const FriendCard = memo(function FriendCard({
                                         d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                                     />
                                 </svg>
-                                <span className="truncate hidden sm:inline">Copy</span>
+                                <span className="truncate hidden sm:inline">
+                                    Copy
+                                </span>
                             </button>
                             <button
                                 onClick={() => onRemoveClick(friend)}
@@ -787,6 +850,9 @@ export function FriendsList({
     unreadCounts = {},
     hideChat = false,
     friendsWakuStatus = {},
+    onAddFriendClick,
+    pendingRequestsCount = 0,
+    onViewRequestsClick,
 }: FriendsListProps) {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [friendToRemove, setFriendToRemove] = useState<Friend | null>(null);
@@ -802,15 +868,15 @@ export function FriendsList({
     const [friendPhones, setFriendPhones] = useState<Record<string, string>>(
         {}
     );
-    const [friendScheduling, setFriendScheduling] = useState<Record<string, boolean>>(
-        {}
-    );
-    const [friendPublicProfiles, setFriendPublicProfiles] = useState<Record<string, boolean>>(
-        {}
-    );
-    const [friendCustomAvatars, setFriendCustomAvatars] = useState<Record<string, string | null>>(
-        {}
-    );
+    const [friendScheduling, setFriendScheduling] = useState<
+        Record<string, boolean>
+    >({});
+    const [friendPublicProfiles, setFriendPublicProfiles] = useState<
+        Record<string, boolean>
+    >({});
+    const [friendCustomAvatars, setFriendCustomAvatars] = useState<
+        Record<string, string | null>
+    >({});
 
     // Friend tags hook
     const { getTag, setTag, getAllTags } = useFriendTags(userAddress || null);
@@ -821,7 +887,16 @@ export function FriendsList({
 
     // New state for search, filter, sort, and favorites
     const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
     const [showSearch, setShowSearch] = useState(false);
+
+    useEffect(() => {
+        const t = setTimeout(
+            () => setDebouncedSearchQuery(searchQuery),
+            SEARCH_DEBOUNCE_MS
+        );
+        return () => clearTimeout(t);
+    }, [searchQuery]);
     const [filter, setFilter] = useState<FilterType>("all");
     const [sortBy, setSortBy] = useState<SortType>("name");
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
@@ -920,7 +995,8 @@ export function FriendsList({
                     }
                     // Store custom avatar if friend has one enabled
                     if (row.use_custom_avatar && row.custom_avatar_url) {
-                        customAvatars[row.wallet_address] = row.custom_avatar_url;
+                        customAvatars[row.wallet_address] =
+                            row.custom_avatar_url;
                     }
                 });
                 setFriendStatuses(statuses);
@@ -1130,9 +1206,9 @@ export function FriendsList({
     const processedFriends = useMemo(() => {
         let result = [...friends];
 
-        // Apply search filter (now also searches tags)
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
+        // Apply search filter (debounced; also searches tags)
+        if (debouncedSearchQuery.trim()) {
+            const query = debouncedSearchQuery.toLowerCase();
             result = result.filter((friend) => {
                 const displayName = getDisplayName(friend).toLowerCase();
                 const address = friend.address.toLowerCase();
@@ -1214,7 +1290,7 @@ export function FriendsList({
         return result;
     }, [
         friends,
-        searchQuery,
+        debouncedSearchQuery,
         filter,
         sortBy,
         favorites,
@@ -1259,9 +1335,31 @@ export function FriendsList({
                     </svg>
                 </div>
                 <p className="text-zinc-400 font-medium">No friends yet</p>
-                <p className="text-zinc-600 text-sm mt-1">
+                <p className="text-zinc-600 text-sm mt-1 mb-4">
                     Add friends to start calling them
                 </p>
+                <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
+                    {onAddFriendClick && (
+                        <button
+                            type="button"
+                            onClick={onAddFriendClick}
+                            className="px-4 py-2.5 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                            <span>👋</span>
+                            Add your first friend
+                        </button>
+                    )}
+                    {pendingRequestsCount > 0 && onViewRequestsClick && (
+                        <button
+                            type="button"
+                            onClick={onViewRequestsClick}
+                            className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                            <span>📩</span>
+                            View friend requests ({pendingRequestsCount})
+                        </button>
+                    )}
+                </div>
             </div>
         );
     }
@@ -1332,17 +1430,6 @@ export function FriendsList({
                         }`}
                         title="Search friends"
                     >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                    </button>
-
-                    {/* Sort Dropdown */}
-                <div className="relative">
-                    <button
-                        onClick={() => setShowSortMenu(!showSortMenu)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-zinc-400 hover:text-white transition-colors"
-                    >
                         <svg
                             className="w-4 h-4"
                             fill="none"
@@ -1353,83 +1440,104 @@ export function FriendsList({
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 strokeWidth={2}
-                                d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
-                            />
-                        </svg>
-                        <span className="text-sm hidden sm:inline">
-                            {sortBy === "name"
-                                ? "Name"
-                                : sortBy === "online"
-                                ? "Online"
-                                : sortBy === "tag"
-                                ? "By Tag"
-                                : "Recent"}
-                        </span>
-                        <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 9l-7 7-7-7"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                             />
                         </svg>
                     </button>
 
-                    <AnimatePresence>
-                        {showSortMenu && (
-                            <>
-                                <div
-                                    className="fixed inset-0 z-10"
-                                    onClick={() => setShowSortMenu(false)}
+                    {/* Sort Dropdown */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowSortMenu(!showSortMenu)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                        >
+                            <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
                                 />
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    className="absolute right-0 top-full mt-1 z-20 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden min-w-[140px]"
-                                >
-                                    {[
-                                        { value: "name", label: "Name" },
-                                        {
-                                            value: "online",
-                                            label: "Online First",
-                                        },
-                                        {
-                                            value: "recent",
-                                            label: "Recently Added",
-                                        },
-                                        {
-                                            value: "tag",
-                                            label: "Group By Tag",
-                                        },
-                                    ].map((option) => (
-                                        <button
-                                            key={option.value}
-                                            onClick={() => {
-                                                setSortBy(
-                                                    option.value as SortType
-                                                );
-                                                setShowSortMenu(false);
-                                            }}
-                                            className={`w-full px-4 py-2 text-left text-sm transition-colors ${
-                                                sortBy === option.value
-                                                    ? "bg-[#FF5500]/20 text-[#FF5500]"
-                                                    : "text-zinc-300 hover:bg-zinc-700"
-                                            }`}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
-                                </motion.div>
-                            </>
-                        )}
-                    </AnimatePresence>
-                </div>
+                            </svg>
+                            <span className="text-sm hidden sm:inline">
+                                {sortBy === "name"
+                                    ? "Name"
+                                    : sortBy === "online"
+                                    ? "Online"
+                                    : sortBy === "tag"
+                                    ? "By Tag"
+                                    : "Recent"}
+                            </span>
+                            <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                />
+                            </svg>
+                        </button>
+
+                        <AnimatePresence>
+                            {showSortMenu && (
+                                <>
+                                    <div
+                                        className="fixed inset-0 z-10"
+                                        onClick={() => setShowSortMenu(false)}
+                                    />
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="absolute right-0 top-full mt-1 z-20 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden min-w-[140px]"
+                                    >
+                                        {[
+                                            { value: "name", label: "Name" },
+                                            {
+                                                value: "online",
+                                                label: "Online First",
+                                            },
+                                            {
+                                                value: "recent",
+                                                label: "Recently Added",
+                                            },
+                                            {
+                                                value: "tag",
+                                                label: "Group By Tag",
+                                            },
+                                        ].map((option) => (
+                                            <button
+                                                key={option.value}
+                                                onClick={() => {
+                                                    setSortBy(
+                                                        option.value as SortType
+                                                    );
+                                                    setShowSortMenu(false);
+                                                }}
+                                                className={`w-full px-4 py-2 text-left text-sm transition-colors ${
+                                                    sortBy === option.value
+                                                        ? "bg-[#FF5500]/20 text-[#FF5500]"
+                                                        : "text-zinc-300 hover:bg-zinc-700"
+                                                }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
             </div>
 
@@ -1474,8 +1582,17 @@ export function FriendsList({
                                     onClick={() => setSearchQuery("")}
                                     className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 hover:text-zinc-300 transition-colors"
                                 >
-                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             )}
@@ -1605,56 +1722,60 @@ export function FriendsList({
                                     }}
                                     className="pb-2"
                                 >
-                                                <FriendCard
-                                                    friend={friend}
-                                                    effectiveAvatar={getEffectiveAvatar(friend, friendCustomAvatars)}
-                                                    index={virtualItem.index}
-                                                    isExpanded={expandedId === friend.id}
-                                                    isFavorite={favorites.has(addressLower)}
-                                                    isOnline={
-                                                        onlineStatuses[addressLower] ||
-                                                        false
-                                                    }
-                                                    friendStatus={
-                                                        friendStatuses[addressLower]
-                                                    }
-                                                    friendSocials={
-                                                        friendSocials[addressLower]
-                                                    }
-                                                    friendPhone={friendPhones[addressLower]}
-                                                    friendTag={getTag(addressLower)}
-                                                    schedulingEnabled={
-                                                        friendScheduling[addressLower] ||
-                                                        false
-                                                    }
-                                                    publicProfileEnabled={
-                                                        friendPublicProfiles[addressLower] ||
-                                                        false
-                                                    }
-                                                    wakuStatus={
-                                                        friendsWakuStatus[addressLower]
-                                                    }
-                                                    unreadCount={
-                                                        unreadCounts[addressLower] || 0
-                                                    }
-                                                    isCallActive={isCallActive}
-                                                    hideChat={hideChat}
-                                                    onToggleExpand={toggleExpand}
-                                                    onToggleFavorite={() =>
-                                                        toggleFavorite(friend.address)
-                                                    }
-                                                    onEditTag={() =>
-                                                        setTagModalFriend(friend)
-                                                    }
-                                                    onEditNote={() => {
-                                                        setNoteText(friend.nickname || "");
-                                                        setNoteModalFriend(friend);
-                                                    }}
-                                                    onCall={onCall}
-                                                    onVideoCall={onVideoCall}
-                                                    onChat={onChat}
-                                                    onRemoveClick={handleRemoveClick}
-                                                />
+                                    <FriendCard
+                                        friend={friend}
+                                        effectiveAvatar={getEffectiveAvatar(
+                                            friend,
+                                            friendCustomAvatars
+                                        )}
+                                        index={virtualItem.index}
+                                        isExpanded={expandedId === friend.id}
+                                        isFavorite={favorites.has(addressLower)}
+                                        isOnline={
+                                            onlineStatuses[addressLower] ||
+                                            false
+                                        }
+                                        friendStatus={
+                                            friendStatuses[addressLower]
+                                        }
+                                        friendSocials={
+                                            friendSocials[addressLower]
+                                        }
+                                        friendPhone={friendPhones[addressLower]}
+                                        friendTag={getTag(addressLower)}
+                                        schedulingEnabled={
+                                            friendScheduling[addressLower] ||
+                                            false
+                                        }
+                                        publicProfileEnabled={
+                                            friendPublicProfiles[
+                                                addressLower
+                                            ] || false
+                                        }
+                                        wakuStatus={
+                                            friendsWakuStatus[addressLower]
+                                        }
+                                        unreadCount={
+                                            unreadCounts[addressLower] || 0
+                                        }
+                                        isCallActive={isCallActive}
+                                        hideChat={hideChat}
+                                        onToggleExpand={toggleExpand}
+                                        onToggleFavorite={() =>
+                                            toggleFavorite(friend.address)
+                                        }
+                                        onEditTag={() =>
+                                            setTagModalFriend(friend)
+                                        }
+                                        onEditNote={() => {
+                                            setNoteText(friend.nickname || "");
+                                            setNoteModalFriend(friend);
+                                        }}
+                                        onCall={onCall}
+                                        onVideoCall={onVideoCall}
+                                        onChat={onChat}
+                                        onRemoveClick={handleRemoveClick}
+                                    />
                                 </div>
                             );
                         })}
@@ -1669,7 +1790,10 @@ export function FriendsList({
                             <FriendCard
                                 key={friend.id}
                                 friend={friend}
-                                effectiveAvatar={getEffectiveAvatar(friend, friendCustomAvatars)}
+                                effectiveAvatar={getEffectiveAvatar(
+                                    friend,
+                                    friendCustomAvatars
+                                )}
                                 index={index}
                                 isExpanded={expandedId === friend.id}
                                 isFavorite={favorites.has(addressLower)}
@@ -1678,8 +1802,12 @@ export function FriendsList({
                                 friendSocials={friendSocials[addressLower]}
                                 friendPhone={friendPhones[addressLower]}
                                 friendTag={getTag(addressLower)}
-                                schedulingEnabled={friendScheduling[addressLower] || false}
-                                publicProfileEnabled={friendPublicProfiles[addressLower] || false}
+                                schedulingEnabled={
+                                    friendScheduling[addressLower] || false
+                                }
+                                publicProfileEnabled={
+                                    friendPublicProfiles[addressLower] || false
+                                }
                                 wakuStatus={friendsWakuStatus[addressLower]}
                                 unreadCount={unreadCounts[addressLower] || 0}
                                 isCallActive={isCallActive}
@@ -1828,24 +1956,39 @@ export function FriendsList({
                         >
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-bold text-white">
-                                    {noteModalFriend.nickname ? "Edit Nickname" : "Add Nickname"}
+                                    {noteModalFriend.nickname
+                                        ? "Edit Nickname"
+                                        : "Add Nickname"}
                                 </h3>
                                 <button
                                     onClick={() => setNoteModalFriend(null)}
                                     className="text-zinc-500 hover:text-white transition-colors"
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             </div>
-                            
+
                             <p className="text-zinc-400 text-sm mb-4">
                                 Set a nickname for{" "}
                                 <span className="text-white font-medium">
-                                    {noteModalFriend.reachUsername 
-                                        ? `@${noteModalFriend.reachUsername}` 
-                                        : noteModalFriend.ensName || formatAddress(noteModalFriend.address)}
+                                    {noteModalFriend.reachUsername
+                                        ? `@${noteModalFriend.reachUsername}`
+                                        : noteModalFriend.ensName ||
+                                          formatAddress(
+                                              noteModalFriend.address
+                                          )}
                                 </span>
                             </p>
 
@@ -1870,9 +2013,13 @@ export function FriendsList({
                                 </button>
                                 <button
                                     onClick={async () => {
-                                        if (!onUpdateNote || !noteModalFriend) return;
+                                        if (!onUpdateNote || !noteModalFriend)
+                                            return;
                                         setIsSavingNote(true);
-                                        const success = await onUpdateNote(noteModalFriend.id, noteText.trim());
+                                        const success = await onUpdateNote(
+                                            noteModalFriend.id,
+                                            noteText.trim()
+                                        );
                                         setIsSavingNote(false);
                                         if (success) {
                                             setNoteModalFriend(null);

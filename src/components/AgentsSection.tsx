@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
     useAgents,
@@ -16,6 +16,25 @@ import { AgentChatModal } from "./AgentChatModal";
 import { EditAgentModal } from "./EditAgentModal";
 import { AgentKnowledgeModal } from "./AgentKnowledgeModal";
 import { ExploreAgentsModal } from "./ExploreAgentsModal";
+
+function AgentListSkeleton({ count = 5 }: { count?: number }) {
+    return (
+        <div className="space-y-1.5 sm:space-y-2">
+            {Array.from({ length: count }).map((_, i) => (
+                <div
+                    key={i}
+                    className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-zinc-800/30 sm:bg-zinc-800/50 border border-transparent sm:border-zinc-700/50"
+                >
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-700 animate-pulse shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="h-4 w-28 sm:w-32 rounded bg-zinc-700 animate-pulse" />
+                        <div className="h-3 w-20 sm:w-24 rounded bg-zinc-700/60 animate-pulse" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 interface AgentsSectionProps {
     userAddress: string;
@@ -67,6 +86,8 @@ export function AgentsSection({
     const [hasApplied, setHasApplied] = useState(false);
     const [appliedAt, setAppliedAt] = useState<string | null>(null);
     const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(true); // Start true to prevent flash
+    const [agentSearchQuery, setAgentSearchQuery] = useState("");
+    const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
 
     // Use ref to track if we've initiated the check (prevents re-triggering)
     const hasCheckedBetaStatus = useRef(false);
@@ -117,11 +138,45 @@ export function AgentsSection({
         await createAgent(name, personality, emoji, visibility, tags);
     };
 
-    const handleDeleteAgent = async (agent: Agent) => {
-        if (confirm(`Delete "${agent.name}"? This cannot be undone.`)) {
-            await deleteAgent(agent.id);
-        }
+    const handleDeleteAgent = (agent: Agent) => {
+        setAgentToDelete(agent);
     };
+
+    const confirmDeleteAgent = async () => {
+        if (!agentToDelete) return;
+        await deleteAgent(agentToDelete.id);
+        setAgentToDelete(null);
+    };
+
+    const totalAgentsCount = agents.length + favorites.length;
+    const agentQuery = agentSearchQuery.trim().toLowerCase();
+    const filteredAgents = useMemo(() => {
+        if (!agentQuery) return agents;
+        return agents.filter((a) => {
+            const name = (a.name || "").toLowerCase();
+            const personality = (a.personality || "").toLowerCase();
+            const tags = (a.tags || []).join(" ").toLowerCase();
+            return (
+                name.includes(agentQuery) ||
+                personality.includes(agentQuery) ||
+                tags.includes(agentQuery)
+            );
+        });
+    }, [agents, agentQuery]);
+    const filteredFavorites = useMemo(() => {
+        if (!agentQuery) return favorites;
+        return favorites.filter((f) => {
+            const a = f.agent;
+            const name = (a.name || "").toLowerCase();
+            const personality = (a.personality || "").toLowerCase();
+            const tags = (a.tags || []).join(" ").toLowerCase();
+            return (
+                name.includes(agentQuery) ||
+                personality.includes(agentQuery) ||
+                tags.includes(agentQuery)
+            );
+        });
+    }, [favorites, agentQuery]);
 
     const handleOpenChat = (agent: Agent) => {
         setSelectedAgent(agent);
@@ -324,30 +379,12 @@ export function AgentsSection({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                     >
-                        {/* Show loading while checking beta status OR loading agents */}
+                        {/* Show loading skeleton while checking beta status OR loading agents */}
                         {isLoading ||
                         isCheckingBetaStatus ||
                         isBetaAccessLoading ? (
-                            <div className="flex items-center justify-center py-6 sm:py-8">
-                                <svg
-                                    className="animate-spin w-5 h-5 sm:w-6 sm:h-6 text-purple-400"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <circle
-                                        className="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        strokeWidth="4"
-                                    />
-                                    <path
-                                        className="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                                    />
-                                </svg>
+                            <div className="py-2 sm:py-3">
+                                <AgentListSkeleton count={5} />
                             </div>
                         ) : error ? (
                             <div className="p-3 sm:p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs sm:text-sm">
@@ -450,8 +487,28 @@ export function AgentsSection({
                             </motion.div>
                         ) : (
                             <div className="space-y-1.5 sm:space-y-2">
+                                {/* No search results */}
+                                {agentQuery &&
+                                    filteredAgents.length === 0 &&
+                                    filteredFavorites.length === 0 && (
+                                        <div className="text-center py-6 px-4 rounded-xl bg-zinc-800/30 border border-zinc-700/50">
+                                            <p className="text-zinc-400 text-sm font-medium">
+                                                No agents match &ldquo;
+                                                {agentSearchQuery.trim()}&rdquo;
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setAgentSearchQuery("")
+                                                }
+                                                className="mt-2 text-sm text-purple-400 hover:text-purple-300"
+                                            >
+                                                Clear search
+                                            </button>
+                                        </div>
+                                    )}
                                 {/* User's own agents */}
-                                {agents.map((agent) => (
+                                {filteredAgents.map((agent) => (
                                     <motion.div
                                         key={agent.id}
                                         initial={{ opacity: 0, y: 10 }}
@@ -633,17 +690,23 @@ export function AgentsSection({
                                 ))}
 
                                 {/* Favorite agents from others */}
-                                {favorites.length > 0 && (
+                                {filteredFavorites.length > 0 && (
                                     <>
                                         <div className="flex items-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 mb-1.5 sm:mb-2">
                                             <span className="text-yellow-400 text-sm">
                                                 ⭐
                                             </span>
                                             <span className="text-[10px] sm:text-xs font-medium text-zinc-400 uppercase tracking-wide">
-                                                Favorites ({favorites.length})
+                                                Favorites (
+                                                {filteredFavorites.length}
+                                                {filteredFavorites.length !==
+                                                favorites.length
+                                                    ? ` of ${favorites.length}`
+                                                    : ""}
+                                                )
                                             </span>
                                         </div>
-                                        {favorites.map((fav) => (
+                                        {filteredFavorites.map((fav) => (
                                             <motion.div
                                                 key={fav.id}
                                                 initial={{ opacity: 0, y: 10 }}
@@ -2189,6 +2252,56 @@ export default function SpritzAgent() {
                     )}
                 </div>
             )}
+
+            {/* Delete agent confirmation modal */}
+            <AnimatePresence>
+                {agentToDelete && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => setAgentToDelete(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full"
+                        >
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-3xl">🗑️</span>
+                                </div>
+                                <h3 className="text-lg font-bold text-white mb-2">
+                                    Delete agent?
+                                </h3>
+                                <p className="text-zinc-400 text-sm">
+                                    &ldquo;{agentToDelete.name}&rdquo; will be
+                                    permanently deleted. This cannot be undone.
+                                </p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setAgentToDelete(null)}
+                                    className="flex-1 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={confirmDeleteAgent}
+                                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

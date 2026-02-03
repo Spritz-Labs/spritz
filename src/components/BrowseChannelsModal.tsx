@@ -116,6 +116,16 @@ export function BrowseChannelsModal({
         return () => document.removeEventListener("keydown", onKeyDown);
     }, [isOpen, onClose]);
 
+    // Lock body scroll when modal is open so background doesn't scroll
+    useEffect(() => {
+        if (!isOpen) return;
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.body.style.overflow = prev;
+        };
+    }, [isOpen]);
+
     // Reset showCreateModal when the modal opens/closes
     useEffect(() => {
         if (isOpen) {
@@ -443,7 +453,7 @@ export function BrowseChannelsModal({
                                       filteredChannels.length !== 1 ? "s" : ""
                                   }`}
                         </p>
-                        <div className="p-3 sm:p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 min-w-0">
+                        <div className="p-3 sm:p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 min-w-0 overscroll-contain">
                             {view === "poap" ? (
                                 <>
                                     {poapLoading ? (
@@ -671,15 +681,15 @@ export function BrowseChannelsModal({
                                     </p>
                                 </div>
                             ) : (
-                                <div className="grid gap-3">
+                                <div className="grid gap-3 min-w-0">
                                     {filteredChannels.map((channel) => (
                                         <motion.div
                                             key={channel.id}
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
+                                            className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
                                         >
-                                            <div className="flex items-start gap-3">
+                                            <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
                                                 {channel.poap_image_url ??
                                                 channel.icon_url ? (
                                                     <button
@@ -693,7 +703,7 @@ export function BrowseChannelsModal({
                                                                     url
                                                                 );
                                                         }}
-                                                        className="flex-shrink-0 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 rounded-xl focus:outline-none"
+                                                        className="shrink-0 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 rounded-xl focus:outline-none"
                                                     >
                                                         <ChannelIcon
                                                             emoji={
@@ -705,7 +715,7 @@ export function BrowseChannelsModal({
                                                             }
                                                             name={channel.name}
                                                             size="md"
-                                                            className="flex-shrink-0"
+                                                            className="shrink-0"
                                                         />
                                                     </button>
                                                 ) : (
@@ -717,25 +727,25 @@ export function BrowseChannelsModal({
                                                         }
                                                         name={channel.name}
                                                         size="md"
-                                                        className="flex-shrink-0"
+                                                        className="shrink-0"
                                                     />
                                                 )}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <p className="text-white font-medium truncate">
+                                                <div className="flex-1 min-w-0 pr-2">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <p className="text-white font-medium truncate text-sm sm:text-base">
                                                             {channel.name}
                                                         </p>
                                                         {channel.is_official && (
-                                                            <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] sm:text-xs rounded">
+                                                            <span className="shrink-0 px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] sm:text-xs rounded">
                                                                 Official
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <p className="text-zinc-500 text-xs sm:text-sm line-clamp-1">
+                                                    <p className="text-zinc-500 text-xs sm:text-sm line-clamp-1 truncate">
                                                         {channel.description ||
                                                             "No description"}
                                                     </p>
-                                                    <p className="text-zinc-600 text-[10px] sm:text-xs mt-0.5">
+                                                    <p className="text-zinc-600 text-[10px] sm:text-xs mt-0.5 truncate">
                                                         {channel.member_count}{" "}
                                                         members •{" "}
                                                         {channel.message_count}{" "}
@@ -756,7 +766,7 @@ export function BrowseChannelsModal({
                                                         joiningChannel ===
                                                         channel.id
                                                     }
-                                                    className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex-shrink-0 ${
+                                                    className={`shrink-0 self-start px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
                                                         channel.is_member
                                                             ? "bg-zinc-700 text-zinc-300 hover:bg-red-500/20 hover:text-red-400"
                                                             : "bg-[#FF5500] text-white hover:bg-[#FF6600]"

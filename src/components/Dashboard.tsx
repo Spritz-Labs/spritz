@@ -3866,7 +3866,10 @@ function DashboardContent({
                             {/* Friend Requests Section - only on Friends tab */}
                             {(incomingRequests.length > 0 ||
                                 outgoingRequests.length > 0) && (
-                                <div className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6">
+                                <div
+                                    id="friend-requests-section"
+                                    className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6"
+                                >
                                     <div className="px-1 py-2 sm:p-4">
                                         <FriendRequests
                                             incomingRequests={incomingRequests}
@@ -4085,6 +4088,21 @@ function DashboardContent({
                                         unreadCounts={unreadCounts}
                                         hideChat={false}
                                         friendsWakuStatus={friendsWakuStatus}
+                                        onAddFriendClick={() =>
+                                            setIsAddFriendOpen(true)
+                                        }
+                                        pendingRequestsCount={
+                                            incomingRequests.length
+                                        }
+                                        onViewRequestsClick={() =>
+                                            document
+                                                .getElementById(
+                                                    "friend-requests-section"
+                                                )
+                                                ?.scrollIntoView({
+                                                    behavior: "smooth",
+                                                })
+                                        }
                                     />
                                 </div>
                             </div>
@@ -4485,6 +4503,7 @@ function DashboardContent({
                                     <UnifiedChatList
                                         chats={unifiedChats}
                                         userAddress={userAddress}
+                                        isChatsLoading={false}
                                         onChatClick={handleUnifiedChatClick}
                                         onCallClick={handleUnifiedCallClick}
                                         onVideoClick={handleUnifiedVideoClick}

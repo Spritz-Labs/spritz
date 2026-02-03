@@ -1,51 +1,65 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedUser, createAuthResponse, type SessionPayload } from "@/lib/session";
+import {
+    getAuthenticatedUser,
+    createAuthResponse,
+    type SessionPayload,
+} from "@/lib/session";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey 
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase =
+    supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // GET /api/auth/session - Get current session info
 export async function GET(request: NextRequest) {
     const session = await getAuthenticatedUser(request);
-    
+
     if (!session) {
-        return NextResponse.json({ 
+        return NextResponse.json({
             authenticated: false,
             user: null,
         });
     }
-    
+
     // Fetch fresh user data from database
     let userData = null;
     let effectiveAuthMethod = session.authMethod;
-    
+
     if (supabase) {
         const { data: user } = await supabase
             .from("shout_users")
-            .select("id, wallet_address, username, ens_name, email, email_verified, beta_access, subscription_tier, points, invite_count, is_banned, display_name, avatar_url, wallet_type")
+            .select(
+                "id, wallet_address, username, ens_name, email, email_verified, email_updates_opt_in, beta_access, subscription_tier, points, invite_count, is_banned, display_name, avatar_url, wallet_type"
+            )
             .eq("wallet_address", session.userAddress)
             .single();
-        
+
         userData = user;
-        
+
         // IMPORTANT: The database wallet_type is the source of truth
-        // If the session says "passkey" but the database says "wallet", 
+        // If the session says "passkey" but the database says "wallet",
         // the user is a wallet/EOA user who registered a passkey
         // They should still use wallet signing, not passkey signing
         if (user?.wallet_type) {
             effectiveAuthMethod = user.wallet_type;
             if (effectiveAuthMethod !== session.authMethod) {
-                console.log("[Session] Auth method override:", session.authMethod, "->", effectiveAuthMethod, "for", session.userAddress.slice(0, 10));
+                console.log(
+                    "[Session] Auth method override:",
+                    session.authMethod,
+                    "->",
+                    effectiveAuthMethod,
+                    "for",
+                    session.userAddress.slice(0, 10)
+                );
             }
         }
     }
-    
+
     return NextResponse.json({
         authenticated: true,
         session: {
@@ -71,17 +85,19 @@ export async function POST(request: NextRequest) {
         // It cannot CREATE sessions from scratch
         const existingSession = await getAuthenticatedUser(request);
         if (!existingSession) {
-            console.warn("[Session] Attempted session refresh without valid existing session");
+            console.warn(
+                "[Session] Attempted session refresh without valid existing session"
+            );
             return NextResponse.json(
                 { error: "Authentication required. Please login again." },
                 { status: 401 }
             );
         }
-        
+
         // Use the verified session data, not client-provided data
         const userAddress = existingSession.userAddress;
         const authMethod = existingSession.authMethod;
-        
+
         // Optionally update last login in database
         if (supabase) {
             await supabase
@@ -89,15 +105,19 @@ export async function POST(request: NextRequest) {
                 .update({ last_login: new Date().toISOString() })
                 .eq("wallet_address", userAddress);
         }
-        
-        console.log("[Session] Extended session for:", userAddress.slice(0, 10) + "...", "method:", authMethod);
-        
-        // Create new session with extended expiry
-        return createAuthResponse(
-            userAddress,
-            authMethod,
-            { success: true, extended: true }
+
+        console.log(
+            "[Session] Extended session for:",
+            userAddress.slice(0, 10) + "...",
+            "method:",
+            authMethod
         );
+
+        // Create new session with extended expiry
+        return createAuthResponse(userAddress, authMethod, {
+            success: true,
+            extended: true,
+        });
     } catch (error) {
         console.error("[Session] Extend error:", error);
         return NextResponse.json(
