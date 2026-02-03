@@ -15,6 +15,9 @@ const supabase =
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.spritz.chat";
+const LOGO_URL = `${APP_URL}/spritz-logo-transparent.svg`;
+
 export async function POST(request: NextRequest) {
     // Rate limit: 5 requests per minute for email sending (strict)
     const rateLimitResponse = await checkRateLimit(request, "strict");
@@ -105,8 +108,8 @@ export async function POST(request: NextRequest) {
             html: `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
                     <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #FF5500; font-size: 28px; margin: 0;">Spritz</h1>
-                        <p style="color: #666; margin-top: 5px;">Voice Calls for Web3</p>
+                        <img src="${LOGO_URL}" alt="Spritz" width="180" height="77" style="display: block; margin: 0 auto; max-width: 180px; height: auto;" />
+                        <p style="color: #666; margin-top: 12px;">Voice Calls for Web3</p>
                     </div>
                     
                     <div style="background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); border-radius: 16px; padding: 30px; text-align: center;">

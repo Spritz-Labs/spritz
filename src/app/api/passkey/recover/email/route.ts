@@ -7,6 +7,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const resendApiKey = process.env.RESEND_API_KEY;
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.spritz.chat";
+const LOGO_URL = `${APP_URL}/spritz-logo-transparent.svg`;
+
 // Generate a 6-digit code
 function generateCode(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -132,8 +135,8 @@ export async function POST(request: NextRequest) {
             html: `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
                     <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #FF5500; font-size: 28px; margin: 0;">Spritz</h1>
-                        <p style="color: #666; margin-top: 5px;">Passkey Account Recovery</p>
+                        <img src="${LOGO_URL}" alt="Spritz" width="180" height="77" style="display: block; margin: 0 auto; max-width: 180px; height: auto;" />
+                        <p style="color: #666; margin-top: 12px;">Passkey Account Recovery</p>
                     </div>
                     
                     <div style="background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); border-radius: 16px; padding: 30px; text-align: center;">

@@ -13,6 +13,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 // Always use app.spritz.chat for email links (not spritz.chat which is landing page)
 const BASE_URL = "https://app.spritz.chat";
+const LOGO_URL = `${BASE_URL}/spritz-logo-transparent.svg`;
 
 // Generate ICS calendar file content
 function generateICSFile({
@@ -294,9 +295,7 @@ function generateGuestEmail({
     <div style="max-width: 560px; margin: 0 auto; padding: 40px 20px;">
         <!-- Header -->
         <div style="text-align: center; margin-bottom: 32px;">
-            <div style="display: inline-block; background: linear-gradient(135deg, #FF5500, #FB8D22); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 32px; font-weight: bold; letter-spacing: -1px;">
-                Spritz
-            </div>
+            <img src="${LOGO_URL}" alt="Spritz" width="180" height="77" style="display: block; margin: 0 auto; max-width: 180px; height: auto;" />
         </div>
 
         <!-- Main Card -->
@@ -410,9 +409,7 @@ function generateHostEmail({
     <div style="max-width: 560px; margin: 0 auto; padding: 40px 20px;">
         <!-- Header -->
         <div style="text-align: center; margin-bottom: 32px;">
-            <div style="display: inline-block; background: linear-gradient(135deg, #FF5500, #FB8D22); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 32px; font-weight: bold; letter-spacing: -1px;">
-                Spritz
-            </div>
+            <img src="${LOGO_URL}" alt="Spritz" width="180" height="77" style="display: block; margin: 0 auto; max-width: 180px; height: auto;" />
         </div>
 
         <!-- Main Card -->
