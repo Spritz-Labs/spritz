@@ -10,6 +10,19 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+function parsePoapList(data: unknown): boolean {
+    if (Array.isArray(data)) return data.length > 0;
+    if (data && typeof data === "object") {
+        const obj = data as Record<string, unknown>;
+        let list = obj.tokens ?? obj.poaps;
+        if (Array.isArray(list)) return list.length > 0;
+        if (obj.token != null) list = [obj.token];
+        else if (obj.event != null || obj.eventId != null) list = [obj];
+        if (Array.isArray(list)) return list.length > 0;
+    }
+    return false;
+}
+
 async function addressHoldsPoap(
     address: string,
     eventId: number,
@@ -23,9 +36,47 @@ async function addressHoldsPoap(
         next: { revalidate: 60 },
     });
     if (!res.ok) return false;
-    const data = await res.json();
-    const list = Array.isArray(data) ? data : data?.tokens ?? data?.poaps ?? [];
-    return list.length > 0;
+    let data: unknown;
+    try {
+        data = await res.json();
+    } catch {
+        return false;
+    }
+    if (parsePoapList(data)) return true;
+    // Fallback: full scan - POAP API may return different shape for event-specific endpoint
+    const fullUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
+        address
+    )}`;
+    const fullRes = await fetch(fullUrl, {
+        headers: { "X-API-Key": apiKey },
+        next: { revalidate: 60 },
+    });
+    if (!fullRes.ok) return false;
+    try {
+        const fullData = (await fullRes.json()) as unknown;
+        const list = Array.isArray(fullData)
+            ? fullData
+            : (fullData as Record<string, unknown>)?.tokens ??
+              (fullData as Record<string, unknown>)?.poaps ??
+              [];
+        for (const item of Array.isArray(list) ? list : []) {
+            const o = item as Record<string, unknown>;
+            const ev = o?.event ?? o;
+            const eid =
+                (ev as { id?: number })?.id ??
+                (o as { eventId?: number }).eventId;
+            const id =
+                typeof eid === "number"
+                    ? eid
+                    : typeof eid === "string"
+                    ? parseInt(eid, 10)
+                    : NaN;
+            if (!Number.isNaN(id) && id === eventId) return true;
+        }
+    } catch {
+        // ignore
+    }
+    return false;
 }
 
 // POST /api/channels/[id]/join - Join a channel (POAP channels require holding the POAP)
@@ -88,13 +139,20 @@ export async function POST(
                 );
             }
 
+            // Addresses to try with POAP API: resolved 0x, checksummed 0x, and original (e.g. ENS) since API accepts ENS
             const addressesToCheck: string[] = [normalizedAddress];
             const lookupKeys = [normalizedAddress];
+            const originalTrimmed =
+                typeof userAddress === "string"
+                    ? userAddress.trim().toLowerCase()
+                    : "";
             if (
-                typeof userAddress === "string" &&
-                userAddress.trim().toLowerCase() !== normalizedAddress
+                originalTrimmed &&
+                originalTrimmed !== normalizedAddress &&
+                !addressesToCheck.includes(originalTrimmed)
             ) {
-                lookupKeys.push(userAddress.trim().toLowerCase());
+                lookupKeys.push(originalTrimmed);
+                addressesToCheck.push(originalTrimmed);
             }
             let userRow: { smart_wallet_address: string | null } | null = null;
             for (const key of lookupKeys) {
@@ -117,6 +175,8 @@ export async function POST(
                     addressesToCheck.push(smart);
                 }
             }
+
+            // Try POAP API with each identifier (0x lowercase, 0x checksummed, ENS name)
 
             let hasPoap = false;
             for (const addr of addressesToCheck) {
