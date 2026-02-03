@@ -7,6 +7,7 @@ import {
     useFavoriteAgents,
     DiscoveredAgent,
 } from "@/hooks/useAgents";
+import { AgentAvatar } from "./AgentAvatar";
 
 interface ExploreAgentsModalProps {
     isOpen: boolean;
@@ -241,18 +242,13 @@ export function ExploreAgentsModal({
                                             }
                                         >
                                             <div className="flex items-start gap-4">
-                                                {agent.avatar_url ? (
-                                                    <img
-                                                        src={agent.avatar_url}
-                                                        alt={agent.name}
-                                                        className="w-12 h-12 rounded-xl object-cover shrink-0 group-hover:scale-110 transition-transform ring-1 ring-purple-500/30"
-                                                    />
-                                                ) : (
-                                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                                        {agent.avatar_emoji ||
-                                                            "🤖"}
-                                                    </div>
-                                                )}
+                                                <AgentAvatar
+                                                    avatarUrl={agent.avatar_url}
+                                                    avatarEmoji={agent.avatar_emoji}
+                                                    name={agent.name}
+                                                    size="lg"
+                                                    className="group-hover:scale-110 transition-transform ring-1 ring-purple-500/30"
+                                                />
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                                                         <h4 className="font-semibold text-white truncate">

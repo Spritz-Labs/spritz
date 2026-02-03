@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
                     name,
                     personality,
                     avatar_emoji,
+                    avatar_url,
                     visibility,
                     message_count,
                     created_at

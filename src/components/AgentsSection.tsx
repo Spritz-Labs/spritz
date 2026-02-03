@@ -16,6 +16,7 @@ import { AgentChatModal } from "./AgentChatModal";
 import { EditAgentModal } from "./EditAgentModal";
 import { AgentKnowledgeModal } from "./AgentKnowledgeModal";
 import { ExploreAgentsModal } from "./ExploreAgentsModal";
+import { AgentAvatar } from "./AgentAvatar";
 
 function AgentListSkeleton({ count = 5 }: { count?: number }) {
     return (
@@ -517,17 +518,12 @@ export function AgentsSection({
                                         onClick={() => handleOpenChat(agent)}
                                     >
                                         <div className="flex items-center gap-2.5 sm:gap-3">
-                                            {agent.avatar_url ? (
-                                                <img
-                                                    src={agent.avatar_url}
-                                                    alt={agent.name}
-                                                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
-                                                />
-                                            ) : (
-                                                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center text-lg sm:text-xl shrink-0">
-                                                    {agent.avatar_emoji}
-                                                </div>
-                                            )}
+                                            <AgentAvatar
+                                                avatarUrl={agent.avatar_url}
+                                                avatarEmoji={agent.avatar_emoji}
+                                                name={agent.name}
+                                                size="md"
+                                            />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-1.5 sm:gap-2">
                                                     <h3 className="text-sm sm:text-base font-medium text-white truncate">
@@ -719,23 +715,13 @@ export function AgentsSection({
                                                 }
                                             >
                                                 <div className="flex items-center gap-2.5 sm:gap-3">
-                                                    {fav.agent.avatar_url ? (
-                                                        <img
-                                                            src={
-                                                                fav.agent
-                                                                    .avatar_url
-                                                            }
-                                                            alt={fav.agent.name}
-                                                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center text-lg sm:text-xl shrink-0">
-                                                            {
-                                                                fav.agent
-                                                                    .avatar_emoji
-                                                            }
-                                                        </div>
-                                                    )}
+                                                    <AgentAvatar
+                                                        avatarUrl={fav.agent.avatar_url}
+                                                        avatarEmoji={fav.agent.avatar_emoji}
+                                                        name={fav.agent.name}
+                                                        size="md"
+                                                        variant="favorite"
+                                                    />
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-1.5 sm:gap-2">
                                                             <h3 className="text-sm sm:text-base font-medium text-white truncate">
