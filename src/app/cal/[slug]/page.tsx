@@ -7,10 +7,32 @@ import { motion, AnimatePresence } from "motion/react";
 import { format, addDays, startOfDay, isSameDay } from "date-fns";
 import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
 import { getDayOfWeekInTimezone } from "@/lib/timezone";
-import { useAccount, useDisconnect, useSendTransaction, useWaitForTransactionReceipt, useSwitchChain, useReadContract, useConnect, useReconnect } from "wagmi";
-import { createPublicClient, http, parseUnits, encodeFunctionData, formatUnits } from "viem";
+import {
+    useAccount,
+    useDisconnect,
+    useSendTransaction,
+    useWaitForTransactionReceipt,
+    useSwitchChain,
+    useReadContract,
+    useConnect,
+    useReconnect,
+} from "wagmi";
+import {
+    createPublicClient,
+    http,
+    parseUnits,
+    encodeFunctionData,
+    formatUnits,
+} from "viem";
 import { injected, coinbaseWallet } from "wagmi/connectors";
-import { base, baseSepolia, mainnet, arbitrum, optimism, polygon } from "wagmi/chains";
+import {
+    base,
+    baseSepolia,
+    mainnet,
+    arbitrum,
+    optimism,
+    polygon,
+} from "wagmi/chains";
 import { normalize } from "viem/ens";
 
 import { getRpcUrl } from "@/lib/rpc";
@@ -62,42 +84,42 @@ type TimeSlot = {
 
 // USDC contract addresses by network
 const USDC_ADDRESSES: Record<string, `0x${string}`> = {
-    "base": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "base-sepolia": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-    "ethereum": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    "arbitrum": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-    "optimism": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-    "polygon": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    ethereum: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    arbitrum: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    optimism: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    polygon: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
 };
 
 // Chain IDs by network name
 const CHAIN_IDS: Record<string, number> = {
-    "base": base.id,
+    base: base.id,
     "base-sepolia": baseSepolia.id,
-    "ethereum": mainnet.id,
-    "arbitrum": arbitrum.id,
-    "optimism": optimism.id,
-    "polygon": polygon.id,
+    ethereum: mainnet.id,
+    arbitrum: arbitrum.id,
+    optimism: optimism.id,
+    polygon: polygon.id,
 };
 
 // Network display names
 const NETWORK_NAMES: Record<string, string> = {
-    "base": "Base",
+    base: "Base",
     "base-sepolia": "Base Sepolia",
-    "ethereum": "Ethereum",
-    "arbitrum": "Arbitrum",
-    "optimism": "Optimism",
-    "polygon": "Polygon",
+    ethereum: "Ethereum",
+    arbitrum: "Arbitrum",
+    optimism: "Optimism",
+    polygon: "Polygon",
 };
 
 // Block explorer URLs
 const EXPLORER_URLS: Record<string, string> = {
-    "base": "https://basescan.org",
+    base: "https://basescan.org",
     "base-sepolia": "https://sepolia.basescan.org",
-    "ethereum": "https://etherscan.io",
-    "arbitrum": "https://arbiscan.io",
-    "optimism": "https://optimistic.etherscan.io",
-    "polygon": "https://polygonscan.com",
+    ethereum: "https://etherscan.io",
+    arbitrum: "https://arbiscan.io",
+    optimism: "https://optimistic.etherscan.io",
+    polygon: "https://polygonscan.com",
 };
 
 // ERC20 ABI
@@ -120,65 +142,84 @@ const ERC20_ABI = [
     },
 ] as const;
 
-export default function CalPage({ params }: { params: Promise<{ slug: string }> }) {
+export default function CalPage({
+    params,
+}: {
+    params: Promise<{ slug: string }>;
+}) {
     const { slug } = use(params);
     const [profile, setProfile] = useState<SchedulingProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    
+
     // Booking flow state
-    const [step, setStep] = useState<"select" | "calendar" | "details" | "payment" | "confirm">("select");
+    const [step, setStep] = useState<
+        "select" | "calendar" | "details" | "payment" | "confirm"
+    >("select");
     const [scheduleType, setScheduleType] = useState<ScheduleType | null>(null);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
     const [slotsLoading, setSlotsLoading] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-    
+
     // Guest details
     const [guestName, setGuestName] = useState("");
     const [guestEmail, setGuestEmail] = useState("");
     const [notes, setNotes] = useState("");
-    
+
     // Booking state
     const [booking, setBooking] = useState(false);
     const [bookingError, setBookingError] = useState<string | null>(null);
     const [bookingSuccess, setBookingSuccess] = useState(false);
     const [paymentTxHash, setPaymentTxHash] = useState<string | null>(null);
-    
+
     // Payment state
     const [paymentError, setPaymentError] = useState<string | null>(null);
     const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
-    
+
     // ENS avatar state
     const [ensAvatar, setEnsAvatar] = useState<string | null>(null);
-    
+
     // Wallet connection
     const router = useRouter();
     const { address, isConnected, chain } = useAccount();
     const { connect, isPending: isConnecting } = useConnect();
     const { disconnect } = useDisconnect();
     const { reconnect } = useReconnect();
-    
+
     // Attempt to reconnect wallet on mount (for PWA persistence)
     useEffect(() => {
         reconnect();
     }, [reconnect]);
     const { switchChain, switchChainAsync } = useSwitchChain();
-    
+
     // Transaction state
-    const { sendTransaction, data: txHash, isPending: isSending, error: sendError, reset: resetTransaction } = useSendTransaction();
-    const { isLoading: isConfirming, isSuccess: isConfirmed, isError: isTxError, error: txError } = useWaitForTransactionReceipt({
+    const {
+        sendTransaction,
+        data: txHash,
+        isPending: isSending,
+        error: sendError,
+        reset: resetTransaction,
+    } = useSendTransaction();
+    const {
+        isLoading: isConfirming,
+        isSuccess: isConfirmed,
+        isError: isTxError,
+        error: txError,
+    } = useWaitForTransactionReceipt({
         hash: txHash,
     });
-    
+
     // Get user's timezone
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    
+
     // Check USDC balance
     const targetNetwork = profile?.scheduling.network || undefined;
     const targetChainId = targetNetwork ? CHAIN_IDS[targetNetwork] : undefined;
-    const usdcAddress = targetNetwork ? USDC_ADDRESSES[targetNetwork] : undefined;
-    
+    const usdcAddress = targetNetwork
+        ? USDC_ADDRESSES[targetNetwork]
+        : undefined;
+
     const { data: usdcBalance } = useReadContract({
         address: usdcAddress,
         abi: ERC20_ABI,
@@ -186,13 +227,21 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
         args: address ? [address] : undefined,
         chainId: targetChainId,
         query: {
-            enabled: !!address && !!usdcAddress && !!targetChainId && step === "payment",
+            enabled:
+                !!address &&
+                !!usdcAddress &&
+                !!targetChainId &&
+                step === "payment",
         },
     });
-    
-    const formattedBalance = usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)).toFixed(2) : null;
+
+    const formattedBalance = usdcBalance
+        ? parseFloat(formatUnits(usdcBalance as bigint, 6)).toFixed(2)
+        : null;
     const requiredAmount = profile ? profile.scheduling.priceCents / 100 : 0;
-    const hasInsufficientBalance = formattedBalance !== null && parseFloat(formattedBalance) < requiredAmount;
+    const hasInsufficientBalance =
+        formattedBalance !== null &&
+        parseFloat(formattedBalance) < requiredAmount;
 
     useEffect(() => {
         fetchProfile();
@@ -202,17 +251,17 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
     useEffect(() => {
         const resolveEnsAvatar = async () => {
             if (!profile) return;
-            
+
             // If we already have an avatar URL from the database, use that
             if (profile.profile.avatarUrl) {
                 setEnsAvatar(null);
                 return;
             }
-            
+
             // Try to resolve ENS avatar
             const address = profile.profile.walletAddress;
             const ensName = profile.profile.ensName;
-            
+
             try {
                 // If we have an ENS name, try to get avatar directly
                 if (ensName) {
@@ -224,7 +273,7 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                         return;
                     }
                 }
-                
+
                 // Otherwise, try reverse lookup from address
                 if (address && address.startsWith("0x")) {
                     const name = await ensClient.getEnsName({
@@ -244,9 +293,13 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                 console.log("[Schedule] ENS avatar resolution failed:", err);
             }
         };
-        
+
         resolveEnsAvatar();
-    }, [profile?.profile.walletAddress, profile?.profile.ensName, profile?.profile.avatarUrl]);
+    }, [
+        profile?.profile.walletAddress,
+        profile?.profile.ensName,
+        profile?.profile.avatarUrl,
+    ]);
 
     useEffect(() => {
         if (selectedDate && profile) {
@@ -266,7 +319,9 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
     useEffect(() => {
         if (sendError) {
             console.error("Send transaction error:", sendError);
-            setPaymentError(sendError.message || "Transaction failed. Please try again.");
+            setPaymentError(
+                sendError.message || "Transaction failed. Please try again."
+            );
             setIsSwitchingNetwork(false);
         }
     }, [sendError]);
@@ -275,7 +330,9 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
     useEffect(() => {
         if (isTxError && txError) {
             console.error("Transaction receipt error:", txError);
-            setPaymentError("Transaction failed on chain. Do you have enough USDC on Base?");
+            setPaymentError(
+                "Transaction failed on chain. Do you have enough USDC on Base?"
+            );
             resetTransaction();
         }
     }, [isTxError, txError]);
@@ -291,12 +348,15 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
             }
 
             setProfile(data);
-            
+
             // Auto-select if only one option
             if (data.scheduling.freeEnabled && !data.scheduling.paidEnabled) {
                 setScheduleType("free");
                 setStep("calendar");
-            } else if (!data.scheduling.freeEnabled && data.scheduling.paidEnabled) {
+            } else if (
+                !data.scheduling.freeEnabled &&
+                data.scheduling.paidEnabled
+            ) {
                 setScheduleType("paid");
                 setStep("calendar");
             }
@@ -317,7 +377,7 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
             startDateNormalized.setUTCHours(12, 0, 0, 0);
             const endDateNormalized = addDays(startDateNormalized, 1);
             endDateNormalized.setUTCHours(12, 0, 0, 0);
-            
+
             const startDate = startDateNormalized.toISOString();
             const endDate = endDateNormalized.toISOString();
 
@@ -350,7 +410,7 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
 
     const handleProceedToPayment = () => {
         if (!guestEmail) return;
-        
+
         if (scheduleType === "paid") {
             setStep("payment");
         } else {
@@ -367,14 +427,14 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
         const network = profile.scheduling.network;
         const targetChainId = CHAIN_IDS[network];
         const usdcAddress = USDC_ADDRESSES[network];
-        
+
         if (!targetChainId || !usdcAddress) {
             setPaymentError("Unsupported network for payment");
             return;
         }
         const payToAddress = profile.scheduling.payToAddress as `0x${string}`;
         const amountInUSDC = profile.scheduling.priceCents / 100;
-        
+
         // USDC has 6 decimals
         const amount = parseUnits(amountInUSDC.toString(), 6);
 
@@ -386,7 +446,9 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                     await switchChainAsync({ chainId: targetChainId });
                 } catch (switchErr) {
                     console.error("Network switch error:", switchErr);
-                    setPaymentError("Failed to switch network. Please try again or switch manually in your wallet.");
+                    setPaymentError(
+                        "Failed to switch network. Please try again or switch manually in your wallet."
+                    );
                     setIsSwitchingNetwork(false);
                     return;
                 }
@@ -406,7 +468,11 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
             });
         } catch (err) {
             console.error("Payment error:", err);
-            setPaymentError(err instanceof Error ? err.message : "Payment failed. Please try again.");
+            setPaymentError(
+                err instanceof Error
+                    ? err.message
+                    : "Payment failed. Please try again."
+            );
             setIsSwitchingNetwork(false);
         }
     };
@@ -418,9 +484,10 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
         setBookingError(null);
 
         try {
-            const duration = scheduleType === "paid" 
-                ? profile.scheduling.paidDuration 
-                : profile.scheduling.freeDuration;
+            const duration =
+                scheduleType === "paid"
+                    ? profile.scheduling.paidDuration
+                    : profile.scheduling.freeDuration;
 
             const res = await fetch("/api/scheduling/schedule", {
                 method: "POST",
@@ -457,7 +524,9 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
             setBookingSuccess(true);
             setStep("confirm");
         } catch (err) {
-            setBookingError(err instanceof Error ? err.message : "Failed to book");
+            setBookingError(
+                err instanceof Error ? err.message : "Failed to book"
+            );
         } finally {
             setBooking(false);
         }
@@ -484,14 +553,21 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
         dateAtNoonUTC.setUTCHours(12, 0, 0, 0);
         // Use the same timezone-aware calculation as the backend
         const dayOfWeek = getDayOfWeekInTimezone(dateAtNoonUTC, userTimezone);
-        return profile.availability.windows.some(w => w.dayOfWeek === dayOfWeek);
+        return profile.availability.windows.some(
+            (w) => w.dayOfWeek === dayOfWeek
+        );
     };
 
-    const priceDisplay = profile ? `$${(profile.scheduling.priceCents / 100).toFixed(2)}` : "$0";
-    
+    const priceDisplay = profile
+        ? `$${(profile.scheduling.priceCents / 100).toFixed(2)}`
+        : "$0";
+
     // Get expected chain ID from profile's network setting
-    const expectedChainId = profile?.scheduling.network ? CHAIN_IDS[profile.scheduling.network] : base.id;
-    const isWrongNetwork = isConnected && !!chain && chain.id !== expectedChainId;
+    const expectedChainId = profile?.scheduling.network
+        ? CHAIN_IDS[profile.scheduling.network]
+        : base.id;
+    const isWrongNetwork =
+        isConnected && !!chain && chain.id !== expectedChainId;
 
     if (loading) {
         return (
@@ -506,12 +582,26 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="text-center">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center">
-                        <svg className="w-8 h-8 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        <svg
+                            className="w-8 h-8 text-zinc-500"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                            />
                         </svg>
                     </div>
-                    <h1 className="text-xl font-bold text-white mb-2">Page Not Found</h1>
-                    <p className="text-zinc-500">{error || "This scheduling page doesn't exist."}</p>
+                    <h1 className="text-xl font-bold text-white mb-2">
+                        Page Not Found
+                    </h1>
+                    <p className="text-zinc-500">
+                        {error || "This scheduling page doesn't exist."}
+                    </p>
                 </div>
             </div>
         );
@@ -525,7 +615,13 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                 <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-[128px]" />
             </div>
 
-            <div className="relative z-10 max-w-2xl mx-auto px-4 py-8 sm:py-16">
+            <div
+                className="relative z-10 max-w-2xl mx-auto px-4 pb-8 sm:pb-16"
+                style={{
+                    paddingTop:
+                        "max(2rem, calc(2rem + env(safe-area-inset-top, 0px)))",
+                }}
+            >
                 {/* Back Button */}
                 <motion.div
                     initial={{ opacity: 0, x: -10 }}
@@ -543,8 +639,18 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                         }}
                         className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
                     >
-                        <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        <svg
+                            className="w-5 h-5 group-hover:-translate-x-1 transition-transform"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                            />
                         </svg>
                         <span className="text-sm font-medium">Back</span>
                     </button>
@@ -559,15 +665,21 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                     {/* Avatar */}
                     <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 p-0.5">
                         <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center overflow-hidden">
-                            {(profile.profile.avatarUrl || ensAvatar) ? (
-                                <img 
-                                    src={profile.profile.avatarUrl || ensAvatar || ""} 
+                            {profile.profile.avatarUrl || ensAvatar ? (
+                                <img
+                                    src={
+                                        profile.profile.avatarUrl ||
+                                        ensAvatar ||
+                                        ""
+                                    }
                                     alt={profile.profile.displayName}
                                     className="w-full h-full object-cover"
                                 />
                             ) : (
                                 <span className="text-3xl font-bold text-white">
-                                    {profile.profile.displayName.charAt(0).toUpperCase()}
+                                    {profile.profile.displayName
+                                        .charAt(0)
+                                        .toUpperCase()}
                                 </span>
                             )}
                         </div>
@@ -576,7 +688,7 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                     <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
                         {profile.profile.title}
                     </h1>
-                    
+
                     {/* Identity display with badge */}
                     <div className="flex items-center justify-center gap-2 mb-2">
                         <p className="text-lg text-white font-medium">
@@ -586,7 +698,8 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                 <span>{profile.profile.ensName}</span>
                             ) : (
                                 <span className="font-mono text-base">
-                                    {profile.profile.walletAddress.slice(0, 6)}...{profile.profile.walletAddress.slice(-4)}
+                                    {profile.profile.walletAddress.slice(0, 6)}
+                                    ...{profile.profile.walletAddress.slice(-4)}
                                 </span>
                             )}
                         </p>
@@ -601,14 +714,20 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                             </span>
                         ) : null}
                     </div>
-                    
+
                     {/* Show ENS or address below Spritz username */}
                     {profile.profile.username && (
                         <p className="text-sm text-zinc-500">
-                            {profile.profile.ensName || `${profile.profile.walletAddress.slice(0, 6)}...${profile.profile.walletAddress.slice(-4)}`}
+                            {profile.profile.ensName ||
+                                `${profile.profile.walletAddress.slice(
+                                    0,
+                                    6
+                                )}...${profile.profile.walletAddress.slice(
+                                    -4
+                                )}`}
                         </p>
                     )}
-                    
+
                     {profile.profile.bio && (
                         <p className="text-zinc-500 max-w-md mx-auto mt-3">
                             {profile.profile.bio}
@@ -629,7 +748,8 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                 <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
                                     <span className="text-zinc-400 text-sm">
-                                        {address.slice(0, 6)}...{address.slice(-4)}
+                                        {address.slice(0, 6)}...
+                                        {address.slice(-4)}
                                     </span>
                                 </div>
                                 <button
@@ -646,20 +766,33 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                 </p>
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => connect({ connector: injected() })}
+                                        onClick={() =>
+                                            connect({ connector: injected() })
+                                        }
                                         disabled={isConnecting}
                                         className="px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white text-sm font-medium transition-all disabled:opacity-50"
                                     >
                                         {isConnecting ? "..." : "Connect"}
                                     </button>
                                     <button
-                                        onClick={() => connect({ connector: coinbaseWallet() })}
+                                        onClick={() =>
+                                            connect({
+                                                connector: coinbaseWallet(),
+                                            })
+                                        }
                                         disabled={isConnecting}
                                         className="px-4 py-2 rounded-lg bg-[#0052FF] hover:bg-[#0052FF]/90 text-white text-sm font-medium transition-colors disabled:opacity-50"
                                         title="Coinbase Wallet"
                                     >
-                                        <svg className="w-5 h-5" viewBox="0 0 28 28" fill="none">
-                                            <path d="M14 6C9.582 6 6 9.582 6 14s3.582 8 8 8 8-3.582 8-8-3.582-8-8-8zm0 12.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9z" fill="currentColor"/>
+                                        <svg
+                                            className="w-5 h-5"
+                                            viewBox="0 0 28 28"
+                                            fill="none"
+                                        >
+                                            <path
+                                                d="M14 6C9.582 6 6 9.582 6 14s3.582 8 8 8 8-3.582 8-8-3.582-8-8-8zm0 12.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"
+                                                fill="currentColor"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -690,8 +823,18 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                 >
                                     <div className="flex items-start gap-4">
                                         <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-                                            <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            <svg
+                                                className="w-6 h-6 text-emerald-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                />
                                             </svg>
                                         </div>
                                         <div className="flex-1">
@@ -699,14 +842,30 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                                 <h3 className="text-lg font-semibold text-white group-hover:text-emerald-400 transition-colors">
                                                     Free Consultation
                                                 </h3>
-                                                <span className="text-emerald-400 font-medium">Free</span>
+                                                <span className="text-emerald-400 font-medium">
+                                                    Free
+                                                </span>
                                             </div>
                                             <p className="text-zinc-500 text-sm">
-                                                {profile.scheduling.freeDuration} minute call
+                                                {
+                                                    profile.scheduling
+                                                        .freeDuration
+                                                }{" "}
+                                                minute call
                                             </p>
                                         </div>
-                                        <svg className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        <svg
+                                            className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M9 5l7 7-7 7"
+                                            />
                                         </svg>
                                     </div>
                                 </button>
@@ -719,8 +878,18 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                 >
                                     <div className="flex items-start gap-4">
                                         <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center shrink-0">
-                                            <svg className="w-6 h-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            <svg
+                                                className="w-6 h-6 text-orange-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                />
                                             </svg>
                                         </div>
                                         <div className="flex-1">
@@ -733,11 +902,25 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                                 </span>
                                             </div>
                                             <p className="text-zinc-500 text-sm">
-                                                {profile.scheduling.paidDuration} minute call
+                                                {
+                                                    profile.scheduling
+                                                        .paidDuration
+                                                }{" "}
+                                                minute call
                                             </p>
                                         </div>
-                                        <svg className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        <svg
+                                            className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M9 5l7 7-7 7"
+                                            />
                                         </svg>
                                     </div>
                                 </button>
@@ -755,41 +938,68 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                             className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6"
                         >
                             {/* Back button */}
-                            {profile.scheduling.freeEnabled && profile.scheduling.paidEnabled && (
-                                <button
-                                    onClick={() => { setStep("select"); setScheduleType(null); setSelectedDate(null); }}
-                                    className="flex items-center gap-2 text-zinc-500 hover:text-white mb-4 transition-colors"
-                                >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                    Back
-                                </button>
-                            )}
+                            {profile.scheduling.freeEnabled &&
+                                profile.scheduling.paidEnabled && (
+                                    <button
+                                        onClick={() => {
+                                            setStep("select");
+                                            setScheduleType(null);
+                                            setSelectedDate(null);
+                                        }}
+                                        className="flex items-center gap-2 text-zinc-500 hover:text-white mb-4 transition-colors"
+                                    >
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M15 19l-7-7 7-7"
+                                            />
+                                        </svg>
+                                        Back
+                                    </button>
+                                )}
 
                             {/* Selected type badge */}
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-lg font-semibold text-white">Select a Date & Time</h2>
-                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                    scheduleType === "free" 
-                                        ? "bg-emerald-500/20 text-emerald-400" 
-                                        : "bg-orange-500/20 text-orange-400"
-                                }`}>
-                                    {scheduleType === "free" ? "Free" : `${priceDisplay} USDC`}
+                                <h2 className="text-lg font-semibold text-white">
+                                    Select a Date & Time
+                                </h2>
+                                <span
+                                    className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                        scheduleType === "free"
+                                            ? "bg-emerald-500/20 text-emerald-400"
+                                            : "bg-orange-500/20 text-orange-400"
+                                    }`}
+                                >
+                                    {scheduleType === "free"
+                                        ? "Free"
+                                        : `${priceDisplay} USDC`}
                                 </span>
                             </div>
 
                             {/* Calendar days */}
                             <div className="flex gap-2 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-thin">
                                 {calendarDays.map((date, i) => {
-                                    const hasAvailability = dayHasAvailability(date);
-                                    const isSelected = selectedDate && isSameDay(date, selectedDate);
+                                    const hasAvailability =
+                                        dayHasAvailability(date);
+                                    const isSelected =
+                                        selectedDate &&
+                                        isSameDay(date, selectedDate);
                                     const isToday = isSameDay(date, new Date());
 
                                     return (
                                         <button
                                             key={i}
-                                            onClick={() => hasAvailability && setSelectedDate(date)}
+                                            onClick={() =>
+                                                hasAvailability &&
+                                                setSelectedDate(date)
+                                            }
                                             disabled={!hasAvailability}
                                             className={`flex-shrink-0 w-16 py-3 rounded-xl text-center transition-all ${
                                                 isSelected
@@ -800,7 +1010,11 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                             }`}
                                         >
                                             <div className="text-xs uppercase tracking-wide mb-1 opacity-70">
-                                                {formatInTimeZone(date, userTimezone, "EEE")}
+                                                {formatInTimeZone(
+                                                    date,
+                                                    userTimezone,
+                                                    "EEE"
+                                                )}
                                             </div>
                                             <div className="text-lg font-semibold">
                                                 {format(date, "d")}
@@ -817,7 +1031,12 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                             {selectedDate && (
                                 <div className="mt-6">
                                     <h3 className="text-sm font-medium text-zinc-400 mb-3">
-                                        Available times on {formatInTimeZone(selectedDate, userTimezone, "EEEE, MMMM d")}
+                                        Available times on{" "}
+                                        {formatInTimeZone(
+                                            selectedDate,
+                                            userTimezone,
+                                            "EEEE, MMMM d"
+                                        )}
                                     </h3>
 
                                     {slotsLoading ? (
@@ -831,14 +1050,24 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                     ) : (
                                         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                                             {availableSlots.map((slot, i) => {
-                                                const slotTime = new Date(slot.start);
+                                                const slotTime = new Date(
+                                                    slot.start
+                                                );
                                                 return (
                                                     <button
                                                         key={i}
-                                                        onClick={() => handleSelectSlot(slot)}
+                                                        onClick={() =>
+                                                            handleSelectSlot(
+                                                                slot
+                                                            )
+                                                        }
                                                         className="px-3 py-2.5 rounded-lg bg-zinc-800 hover:bg-orange-500 text-white text-sm font-medium transition-colors"
                                                     >
-                                                        {formatInTimeZone(slotTime, userTimezone, "h:mm a")}
+                                                        {formatInTimeZone(
+                                                            slotTime,
+                                                            userTimezone,
+                                                            "h:mm a"
+                                                        )}
                                                     </button>
                                                 );
                                             })}
@@ -864,31 +1093,71 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                         >
                             {/* Back button */}
                             <button
-                                onClick={() => { setStep("calendar"); setSelectedSlot(null); }}
+                                onClick={() => {
+                                    setStep("calendar");
+                                    setSelectedSlot(null);
+                                }}
                                 className="flex items-center gap-2 text-zinc-500 hover:text-white mb-4 transition-colors"
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15 19l-7-7 7-7"
+                                    />
                                 </svg>
                                 Back
                             </button>
 
-                            <h2 className="text-lg font-semibold text-white mb-6">Your Details</h2>
+                            <h2 className="text-lg font-semibold text-white mb-6">
+                                Your Details
+                            </h2>
 
                             {/* Selected time summary */}
                             <div className="bg-zinc-800/50 rounded-xl p-4 mb-6">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                                        <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        <svg
+                                            className="w-5 h-5 text-orange-400"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                            />
                                         </svg>
                                     </div>
                                     <div>
                                         <p className="text-white font-medium">
-                                            {formatInTimeZone(new Date(selectedSlot.start), userTimezone, "EEEE, MMMM d")}
+                                            {formatInTimeZone(
+                                                new Date(selectedSlot.start),
+                                                userTimezone,
+                                                "EEEE, MMMM d"
+                                            )}
                                         </p>
                                         <p className="text-zinc-400 text-sm">
-                                            {formatInTimeZone(new Date(selectedSlot.start), userTimezone, "h:mm a")} - {scheduleType === "paid" ? profile.scheduling.paidDuration : profile.scheduling.freeDuration} min
+                                            {formatInTimeZone(
+                                                new Date(selectedSlot.start),
+                                                userTimezone,
+                                                "h:mm a"
+                                            )}{" "}
+                                            -{" "}
+                                            {scheduleType === "paid"
+                                                ? profile.scheduling
+                                                      .paidDuration
+                                                : profile.scheduling
+                                                      .freeDuration}{" "}
+                                            min
                                         </p>
                                     </div>
                                 </div>
@@ -903,7 +1172,9 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                     <input
                                         type="text"
                                         value={guestName}
-                                        onChange={(e) => setGuestName(e.target.value)}
+                                        onChange={(e) =>
+                                            setGuestName(e.target.value)
+                                        }
                                         placeholder="John Doe"
                                         className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
                                     />
@@ -911,12 +1182,17 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
 
                                 <div>
                                     <label className="block text-sm text-zinc-400 mb-2">
-                                        Email Address <span className="text-orange-400">*</span>
+                                        Email Address{" "}
+                                        <span className="text-orange-400">
+                                            *
+                                        </span>
                                     </label>
                                     <input
                                         type="email"
                                         value={guestEmail}
-                                        onChange={(e) => setGuestEmail(e.target.value)}
+                                        onChange={(e) =>
+                                            setGuestEmail(e.target.value)
+                                        }
                                         placeholder="john@example.com"
                                         required
                                         className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
@@ -932,7 +1208,9 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                     </label>
                                     <textarea
                                         value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
+                                        onChange={(e) =>
+                                            setNotes(e.target.value)
+                                        }
                                         placeholder="What would you like to discuss?"
                                         rows={3}
                                         className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors resize-none"
@@ -980,36 +1258,67 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                 disabled={isSending || isConfirming}
                                 className="flex items-center gap-2 text-zinc-500 hover:text-white mb-4 transition-colors disabled:opacity-50"
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15 19l-7-7 7-7"
+                                    />
                                 </svg>
                                 Back
                             </button>
 
-                            <h2 className="text-lg font-semibold text-white mb-2">Complete Payment</h2>
+                            <h2 className="text-lg font-semibold text-white mb-2">
+                                Complete Payment
+                            </h2>
                             <p className="text-zinc-400 text-sm mb-6">
-                                Pay with USDC on {NETWORK_NAMES[profile.scheduling.network] || profile.scheduling.network}
+                                Pay with USDC on{" "}
+                                {NETWORK_NAMES[profile.scheduling.network] ||
+                                    profile.scheduling.network}
                             </p>
 
                             {/* Payment summary */}
                             <div className="bg-zinc-800/50 rounded-xl p-4 mb-6">
                                 <div className="flex items-center justify-between mb-4">
-                                    <span className="text-zinc-400">Priority Session</span>
-                                    <span className="text-white font-semibold">{priceDisplay} USDC</span>
+                                    <span className="text-zinc-400">
+                                        Priority Session
+                                    </span>
+                                    <span className="text-white font-semibold">
+                                        {priceDisplay} USDC
+                                    </span>
                                 </div>
                                 <div className="flex items-center justify-between text-sm">
-                                    <span className="text-zinc-500">Duration</span>
-                                    <span className="text-zinc-400">{profile.scheduling.paidDuration} minutes</span>
+                                    <span className="text-zinc-500">
+                                        Duration
+                                    </span>
+                                    <span className="text-zinc-400">
+                                        {profile.scheduling.paidDuration}{" "}
+                                        minutes
+                                    </span>
                                 </div>
                                 <div className="flex items-center justify-between text-sm mt-1">
                                     <span className="text-zinc-500">Date</span>
                                     <span className="text-zinc-400">
-                                        {formatInTimeZone(new Date(selectedSlot.start), userTimezone, "MMM d, h:mm a")}
+                                        {formatInTimeZone(
+                                            new Date(selectedSlot.start),
+                                            userTimezone,
+                                            "MMM d, h:mm a"
+                                        )}
                                     </span>
                                 </div>
                                 <div className="border-t border-zinc-700 mt-4 pt-4 flex items-center justify-between">
-                                    <span className="text-white font-medium">Total</span>
-                                    <span className="text-orange-400 font-bold text-lg">{priceDisplay} USDC</span>
+                                    <span className="text-white font-medium">
+                                        Total
+                                    </span>
+                                    <span className="text-orange-400 font-bold text-lg">
+                                        {priceDisplay} USDC
+                                    </span>
                                 </div>
                             </div>
 
@@ -1020,28 +1329,60 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                         Connect your wallet to pay
                                     </p>
                                     <button
-                                        onClick={() => connect({ connector: injected() })}
+                                        onClick={() =>
+                                            connect({ connector: injected() })
+                                        }
                                         disabled={isConnecting}
                                         className="w-full py-3.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                                     >
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                                            />
                                         </svg>
-                                        {isConnecting ? "Connecting..." : "Connect Wallet"}
+                                        {isConnecting
+                                            ? "Connecting..."
+                                            : "Connect Wallet"}
                                     </button>
                                     <button
-                                        onClick={() => connect({ connector: coinbaseWallet() })}
+                                        onClick={() =>
+                                            connect({
+                                                connector: coinbaseWallet(),
+                                            })
+                                        }
                                         disabled={isConnecting}
                                         className="w-full py-3 rounded-xl bg-[#0052FF] hover:bg-[#0052FF]/90 text-white font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                                     >
-                                        <svg className="w-5 h-5" viewBox="0 0 28 28" fill="none">
-                                            <rect width="28" height="28" rx="14" fill="currentColor" fillOpacity="0.2"/>
-                                            <path d="M14 6C9.582 6 6 9.582 6 14s3.582 8 8 8 8-3.582 8-8-3.582-8-8-8zm0 12.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9z" fill="currentColor"/>
+                                        <svg
+                                            className="w-5 h-5"
+                                            viewBox="0 0 28 28"
+                                            fill="none"
+                                        >
+                                            <rect
+                                                width="28"
+                                                height="28"
+                                                rx="14"
+                                                fill="currentColor"
+                                                fillOpacity="0.2"
+                                            />
+                                            <path
+                                                d="M14 6C9.582 6 6 9.582 6 14s3.582 8 8 8 8-3.582 8-8-3.582-8-8-8zm0 12.5a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"
+                                                fill="currentColor"
+                                            />
                                         </svg>
                                         Coinbase Wallet
                                     </button>
                                     <p className="text-zinc-500 text-xs text-center">
-                                        MetaMask, Coinbase Wallet & browser wallets supported
+                                        MetaMask, Coinbase Wallet & browser
+                                        wallets supported
                                     </p>
                                 </div>
                             ) : isWrongNetwork && !isSwitchingNetwork ? (
@@ -1051,24 +1392,47 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                             Wrong network detected
                                         </p>
                                         <p className="text-zinc-400 text-xs">
-                                            Payment requires {NETWORK_NAMES[profile.scheduling.network] || profile.scheduling.network} network
+                                            Payment requires{" "}
+                                            {NETWORK_NAMES[
+                                                profile.scheduling.network
+                                            ] ||
+                                                profile.scheduling.network}{" "}
+                                            network
                                         </p>
                                     </div>
                                     <button
                                         onClick={async () => {
                                             try {
-                                                await switchChainAsync({ chainId: expectedChainId });
+                                                await switchChainAsync({
+                                                    chainId: expectedChainId,
+                                                });
                                             } catch (err) {
-                                                console.error("Failed to switch network:", err);
+                                                console.error(
+                                                    "Failed to switch network:",
+                                                    err
+                                                );
                                             }
                                         }}
                                         disabled={isSwitchingNetwork}
                                         className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                            />
                                         </svg>
-                                        Switch to {NETWORK_NAMES[profile.scheduling.network] || profile.scheduling.network}
+                                        Switch to{" "}
+                                        {NETWORK_NAMES[
+                                            profile.scheduling.network
+                                        ] || profile.scheduling.network}
                                     </button>
                                     <button
                                         onClick={() => disconnect()}
@@ -1085,7 +1449,8 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                             <div className="flex items-center gap-2">
                                                 <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
                                                 <span className="text-zinc-400 text-sm">
-                                                    {address?.slice(0, 6)}...{address?.slice(-4)}
+                                                    {address?.slice(0, 6)}...
+                                                    {address?.slice(-4)}
                                                 </span>
                                             </div>
                                             <button
@@ -1097,8 +1462,16 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                         </div>
                                         {formattedBalance !== null && (
                                             <div className="flex items-center justify-between text-sm">
-                                                <span className="text-zinc-500">USDC Balance:</span>
-                                                <span className={hasInsufficientBalance ? "text-red-400" : "text-white"}>
+                                                <span className="text-zinc-500">
+                                                    USDC Balance:
+                                                </span>
+                                                <span
+                                                    className={
+                                                        hasInsufficientBalance
+                                                            ? "text-red-400"
+                                                            : "text-white"
+                                                    }
+                                                >
                                                     ${formattedBalance}
                                                 </span>
                                             </div>
@@ -1107,28 +1480,47 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
 
                                     {hasInsufficientBalance && (
                                         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                                            Insufficient USDC balance. You need ${requiredAmount.toFixed(2)} USDC on {NETWORK_NAMES[profile.scheduling.network] || profile.scheduling.network}.
+                                            Insufficient USDC balance. You need
+                                            ${requiredAmount.toFixed(2)} USDC on{" "}
+                                            {NETWORK_NAMES[
+                                                profile.scheduling.network
+                                            ] || profile.scheduling.network}
+                                            .
                                         </div>
                                     )}
 
                                     {sendError && (
                                         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                                            {sendError.message || "Transaction failed"}
+                                            {sendError.message ||
+                                                "Transaction failed"}
                                         </div>
                                     )}
 
-                                    {(isConfirming || isConfirmed || booking) && !isTxError ? (
+                                    {(isConfirming || isConfirmed || booking) &&
+                                    !isTxError ? (
                                         <div className="text-center py-4">
                                             <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                                             <p className="text-white font-medium">
-                                                {booking ? "Creating your booking..." : isConfirmed ? "Payment confirmed!" : "Confirming payment..."}
+                                                {booking
+                                                    ? "Creating your booking..."
+                                                    : isConfirmed
+                                                    ? "Payment confirmed!"
+                                                    : "Confirming payment..."}
                                             </p>
                                             <p className="text-zinc-500 text-sm">
-                                                {booking ? "Almost done" : "This may take a few seconds"}
+                                                {booking
+                                                    ? "Almost done"
+                                                    : "This may take a few seconds"}
                                             </p>
                                             {txHash && (
                                                 <a
-                                                    href={`${EXPLORER_URLS[profile.scheduling.network] || "https://basescan.org"}/tx/${txHash}`}
+                                                    href={`${
+                                                        EXPLORER_URLS[
+                                                            profile.scheduling
+                                                                .network
+                                                        ] ||
+                                                        "https://basescan.org"
+                                                    }/tx/${txHash}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="text-orange-400 hover:text-orange-300 text-xs mt-2 inline-block"
@@ -1151,7 +1543,14 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                     ) : (
                                         <button
                                             onClick={handlePayment}
-                                            disabled={isSending || isConfirming || isConfirmed || booking || isSwitchingNetwork || hasInsufficientBalance}
+                                            disabled={
+                                                isSending ||
+                                                isConfirming ||
+                                                isConfirmed ||
+                                                booking ||
+                                                isSwitchingNetwork ||
+                                                hasInsufficientBalance
+                                            }
                                             className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                                         >
                                             {isSwitchingNetwork ? (
@@ -1177,7 +1576,8 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                     )}
 
                                     <p className="text-xs text-zinc-500 text-center">
-                                        Payment will be sent directly to the host
+                                        Payment will be sent directly to the
+                                        host
                                     </p>
                                 </div>
                             )}
@@ -1193,8 +1593,18 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                             className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-8 text-center"
                         >
                             <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                                <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                <svg
+                                    className="w-8 h-8 text-emerald-400"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M5 13l4 4L19 7"
+                                    />
                                 </svg>
                             </div>
 
@@ -1202,30 +1612,47 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
                                 You&apos;re all set!
                             </h2>
                             <p className="text-zinc-400 mb-6">
-                                A calendar invite has been sent to <span className="text-white">{guestEmail}</span>
+                                A calendar invite has been sent to{" "}
+                                <span className="text-white">{guestEmail}</span>
                             </p>
 
                             {selectedSlot && (
                                 <div className="bg-zinc-800/50 rounded-xl p-4 mb-6">
                                     <p className="text-white font-medium">
-                                        {formatInTimeZone(new Date(selectedSlot.start), userTimezone, "EEEE, MMMM d, yyyy")}
+                                        {formatInTimeZone(
+                                            new Date(selectedSlot.start),
+                                            userTimezone,
+                                            "EEEE, MMMM d, yyyy"
+                                        )}
                                     </p>
                                     <p className="text-orange-400">
-                                        {formatInTimeZone(new Date(selectedSlot.start), userTimezone, "h:mm a")} ({userTimezone})
+                                        {formatInTimeZone(
+                                            new Date(selectedSlot.start),
+                                            userTimezone,
+                                            "h:mm a"
+                                        )}{" "}
+                                        ({userTimezone})
                                     </p>
                                 </div>
                             )}
 
                             {paymentTxHash && (
                                 <div className="bg-zinc-800/50 rounded-xl p-3 mb-6">
-                                    <p className="text-zinc-500 text-xs mb-1">Payment confirmed</p>
+                                    <p className="text-zinc-500 text-xs mb-1">
+                                        Payment confirmed
+                                    </p>
                                     <a
-                                        href={`${EXPLORER_URLS[profile.scheduling.network] || "https://basescan.org"}/tx/${paymentTxHash}`}
+                                        href={`${
+                                            EXPLORER_URLS[
+                                                profile.scheduling.network
+                                            ] || "https://basescan.org"
+                                        }/tx/${paymentTxHash}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-orange-400 hover:text-orange-300 text-sm font-mono"
                                     >
-                                        {paymentTxHash.slice(0, 10)}...{paymentTxHash.slice(-8)}
+                                        {paymentTxHash.slice(0, 10)}...
+                                        {paymentTxHash.slice(-8)}
                                     </a>
                                 </div>
                             )}
@@ -1252,11 +1679,14 @@ export default function CalPage({ params }: { params: Promise<{ slug: string }> 
 
                 {/* Footer */}
                 <div className="mt-8 text-center">
-                    <a 
-                        href="/" 
+                    <a
+                        href="/"
                         className="text-zinc-500 hover:text-white text-sm transition-colors inline-flex items-center gap-2"
                     >
-                        Powered by <span className="text-orange-400 font-semibold">Spritz</span>
+                        Powered by{" "}
+                        <span className="text-orange-400 font-semibold">
+                            Spritz
+                        </span>
                     </a>
                 </div>
             </div>

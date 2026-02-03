@@ -166,8 +166,11 @@ function DashboardContent({
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
     // Profile / Go Live modal (avatar click: two tabs)
-    const [isProfileAvatarModalOpen, setIsProfileAvatarModalOpen] = useState(false);
-    const [profileAvatarInitialTab, setProfileAvatarInitialTab] = useState<"profile" | "goLive">("profile");
+    const [isProfileAvatarModalOpen, setIsProfileAvatarModalOpen] =
+        useState(false);
+    const [profileAvatarInitialTab, setProfileAvatarInitialTab] = useState<
+        "profile" | "goLive"
+    >("profile");
 
     // Bottom navigation tab state - default to chats
     type NavTab =
@@ -6056,10 +6059,17 @@ function DashboardContent({
                 effectiveAvatar={effectiveAvatar ?? null}
                 displayName={
                     userENS.ensName ||
-                    (reachUsername ? `@${reachUsername}` : formatAddress(userAddress))
+                    (reachUsername
+                        ? `@${reachUsername}`
+                        : formatAddress(userAddress))
                 }
                 statusEmoji={userSettings.statusEmoji}
                 statusText={userSettings.statusText}
+                onUpdateStatus={async (emoji, text) => {
+                    const ok = await setStatus(emoji, text);
+                    if (ok) refetchUserSettings();
+                    return ok;
+                }}
                 publicBio={userSettings.publicBio}
                 publicLandingEnabled={userSettings.publicLandingEnabled}
                 onTogglePublicLanding={togglePublicLanding}
