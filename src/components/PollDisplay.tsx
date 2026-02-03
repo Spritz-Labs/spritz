@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -23,6 +23,12 @@ type PollDisplayProps = {
     onVote: (optionIndex: number) => Promise<void>;
     showVoters?: boolean;
     compact?: boolean;
+    /** Admins/moderators can edit and delete */
+    canManage?: boolean;
+    onEdit?: (poll: DisplayPoll) => void;
+    onDelete?: (poll: DisplayPoll) => Promise<void>;
+    /** Any user can hide a poll (client-side) */
+    onHide?: (pollId: string) => void;
 };
 
 export function PollDisplay({
@@ -30,8 +36,29 @@ export function PollDisplay({
     onVote,
     showVoters = false,
     compact = false,
+    canManage = false,
+    onEdit,
+    onDelete,
+    onHide,
 }: PollDisplayProps) {
     const [isVoting, setIsVoting] = useState<number | null>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const close = (e: MouseEvent) => {
+            if (
+                menuRef.current &&
+                !menuRef.current.contains(e.target as Node)
+            ) {
+                setMenuOpen(false);
+            }
+        };
+        document.addEventListener("click", close);
+        return () => document.removeEventListener("click", close);
+    }, [menuOpen]);
 
     const hasVoted = poll.user_votes.length > 0;
     const isEnded =
@@ -58,18 +85,24 @@ export function PollDisplay({
 
     return (
         <div
-            className={`bg-zinc-800/50 border border-zinc-700/50 rounded-xl overflow-hidden ${compact ? "p-3" : "p-4"}`}
+            className={`bg-zinc-800/50 border border-zinc-700/50 rounded-xl overflow-hidden ${
+                compact ? "p-3" : "p-4"
+            }`}
         >
             {/* Header */}
             <div className="flex items-start gap-3 mb-3">
                 <div
-                    className={`${compact ? "w-8 h-8 text-base" : "w-10 h-10 text-xl"} rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center`}
+                    className={`${
+                        compact ? "w-8 h-8 text-base" : "w-10 h-10 text-xl"
+                    } rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center shrink-0`}
                 >
                     🗳️
                 </div>
                 <div className="flex-1 min-w-0">
                     <h4
-                        className={`${compact ? "text-sm" : "text-base"} font-semibold text-white leading-tight`}
+                        className={`${
+                            compact ? "text-sm" : "text-base"
+                        } font-semibold text-white leading-tight`}
                     >
                         {poll.question}
                     </h4>
@@ -89,12 +122,81 @@ export function PollDisplay({
                                 <span>
                                     {isEnded
                                         ? "Ended"
-                                        : `Ends ${formatDistanceToNow(new Date(poll.ends_at), { addSuffix: true })}`}
+                                        : `Ends ${formatDistanceToNow(
+                                              new Date(poll.ends_at),
+                                              { addSuffix: true }
+                                          )}`}
                                 </span>
                             </>
                         )}
                     </div>
                 </div>
+                {(canManage || onHide) && (
+                    <div className="relative shrink-0" ref={menuRef}>
+                        <button
+                            type="button"
+                            onClick={() => setMenuOpen((o) => !o)}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700/50 transition-colors"
+                            aria-label="Poll options"
+                        >
+                            <svg
+                                className="w-4 h-4"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                            >
+                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                            </svg>
+                        </button>
+                        {menuOpen && (
+                            <div className="absolute right-0 top-full mt-1 py-1 w-40 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-10">
+                                {canManage && onEdit && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            onEdit(poll);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-700"
+                                    >
+                                        Edit poll
+                                    </button>
+                                )}
+                                {canManage && onDelete && (
+                                    <button
+                                        type="button"
+                                        disabled={isDeleting}
+                                        onClick={async () => {
+                                            setMenuOpen(false);
+                                            setIsDeleting(true);
+                                            try {
+                                                await onDelete(poll);
+                                            } finally {
+                                                setIsDeleting(false);
+                                            }
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-700 disabled:opacity-50"
+                                    >
+                                        {isDeleting
+                                            ? "Deleting…"
+                                            : "Delete poll"}
+                                    </button>
+                                )}
+                                {onHide && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            onHide(poll.id);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-700"
+                                    >
+                                        Hide poll
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Options */}
@@ -136,7 +238,9 @@ export function PollDisplay({
 
                             {/* Content */}
                             <div
-                                className={`relative flex items-center justify-between ${compact ? "px-3 py-2" : "px-4 py-3"}`}
+                                className={`relative flex items-center justify-between ${
+                                    compact ? "px-3 py-2" : "px-4 py-3"
+                                }`}
                             >
                                 <div className="flex items-center gap-2 min-w-0">
                                     {isVotingThis ? (
@@ -155,18 +259,24 @@ export function PollDisplay({
                                         </svg>
                                     ) : (
                                         <div
-                                            className={`${compact ? "w-4 h-4" : "w-4 h-4"} rounded-full border-2 border-zinc-500 shrink-0`}
+                                            className={`${
+                                                compact ? "w-4 h-4" : "w-4 h-4"
+                                            } rounded-full border-2 border-zinc-500 shrink-0`}
                                         />
                                     )}
                                     <span
-                                        className={`${compact ? "text-sm" : "text-sm"} text-white truncate`}
+                                        className={`${
+                                            compact ? "text-sm" : "text-sm"
+                                        } text-white truncate`}
                                     >
                                         {option}
                                     </span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                     <span
-                                        className={`${compact ? "text-xs" : "text-sm"} font-medium ${
+                                        className={`${
+                                            compact ? "text-xs" : "text-sm"
+                                        } font-medium ${
                                             isSelected
                                                 ? "text-purple-400"
                                                 : "text-zinc-400"

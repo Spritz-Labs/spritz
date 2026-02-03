@@ -40,7 +40,8 @@ import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { ChatMembersList } from "./ChatMembersList";
 import { PollCreator } from "./PollCreator";
-import { PollDisplay } from "./PollDisplay";
+import { PollDisplay, type DisplayPoll } from "./PollDisplay";
+import { PollEditModal } from "./PollEditModal";
 import { useAlphaPolls } from "@/hooks/useAlphaPolls";
 import { MessageSearch } from "./MessageSearch";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
@@ -160,8 +161,30 @@ export function AlphaChatModal({
     // Moderation hook (null channelId = global/alpha chat)
     const moderation = useModeration(userAddress, null);
 
-    const { polls, canCreatePoll, fetchPolls, createPoll, vote } =
-        useAlphaPolls(userAddress);
+    const {
+        polls,
+        canCreatePoll,
+        fetchPolls,
+        createPoll,
+        vote,
+        updatePoll,
+        deletePoll,
+    } = useAlphaPolls(userAddress);
+
+    const HIDDEN_POLLS_KEY = "spritz_hidden_polls_alpha";
+    const [hiddenPollIds, setHiddenPollIds] = useState<string[]>(() => {
+        if (typeof window === "undefined") return [];
+        try {
+            return JSON.parse(
+                window.localStorage.getItem(HIDDEN_POLLS_KEY) ?? "[]"
+            );
+        } catch {
+            return [];
+        }
+    });
+    const [editingPoll, setEditingPoll] = useState<DisplayPoll | null>(null);
+
+    const visiblePolls = polls.filter((p) => !hiddenPollIds.includes(p.id));
 
     // Message search: map alpha messages to MessageSearch shape (exclude system/pixel/gif markers for search)
     const alphaSearchMessages = useMemo(
@@ -1384,6 +1407,92 @@ export function AlphaChatModal({
                             {/* Messages */}
                             {isMember && (
                                 <>
+                                    {/* Active Polls - shown at top when polls exist */}
+                                    {visiblePolls.length > 0 && (
+                                        <div className="border-b border-zinc-800 p-3 space-y-2 max-h-[200px] overflow-y-auto overscroll-contain">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                                                    Active Polls
+                                                </span>
+                                                <span className="text-xs text-zinc-600">
+                                                    {visiblePolls.length} poll
+                                                    {visiblePolls.length !== 1
+                                                        ? "s"
+                                                        : ""}
+                                                </span>
+                                            </div>
+                                            {visiblePolls
+                                                .slice(0, 2)
+                                                .map((poll) => (
+                                                    <PollDisplay
+                                                        key={poll.id}
+                                                        poll={poll}
+                                                        onVote={(optionIndex) =>
+                                                            vote(
+                                                                poll.id,
+                                                                optionIndex
+                                                            )
+                                                        }
+                                                        compact
+                                                        canManage={isAdmin}
+                                                        onEdit={(p) =>
+                                                            setEditingPoll(p)
+                                                        }
+                                                        onDelete={async (p) => {
+                                                            await deletePoll(
+                                                                p.id
+                                                            );
+                                                            setEditingPoll(
+                                                                null
+                                                            );
+                                                        }}
+                                                        onHide={(pollId) => {
+                                                            setHiddenPollIds(
+                                                                (prev) => {
+                                                                    const next =
+                                                                        [
+                                                                            ...prev,
+                                                                            pollId,
+                                                                        ];
+                                                                    try {
+                                                                        window.localStorage.setItem(
+                                                                            HIDDEN_POLLS_KEY,
+                                                                            JSON.stringify(
+                                                                                next
+                                                                            )
+                                                                        );
+                                                                    } catch {}
+                                                                    return next;
+                                                                }
+                                                            );
+                                                        }}
+                                                    />
+                                                ))}
+                                            {visiblePolls.length > 2 && (
+                                                <button
+                                                    type="button"
+                                                    className="w-full text-center text-xs text-purple-400 hover:text-purple-300 py-2"
+                                                >
+                                                    View all{" "}
+                                                    {visiblePolls.length} polls
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                    <PollEditModal
+                                        isOpen={!!editingPoll}
+                                        onClose={() => setEditingPoll(null)}
+                                        poll={editingPoll}
+                                        onSave={async (updates) => {
+                                            if (editingPoll) {
+                                                await updatePoll(
+                                                    editingPoll.id,
+                                                    updates
+                                                );
+                                                setEditingPoll(null);
+                                            }
+                                        }}
+                                    />
                                     {/* Pinned Messages Panel */}
                                     <AnimatePresence>
                                         {showPinnedMessages &&

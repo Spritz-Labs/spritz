@@ -20,7 +20,8 @@ import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { PollCreator } from "./PollCreator";
-import { PollDisplay } from "./PollDisplay";
+import { PollDisplay, type DisplayPoll } from "./PollDisplay";
+import { PollEditModal } from "./PollEditModal";
 import { usePolls } from "@/hooks/usePolls";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -355,10 +356,34 @@ export function ChannelChatModal({
         : standardMessages.setReplyingTo;
 
     // Polls
-    const { polls, canCreatePoll, fetchPolls, createPoll, vote } = usePolls(
-        channel.id,
-        userAddress
-    );
+    const {
+        polls,
+        canCreatePoll,
+        fetchPolls,
+        createPoll,
+        vote,
+        updatePoll,
+        deletePoll,
+    } = usePolls(channel.id, userAddress);
+    const channelHiddenPollsKey = `spritz_hidden_polls_channel_${channel.id}`;
+    const [hiddenPollIds, setHiddenPollIds] = useState<string[]>([]);
+    useEffect(() => {
+        if (!channel?.id || typeof window === "undefined") {
+            setHiddenPollIds([]);
+            return;
+        }
+        try {
+            const stored = JSON.parse(
+                window.localStorage.getItem(channelHiddenPollsKey) ?? "[]"
+            );
+            setHiddenPollIds(Array.isArray(stored) ? stored : []);
+        } catch {
+            setHiddenPollIds([]);
+        }
+    }, [channel.id, channelHiddenPollsKey]);
+    const [editingPoll, setEditingPoll] = useState<DisplayPoll | null>(null);
+    const visiblePolls = polls.filter((p) => !hiddenPollIds.includes(p.id));
+
     const [inputValue, setInputValue] = useState("");
     const [isSending, setIsSending] = useState(false);
     const draftAppliedRef = useRef(false);
@@ -2008,18 +2033,18 @@ export function ChannelChatModal({
                     </AnimatePresence>
 
                     {/* Active Polls - shown at top when polls exist */}
-                    {polls.length > 0 && (
+                    {visiblePolls.length > 0 && (
                         <div className="border-b border-zinc-800 p-3 space-y-2 max-h-[200px] overflow-y-auto overscroll-contain">
                             <div className="flex items-center justify-between mb-1">
                                 <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
                                     Active Polls
                                 </span>
                                 <span className="text-xs text-zinc-600">
-                                    {polls.length} poll
-                                    {polls.length !== 1 ? "s" : ""}
+                                    {visiblePolls.length} poll
+                                    {visiblePolls.length !== 1 ? "s" : ""}
                                 </span>
                             </div>
-                            {polls.slice(0, 2).map((poll) => (
+                            {visiblePolls.slice(0, 2).map((poll) => (
                                 <PollDisplay
                                     key={poll.id}
                                     poll={poll}
@@ -2027,15 +2052,44 @@ export function ChannelChatModal({
                                         vote(poll.id, optionIndex)
                                     }
                                     compact
+                                    canManage={canCreatePoll}
+                                    onEdit={(p) => setEditingPoll(p)}
+                                    onDelete={async (p) => {
+                                        await deletePoll(p.id);
+                                        setEditingPoll(null);
+                                    }}
+                                    onHide={(pollId) => {
+                                        setHiddenPollIds((prev) => {
+                                            const next = [...prev, pollId];
+                                            try {
+                                                window.localStorage.setItem(
+                                                    channelHiddenPollsKey,
+                                                    JSON.stringify(next)
+                                                );
+                                            } catch {}
+                                            return next;
+                                        });
+                                    }}
                                 />
                             ))}
-                            {polls.length > 2 && (
+                            {visiblePolls.length > 2 && (
                                 <button className="w-full text-center text-xs text-purple-400 hover:text-purple-300 py-2">
-                                    View all {polls.length} polls
+                                    View all {visiblePolls.length} polls
                                 </button>
                             )}
                         </div>
                     )}
+                    <PollEditModal
+                        isOpen={!!editingPoll}
+                        onClose={() => setEditingPoll(null)}
+                        poll={editingPoll}
+                        onSave={async (updates) => {
+                            if (editingPoll) {
+                                await updatePoll(editingPoll.id, updates);
+                                setEditingPoll(null);
+                            }
+                        }}
+                    />
 
                     {/* Messages - flex-1 min-h-0 so area shrinks and scrolls on mobile */}
                     <div

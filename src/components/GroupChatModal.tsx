@@ -43,7 +43,8 @@ import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { MessageSearch } from "./MessageSearch";
 import { PollCreator } from "./PollCreator";
-import { PollDisplay } from "./PollDisplay";
+import { PollDisplay, type DisplayPoll } from "./PollDisplay";
+import { PollEditModal } from "./PollEditModal";
 import { useGroupPolls } from "@/hooks/useGroupPolls";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
@@ -96,6 +97,8 @@ interface GroupChatModalProps {
     onMessageSent?: () => void;
     // Callback when message is received (for updating chat order)
     onMessageReceived?: () => void;
+    /** Admin/moderator can manage polls (edit, delete) */
+    isAdmin?: boolean;
 }
 
 type Message = {
@@ -124,6 +127,7 @@ export function GroupChatModal({
     getUserInfo,
     isFriend,
     onOpenDM,
+    isAdmin = false,
 }: GroupChatModalProps) {
     const userTimezone = useUserTimezone();
     const [messages, setMessages] = useState<Message[]>([]);
@@ -200,8 +204,38 @@ export function GroupChatModal({
         toggleReaction: toggleMsgReaction,
     } = useMessageReactions(userAddress, group?.id || null);
 
-    const { polls, canCreatePoll, fetchPolls, createPoll, vote } =
-        useGroupPolls(group?.id ?? null, userAddress);
+    const {
+        polls,
+        canCreatePoll,
+        fetchPolls,
+        createPoll,
+        vote,
+        updatePoll,
+        deletePoll,
+    } = useGroupPolls(group?.id ?? null, userAddress);
+
+    const groupHiddenPollsKey = group?.id
+        ? `spritz_hidden_polls_group_${group.id}`
+        : "";
+    const [hiddenPollIds, setHiddenPollIds] = useState<string[]>([]);
+    useEffect(() => {
+        if (!group?.id || typeof window === "undefined") {
+            setHiddenPollIds([]);
+            return;
+        }
+        try {
+            const stored = JSON.parse(
+                window.localStorage.getItem(
+                    `spritz_hidden_polls_group_${group.id}`
+                ) ?? "[]"
+            );
+            setHiddenPollIds(Array.isArray(stored) ? stored : []);
+        } catch {
+            setHiddenPollIds([]);
+        }
+    }, [group?.id]);
+    const [editingPoll, setEditingPoll] = useState<DisplayPoll | null>(null);
+    const visiblePolls = polls.filter((p) => !hiddenPollIds.includes(p.id));
 
     const {
         isInitialized,
@@ -1446,6 +1480,77 @@ export function GroupChatModal({
                                         </motion.div>
                                     )}
                             </AnimatePresence>
+
+                            {/* Active Polls - shown at top when polls exist */}
+                            {visiblePolls.length > 0 && (
+                                <div className="border-b border-zinc-800 p-3 space-y-2 max-h-[200px] overflow-y-auto overscroll-contain">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                                            Active Polls
+                                        </span>
+                                        <span className="text-xs text-zinc-600">
+                                            {visiblePolls.length} poll
+                                            {visiblePolls.length !== 1
+                                                ? "s"
+                                                : ""}
+                                        </span>
+                                    </div>
+                                    {visiblePolls.slice(0, 2).map((poll) => (
+                                        <PollDisplay
+                                            key={poll.id}
+                                            poll={poll}
+                                            onVote={(optionIndex) =>
+                                                vote(poll.id, optionIndex)
+                                            }
+                                            compact
+                                            canManage={isAdmin}
+                                            onEdit={(p) => setEditingPoll(p)}
+                                            onDelete={async (p) => {
+                                                await deletePoll(p.id);
+                                                setEditingPoll(null);
+                                            }}
+                                            onHide={(pollId) => {
+                                                if (!group?.id) return;
+                                                setHiddenPollIds((prev) => {
+                                                    const next = [
+                                                        ...prev,
+                                                        pollId,
+                                                    ];
+                                                    try {
+                                                        window.localStorage.setItem(
+                                                            `spritz_hidden_polls_group_${group.id}`,
+                                                            JSON.stringify(next)
+                                                        );
+                                                    } catch {}
+                                                    return next;
+                                                });
+                                            }}
+                                        />
+                                    ))}
+                                    {visiblePolls.length > 2 && (
+                                        <button
+                                            type="button"
+                                            className="w-full text-center text-xs text-purple-400 hover:text-purple-300 py-2"
+                                        >
+                                            View all {visiblePolls.length} polls
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                            <PollEditModal
+                                isOpen={!!editingPoll}
+                                onClose={() => setEditingPoll(null)}
+                                poll={editingPoll}
+                                onSave={async (updates) => {
+                                    if (editingPoll) {
+                                        await updatePoll(
+                                            editingPoll.id,
+                                            updates
+                                        );
+                                        setEditingPoll(null);
+                                    }
+                                }}
+                            />
 
                             {/* Messages - flex-col-reverse so newest at bottom */}
                             <div

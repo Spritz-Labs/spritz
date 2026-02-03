@@ -27,7 +27,7 @@ export function useAlphaPolls(userAddress: string | null) {
         } catch (err) {
             console.error("[useAlphaPolls] Error fetching polls:", err);
             setError(
-                err instanceof Error ? err.message : "Failed to fetch polls",
+                err instanceof Error ? err.message : "Failed to fetch polls"
             );
         } finally {
             setIsLoading(false);
@@ -40,7 +40,7 @@ export function useAlphaPolls(userAddress: string | null) {
             options: string[],
             allowsMultiple = false,
             endsAt: string | null = null,
-            isAnonymous = false,
+            isAnonymous = false
         ) => {
             if (!userAddress) {
                 throw new Error("User address is required");
@@ -68,7 +68,7 @@ export function useAlphaPolls(userAddress: string | null) {
             setPolls((prev) => [data.poll, ...prev]);
             return data.poll;
         },
-        [userAddress],
+        [userAddress]
     );
 
     const vote = useCallback(
@@ -104,12 +104,12 @@ export function useAlphaPolls(userAddress: string | null) {
                                 ...newVotes[prevOption],
                                 count: Math.max(
                                     0,
-                                    newVotes[prevOption].count - 1,
+                                    newVotes[prevOption].count - 1
                                 ),
                                 voters: newVotes[prevOption].voters.filter(
                                     (v) =>
                                         v.toLowerCase() !==
-                                        userAddress.toLowerCase(),
+                                        userAddress.toLowerCase()
                                 ),
                             };
                             newTotalVotes--;
@@ -134,7 +134,7 @@ export function useAlphaPolls(userAddress: string | null) {
                             voters: newVotes[optionIndex].voters.filter(
                                 (v) =>
                                     v.toLowerCase() !==
-                                    userAddress.toLowerCase(),
+                                    userAddress.toLowerCase()
                             ),
                         };
                         newTotalVotes = Math.max(0, newTotalVotes - 1);
@@ -146,12 +146,54 @@ export function useAlphaPolls(userAddress: string | null) {
                         votes: newVotes,
                         total_votes: newTotalVotes,
                     };
-                }),
+                })
             );
 
             return data;
         },
-        [userAddress],
+        [userAddress]
+    );
+
+    const updatePoll = useCallback(
+        async (
+            pollId: string,
+            updates: {
+                question?: string;
+                options?: string[];
+                allowsMultiple?: boolean;
+                endsAt?: string | null;
+                isAnonymous?: boolean;
+                isClosed?: boolean;
+            }
+        ) => {
+            if (!userAddress) throw new Error("User address is required");
+            const res = await fetch(`/api/alpha/polls/${pollId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userAddress, ...updates }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to update poll");
+            await fetchPolls();
+            return data.poll;
+        },
+        [userAddress, fetchPolls]
+    );
+
+    const deletePoll = useCallback(
+        async (pollId: string) => {
+            if (!userAddress) throw new Error("User address is required");
+            const res = await fetch(
+                `/api/alpha/polls/${pollId}?userAddress=${encodeURIComponent(
+                    userAddress
+                )}`,
+                { method: "DELETE" }
+            );
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to delete poll");
+            setPolls((prev) => prev.filter((p) => p.id !== pollId));
+        },
+        [userAddress]
     );
 
     return {
@@ -162,5 +204,7 @@ export function useAlphaPolls(userAddress: string | null) {
         fetchPolls,
         createPoll,
         vote,
+        updatePoll,
+        deletePoll,
     };
 }

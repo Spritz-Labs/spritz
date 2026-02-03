@@ -3,7 +3,7 @@ import type { GroupPoll } from "@/app/api/groups/[id]/polls/route";
 
 export function useGroupPolls(
     groupId: string | null,
-    userAddress: string | null,
+    userAddress: string | null
 ) {
     const [polls, setPolls] = useState<GroupPoll[]>([]);
     const [canCreatePoll, setCanCreatePoll] = useState(true);
@@ -32,7 +32,7 @@ export function useGroupPolls(
         } catch (err) {
             console.error("[useGroupPolls] Error fetching polls:", err);
             setError(
-                err instanceof Error ? err.message : "Failed to fetch polls",
+                err instanceof Error ? err.message : "Failed to fetch polls"
             );
         } finally {
             setIsLoading(false);
@@ -45,7 +45,7 @@ export function useGroupPolls(
             options: string[],
             allowsMultiple = false,
             endsAt: string | null = null,
-            isAnonymous = false,
+            isAnonymous = false
         ) => {
             if (!groupId || !userAddress) {
                 throw new Error("Group ID and user address are required");
@@ -73,7 +73,7 @@ export function useGroupPolls(
             setPolls((prev) => [data.poll, ...prev]);
             return data.poll;
         },
-        [groupId, userAddress],
+        [groupId, userAddress]
     );
 
     const vote = useCallback(
@@ -88,7 +88,7 @@ export function useGroupPolls(
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ userAddress, optionIndex }),
-                },
+                }
             );
 
             const data = await res.json();
@@ -112,12 +112,12 @@ export function useGroupPolls(
                                 ...newVotes[prevOption],
                                 count: Math.max(
                                     0,
-                                    newVotes[prevOption].count - 1,
+                                    newVotes[prevOption].count - 1
                                 ),
                                 voters: newVotes[prevOption].voters.filter(
                                     (v) =>
                                         v.toLowerCase() !==
-                                        userAddress.toLowerCase(),
+                                        userAddress.toLowerCase()
                                 ),
                             };
                             newTotalVotes--;
@@ -142,7 +142,7 @@ export function useGroupPolls(
                             voters: newVotes[optionIndex].voters.filter(
                                 (v) =>
                                     v.toLowerCase() !==
-                                    userAddress.toLowerCase(),
+                                    userAddress.toLowerCase()
                             ),
                         };
                         newTotalVotes = Math.max(0, newTotalVotes - 1);
@@ -154,12 +154,58 @@ export function useGroupPolls(
                         votes: newVotes,
                         total_votes: newTotalVotes,
                     };
-                }),
+                })
             );
 
             return data;
         },
-        [groupId, userAddress],
+        [groupId, userAddress]
+    );
+
+    const updatePoll = useCallback(
+        async (
+            pollId: string,
+            updates: {
+                question?: string;
+                options?: string[];
+                allowsMultiple?: boolean;
+                endsAt?: string | null;
+                isAnonymous?: boolean;
+                isClosed?: boolean;
+            }
+        ) => {
+            if (!groupId || !userAddress) {
+                throw new Error("Group ID and user address are required");
+            }
+            const res = await fetch(`/api/groups/${groupId}/polls/${pollId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userAddress, ...updates }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to update poll");
+            await fetchPolls();
+            return data.poll;
+        },
+        [groupId, userAddress, fetchPolls]
+    );
+
+    const deletePoll = useCallback(
+        async (pollId: string) => {
+            if (!groupId || !userAddress) {
+                throw new Error("Group ID and user address are required");
+            }
+            const res = await fetch(
+                `/api/groups/${groupId}/polls/${pollId}?userAddress=${encodeURIComponent(
+                    userAddress
+                )}`,
+                { method: "DELETE" }
+            );
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to delete poll");
+            setPolls((prev) => prev.filter((p) => p.id !== pollId));
+        },
+        [groupId, userAddress]
     );
 
     return {
@@ -170,5 +216,7 @@ export function useGroupPolls(
         fetchPolls,
         createPoll,
         vote,
+        updatePoll,
+        deletePoll,
     };
 }

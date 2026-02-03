@@ -5784,6 +5784,7 @@ function DashboardContent({
                         openDMByAddress(address);
                         setSelectedGroup(null);
                     }}
+                    isAdmin={isAdmin}
                     onMessageSent={() => {
                         // Update last message time for this group (for sorting)
                         if (selectedGroup) {
