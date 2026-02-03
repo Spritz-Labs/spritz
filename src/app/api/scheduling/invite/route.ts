@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { formatInTimeZone } from "date-fns-tz";
 import { addMinutes } from "date-fns";
+
+function generateInviteToken(): string {
+    return randomBytes(16).toString("hex");
+}
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -131,6 +136,16 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Ensure invite_token exists (older records may not have one)
+        let inviteToken = call.invite_token;
+        if (!inviteToken) {
+            inviteToken = generateInviteToken();
+            await supabase
+                .from("shout_scheduled_calls")
+                .update({ invite_token: inviteToken })
+                .eq("id", scheduledCallId);
+        }
+
         // Get recipient (host) user details
         const { data: hostUser } = await supabase
             .from("shout_users")
@@ -144,7 +159,6 @@ export async function POST(request: NextRequest) {
         const timezone = call.timezone || "UTC";
         const duration = call.duration_minutes || 30;
         const isPaid = call.is_paid || call.payment_amount_cents > 0;
-        const inviteToken = call.invite_token;
 
         // Format time for display
         const formattedDate = formatInTimeZone(scheduledTime, timezone, "EEEE, MMMM d, yyyy");

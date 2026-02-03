@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { Resend } from "resend";
 import { verifyX402Payment, type X402Config } from "@/lib/x402";
 import { toZonedTime, format } from "date-fns-tz";
 
+function generateInviteToken(): string {
+    return randomBytes(16).toString("hex");
+}
+
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resend = process.env.RESEND_API_KEY
+    ? new Resend(process.env.RESEND_API_KEY)
+    : null;
 
 // Helper to get the app's base URL from the request
 function getAppUrl(request: NextRequest): string {
@@ -18,7 +25,10 @@ function getAppUrl(request: NextRequest): string {
         return process.env.NEXT_PUBLIC_APP_URL;
     }
     const proto = request.headers.get("x-forwarded-proto") || "https";
-    const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
+    const host =
+        request.headers.get("x-forwarded-host") ||
+        request.headers.get("host") ||
+        "localhost:3000";
     return `${proto}://${host}`;
 }
 
@@ -60,7 +70,9 @@ export async function POST(request: NextRequest) {
         // Get recipient's scheduling settings
         const { data: settings } = await supabase
             .from("shout_user_settings")
-            .select("scheduling_enabled, scheduling_price_cents, scheduling_network, scheduling_wallet_address, scheduling_duration_minutes, scheduling_paid_enabled, scheduling_free_enabled")
+            .select(
+                "scheduling_enabled, scheduling_price_cents, scheduling_network, scheduling_wallet_address, scheduling_duration_minutes, scheduling_paid_enabled, scheduling_free_enabled"
+            )
             .eq("wallet_address", recipientAddress.toLowerCase())
             .single();
 
@@ -72,10 +84,12 @@ export async function POST(request: NextRequest) {
         }
 
         const priceCents = settings.scheduling_price_cents || 0;
-        const duration = durationMinutes || settings.scheduling_duration_minutes || 30;
+        const duration =
+            durationMinutes || settings.scheduling_duration_minutes || 30;
 
         // Determine if payment is required based on the booking type
-        const requiresPayment = isPaid && priceCents > 0 && settings.scheduling_paid_enabled;
+        const requiresPayment =
+            isPaid && priceCents > 0 && settings.scheduling_paid_enabled;
 
         // Verify payment if required
         let paymentResult = null;
@@ -87,7 +101,9 @@ export async function POST(request: NextRequest) {
                         error: "Payment required",
                         priceCents,
                         network: settings.scheduling_network || "base",
-                        payToAddress: settings.scheduling_wallet_address || recipientAddress,
+                        payToAddress:
+                            settings.scheduling_wallet_address ||
+                            recipientAddress,
                     },
                     { status: 402 }
                 );
@@ -104,9 +120,15 @@ export async function POST(request: NextRequest) {
                 // Otherwise verify via x402
                 const x402Config: X402Config = {
                     priceUSD: `$${(priceCents / 100).toFixed(2)}`,
-                    network: (settings.scheduling_network || "base") as "base" | "base-sepolia",
-                    payToAddress: settings.scheduling_wallet_address || recipientAddress,
-                    description: `Schedule a call with ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
+                    network: (settings.scheduling_network || "base") as
+                        | "base"
+                        | "base-sepolia",
+                    payToAddress:
+                        settings.scheduling_wallet_address || recipientAddress,
+                    description: `Schedule a call with ${recipientAddress.slice(
+                        0,
+                        6
+                    )}...${recipientAddress.slice(-4)}`,
                 };
 
                 // Create a mock request with the payment header for verification
@@ -116,11 +138,17 @@ export async function POST(request: NextRequest) {
                     },
                 });
 
-                paymentResult = await verifyX402Payment(mockRequest, x402Config);
+                paymentResult = await verifyX402Payment(
+                    mockRequest,
+                    x402Config
+                );
 
                 if (!paymentResult.isValid) {
                     return NextResponse.json(
-                        { error: "Payment verification failed", details: paymentResult.error },
+                        {
+                            error: "Payment verification failed",
+                            details: paymentResult.error,
+                        },
                         { status: 402 }
                     );
                 }
@@ -131,7 +159,7 @@ export async function POST(request: NextRequest) {
         // scheduledAt should be in UTC ISO format
         const scheduledTime = new Date(scheduledAt);
         const now = new Date();
-        
+
         // Get recipient's timezone for calendar event creation
         const { data: recipientWindows } = await supabase
             .from("shout_availability_windows")
@@ -140,8 +168,9 @@ export async function POST(request: NextRequest) {
             .eq("is_active", true)
             .limit(1)
             .single();
-        
-        const recipientTimezone = recipientWindows?.timezone || timezone || "UTC";
+
+        const recipientTimezone =
+            recipientWindows?.timezone || timezone || "UTC";
 
         // Check minimum advance notice
         const { data: advanceNotice } = await supabase
@@ -150,12 +179,17 @@ export async function POST(request: NextRequest) {
             .eq("wallet_address", recipientAddress.toLowerCase())
             .single();
 
-        const minAdvanceHours = advanceNotice?.scheduling_advance_notice_hours || 24;
-        const minTime = new Date(now.getTime() + minAdvanceHours * 60 * 60 * 1000);
+        const minAdvanceHours =
+            advanceNotice?.scheduling_advance_notice_hours || 24;
+        const minTime = new Date(
+            now.getTime() + minAdvanceHours * 60 * 60 * 1000
+        );
 
         if (scheduledTime < minTime) {
             return NextResponse.json(
-                { error: `Scheduled time must be at least ${minAdvanceHours} hours in advance` },
+                {
+                    error: `Scheduled time must be at least ${minAdvanceHours} hours in advance`,
+                },
                 { status: 400 }
             );
         }
@@ -163,7 +197,9 @@ export async function POST(request: NextRequest) {
         // Check if slot is still available (race condition protection)
         // Use a wider window to catch all potential conflicts
         const slotStart = scheduledTime.getTime();
-        const slotEnd = new Date(scheduledTime.getTime() + duration * 60 * 1000);
+        const slotEnd = new Date(
+            scheduledTime.getTime() + duration * 60 * 1000
+        );
         const slotEndTime = slotEnd.getTime();
 
         // Check existing scheduled calls - need to check for ANY overlap
@@ -174,7 +210,7 @@ export async function POST(request: NextRequest) {
         const maxDurationMinutes = 120; // Assume max call duration of 2 hours for query window
         const queryStart = new Date(slotStart - maxDurationMinutes * 60 * 1000); // Query from before our slot
         const queryEnd = new Date(slotEndTime + maxDurationMinutes * 60 * 1000); // Query to after our slot
-        
+
         const { data: existingCalls } = await supabase
             .from("shout_scheduled_calls")
             .select("id, scheduled_at, duration_minutes")
@@ -191,20 +227,23 @@ export async function POST(request: NextRequest) {
 
             // Check for any overlap between [slotStart, slotEnd] and [callStart, callEnd]
             return (
-                (slotStart >= callStart && slotStart < callEnd) ||  // New slot starts during existing call
-                (slotEndTime > callStart && slotEndTime <= callEnd) ||  // New slot ends during existing call
-                (slotStart <= callStart && slotEndTime >= callEnd)  // New slot completely contains existing call
+                (slotStart >= callStart && slotStart < callEnd) || // New slot starts during existing call
+                (slotEndTime > callStart && slotEndTime <= callEnd) || // New slot ends during existing call
+                (slotStart <= callStart && slotEndTime >= callEnd) // New slot completely contains existing call
             );
         });
 
         if (hasConflict) {
             console.log("[Schedule] Database conflict detected:", {
-                requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
+                requestedSlot: {
+                    start: scheduledTime.toISOString(),
+                    end: slotEnd.toISOString(),
+                },
                 existingCallsCount: existingCalls?.length || 0,
             });
             return NextResponse.json(
-                { 
-                    error: "This time slot is no longer available", 
+                {
+                    error: "This time slot is no longer available",
                     source: "database",
                 },
                 { status: 409 }
@@ -232,54 +271,82 @@ export async function POST(request: NextRequest) {
                 });
 
                 // Refresh token if needed
-                const tokenExpiry = calendarConnection.token_expires_at ? new Date(calendarConnection.token_expires_at) : null;
-                if (tokenExpiry && tokenExpiry.getTime() < Date.now() && calendarConnection.refresh_token) {
-                    const { credentials } = await oauth2Client.refreshAccessToken();
+                const tokenExpiry = calendarConnection.token_expires_at
+                    ? new Date(calendarConnection.token_expires_at)
+                    : null;
+                if (
+                    tokenExpiry &&
+                    tokenExpiry.getTime() < Date.now() &&
+                    calendarConnection.refresh_token
+                ) {
+                    const { credentials } =
+                        await oauth2Client.refreshAccessToken();
                     await supabase
                         .from("shout_calendar_connections")
                         .update({
                             access_token: credentials.access_token,
-                            token_expires_at: credentials.expiry_date 
-                                ? new Date(credentials.expiry_date).toISOString()
-                                : new Date(Date.now() + 3600 * 1000).toISOString(),
+                            token_expires_at: credentials.expiry_date
+                                ? new Date(
+                                      credentials.expiry_date
+                                  ).toISOString()
+                                : new Date(
+                                      Date.now() + 3600 * 1000
+                                  ).toISOString(),
                         })
                         .eq("wallet_address", recipientAddress.toLowerCase())
                         .eq("provider", "google");
                     oauth2Client.setCredentials(credentials);
                 }
 
-                const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+                const calendar = google.calendar({
+                    version: "v3",
+                    auth: oauth2Client,
+                });
                 const busyResponse = await calendar.freebusy.query({
                     requestBody: {
                         timeMin: scheduledTime.toISOString(),
                         timeMax: slotEnd.toISOString(),
-                        items: [{ id: calendarConnection.calendar_id || "primary" }],
+                        items: [
+                            { id: calendarConnection.calendar_id || "primary" },
+                        ],
                     },
                 });
 
-                const calendarData = busyResponse.data.calendars?.[calendarConnection.calendar_id || "primary"];
+                const calendarData =
+                    busyResponse.data.calendars?.[
+                        calendarConnection.calendar_id || "primary"
+                    ];
                 const busyPeriods = calendarData?.busy || [];
                 const calendarErrors = calendarData?.errors || [];
-                
+
                 // Log detailed info about the freebusy response
                 console.log("[Schedule] Google Calendar freebusy check:", {
                     calendarId: calendarConnection.calendar_id || "primary",
-                    requestedSlot: { start: scheduledTime.toISOString(), end: slotEnd.toISOString() },
+                    requestedSlot: {
+                        start: scheduledTime.toISOString(),
+                        end: slotEnd.toISOString(),
+                    },
                     busyPeriodsCount: busyPeriods.length,
-                    busyPeriods: busyPeriods.map(b => ({ start: b.start, end: b.end })),
+                    busyPeriods: busyPeriods.map((b) => ({
+                        start: b.start,
+                        end: b.end,
+                    })),
                     errors: calendarErrors,
                 });
-                
+
                 // If there are calendar API errors, log them
                 if (calendarErrors.length > 0) {
-                    console.warn("[Schedule] Calendar API errors:", calendarErrors);
+                    console.warn(
+                        "[Schedule] Calendar API errors:",
+                        calendarErrors
+                    );
                 }
-                
+
                 if (busyPeriods.length > 0) {
                     // Don't expose calendar event details for privacy
                     // Just indicate there's a conflict
                     return NextResponse.json(
-                        { 
+                        {
                             error: "This time slot is no longer available",
                             source: "google_calendar",
                         },
@@ -287,16 +354,21 @@ export async function POST(request: NextRequest) {
                     );
                 }
             } catch (calendarError) {
-                console.error("[Schedule] Google Calendar check error:", calendarError);
+                console.error(
+                    "[Schedule] Google Calendar check error:",
+                    calendarError
+                );
                 // Continue with booking - calendar check is best-effort
             }
         }
 
-        // Create scheduled call record
+        // Create scheduled call record (invite_token required for join link and email)
+        const inviteToken = generateInviteToken();
         const { data: scheduledCall, error: createError } = await supabase
             .from("shout_scheduled_calls")
             .insert({
-                scheduler_wallet_address: schedulerAddress?.toLowerCase() || null,
+                scheduler_wallet_address:
+                    schedulerAddress?.toLowerCase() || null,
                 recipient_wallet_address: recipientAddress.toLowerCase(),
                 scheduled_at: scheduledTime.toISOString(),
                 duration_minutes: duration,
@@ -304,8 +376,14 @@ export async function POST(request: NextRequest) {
                 status: "pending",
                 payment_required: priceCents > 0,
                 payment_amount_cents: priceCents > 0 ? priceCents : null,
-                payment_transaction_hash: paymentResult?.transactionHash || null,
-                payment_status: priceCents > 0 ? (paymentResult?.isValid ? "paid" : "pending") : null,
+                payment_transaction_hash:
+                    paymentResult?.transactionHash || null,
+                payment_status:
+                    priceCents > 0
+                        ? paymentResult?.isValid
+                            ? "paid"
+                            : "pending"
+                        : null,
                 guest_email: guestEmail || null,
                 guest_name: guestName || null,
                 scheduler_email: guestEmail || null,
@@ -313,6 +391,7 @@ export async function POST(request: NextRequest) {
                 notes: notes || null,
                 is_paid: isPaid || priceCents > 0,
                 timezone: recipientTimezone,
+                invite_token: inviteToken,
             })
             .select()
             .single();
@@ -345,7 +424,10 @@ export async function POST(request: NextRequest) {
                     refresh_token: connection.refresh_token,
                 });
 
-                const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+                const calendar = google.calendar({
+                    version: "v3",
+                    auth: oauth2Client,
+                });
 
                 // Get recipient's display name
                 const { data: recipientUser } = await supabase
@@ -354,25 +436,46 @@ export async function POST(request: NextRequest) {
                     .eq("wallet_address", recipientAddress.toLowerCase())
                     .single();
 
-                const eventTitle = title || `Call with ${schedulerAddress ? schedulerAddress.slice(0, 6) + "..." + schedulerAddress.slice(-4) : guestName || "Guest"}`;
-                const eventDescription = `Scheduled call via Spritz\n\n${title || ""}\n\nScheduler: ${schedulerAddress || guestEmail || "Guest"}`;
+                const eventTitle =
+                    title ||
+                    `Call with ${
+                        schedulerAddress
+                            ? schedulerAddress.slice(0, 6) +
+                              "..." +
+                              schedulerAddress.slice(-4)
+                            : guestName || "Guest"
+                    }`;
+                const eventDescription = `Scheduled call via Spritz\n\n${
+                    title || ""
+                }\n\nScheduler: ${schedulerAddress || guestEmail || "Guest"}`;
 
                 // Convert UTC to recipient's timezone for Google Calendar
                 // Google Calendar expects RFC3339 format with timezone
-                const zonedStart = toZonedTime(scheduledTime, recipientTimezone);
+                const zonedStart = toZonedTime(
+                    scheduledTime,
+                    recipientTimezone
+                );
                 const zonedEnd = toZonedTime(slotEnd, recipientTimezone);
-                
+
                 // Format as RFC3339: "2024-01-15T09:00:00-05:00"
-                const startDateTime = format(zonedStart, "yyyy-MM-dd'T'HH:mm:ss", { timeZone: recipientTimezone });
-                const endDateTime = format(zonedEnd, "yyyy-MM-dd'T'HH:mm:ss", { timeZone: recipientTimezone });
-                
+                const startDateTime = format(
+                    zonedStart,
+                    "yyyy-MM-dd'T'HH:mm:ss",
+                    { timeZone: recipientTimezone }
+                );
+                const endDateTime = format(zonedEnd, "yyyy-MM-dd'T'HH:mm:ss", {
+                    timeZone: recipientTimezone,
+                });
+
                 // Create event without attendees to avoid permission issues
                 // Guest will receive email invite separately via Resend
                 const event = await calendar.events.insert({
                     calendarId: connection.calendar_id || "primary",
                     requestBody: {
                         summary: eventTitle,
-                        description: `${eventDescription}\n\nGuest: ${guestName || ""} ${guestEmail ? `<${guestEmail}>` : ""}`.trim(),
+                        description: `${eventDescription}\n\nGuest: ${
+                            guestName || ""
+                        } ${guestEmail ? `<${guestEmail}>` : ""}`.trim(),
                         start: {
                             dateTime: startDateTime,
                             timeZone: recipientTimezone,
@@ -405,20 +508,23 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Send calendar invite emails via the invite endpoint
-        if (resend && scheduledCall && (guestEmail || connection?.calendar_email)) {
+        // Send calendar invite emails via the invite endpoint (always send so host gets email from shout_users)
+        if (resend && scheduledCall) {
             try {
-                // Call the invite endpoint to send beautiful emails
-                const inviteResponse = await fetch(`${getAppUrl(request)}/api/scheduling/invite`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        scheduledCallId: scheduledCall.id,
-                        recipientEmail: connection?.calendar_email,
-                        schedulerEmail: guestEmail,
-                    }),
-                });
-                
+                // Call the invite endpoint to send beautiful emails (guest if guestEmail, host from DB)
+                const inviteResponse = await fetch(
+                    `${getAppUrl(request)}/api/scheduling/invite`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            scheduledCallId: scheduledCall.id,
+                            recipientEmail: connection?.calendar_email,
+                            schedulerEmail: guestEmail,
+                        }),
+                    }
+                );
+
                 if (!inviteResponse.ok) {
                     console.error("[Scheduling] Failed to send invite emails");
                 }
@@ -443,4 +549,3 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-

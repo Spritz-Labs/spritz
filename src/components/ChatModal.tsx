@@ -1328,15 +1328,20 @@ export function ChatModal({
                                     )}
                                 </div>
 
-                                {/* Title area - takes remaining space */}
-                                <div className="flex-1 min-w-0 pr-1">
+                                {/* Title area - clickable to open profile/schedule tray (same as Friends) */}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowActionsMenu(true)}
+                                    className="flex-1 min-w-0 pr-1 text-left cursor-pointer rounded-lg -ml-1 pl-1 hover:bg-zinc-800/50 active:bg-zinc-800 transition-colors"
+                                    aria-label={`Actions for ${displayName}`}
+                                >
                                     <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                         {displayName}
                                     </h2>
                                     <p className="text-zinc-500 text-xs font-mono truncate">
                                         {formatAddress(peerAddress)}
                                     </p>
-                                </div>
+                                </button>
 
                                 {/* Action buttons - compact on mobile */}
                                 <div className="shrink-0 flex items-center">
@@ -2802,7 +2807,7 @@ export function ChatModal({
                         peerName={displayName}
                     />
 
-                    {/* Conversation Actions Menu */}
+                    {/* Conversation Actions Menu - includes View profile & Schedule a call when peerAddress set */}
                     <ConversationActionsMenu
                         isOpen={showActionsMenu}
                         onClose={() => setShowActionsMenu(false)}
@@ -2814,6 +2819,7 @@ export function ChatModal({
                         showMute={true}
                         showBlock={true}
                         showReport={true}
+                        peerAddress={peerAddress}
                     />
 
                     {/* Mute Options Modal */}

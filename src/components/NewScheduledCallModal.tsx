@@ -40,8 +40,10 @@ export function NewScheduledCallModal({
         setIsCreating(true);
         try {
             // Combine date and time into ISO string
-            const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}:00`);
-            
+            const scheduledAt = new Date(
+                `${scheduledDate}T${scheduledTime}:00`
+            );
+
             // Create a scheduled call with a custom invite token
             const res = await fetch("/api/scheduling/create-shareable", {
                 method: "POST",
@@ -58,7 +60,9 @@ export function NewScheduledCallModal({
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.error || "Failed to create scheduled call");
+                throw new Error(
+                    data.error || "Failed to create scheduled call"
+                );
             }
 
             // Track schedule creation
@@ -70,7 +74,11 @@ export function NewScheduledCallModal({
             setShareUrl(url);
         } catch (err) {
             console.error("[NewScheduledCall] Error:", err);
-            setError(err instanceof Error ? err.message : "Failed to create scheduled call");
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to create scheduled call"
+            );
         } finally {
             setIsCreating(false);
         }
@@ -105,17 +113,23 @@ export function NewScheduledCallModal({
         setError(null);
     };
 
+    const handleClose = () => {
+        handleReset();
+        onClose();
+    };
+
     if (!isOpen) return null;
 
     return (
         <AnimatePresence>
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Top padding for PWA safe area so X is below notch/battery/wifi */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))]">
                 {/* Backdrop */}
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                 />
 
@@ -138,11 +152,22 @@ export function NewScheduledCallModal({
                                 </p>
                             </div>
                             <button
-                                onClick={onClose}
-                                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                onClick={handleClose}
+                                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                aria-label="Close"
                             >
-                                <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                <svg
+                                    className="w-5 h-5 text-zinc-400"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
                                 </svg>
                             </button>
                         </div>
@@ -155,7 +180,7 @@ export function NewScheduledCallModal({
                                 <p className="text-red-400 text-sm">{error}</p>
                             </div>
                         )}
-                        
+
                         {shareUrl ? (
                             // Success state - show shareable URL
                             <motion.div
@@ -168,7 +193,8 @@ export function NewScheduledCallModal({
                                         ✅ Scheduled call created!
                                     </p>
                                     <p className="text-zinc-300 text-sm mb-3">
-                                        Copy this link to share in your calendar invites:
+                                        Copy this link to share in your calendar
+                                        invites:
                                     </p>
                                     <div className="flex items-center gap-2 p-3 bg-zinc-800 rounded-lg">
                                         <input
@@ -182,8 +208,18 @@ export function NewScheduledCallModal({
                                             className="p-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
                                             title="Copy link"
                                         >
-                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            <svg
+                                                className="w-4 h-4 text-white"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                />
                                             </svg>
                                         </button>
                                     </div>
@@ -196,7 +232,7 @@ export function NewScheduledCallModal({
                                         Create Another
                                     </button>
                                     <button
-                                        onClick={onClose}
+                                        onClick={handleClose}
                                         className="flex-1 py-2.5 px-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:shadow-lg hover:shadow-orange-500/25 transition-all"
                                     >
                                         Done
@@ -208,12 +244,15 @@ export function NewScheduledCallModal({
                             <>
                                 <div>
                                     <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                        Title <span className="text-red-400">*</span>
+                                        Title{" "}
+                                        <span className="text-red-400">*</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={title}
-                                        onChange={(e) => setTitle(e.target.value)}
+                                        onChange={(e) =>
+                                            setTitle(e.target.value)
+                                        }
                                         placeholder="e.g. Team Meeting, Client Call"
                                         className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                     />
@@ -222,24 +261,37 @@ export function NewScheduledCallModal({
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                            Date <span className="text-red-400">*</span>
+                                            Date{" "}
+                                            <span className="text-red-400">
+                                                *
+                                            </span>
                                         </label>
                                         <input
                                             type="date"
                                             value={scheduledDate || defaultDate}
-                                            onChange={(e) => setScheduledDate(e.target.value)}
-                                            min={format(new Date(), "yyyy-MM-dd")}
+                                            onChange={(e) =>
+                                                setScheduledDate(e.target.value)
+                                            }
+                                            min={format(
+                                                new Date(),
+                                                "yyyy-MM-dd"
+                                            )}
                                             className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-zinc-300 mb-2">
-                                            Time <span className="text-red-400">*</span>
+                                            Time{" "}
+                                            <span className="text-red-400">
+                                                *
+                                            </span>
                                         </label>
                                         <input
                                             type="time"
                                             value={scheduledTime || defaultTime}
-                                            onChange={(e) => setScheduledTime(e.target.value)}
+                                            onChange={(e) =>
+                                                setScheduledTime(e.target.value)
+                                            }
                                             className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                         />
                                     </div>
@@ -251,7 +303,9 @@ export function NewScheduledCallModal({
                                     </label>
                                     <select
                                         value={duration}
-                                        onChange={(e) => setDuration(Number(e.target.value))}
+                                        onChange={(e) =>
+                                            setDuration(Number(e.target.value))
+                                        }
                                         className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                     >
                                         <option value={15}>15 minutes</option>
@@ -265,14 +319,19 @@ export function NewScheduledCallModal({
 
                                 <div className="flex gap-3 pt-2">
                                     <button
-                                        onClick={onClose}
+                                        onClick={handleClose}
                                         className="flex-1 py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         onClick={handleCreate}
-                                        disabled={isCreating || !title.trim() || !scheduledDate || !scheduledTime}
+                                        disabled={
+                                            isCreating ||
+                                            !title.trim() ||
+                                            !scheduledDate ||
+                                            !scheduledTime
+                                        }
                                         className="flex-1 py-2.5 px-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:shadow-lg hover:shadow-orange-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {isCreating ? (
@@ -293,4 +352,3 @@ export function NewScheduledCallModal({
         </AnimatePresence>
     );
 }
-

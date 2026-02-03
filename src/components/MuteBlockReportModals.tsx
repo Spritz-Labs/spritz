@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-    MuteDuration, 
-    MUTE_DURATIONS, 
-    ReportType, 
-    REPORT_TYPES 
+import {
+    MuteDuration,
+    MUTE_DURATIONS,
+    ReportType,
+    REPORT_TYPES,
 } from "@/hooks/useMuteBlockReport";
 
 // =============================================================================
@@ -33,7 +33,8 @@ export function MuteOptionsModal({
     muteUntil,
 }: MuteOptionsModalProps) {
     const [isLoading, setIsLoading] = useState(false);
-    const [selectedDuration, setSelectedDuration] = useState<MuteDuration | null>(null);
+    const [selectedDuration, setSelectedDuration] =
+        useState<MuteDuration | null>(null);
 
     const handleMute = async (duration: MuteDuration) => {
         setIsLoading(true);
@@ -60,10 +61,10 @@ export function MuteOptionsModal({
         if (!muteUntil) return "Forever";
         const remaining = new Date(muteUntil).getTime() - Date.now();
         if (remaining <= 0) return "Expired";
-        
+
         const hours = Math.floor(remaining / (1000 * 60 * 60));
         const days = Math.floor(hours / 24);
-        
+
         if (days > 0) return `${days} day${days > 1 ? "s" : ""} remaining`;
         if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} remaining`;
         return "Less than an hour";
@@ -97,7 +98,9 @@ export function MuteOptionsModal({
                                 </div>
                                 <div>
                                     <h2 className="text-lg font-semibold text-white">
-                                        {isMuted ? "Muted" : "Mute Notifications"}
+                                        {isMuted
+                                            ? "Muted"
+                                            : "Mute Notifications"}
                                     </h2>
                                     <p className="text-sm text-zinc-400 truncate max-w-[200px]">
                                         {conversationName}
@@ -113,8 +116,12 @@ export function MuteOptionsModal({
                                 <div className="space-y-4">
                                     <div className="bg-zinc-800/50 rounded-xl p-4 text-center">
                                         <span className="text-3xl">🔇</span>
-                                        <p className="text-white font-medium mt-2">Currently muted</p>
-                                        <p className="text-sm text-zinc-400">{formatMuteRemaining()}</p>
+                                        <p className="text-white font-medium mt-2">
+                                            Currently muted
+                                        </p>
+                                        <p className="text-sm text-zinc-400">
+                                            {formatMuteRemaining()}
+                                        </p>
                                     </div>
 
                                     <button
@@ -122,7 +129,9 @@ export function MuteOptionsModal({
                                         disabled={isLoading}
                                         className="w-full py-3 bg-[#FF5500] hover:bg-[#FF6600] active:bg-[#E64D00] text-white font-medium rounded-xl transition-colors disabled:opacity-50"
                                     >
-                                        {isLoading ? "Unmuting..." : "Unmute Notifications"}
+                                        {isLoading
+                                            ? "Unmuting..."
+                                            : "Unmute Notifications"}
                                     </button>
 
                                     <p className="text-xs text-zinc-500 text-center">
@@ -131,7 +140,8 @@ export function MuteOptionsModal({
                                 </div>
                             ) : (
                                 <p className="text-sm text-zinc-400 mb-4">
-                                    You won't receive notifications from this conversation. Select how long to mute:
+                                    You won't receive notifications from this
+                                    conversation. Select how long to mute:
                                 </p>
                             )}
 
@@ -143,7 +153,8 @@ export function MuteOptionsModal({
                                         onClick={() => handleMute(option.value)}
                                         disabled={isLoading}
                                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${
-                                            selectedDuration === option.value && isLoading
+                                            selectedDuration === option.value &&
+                                            isLoading
                                                 ? "bg-zinc-700 text-white"
                                                 : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white"
                                         }`}
@@ -154,13 +165,15 @@ export function MuteOptionsModal({
                                                 {option.value === "8h" && "🌙"}
                                                 {option.value === "1d" && "📅"}
                                                 {option.value === "1w" && "📆"}
-                                                {option.value === "forever" && "🔇"}
+                                                {option.value === "forever" &&
+                                                    "🔇"}
                                             </span>
                                             {option.label}
                                         </span>
-                                        {selectedDuration === option.value && isLoading && (
-                                            <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
-                                        )}
+                                        {selectedDuration === option.value &&
+                                            isLoading && (
+                                                <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                            )}
                                     </button>
                                 ))}
                             </div>
@@ -249,7 +262,9 @@ export function BlockUserModal({
                         {/* Header with warning icon */}
                         <div className="pt-6 pb-4 text-center">
                             <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-                                <span className="text-3xl">{isBlocked ? "🚫" : "⛔"}</span>
+                                <span className="text-3xl">
+                                    {isBlocked ? "🚫" : "⛔"}
+                                </span>
                             </div>
                             <h2 className="text-xl font-bold text-white">
                                 {isBlocked ? "Unblock User?" : "Block User?"}
@@ -257,7 +272,8 @@ export function BlockUserModal({
                             <p className="text-zinc-400 mt-1">{userName}</p>
                             {userAddress && (
                                 <p className="text-xs text-zinc-600 mt-1 font-mono">
-                                    {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
+                                    {userAddress.slice(0, 6)}...
+                                    {userAddress.slice(-4)}
                                 </p>
                             )}
                         </div>
@@ -269,7 +285,9 @@ export function BlockUserModal({
                                     <p>Unblocking will allow this user to:</p>
                                     <ul className="list-disc list-inside text-zinc-400 space-y-1">
                                         <li>Send you direct messages</li>
-                                        <li>See your messages in groups/channels</li>
+                                        <li>
+                                            See your messages in groups/channels
+                                        </li>
                                         <li>Add you as a friend</li>
                                     </ul>
                                 </div>
@@ -293,7 +311,9 @@ export function BlockUserModal({
                                     disabled={isLoading}
                                     className="w-full py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
                                 >
-                                    {isLoading ? "Unblocking..." : "Unblock User"}
+                                    {isLoading
+                                        ? "Unblocking..."
+                                        : "Unblock User"}
                                 </button>
                             ) : (
                                 <button
@@ -430,9 +450,12 @@ export function ReportUserModal({
                                 >
                                     <span className="text-4xl">✅</span>
                                 </motion.div>
-                                <h2 className="text-xl font-bold text-white">Report Submitted</h2>
+                                <h2 className="text-xl font-bold text-white">
+                                    Report Submitted
+                                </h2>
                                 <p className="text-zinc-400 mt-2">
-                                    Thank you for helping keep our community safe.
+                                    Thank you for helping keep our community
+                                    safe.
                                 </p>
                             </div>
                         ) : step === "type" ? (
@@ -440,15 +463,29 @@ export function ReportUserModal({
                             <>
                                 <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
                                     <div>
-                                        <h2 className="text-lg font-semibold text-white">Report User</h2>
-                                        <p className="text-sm text-zinc-400">{userName}</p>
+                                        <h2 className="text-lg font-semibold text-white">
+                                            Report User
+                                        </h2>
+                                        <p className="text-sm text-zinc-400">
+                                            {userName}
+                                        </p>
                                     </div>
                                     <button
                                         onClick={handleClose}
                                         className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -462,13 +499,21 @@ export function ReportUserModal({
                                         {REPORT_TYPES.map((type) => (
                                             <button
                                                 key={type.value}
-                                                onClick={() => handleSelectType(type.value)}
+                                                onClick={() =>
+                                                    handleSelectType(type.value)
+                                                }
                                                 className="w-full flex items-center gap-3 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors text-left"
                                             >
-                                                <span className="text-xl">{type.emoji}</span>
+                                                <span className="text-xl">
+                                                    {type.emoji}
+                                                </span>
                                                 <div>
-                                                    <p className="font-medium text-white">{type.label}</p>
-                                                    <p className="text-xs text-zinc-500">{type.description}</p>
+                                                    <p className="font-medium text-white">
+                                                        {type.label}
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500">
+                                                        {type.description}
+                                                    </p>
                                                 </div>
                                             </button>
                                         ))}
@@ -483,15 +528,32 @@ export function ReportUserModal({
                                         onClick={() => setStep("type")}
                                         className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
                                     >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M15 19l-7-7 7-7"
+                                            />
                                         </svg>
                                     </button>
                                     <div>
                                         <h2 className="text-lg font-semibold text-white">
-                                            {REPORT_TYPES.find((t) => t.value === selectedType)?.label}
+                                            {
+                                                REPORT_TYPES.find(
+                                                    (t) =>
+                                                        t.value === selectedType
+                                                )?.label
+                                            }
                                         </h2>
-                                        <p className="text-sm text-zinc-400">Add details (optional)</p>
+                                        <p className="text-sm text-zinc-400">
+                                            Add details (optional)
+                                        </p>
                                     </div>
                                 </div>
 
@@ -499,7 +561,9 @@ export function ReportUserModal({
                                     {/* Show message being reported if available */}
                                     {messageContent && (
                                         <div className="bg-zinc-800/50 rounded-xl p-3">
-                                            <p className="text-xs text-zinc-500 mb-1">Reported message:</p>
+                                            <p className="text-xs text-zinc-500 mb-1">
+                                                Reported message:
+                                            </p>
                                             <p className="text-sm text-zinc-300 line-clamp-3">
                                                 {messageContent}
                                             </p>
@@ -513,7 +577,9 @@ export function ReportUserModal({
                                         </label>
                                         <textarea
                                             value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
+                                            onChange={(e) =>
+                                                setDescription(e.target.value)
+                                            }
                                             placeholder="Describe what happened..."
                                             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-[#FF5500]"
                                             rows={3}
@@ -529,13 +595,18 @@ export function ReportUserModal({
                                         <input
                                             type="checkbox"
                                             checked={alsoBlock}
-                                            onChange={(e) => setAlsoBlock(e.target.checked)}
+                                            onChange={(e) =>
+                                                setAlsoBlock(e.target.checked)
+                                            }
                                             className="w-5 h-5 rounded border-zinc-600 bg-zinc-700 text-[#FF5500] focus:ring-[#FF5500] focus:ring-offset-zinc-900"
                                         />
                                         <div>
-                                            <p className="text-white font-medium">Also block this user</p>
+                                            <p className="text-white font-medium">
+                                                Also block this user
+                                            </p>
                                             <p className="text-xs text-zinc-500">
-                                                They won't be able to message you
+                                                They won't be able to message
+                                                you
                                             </p>
                                         </div>
                                     </label>
@@ -543,7 +614,9 @@ export function ReportUserModal({
                                     {/* Error */}
                                     {error && (
                                         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-                                            <p className="text-sm text-red-400">{error}</p>
+                                            <p className="text-sm text-red-400">
+                                                {error}
+                                            </p>
                                         </div>
                                     )}
                                 </div>
@@ -593,6 +666,8 @@ type ConversationActionsMenuProps = {
     showMute?: boolean;
     showBlock?: boolean;
     showReport?: boolean;
+    /** When set (e.g. in DM chat), show View profile and Schedule a call at top */
+    peerAddress?: string;
 };
 
 export function ConversationActionsMenu({
@@ -607,6 +682,7 @@ export function ConversationActionsMenu({
     showMute = true,
     showBlock = true,
     showReport = true,
+    peerAddress,
 }: ConversationActionsMenuProps) {
     return (
         <AnimatePresence>
@@ -621,12 +697,12 @@ export function ConversationActionsMenu({
                         className="fixed inset-0 bg-black/40 z-[200]"
                     />
 
-                    {/* Menu */}
+                    {/* Menu - safe area so content is above PWA nav/notch */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 20 }}
-                        className="fixed bottom-0 inset-x-0 bg-zinc-900 rounded-t-2xl z-[201] pb-safe"
+                        className="fixed bottom-0 inset-x-0 bg-zinc-900 rounded-t-2xl z-[201] pb-[max(env(safe-area-inset-bottom),16px)]"
                     >
                         {/* Handle */}
                         <div className="flex justify-center py-2">
@@ -635,6 +711,44 @@ export function ConversationActionsMenu({
 
                         {/* Options */}
                         <div className="px-4 pb-4 space-y-2">
+                            {peerAddress && (
+                                <>
+                                    <a
+                                        href={`/user/${peerAddress}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={() => onClose()}
+                                        className="w-full flex items-center gap-4 px-4 py-3.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+                                    >
+                                        <span className="text-xl">👤</span>
+                                        <div className="text-left">
+                                            <p className="font-medium text-white">
+                                                View Profile
+                                            </p>
+                                            <p className="text-xs text-zinc-500">
+                                                Open their public profile
+                                            </p>
+                                        </div>
+                                    </a>
+                                    <a
+                                        href={`/schedule/${peerAddress}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={() => onClose()}
+                                        className="w-full flex items-center gap-4 px-4 py-3.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+                                    >
+                                        <span className="text-xl">📅</span>
+                                        <div className="text-left">
+                                            <p className="font-medium text-white">
+                                                Schedule a Call
+                                            </p>
+                                            <p className="text-xs text-zinc-500">
+                                                Book a time to talk
+                                            </p>
+                                        </div>
+                                    </a>
+                                </>
+                            )}
                             {showMute && (
                                 <button
                                     onClick={() => {
@@ -643,13 +757,19 @@ export function ConversationActionsMenu({
                                     }}
                                     className="w-full flex items-center gap-4 px-4 py-3.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
                                 >
-                                    <span className="text-xl">{isMuted ? "🔔" : "🔇"}</span>
+                                    <span className="text-xl">
+                                        {isMuted ? "🔔" : "🔇"}
+                                    </span>
                                     <div className="text-left">
                                         <p className="font-medium text-white">
-                                            {isMuted ? "Unmute Notifications" : "Mute Notifications"}
+                                            {isMuted
+                                                ? "Unmute Notifications"
+                                                : "Mute Notifications"}
                                         </p>
                                         <p className="text-xs text-zinc-500">
-                                            {isMuted ? "Turn notifications back on" : "Stop receiving notifications"}
+                                            {isMuted
+                                                ? "Turn notifications back on"
+                                                : "Stop receiving notifications"}
                                         </p>
                                     </div>
                                 </button>
@@ -663,13 +783,19 @@ export function ConversationActionsMenu({
                                     }}
                                     className="w-full flex items-center gap-4 px-4 py-3.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
                                 >
-                                    <span className="text-xl">{isBlocked ? "✅" : "🚫"}</span>
+                                    <span className="text-xl">
+                                        {isBlocked ? "✅" : "🚫"}
+                                    </span>
                                     <div className="text-left">
                                         <p className="font-medium text-white">
-                                            {isBlocked ? "Unblock User" : "Block User"}
+                                            {isBlocked
+                                                ? "Unblock User"
+                                                : "Block User"}
                                         </p>
                                         <p className="text-xs text-zinc-500">
-                                            {isBlocked ? "Allow messages from this user" : "Prevent all contact"}
+                                            {isBlocked
+                                                ? "Allow messages from this user"
+                                                : "Prevent all contact"}
                                         </p>
                                     </div>
                                 </button>
@@ -685,9 +811,12 @@ export function ConversationActionsMenu({
                                 >
                                     <span className="text-xl">🚨</span>
                                     <div className="text-left">
-                                        <p className="font-medium text-red-400">Report User</p>
+                                        <p className="font-medium text-red-400">
+                                            Report User
+                                        </p>
                                         <p className="text-xs text-zinc-500">
-                                            Report for spam, abuse, or violations
+                                            Report for spam, abuse, or
+                                            violations
                                         </p>
                                     </div>
                                 </button>

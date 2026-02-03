@@ -5164,10 +5164,7 @@ function DashboardContent({
                     </div>
                 </nav>
 
-                {/* Spacer for fixed bottom nav + safe area */}
-                <div className="h-20 pb-[env(safe-area-inset-bottom)]" />
-
-                {/* Footer - Sticky to bottom */}
+                {/* Footer - above nav when scrolled */}
                 <footer className="border-t border-zinc-800 bg-zinc-900/50 py-4 px-4 mt-auto">
                     <div className="max-w-4xl mx-auto">
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-zinc-500">
@@ -5193,6 +5190,12 @@ function DashboardContent({
                         </div>
                     </div>
                 </footer>
+
+                {/* Spacer after footer so footer sits above fixed nav on PWA when scrolled to end */}
+                <div
+                    className="min-h-[5.5rem] sm:min-h-[5rem] shrink-0 pb-[env(safe-area-inset-bottom)]"
+                    aria-hidden="true"
+                />
             </div>
 
             {/* Add Friend Modal */}
