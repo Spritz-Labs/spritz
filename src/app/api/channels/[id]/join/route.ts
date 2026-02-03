@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { isAddress, getAddress, createPublicClient, http } from "viem";
-import { mainnet } from "viem/chains";
-import { getRpcUrl } from "@/lib/rpc";
+import { getAddress } from "viem";
+import { resolveToAddress } from "@/lib/ensResolution";
 
 const POAP_API_BASE = "https://api.poap.tech";
 
@@ -16,7 +15,9 @@ async function addressHoldsPoap(
     eventId: number,
     apiKey: string
 ): Promise<boolean> {
-    const url = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(address)}/${eventId}`;
+    const url = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
+        address
+    )}/${eventId}`;
     const res = await fetch(url, {
         headers: { "X-API-Key": apiKey },
         next: { revalidate: 60 },
@@ -25,23 +26,6 @@ async function addressHoldsPoap(
     const data = await res.json();
     const list = Array.isArray(data) ? data : data?.tokens ?? data?.poaps ?? [];
     return list.length > 0;
-}
-
-/** Resolve ENS to address; return lowercase 0x address. If input is already 0x, normalize to lowercase. */
-async function resolveToAddress(input: string): Promise<string | null> {
-    const trimmed = (input || "").trim();
-    if (!trimmed) return null;
-    if (isAddress(trimmed)) return trimmed.toLowerCase();
-    try {
-        const client = createPublicClient({
-            chain: mainnet,
-            transport: http(getRpcUrl(1)),
-        });
-        const resolved = await client.getEnsAddress({ name: trimmed });
-        return resolved ? resolved.toLowerCase() : null;
-    } catch {
-        return null;
-    }
 }
 
 // POST /api/channels/[id]/join - Join a channel (POAP channels require holding the POAP)
@@ -65,7 +49,9 @@ export async function POST(
         const normalizedAddress = await resolveToAddress(userAddress);
         if (!normalizedAddress) {
             return NextResponse.json(
-                { error: "Invalid address or ENS name. Could not resolve to an Ethereum address." },
+                {
+                    error: "Invalid address or ENS name. Could not resolve to an Ethereum address.",
+                },
                 { status: 400 }
             );
         }
@@ -96,8 +82,7 @@ export async function POST(
             if (!apiKey) {
                 return NextResponse.json(
                     {
-                        error:
-                            "POAP verification is not configured. You need this POAP to join this channel.",
+                        error: "POAP verification is not configured. You need this POAP to join this channel.",
                     },
                     { status: 403 }
                 );
@@ -153,8 +138,7 @@ export async function POST(
             if (!hasPoap) {
                 return NextResponse.json(
                     {
-                        error:
-                            "You need this POAP to join this channel. Hold the POAP in your wallet to join.",
+                        error: "You need this POAP to join this channel. Hold the POAP in your wallet to join.",
                     },
                     { status: 403 }
                 );
@@ -218,4 +202,3 @@ export async function POST(
         );
     }
 }
-

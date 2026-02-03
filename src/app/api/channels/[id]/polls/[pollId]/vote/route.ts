@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+    getMembershipLookupAddresses,
+    resolveToAddress,
+} from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,15 +35,20 @@ export async function POST(
             );
         }
 
-        const normalizedAddress = userAddress.toLowerCase();
+        const normalizedAddress =
+            (await resolveToAddress(userAddress)) ?? userAddress.toLowerCase();
 
-        // Verify user is a member of the channel
-        const { data: membership } = await supabase
-            .from("shout_channel_members")
-            .select("id")
-            .eq("channel_id", id)
-            .eq("user_address", normalizedAddress)
-            .single();
+        // Verify user is a member of the channel (resolve ENS so we find rows stored by 0x)
+        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+        const { data: membership } =
+            lookupAddrs.length > 0
+                ? await supabase
+                      .from("shout_channel_members")
+                      .select("id")
+                      .eq("channel_id", id)
+                      .in("user_address", lookupAddrs)
+                      .maybeSingle()
+                : { data: null };
 
         if (!membership) {
             return NextResponse.json(
@@ -95,9 +104,13 @@ export async function POST(
             .eq("poll_id", pollId)
             .eq("user_address", normalizedAddress);
 
-        if (!poll.allows_multiple && existingVotes && existingVotes.length > 0) {
+        if (
+            !poll.allows_multiple &&
+            existingVotes &&
+            existingVotes.length > 0
+        ) {
             // If single choice and already voted for same option, remove the vote (toggle)
-            if (existingVotes.some(v => v.option_index === optionIndex)) {
+            if (existingVotes.some((v) => v.option_index === optionIndex)) {
                 const { error: deleteError } = await supabase
                     .from("shout_channel_poll_votes")
                     .delete()
@@ -106,7 +119,10 @@ export async function POST(
                     .eq("option_index", optionIndex);
 
                 if (deleteError) {
-                    console.error("[Polls API] Error removing vote:", deleteError);
+                    console.error(
+                        "[Polls API] Error removing vote:",
+                        deleteError
+                    );
                     return NextResponse.json(
                         { error: "Failed to remove vote" },
                         { status: 500 }
@@ -124,12 +140,18 @@ export async function POST(
                 .eq("user_address", normalizedAddress);
 
             if (deleteError) {
-                console.error("[Polls API] Error removing previous vote:", deleteError);
+                console.error(
+                    "[Polls API] Error removing previous vote:",
+                    deleteError
+                );
             }
         }
 
         // For multiple choice, check if already voted for this specific option (toggle)
-        if (poll.allows_multiple && existingVotes?.some(v => v.option_index === optionIndex)) {
+        if (
+            poll.allows_multiple &&
+            existingVotes?.some((v) => v.option_index === optionIndex)
+        ) {
             const { error: deleteError } = await supabase
                 .from("shout_channel_poll_votes")
                 .delete()
@@ -168,9 +190,6 @@ export async function POST(
         return NextResponse.json({ success: true, action: "added" });
     } catch (e) {
         console.error("[Polls API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to vote" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to vote" }, { status: 500 });
     }
 }

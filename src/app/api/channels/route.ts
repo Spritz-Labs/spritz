@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
+import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -63,13 +64,18 @@ export async function GET(request: NextRequest) {
             }
             let isMember = false;
             if (channel && userAddress) {
-                const { data: membership } = await supabase
-                    .from("shout_channel_members")
-                    .select("channel_id")
-                    .eq("channel_id", channel.id)
-                    .eq("user_address", userAddress.toLowerCase())
-                    .maybeSingle();
-                isMember = !!membership;
+                const lookupAddrs = await getMembershipLookupAddresses(
+                    userAddress
+                );
+                if (lookupAddrs.length > 0) {
+                    const { data: membership } = await supabase
+                        .from("shout_channel_members")
+                        .select("channel_id")
+                        .eq("channel_id", channel.id)
+                        .in("user_address", lookupAddrs)
+                        .maybeSingle();
+                    isMember = !!membership;
+                }
             }
             return NextResponse.json({
                 channel: channel ? { ...channel, is_member: isMember } : null,
@@ -98,15 +104,17 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    // If user address provided, check which channels they've joined
+    // If user address provided, check which channels they've joined (resolve ENS so we find rows stored by 0x)
     let memberChannelIds: string[] = [];
     if (userAddress) {
-        const { data: memberships } = await supabase
-            .from("shout_channel_members")
-            .select("channel_id")
-            .eq("user_address", userAddress.toLowerCase());
-
-        memberChannelIds = memberships?.map((m) => m.channel_id) || [];
+        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+        if (lookupAddrs.length > 0) {
+            const { data: memberships } = await supabase
+                .from("shout_channel_members")
+                .select("channel_id")
+                .in("user_address", lookupAddrs);
+            memberChannelIds = memberships?.map((m) => m.channel_id) || [];
+        }
     }
 
     // Add is_member flag to each channel

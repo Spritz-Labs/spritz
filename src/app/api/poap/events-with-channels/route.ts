@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 
 const POAP_API_BASE = "https://api.poap.tech";
 
@@ -165,11 +166,15 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 3) User's memberships for is_member (use identity address, not Smart Wallet)
-        const { data: memberships } = await supabase
-            .from("shout_channel_members")
-            .select("channel_id")
-            .eq("user_address", memberAddress);
+        // 3) User's memberships for is_member (resolve ENS so we find rows stored by 0x)
+        const lookupAddrs = await getMembershipLookupAddresses(memberAddress);
+        const { data: memberships } =
+            lookupAddrs.length > 0
+                ? await supabase
+                      .from("shout_channel_members")
+                      .select("channel_id")
+                      .in("user_address", lookupAddrs)
+                : { data: [] };
         const memberSet = new Set((memberships ?? []).map((m) => m.channel_id));
 
         const channelByEventId = new Map(

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeMessageContent } from "@/lib/sanitize";
+import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,7 +49,9 @@ export async function GET(
 
     let query = supabase
         .from("shout_channel_messages")
-        .select("*, reply_to:reply_to_id(id, sender_address, content, message_type), is_pinned, pinned_by, pinned_at")
+        .select(
+            "*, reply_to:reply_to_id(id, sender_address, content, message_type), is_pinned, pinned_by, pinned_at"
+        )
         .eq("channel_id", id)
         .order("created_at", { ascending: false })
         .limit(limit);
@@ -68,9 +71,9 @@ export async function GET(
     }
 
     // Fetch reactions for these messages
-    const messageIds = messages?.map(m => m.id) || [];
+    const messageIds = messages?.map((m) => m.id) || [];
     let reactions: ChannelReaction[] = [];
-    
+
     if (messageIds.length > 0) {
         const { data: reactionData } = await supabase
             .from("shout_channel_reactions")
@@ -80,9 +83,9 @@ export async function GET(
     }
 
     // Return in chronological order with reactions
-    return NextResponse.json({ 
+    return NextResponse.json({
         messages: messages?.reverse() || [],
-        reactions
+        reactions,
     });
 }
 
@@ -100,9 +103,14 @@ export async function POST(
     try {
         // Get authenticated user from session
         const session = await getAuthenticatedUser(request);
-        
+
         const body = await request.json();
-        const { senderAddress: bodySenderAddress, content, messageType, replyToId } = body;
+        const {
+            senderAddress: bodySenderAddress,
+            content,
+            messageType,
+            replyToId,
+        } = body;
 
         // Use session address, fall back to body for backward compatibility
         const senderAddress = session?.userAddress || bodySenderAddress;
@@ -113,21 +121,27 @@ export async function POST(
                 { status: 400 }
             );
         }
-        
+
         // Warn if using unauthenticated fallback
         if (!session && bodySenderAddress) {
-            console.warn("[Channels] Using unauthenticated senderAddress param - migrate to session auth");
+            console.warn(
+                "[Channels] Using unauthenticated senderAddress param - migrate to session auth"
+            );
         }
 
         const normalizedAddress = senderAddress.toLowerCase();
 
-        // Check if user is a member
-        const { data: membership } = await supabase
-            .from("shout_channel_members")
-            .select("id")
-            .eq("channel_id", id)
-            .eq("user_address", normalizedAddress)
-            .single();
+        // Check if user is a member (resolve ENS so we find rows stored by 0x)
+        const lookupAddrs = await getMembershipLookupAddresses(senderAddress);
+        const { data: membership } =
+            lookupAddrs.length > 0
+                ? await supabase
+                      .from("shout_channel_members")
+                      .select("id")
+                      .eq("channel_id", id)
+                      .in("user_address", lookupAddrs)
+                      .maybeSingle()
+                : { data: null };
 
         if (!membership) {
             return NextResponse.json(
@@ -152,7 +166,7 @@ export async function POST(
             content: sanitizedContent,
             message_type: messageType || "text",
         };
-        
+
         if (replyToId) {
             insertData.reply_to_id = replyToId;
         }
@@ -160,7 +174,9 @@ export async function POST(
         const { data: message, error } = await supabase
             .from("shout_channel_messages")
             .insert(insertData)
-            .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+            .select(
+                "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+            )
             .single();
 
         if (error) {
@@ -194,10 +210,10 @@ export async function PATCH(
     try {
         // Get authenticated user from session
         const session = await getAuthenticatedUser(request);
-        
+
         const body = await request.json();
         const { messageId, userAddress: bodyUserAddress, emoji } = body;
-        
+
         // Use session address, fall back to body for backward compatibility
         const userAddress = session?.userAddress || bodyUserAddress;
 
@@ -225,7 +241,7 @@ export async function PATCH(
                 .from("shout_channel_reactions")
                 .delete()
                 .eq("id", existing.id);
-            
+
             return NextResponse.json({ action: "removed" });
         } else {
             // Add reaction
@@ -256,4 +272,3 @@ export async function PATCH(
         );
     }
 }
-

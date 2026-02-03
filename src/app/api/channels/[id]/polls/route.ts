@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+    getMembershipLookupAddresses,
+    resolveToAddress,
+} from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,25 +27,28 @@ export type Poll = {
 };
 
 // Helper to check if user can create polls (admin, moderator, or channel owner)
-async function canCreatePollCheck(userAddress: string, channelId: string): Promise<boolean> {
+async function canCreatePollCheck(
+    userAddress: string,
+    channelId: string
+): Promise<boolean> {
     // Check if global admin
     const { data: admin } = await supabase
         .from("shout_admins")
         .select("id")
         .eq("wallet_address", userAddress)
         .single();
-    
+
     if (admin) return true;
-    
+
     // Check if channel owner
     const { data: channel } = await supabase
         .from("shout_public_channels")
         .select("creator_address")
         .eq("id", channelId)
         .single();
-    
+
     if (channel?.creator_address?.toLowerCase() === userAddress) return true;
-    
+
     // Check if moderator for this channel
     const { data: moderator } = await supabase
         .from("shout_moderators")
@@ -49,9 +56,9 @@ async function canCreatePollCheck(userAddress: string, channelId: string): Promi
         .eq("user_address", userAddress)
         .eq("channel_id", channelId)
         .single();
-    
+
     if (moderator) return true;
-    
+
     // Check if global moderator (channel_id is NULL)
     const { data: globalMod } = await supabase
         .from("shout_moderators")
@@ -59,7 +66,7 @@ async function canCreatePollCheck(userAddress: string, channelId: string): Promi
         .eq("user_address", userAddress)
         .is("channel_id", null)
         .single();
-    
+
     return !!globalMod;
 }
 
@@ -95,7 +102,7 @@ export async function GET(
         }
 
         // Fetch vote counts for all polls
-        const pollIds = polls.map(p => p.id);
+        const pollIds = polls.map((p) => p.id);
         const { data: votes } = await supabase
             .from("shout_channel_poll_votes")
             .select("poll_id, option_index, user_address")
@@ -105,7 +112,7 @@ export async function GET(
         let userVotes: Record<string, number[]> = {};
         if (userAddress && votes) {
             userVotes = votes
-                .filter(v => v.user_address.toLowerCase() === userAddress)
+                .filter((v) => v.user_address.toLowerCase() === userAddress)
                 .reduce((acc, v) => {
                     if (!acc[v.poll_id]) acc[v.poll_id] = [];
                     acc[v.poll_id].push(v.option_index);
@@ -114,16 +121,20 @@ export async function GET(
         }
 
         // Build poll response with vote counts
-        const pollsWithVotes: Poll[] = polls.map(poll => {
-            const pollVotes = votes?.filter(v => v.poll_id === poll.id) || [];
+        const pollsWithVotes: Poll[] = polls.map((poll) => {
+            const pollVotes = votes?.filter((v) => v.poll_id === poll.id) || [];
             const options = poll.options as string[];
-            
+
             const voteCounts = options.map((_, index) => {
-                const optionVotes = pollVotes.filter(v => v.option_index === index);
+                const optionVotes = pollVotes.filter(
+                    (v) => v.option_index === index
+                );
                 return {
                     option_index: index,
                     count: optionVotes.length,
-                    voters: poll.is_anonymous ? [] : optionVotes.map(v => v.user_address),
+                    voters: poll.is_anonymous
+                        ? []
+                        : optionVotes.map((v) => v.user_address),
                 };
             });
 
@@ -163,13 +174,13 @@ export async function POST(
 
     try {
         const body = await request.json();
-        const { 
-            userAddress, 
-            question, 
-            options, 
-            allowsMultiple = false, 
-            endsAt = null, 
-            isAnonymous = false 
+        const {
+            userAddress,
+            question,
+            options,
+            allowsMultiple = false,
+            endsAt = null,
+            isAnonymous = false,
         } = body;
 
         if (!userAddress) {
@@ -200,28 +211,37 @@ export async function POST(
             );
         }
 
-        const normalizedAddress = userAddress.toLowerCase();
+        const normalizedAddress =
+            (await resolveToAddress(userAddress)) ?? userAddress.toLowerCase();
 
         // Check if user can create polls (admin, moderator, or channel owner)
         const canCreate = await canCreatePollCheck(normalizedAddress, id);
         if (!canCreate) {
             return NextResponse.json(
-                { error: "Only admins, moderators, and channel owners can create polls" },
+                {
+                    error: "Only admins, moderators, and channel owners can create polls",
+                },
                 { status: 403 }
             );
         }
 
-        // Verify user is a member of the channel
-        const { data: membership } = await supabase
-            .from("shout_channel_members")
-            .select("id")
-            .eq("channel_id", id)
-            .eq("user_address", normalizedAddress)
-            .single();
+        // Verify user is a member of the channel (resolve ENS so we find rows stored by 0x)
+        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+        const { data: membership } =
+            lookupAddrs.length > 0
+                ? await supabase
+                      .from("shout_channel_members")
+                      .select("id")
+                      .eq("channel_id", id)
+                      .in("user_address", lookupAddrs)
+                      .maybeSingle()
+                : { data: null };
 
         if (!membership) {
             return NextResponse.json(
-                { error: "You must be a member of this channel to create polls" },
+                {
+                    error: "You must be a member of this channel to create polls",
+                },
                 { status: 403 }
             );
         }

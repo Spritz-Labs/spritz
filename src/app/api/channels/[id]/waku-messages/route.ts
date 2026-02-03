@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,7 +56,10 @@ export async function GET(
         const { data: messages, error } = await query;
 
         if (error) {
-            console.error("[Waku Messages API] Error fetching messages:", error);
+            console.error(
+                "[Waku Messages API] Error fetching messages:",
+                error
+            );
             return NextResponse.json(
                 { error: "Failed to fetch messages" },
                 { status: 500 }
@@ -111,13 +115,17 @@ export async function POST(
             );
         }
 
-        // Verify user is a member
-        const { data: membership } = await supabase
-            .from("shout_channel_members")
-            .select("id")
-            .eq("channel_id", id)
-            .eq("user_address", senderAddress.toLowerCase())
-            .single();
+        // Verify user is a member (resolve ENS so we find rows stored by 0x)
+        const lookupAddrs = await getMembershipLookupAddresses(senderAddress);
+        const { data: membership } =
+            lookupAddrs.length > 0
+                ? await supabase
+                      .from("shout_channel_members")
+                      .select("id")
+                      .eq("channel_id", id)
+                      .in("user_address", lookupAddrs)
+                      .maybeSingle()
+                : { data: null };
 
         if (!membership) {
             return NextResponse.json(
@@ -140,7 +148,10 @@ export async function POST(
             .single();
 
         if (insertError) {
-            console.error("[Waku Messages API] Error inserting message:", insertError);
+            console.error(
+                "[Waku Messages API] Error inserting message:",
+                insertError
+            );
             return NextResponse.json(
                 { error: "Failed to send message" },
                 { status: 500 }

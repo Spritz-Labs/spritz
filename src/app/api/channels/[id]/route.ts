@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,19 +28,20 @@ export async function GET(
         );
     }
 
-    // Check if user is a member
+    // Check if user is a member (resolve ENS so we find rows stored by 0x)
     let is_member = false;
     if (userAddress) {
-        const { data: membership } = await supabase
-            .from("shout_channel_members")
-            .select("id")
-            .eq("channel_id", id)
-            .eq("user_address", userAddress.toLowerCase())
-            .single();
-
-        is_member = !!membership;
+        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+        if (lookupAddrs.length > 0) {
+            const { data: membership } = await supabase
+                .from("shout_channel_members")
+                .select("id")
+                .eq("channel_id", id)
+                .in("user_address", lookupAddrs)
+                .maybeSingle();
+            is_member = !!membership;
+        }
     }
 
     return NextResponse.json({ channel: { ...channel, is_member } });
 }
-

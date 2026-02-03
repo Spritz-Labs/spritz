@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,14 +25,20 @@ export async function POST(
             );
         }
 
-        const normalizedAddress = userAddress.toLowerCase();
+        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+        if (lookupAddrs.length === 0) {
+            return NextResponse.json(
+                { error: "Invalid address or ENS name" },
+                { status: 400 }
+            );
+        }
 
-        // Delete membership
+        // Delete membership (row may be stored under resolved 0x or original ENS)
         const { error: leaveError } = await supabase
             .from("shout_channel_members")
             .delete()
             .eq("channel_id", id)
-            .eq("user_address", normalizedAddress);
+            .in("user_address", lookupAddrs);
 
         if (leaveError) {
             console.error("[Channels API] Error leaving channel:", leaveError);
@@ -53,4 +60,3 @@ export async function POST(
         );
     }
 }
-
