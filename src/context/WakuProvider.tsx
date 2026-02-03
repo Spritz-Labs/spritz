@@ -3276,6 +3276,59 @@ export function WakuProvider({
         processedMessageIds.current.clear();
     }, []);
 
+    // PWA keep-alive: when app returns to foreground, re-init Waku if needed (OS may kill connections when backgrounded)
+    useEffect(() => {
+        if (typeof document === "undefined" || !userAddress || !sdkLoaded)
+            return;
+
+        let hiddenAt: number | null = null;
+        const BACKGROUND_REINIT_MS = 2 * 60 * 1000; // Re-init if app was hidden > 2 min
+
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === "hidden") {
+                hiddenAt = Date.now();
+                return;
+            }
+            // App became visible
+            if (document.visibilityState !== "visible") return;
+
+            const wasHiddenLong =
+                hiddenAt != null &&
+                Date.now() - hiddenAt > BACKGROUND_REINIT_MS;
+            hiddenAt = null;
+
+            if (!isInitialized && !isInitializing) {
+                log.debug(
+                    "[Waku] PWA foreground: not initialized, attempting init..."
+                );
+                await initialize();
+                return;
+            }
+            if (wasHiddenLong && isInitialized) {
+                log.debug(
+                    "[Waku] PWA foreground after long background, re-initializing connection..."
+                );
+                close();
+                await new Promise((r) => setTimeout(r, 300));
+                await initialize();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () =>
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange
+            );
+    }, [
+        userAddress,
+        sdkLoaded,
+        isInitialized,
+        isInitializing,
+        initialize,
+        close,
+    ]);
+
     return (
         <WakuContext.Provider
             value={{

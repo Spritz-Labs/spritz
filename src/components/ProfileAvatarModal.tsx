@@ -97,8 +97,14 @@ export function ProfileAvatarModal({
                     className="w-full max-w-lg max-h-[90dvh] bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {/* Header with close and tabs */}
-                    <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                    {/* Header with close and tabs - extra top padding for PWA safe area so X is tappable */}
+                    <div
+                        className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-zinc-800"
+                        style={{
+                            paddingTop:
+                                "max(0.75rem, env(safe-area-inset-top, 0px))",
+                        }}
+                    >
                         <div className="flex rounded-xl bg-zinc-800/80 p-1 gap-0.5">
                             <button
                                 onClick={() => setActiveTab("profile")}
