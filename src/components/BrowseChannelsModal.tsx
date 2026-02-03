@@ -1,12 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChannels } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
 import { ChannelIcon } from "./ChannelIcon";
 import { ImageViewerModal } from "./ImageViewerModal";
 import type { PoapEventWithChannel } from "@/app/api/poap/events-with-channels/route";
+
+function showToast(message: string, type: "success" | "neutral" = "success") {
+    const toast = document.createElement("div");
+    toast.className =
+        type === "success"
+            ? "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2"
+            : "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-zinc-700 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+}
 
 type BrowseChannelsModalProps = {
     isOpen: boolean;
@@ -80,6 +91,30 @@ export function BrowseChannelsModal({
         number | null
     >(null);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
+    const [debouncedSearch, setDebouncedSearch] = useState("");
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Debounce search (250ms) for smoother filtering
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(
+            () => setDebouncedSearch(searchQuery),
+            250
+        );
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [searchQuery]);
+
+    // Esc to close modal
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
+        document.addEventListener("keydown", onKeyDown);
+        return () => document.removeEventListener("keydown", onKeyDown);
+    }, [isOpen, onClose]);
 
     // Reset showCreateModal when the modal opens/closes
     useEffect(() => {
@@ -135,10 +170,10 @@ export function BrowseChannelsModal({
     }, [isOpen, view, fetchPoapEvents]);
 
     const filteredPoapEvents = useMemo(() => {
-        if (!searchQuery.trim()) return poapEvents;
-        const q = searchQuery.trim().toLowerCase();
+        if (!debouncedSearch.trim()) return poapEvents;
+        const q = debouncedSearch.trim().toLowerCase();
         return poapEvents.filter((e) => e.eventName.toLowerCase().includes(q));
-    }, [poapEvents, searchQuery]);
+    }, [poapEvents, debouncedSearch]);
 
     const [newChannel, setNewChannel] = useState({
         name: "",
@@ -149,31 +184,40 @@ export function BrowseChannelsModal({
     });
     const [createError, setCreateError] = useState<string | null>(null);
 
-    const filteredChannels = channels.filter((channel) => {
-        const matchesCategory =
-            selectedCategory === "all" || channel.category === selectedCategory;
-        const matchesSearch =
-            searchQuery === "" ||
-            channel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            channel.description
-                ?.toLowerCase()
-                .includes(searchQuery.toLowerCase());
-        return matchesCategory && matchesSearch;
-    });
+    const filteredChannels = useMemo(
+        () =>
+            channels.filter((channel) => {
+                const matchesCategory =
+                    selectedCategory === "all" ||
+                    channel.category === selectedCategory;
+                const matchesSearch =
+                    debouncedSearch === "" ||
+                    channel.name
+                        .toLowerCase()
+                        .includes(debouncedSearch.toLowerCase()) ||
+                    channel.description
+                        ?.toLowerCase()
+                        .includes(debouncedSearch.toLowerCase());
+                return matchesCategory && matchesSearch;
+            }),
+        [channels, selectedCategory, debouncedSearch]
+    );
 
     const handleJoin = async (channel: PublicChannel) => {
         setJoiningChannel(channel.id);
         const success = await joinChannel(channel.id);
         setJoiningChannel(null);
         if (success) {
+            showToast(`✓ Joined #${channel.name}`);
             onJoinChannel(channel);
         }
     };
 
     const handleLeave = async (channelId: string) => {
         setJoiningChannel(channelId);
-        await leaveChannel(channelId);
+        const success = await leaveChannel(channelId);
         setJoiningChannel(null);
+        if (success) showToast("Left channel", "neutral");
     };
 
     const handleCreatePoapChannel = async (event: PoapEventWithChannel) => {
@@ -187,6 +231,7 @@ export function BrowseChannelsModal({
                 poapImageUrl: event.imageUrl ?? undefined,
             });
             if (channel) {
+                showToast("✓ Channel created");
                 onJoinChannel(channel as PublicChannel);
                 setPoapEvents((prev) =>
                     prev.map((e) =>
@@ -398,12 +443,24 @@ export function BrowseChannelsModal({
                                       filteredChannels.length !== 1 ? "s" : ""
                                   }`}
                         </p>
-                        <div className="p-3 sm:p-4 overflow-y-auto flex-1 min-h-0">
+                        <div className="p-3 sm:p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 min-w-0">
                             {view === "poap" ? (
                                 <>
                                     {poapLoading ? (
-                                        <div className="flex justify-center py-12">
-                                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
+                                        <div className="grid gap-3 min-w-0">
+                                            {[1, 2, 3, 4].map((i) => (
+                                                <div
+                                                    key={i}
+                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 rounded-xl flex flex-row items-start gap-2 sm:gap-3 min-w-0"
+                                                >
+                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 animate-pulse shrink-0" />
+                                                    <div className="flex-1 min-w-0 space-y-2">
+                                                        <div className="h-4 bg-zinc-700 rounded animate-pulse w-3/4" />
+                                                        <div className="h-3 bg-zinc-700/80 rounded animate-pulse w-1/2" />
+                                                    </div>
+                                                    <div className="h-8 w-16 sm:w-20 bg-zinc-700 rounded-lg animate-pulse shrink-0" />
+                                                </div>
+                                            ))}
                                         </div>
                                     ) : poapError ? (
                                         <div className="text-center py-8">
@@ -431,21 +488,32 @@ export function BrowseChannelsModal({
                                             </button>
                                         </div>
                                     ) : filteredPoapEvents.length === 0 ? (
-                                        <div className="text-center py-12">
+                                        <div className="text-center py-12 px-4">
                                             <p className="text-zinc-500 text-sm">
                                                 {poapEvents.length === 0
                                                     ? "No POAPs found for your wallet."
                                                     : "No POAPs match your search."}
                                             </p>
                                             {poapEvents.length === 0 && (
-                                                <p className="text-zinc-600 text-xs mt-1">
-                                                    Hold POAPs to create or join
-                                                    event channels on Logos.
-                                                </p>
+                                                <>
+                                                    <p className="text-zinc-600 text-xs mt-2">
+                                                        Attend events and claim
+                                                        POAPs to unlock channels
+                                                        on Logos.
+                                                    </p>
+                                                    <a
+                                                        href="https://poap.xyz"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-block mt-3 text-xs text-orange-400 hover:text-orange-300"
+                                                    >
+                                                        Learn about POAPs →
+                                                    </a>
+                                                </>
                                             )}
                                         </div>
                                     ) : (
-                                        <div className="grid gap-3">
+                                        <div className="grid gap-3 min-w-0">
                                             {filteredPoapEvents.map((event) => (
                                                 <motion.div
                                                     key={event.eventId}
@@ -457,7 +525,7 @@ export function BrowseChannelsModal({
                                                         opacity: 1,
                                                         y: 0,
                                                     }}
-                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
+                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
                                                 >
                                                     <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
                                                         {event.imageUrl ? (
