@@ -6,6 +6,7 @@ import { supabase } from "@/config/supabase";
 type EmailState = {
     email: string | null;
     isVerified: boolean;
+    emailUpdatesOptIn: boolean;
     isLoading: boolean;
     isSending: boolean;
     isVerifying: boolean;
@@ -17,6 +18,7 @@ export function useEmailVerification(walletAddress: string | null) {
     const [state, setState] = useState<EmailState>({
         email: null,
         isVerified: false,
+        emailUpdatesOptIn: false,
         isLoading: true,
         isSending: false,
         isVerifying: false,
@@ -34,7 +36,7 @@ export function useEmailVerification(walletAddress: string | null) {
         try {
             const { data, error } = await supabase
                 .from("shout_users")
-                .select("email, email_verified")
+                .select("email, email_verified, email_updates_opt_in")
                 .eq("wallet_address", walletAddress.toLowerCase())
                 .single();
 
@@ -47,6 +49,7 @@ export function useEmailVerification(walletAddress: string | null) {
                 ...prev,
                 email: data.email,
                 isVerified: data.email_verified || false,
+                emailUpdatesOptIn: data.email_updates_opt_in ?? false,
                 isLoading: false,
             }));
         } catch (err) {
@@ -138,6 +141,7 @@ export function useEmailVerification(walletAddress: string | null) {
                 isVerifying: false,
                 isVerified: true,
                 email: data.email,
+                emailUpdatesOptIn: true, // Auto opt-in when they verify
                 codeSent: false,
                 error: null,
             }));
@@ -213,6 +217,29 @@ export function useEmailVerification(walletAddress: string | null) {
         setState(prev => ({ ...prev, error: null }));
     }, []);
 
+    // Update email updates opt-in (for Settings toggle)
+    const updateEmailUpdatesOptIn = useCallback(async (enabled: boolean) => {
+        if (!walletAddress) return false;
+        try {
+            const res = await fetch("/api/user/email-updates", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ email_updates_opt_in: enabled }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                console.error("[Email] Update opt-in error:", data.error);
+                return false;
+            }
+            setState(prev => ({ ...prev, emailUpdatesOptIn: data.email_updates_opt_in ?? enabled }));
+            return true;
+        } catch (err) {
+            console.error("[Email] Update opt-in error:", err);
+            return false;
+        }
+    }, [walletAddress]);
+
     return {
         ...state,
         sendCode,
@@ -221,6 +248,7 @@ export function useEmailVerification(walletAddress: string | null) {
         removeEmail,
         startChangeEmail,
         clearError,
+        updateEmailUpdatesOptIn,
         refresh: loadEmailStatus,
     };
 }

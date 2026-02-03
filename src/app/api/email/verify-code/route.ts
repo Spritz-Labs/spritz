@@ -56,13 +56,14 @@ export async function POST(request: NextRequest) {
             .update({ verified: true })
             .eq("id", verification.id);
 
-        // Update user's email
+        // Update user's email and opt in to email updates when they verify
         const { error: updateError } = await supabase
             .from("shout_users")
             .update({
                 email: verification.email,
                 email_verified: true,
                 email_verified_at: new Date().toISOString(),
+                email_updates_opt_in: true,
                 updated_at: new Date().toISOString(),
             })
             .eq("wallet_address", walletAddress.toLowerCase());

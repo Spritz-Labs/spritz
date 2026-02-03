@@ -505,6 +505,8 @@ function DashboardContent({
     const {
         isVerified: isEmailVerified,
         email: userEmail,
+        emailUpdatesOptIn,
+        updateEmailUpdatesOptIn,
         refresh: refreshEmail,
     } = useEmailVerification(userAddress);
 
@@ -5233,6 +5235,8 @@ function DashboardContent({
                 onOpenInvitesModal={() => setIsInvitesModalOpen(true)}
                 userEmail={userEmail}
                 isEmailVerified={isEmailVerified}
+                emailUpdatesOptIn={emailUpdatesOptIn}
+                onEmailUpdatesOptInChange={updateEmailUpdatesOptIn}
                 onOpenEmailModal={() => setIsEmailModalOpen(true)}
                 ensAvatar={userENS.avatar}
                 onToggleUseCustomAvatar={toggleUseCustomAvatar}

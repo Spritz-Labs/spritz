@@ -127,19 +127,20 @@ export async function POST(request: NextRequest) {
 
             if (derivedUser) {
                 user = derivedUser;
-                // Update with verified email
+                // Update with verified email and opt in to email updates
                 await supabase
                     .from("shout_users")
                     .update({
                         email: normalizedEmail,
                         email_verified: true,
                         email_verified_at: new Date().toISOString(),
+                        email_updates_opt_in: true,
                         last_login: new Date().toISOString(),
                         login_count: (derivedUser.login_count || 0) + 1,
                     })
                     .eq("wallet_address", finalAddress);
             } else {
-                // Create new user
+                // Create new user (opt in to email updates when they verify)
                 const { data: newUser, error: createError } = await supabase
                     .from("shout_users")
                     .insert({
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
                         email: normalizedEmail,
                         email_verified: true,
                         email_verified_at: new Date().toISOString(),
+                        email_updates_opt_in: true,
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
                         login_count: 1,
