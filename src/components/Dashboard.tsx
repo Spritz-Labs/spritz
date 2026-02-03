@@ -84,6 +84,7 @@ import { AgentsSection } from "./AgentsSection";
 import { useBetaAccess } from "@/hooks/useBetaAccess";
 import Link from "next/link";
 import { GoLiveModal } from "./GoLiveModal";
+import { ProfileAvatarModal } from "./ProfileAvatarModal";
 import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
@@ -360,6 +361,7 @@ function DashboardContent({
     const {
         settings: userSettings,
         updateSettings,
+        refetch: refetchUserSettings,
         setStatus,
         toggleDnd,
         toggleSound,
@@ -654,6 +656,10 @@ function DashboardContent({
     const [userInfoCache, setUserInfoCache] = useState<
         Map<string, { name: string | null; avatar: string | null }>
     >(new Map());
+    // Bump to refresh ENS/resolve when opening profile or switching to chats
+    const [avatarRefreshTrigger, setAvatarRefreshTrigger] = useState(0);
+    // Bump when switching to chats tab to refetch other users' avatars
+    const [chatsUserInfoRefreshKey, setChatsUserInfoRefreshKey] = useState(0);
 
     const { resolveAddressOrENS } = useENS();
 
@@ -754,7 +760,7 @@ function DashboardContent({
             }
         });
 
-        // Only fetch for senders not in cache
+        // Only fetch for senders not in cache (or refetch when chatsUserInfoRefreshKey bumps)
         const sendersToFetch = Array.from(uniqueSenders).filter(
             (address) => !userInfoCache.has(address)
         );
@@ -795,7 +801,27 @@ function DashboardContent({
                     );
                 });
         });
-    }, [alphaChat.messages, userAddress, friends]); // Removed userInfoCache from deps to avoid infinite loops
+    }, [alphaChat.messages, userAddress, friends, chatsUserInfoRefreshKey]); // chatsUserInfoRefreshKey: refetch other users' avatars when switching to chats tab
+
+    // When user switches to chats tab: refresh own profile/avatar and other users' avatars
+    const prevNavTabRef = useRef(activeNavTab);
+    useEffect(() => {
+        if (prevNavTabRef.current !== "chats" && activeNavTab === "chats") {
+            refetchUserSettings();
+            setAvatarRefreshTrigger((k) => k + 1);
+            setUserInfoCache(new Map());
+            setChatsUserInfoRefreshKey((k) => k + 1);
+        }
+        prevNavTabRef.current = activeNavTab;
+    }, [activeNavTab, refetchUserSettings]);
+
+    // When profile/avatar modal opens: refresh own avatar so the large profile pic is up to date
+    useEffect(() => {
+        if (isProfileAvatarModalOpen) {
+            refetchUserSettings();
+            setAvatarRefreshTrigger((k) => k + 1);
+        }
+    }, [isProfileAvatarModalOpen, refetchUserSettings]);
 
     // Presence heartbeat - updates last_seen every 30 seconds
     usePresence(userAddress);
@@ -831,7 +857,7 @@ function DashboardContent({
         return () => {
             isMounted = false;
         };
-    }, [userAddress, resolveAddressOrENS]);
+    }, [userAddress, resolveAddressOrENS, avatarRefreshTrigger]);
 
     // Effective avatar - uses custom avatar when selected, otherwise ENS avatar
     const effectiveAvatar = useMemo(() => {
@@ -2802,15 +2828,14 @@ function DashboardContent({
                     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 safe-area-pl safe-area-pr">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                {/* User Avatar - Click for Go Live */}
+                                {/* User Avatar - Click for Profile / Go Live tabs */}
                                 <button
-                                    onClick={() => setIsGoLiveModalOpen(true)}
+                                    onClick={() => {
+                                        setProfileAvatarInitialTab("profile");
+                                        setIsProfileAvatarModalOpen(true);
+                                    }}
                                     className="relative group"
-                                    title={
-                                        currentStream?.status === "live"
-                                            ? "You're live!"
-                                            : "Go Live"
-                                    }
+                                    title="My profile"
                                 >
                                     {effectiveAvatar ? (
                                         <img
@@ -2963,7 +2988,47 @@ function DashboardContent({
                                                     </div>
                                                 </button>
 
-                                                {/* 2. Username */}
+                                                {/* 2. Go Live */}
+                                                <button
+                                                    onClick={() => {
+                                                        setIsProfileMenuOpen(
+                                                            false
+                                                        );
+                                                        setProfileAvatarInitialTab(
+                                                            "goLive"
+                                                        );
+                                                        setIsProfileAvatarModalOpen(
+                                                            true
+                                                        );
+                                                    }}
+                                                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
+                                                >
+                                                    <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                                                        <svg
+                                                            className="w-4 h-4 text-red-400"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                            />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-white text-sm font-medium">
+                                                            Go Live
+                                                        </p>
+                                                        <p className="text-zinc-500 text-xs">
+                                                            Start a livestream
+                                                        </p>
+                                                    </div>
+                                                </button>
+
+                                                {/* 3. Username */}
                                                 <button
                                                     onClick={() => {
                                                         setIsProfileMenuOpen(
@@ -5317,13 +5382,15 @@ function DashboardContent({
             {/* Settings Modal */}
             <SettingsModal
                 isOpen={isSettingsModalOpen}
-                onClose={() => setIsSettingsModalOpen(false)}
+                onClose={() => {
+                    refetchUserSettings();
+                    setAvatarRefreshTrigger((k) => k + 1);
+                    setIsSettingsModalOpen(false);
+                }}
                 settings={userSettings}
                 onToggleSound={toggleSound}
                 onToggleDecentralizedCalls={toggleDecentralizedCalls}
                 isHuddle01Configured={isHuddle01Configured}
-                onTogglePublicLanding={togglePublicLanding}
-                onUpdateBio={(bio) => updateSettings({ publicBio: bio })}
                 pushSupported={pushSupported}
                 pushPermission={pushPermission}
                 pushSubscribed={pushSubscribed}
@@ -5980,11 +6047,23 @@ function DashboardContent({
                 )}
             </AnimatePresence>
 
-            {/* Go Live Modal */}
-            <GoLiveModal
-                isOpen={isGoLiveModalOpen}
-                onClose={() => setIsGoLiveModalOpen(false)}
+            {/* Profile / Go Live Modal (avatar click: Profile tab + Go Live tab) */}
+            <ProfileAvatarModal
+                isOpen={isProfileAvatarModalOpen}
+                onClose={() => setIsProfileAvatarModalOpen(false)}
+                initialTab={profileAvatarInitialTab}
                 userAddress={userAddress}
+                effectiveAvatar={effectiveAvatar ?? null}
+                displayName={
+                    userENS.ensName ||
+                    (reachUsername ? `@${reachUsername}` : formatAddress(userAddress))
+                }
+                statusEmoji={userSettings.statusEmoji}
+                statusText={userSettings.statusText}
+                publicBio={userSettings.publicBio}
+                publicLandingEnabled={userSettings.publicLandingEnabled}
+                onTogglePublicLanding={togglePublicLanding}
+                onUpdateBio={(bio) => updateSettings({ publicBio: bio })}
                 currentStream={currentStream}
                 onCreateStream={createStream}
                 onGoLive={goLive}

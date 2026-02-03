@@ -1574,7 +1574,10 @@ export function ChannelChatModal({
                                     />
                                 </svg>
                                 Community
-                                {isWakuChannel && " • Decentralized"}
+                                {typeof channel.member_count === "number" && (
+                                    <> · {channel.member_count} {channel.member_count === 1 ? "member" : "members"}</>
+                                )}
+                                {isWakuChannel && " · Decentralized"}
                             </button>
                         </div>
 

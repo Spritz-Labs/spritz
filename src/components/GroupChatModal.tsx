@@ -1066,6 +1066,9 @@ export function GroupChatModal({
                                             />
                                         </svg>
                                         Community
+                                        {members.length > 0 && (
+                                            <> · {members.length} {members.length === 1 ? "member" : "members"}</>
+                                        )}
                                     </button>
                                 </div>
 

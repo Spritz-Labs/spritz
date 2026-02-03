@@ -53,49 +53,49 @@ export function useUserSettings(userAddress: string | null) {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch settings on mount
-    useEffect(() => {
+    const fetchSettings = useCallback(async () => {
         if (!userAddress || !isSupabaseConfigured || !supabase) {
             setIsLoading(false);
             return;
         }
 
-        const fetchSettings = async () => {
-            const client = supabase;
-            if (!client) return;
+        const client = supabase;
+        if (!client) return;
 
-            try {
-                const { data, error: fetchError } = await client
-                    .from("shout_user_settings")
-                    .select("*")
-                    .eq("wallet_address", normalizeAddress(userAddress))
-                    .maybeSingle();
+        try {
+            const { data, error: fetchError } = await client
+                .from("shout_user_settings")
+                .select("*")
+                .eq("wallet_address", normalizeAddress(userAddress))
+                .maybeSingle();
 
-                if (fetchError) {
-                    console.error("[useUserSettings] Fetch error:", fetchError);
-                    setError(fetchError.message);
-                } else if (data) {
-                    setSettings({
-                        statusEmoji: data.status_emoji || "👋",
-                        statusText: data.status_text || "",
-                        isDnd: data.is_dnd || false,
-                        soundEnabled: data.sound_enabled ?? true,
-                        decentralizedCalls: data.decentralized_calls ?? false, // Default to Agora
-                        publicLandingEnabled: data.public_landing_enabled ?? false,
-                        publicBio: data.public_bio || "",
-                        customAvatarUrl: data.custom_avatar_url || null,
-                        useCustomAvatar: data.use_custom_avatar ?? false,
-                    });
-                }
-            } catch (err) {
-                console.error("[useUserSettings] Error:", err);
-            } finally {
-                setIsLoading(false);
+            if (fetchError) {
+                console.error("[useUserSettings] Fetch error:", fetchError);
+                setError(fetchError.message);
+            } else if (data) {
+                setSettings({
+                    statusEmoji: data.status_emoji || "👋",
+                    statusText: data.status_text || "",
+                    isDnd: data.is_dnd || false,
+                    soundEnabled: data.sound_enabled ?? true,
+                    decentralizedCalls: data.decentralized_calls ?? false, // Default to Agora
+                    publicLandingEnabled: data.public_landing_enabled ?? false,
+                    publicBio: data.public_bio || "",
+                    customAvatarUrl: data.custom_avatar_url || null,
+                    useCustomAvatar: data.use_custom_avatar ?? false,
+                });
             }
-        };
-
-        fetchSettings();
+        } catch (err) {
+            console.error("[useUserSettings] Error:", err);
+        } finally {
+            setIsLoading(false);
+        }
     }, [userAddress]);
+
+    // Fetch settings on mount and when refetch is requested
+    useEffect(() => {
+        fetchSettings();
+    }, [fetchSettings]);
 
     // Update settings
     const updateSettings = useCallback(
@@ -216,11 +216,17 @@ export function useUserSettings(userAddress: string | null) {
         [updateSettings]
     );
 
+    /** Re-fetch settings from DB (e.g. after changing avatar elsewhere or when opening profile/chat) */
+    const refetch = useCallback(() => {
+        fetchSettings();
+    }, [fetchSettings]);
+
     return {
         settings,
         isLoading,
         error,
         updateSettings,
+        refetch,
         setStatus,
         toggleDnd,
         toggleSound,

@@ -31,10 +31,7 @@ type SettingsModalProps = {
     // Censorship resistance props
     onToggleDecentralizedCalls: () => void;
     isHuddle01Configured: boolean;
-    // Public profile props
-    onTogglePublicLanding: () => void;
-    onUpdateBio: (bio: string) => void;
-    // Push notification props
+    // Push notification props (public profile moved to Profile tab in avatar modal)
     pushSupported: boolean;
     pushPermission: NotificationPermission;
     pushSubscribed: boolean;
@@ -72,8 +69,6 @@ export function SettingsModal({
     onToggleSound,
     onToggleDecentralizedCalls,
     isHuddle01Configured,
-    onTogglePublicLanding,
-    onUpdateBio,
     pushSupported,
     pushPermission,
     pushSubscribed,
@@ -883,183 +878,6 @@ export function SettingsModal({
                                         </svg>
                                     </button>
 
-                                    {/* Public Profile Toggle */}
-                                    <button
-                                        onClick={onTogglePublicLanding}
-                                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                                                settings.publicLandingEnabled
-                                                    ? "bg-blue-500/20"
-                                                    : "bg-zinc-700/50"
-                                            }`}>
-                                                <svg
-                                                    className={`w-4 h-4 transition-colors ${
-                                                        settings.publicLandingEnabled
-                                                            ? "text-blue-400"
-                                                            : "text-zinc-500"
-                                                    }`}
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        strokeWidth={2}
-                                                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-                                                    />
-                                                </svg>
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-white font-medium">
-                                                    Enable Public Profile
-                                                </p>
-                                                <p className="text-zinc-500 text-xs">
-                                                    {settings.publicLandingEnabled
-                                                        ? "Your profile is public at /user/[address]"
-                                                        : "Create a public profile page"}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div
-                                            className={`w-11 h-6 rounded-full transition-colors relative ${
-                                                settings.publicLandingEnabled
-                                                    ? "bg-blue-500"
-                                                    : "bg-zinc-700"
-                                            }`}
-                                        >
-                                            <div
-                                                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-                                                    settings.publicLandingEnabled
-                                                        ? "translate-x-5"
-                                                        : "translate-x-0.5"
-                                                }`}
-                                            />
-                                        </div>
-                                    </button>
-
-                                    {/* Public Profile Settings - Only show when enabled */}
-                                    {settings.publicLandingEnabled && userAddress && (
-                                        <div className="mt-3 px-4 space-y-3">
-                                            {/* Bio Input */}
-                                            <div>
-                                                <label className="block text-sm text-zinc-400 mb-1">
-                                                    Profile Bio
-                                                </label>
-                                                <textarea
-                                                    value={settings.publicBio}
-                                                    onChange={(e) => {
-                                                        const newBio = e.target.value.slice(0, 280); // Max 280 chars like Twitter
-                                                        onUpdateBio(newBio);
-                                                    }}
-                                                    placeholder="Tell visitors about yourself..."
-                                                    rows={3}
-                                                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 text-sm resize-none"
-                                                />
-                                                <p className="text-xs text-zinc-500 mt-1 text-right">
-                                                    {settings.publicBio.length}/280
-                                                </p>
-                                            </div>
-
-                                            {/* Profile Action Buttons */}
-                                            <div className="flex gap-2">
-                                                {/* Edit Profile Button */}
-                                                <a
-                                                    href={`/user/${userAddress?.toLowerCase()}/edit`}
-                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500/10 border border-orange-500/30 rounded-xl hover:bg-orange-500/20 transition-colors text-orange-400"
-                                                >
-                                                    <svg
-                                                        className="w-4 h-4"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={2}
-                                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                                        />
-                                                    </svg>
-                                                    <span className="text-sm font-medium">Edit</span>
-                                                </a>
-
-                                                {/* View Profile Button */}
-                                                <a
-                                                    href={`/user/${userAddress?.toLowerCase()}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-700/50 border border-zinc-600 rounded-xl hover:bg-zinc-700 transition-colors text-zinc-300"
-                                                >
-                                                    <svg
-                                                        className="w-4 h-4"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={2}
-                                                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                                                        />
-                                                    </svg>
-                                                    <span className="text-sm font-medium">View</span>
-                                                </a>
-                                            </div>
-
-                                            {/* Copy Profile Link Button */}
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (!userAddress) return;
-                                                    const link = `${window.location.origin}/user/${userAddress.toLowerCase()}`;
-                                                    navigator.clipboard.writeText(link);
-                                                    setCopiedLink(true);
-                                                    setTimeout(() => setCopiedLink(false), 2000);
-                                                }}
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl hover:bg-blue-500/20 transition-colors text-blue-400"
-                                            >
-                                                {copiedLink ? (
-                                                    <>
-                                                        <svg
-                                                            className="w-4 h-4"
-                                                            fill="none"
-                                                            viewBox="0 0 24 24"
-                                                            stroke="currentColor"
-                                                        >
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={2}
-                                                                d="M5 13l4 4L19 7"
-                                                            />
-                                                        </svg>
-                                                        <span className="text-sm font-medium">Copied!</span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg
-                                                            className="w-4 h-4"
-                                                            fill="none"
-                                                            viewBox="0 0 24 24"
-                                                            stroke="currentColor"
-                                                        >
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={2}
-                                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                                            />
-                                                        </svg>
-                                                        <span className="text-sm font-medium">Copy Link</span>
-                                                    </>
-                                                )}
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {/* Sound & Notifications Section */}

@@ -9,6 +9,8 @@ import { useAnalytics } from "@/hooks/useAnalytics";
 type GoLiveModalProps = {
     isOpen: boolean;
     onClose: () => void;
+    /** When true, render only inner content (no full-screen overlay) for embedding in a tab or panel */
+    embed?: boolean;
     userAddress: string;
     currentStream: Stream | null;
     onCreateStream: (
@@ -24,6 +26,7 @@ type StreamStatus = "preview" | "connecting" | "live" | "ending";
 export function GoLiveModal({
     isOpen,
     onClose,
+    embed = false,
     userAddress,
     currentStream,
     onCreateStream,
@@ -651,16 +654,10 @@ export function GoLiveModal({
 
     if (!isOpen) return null;
 
-    return (
-        <AnimatePresence>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black z-50 flex flex-col"
-            >
+    const content = (
+        <>
                 {/* Full screen video area */}
-                <div className="flex-1 relative overflow-hidden">
+                <div className={`relative overflow-hidden ${embed ? "flex-1 min-h-0 flex flex-col" : "flex-1"}`}>
                     {ingestUrl && status !== "ending" ? (
                         /* Live broadcast mode - only render when not ending */
                         <Broadcast.Root
@@ -1087,6 +1084,26 @@ export function GoLiveModal({
                         </div>
                     </div>
                 )}
+        </>
+    );
+
+    if (embed) {
+        return (
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                {content}
+            </div>
+        );
+    }
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black z-50 flex flex-col"
+            >
+                {content}
             </motion.div>
         </AnimatePresence>
     );

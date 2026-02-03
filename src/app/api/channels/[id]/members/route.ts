@@ -127,12 +127,6 @@ export async function GET(
                 total: sortedAddresses.length,
                 hasMore: (offset + limit) < sortedAddresses.length
             });
-
-            return NextResponse.json({ 
-                members: [],
-                total: sortedAddresses.length,
-                hasMore: false
-            });
         }
 
         // For regular channels, get from shout_channel_members
