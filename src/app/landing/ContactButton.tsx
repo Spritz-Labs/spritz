@@ -12,13 +12,14 @@ export function ContactButton({ className }: ContactButtonProps) {
 
     return (
         <>
-            <button
-                onClick={() => setIsOpen(true)}
-                className={className}
-            >
+            <button onClick={() => setIsOpen(true)} className={className}>
                 Contact
             </button>
-            <ContactForm isOpen={isOpen} onClose={() => setIsOpen(false)} />
+            <ContactForm
+                isOpen={isOpen}
+                onClose={() => setIsOpen(false)}
+                source="landing"
+            />
         </>
     );
 }

@@ -1049,13 +1049,23 @@ export function GroupChatModal({
                                         {group.name}
                                     </h2>
                                     <button
-                                        onClick={() =>
-                                            setShowMembers(!showMembers)
-                                        }
-                                        className="text-zinc-500 text-xs hover:text-zinc-400 transition-colors"
+                                        onClick={() => setShowMembers(true)}
+                                        className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1"
                                     >
-                                        {members.length} members •{" "}
-                                        {showMembers ? "Hide" : "Show"}
+                                        <svg
+                                            className="w-3.5 h-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                            />
+                                        </svg>
+                                        Community
                                     </button>
                                 </div>
 
@@ -1296,133 +1306,6 @@ export function GroupChatModal({
                                     </button>
                                 </div>
                             </div>
-
-                            {/* Members Panel */}
-                            <AnimatePresence>
-                                {showMembers && (
-                                    <motion.div
-                                        initial={{ height: 0 }}
-                                        animate={{ height: "auto" }}
-                                        exit={{ height: 0 }}
-                                        className="overflow-hidden border-b border-zinc-800"
-                                    >
-                                        <div className="p-3 bg-zinc-800/50 max-h-40 overflow-y-auto">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <p className="text-zinc-500 text-xs">
-                                                    Group Members (
-                                                    {members.length})
-                                                </p>
-                                                <button
-                                                    onClick={() =>
-                                                        setShowAddMember(true)
-                                                    }
-                                                    disabled={
-                                                        availableFriends.length ===
-                                                        0
-                                                    }
-                                                    className="text-xs text-[#FFBBA7] hover:text-[#FFF0E0] disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    + Add
-                                                </button>
-                                            </div>
-                                            <div className="space-y-1">
-                                                {members.map((member) => {
-                                                    const isMe =
-                                                        member.inboxId ===
-                                                        userInboxId;
-                                                    const memberAddress =
-                                                        member.addresses[0] ||
-                                                        "";
-
-                                                    return (
-                                                        <div
-                                                            key={member.inboxId}
-                                                            className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg ${
-                                                                isMe
-                                                                    ? "bg-[#FB8D22]/20"
-                                                                    : "bg-zinc-700/50"
-                                                            }`}
-                                                        >
-                                                            <span
-                                                                className={`text-xs flex-1 min-w-0 truncate ${
-                                                                    isMe
-                                                                        ? "text-[#FFF0E0]"
-                                                                        : "text-zinc-300"
-                                                                }`}
-                                                            >
-                                                                {isMe
-                                                                    ? "You"
-                                                                    : formatAddress(
-                                                                          memberAddress
-                                                                      )}
-                                                            </span>
-                                                            {!isMe && (
-                                                                <div className="flex items-center gap-0.5 shrink-0">
-                                                                    {onOpenDM &&
-                                                                        isFriend?.(
-                                                                            memberAddress
-                                                                        ) && (
-                                                                            <button
-                                                                                onClick={() =>
-                                                                                    onOpenDM(
-                                                                                        memberAddress
-                                                                                    )
-                                                                                }
-                                                                                className="p-1.5 text-zinc-400 hover:text-[#FF5500] transition-colors rounded"
-                                                                                title="Send private message"
-                                                                            >
-                                                                                <svg
-                                                                                    className="w-3.5 h-3.5"
-                                                                                    fill="none"
-                                                                                    viewBox="0 0 24 24"
-                                                                                    stroke="currentColor"
-                                                                                >
-                                                                                    <path
-                                                                                        strokeLinecap="round"
-                                                                                        strokeLinejoin="round"
-                                                                                        strokeWidth={
-                                                                                            2
-                                                                                        }
-                                                                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                                                                    />
-                                                                                </svg>
-                                                                            </button>
-                                                                        )}
-                                                                    <button
-                                                                        onClick={() =>
-                                                                            handleRemoveMember(
-                                                                                memberAddress
-                                                                            )
-                                                                        }
-                                                                        className="p-1 text-zinc-500 hover:text-red-400 transition-colors rounded"
-                                                                        title="Remove from group"
-                                                                    >
-                                                                        <svg
-                                                                            className="w-3 h-3"
-                                                                            fill="none"
-                                                                            viewBox="0 0 24 24"
-                                                                            stroke="currentColor"
-                                                                        >
-                                                                            <path
-                                                                                strokeLinecap="round"
-                                                                                strokeLinejoin="round"
-                                                                                strokeWidth={
-                                                                                    2
-                                                                                }
-                                                                                d="M6 18L18 6M6 6l12 12"
-                                                                            />
-                                                                        </svg>
-                                                                    </button>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
 
                             {/* Pinned Messages Panel */}
                             <AnimatePresence>
@@ -2246,6 +2129,177 @@ export function GroupChatModal({
                         onSend={handleSendPixelArt}
                         isSending={isUploadingPixelArt}
                     />
+
+                    {/* Community (Members) slide-out panel - same behaviour as Global Chat Active Users */}
+                    <AnimatePresence>
+                        {showMembers && (
+                            <>
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-black/50 z-[100]"
+                                    onClick={() => setShowMembers(false)}
+                                />
+                                <motion.div
+                                    initial={{ x: "100%" }}
+                                    animate={{ x: 0 }}
+                                    exit={{ x: "100%" }}
+                                    transition={{
+                                        type: "spring",
+                                        damping: 25,
+                                        stiffness: 300,
+                                    }}
+                                    className="fixed right-0 top-0 bottom-0 w-full max-w-sm bg-zinc-900 border-l border-zinc-800 z-[101] flex flex-col"
+                                    style={{
+                                        paddingTop: "env(safe-area-inset-top)",
+                                    }}
+                                >
+                                    <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+                                        <div>
+                                            <h3 className="font-semibold text-white">
+                                                Community
+                                            </h3>
+                                            <p className="text-xs text-zinc-500">
+                                                {members.length} members
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() =>
+                                                setShowMembers(false)
+                                            }
+                                            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                        >
+                                            <svg
+                                                className="w-5 h-5"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M6 18L18 6M6 6l12 12"
+                                                />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800">
+                                        <span className="text-xs text-zinc-500">
+                                            Group members
+                                        </span>
+                                        <button
+                                            onClick={() => {
+                                                setShowMembers(false);
+                                                setShowAddMember(true);
+                                            }}
+                                            disabled={
+                                                availableFriends.length === 0
+                                            }
+                                            className="text-xs text-[#FFBBA7] hover:text-[#FFF0E0] disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            + Add
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                        {members.map((member) => {
+                                            const isMe =
+                                                member.inboxId === userInboxId;
+                                            const memberAddress =
+                                                member.addresses[0] || "";
+                                            return (
+                                                <div
+                                                    key={member.inboxId}
+                                                    className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl ${
+                                                        isMe
+                                                            ? "bg-[#FB8D22]/20"
+                                                            : "bg-zinc-800/50"
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`text-sm flex-1 min-w-0 truncate ${
+                                                            isMe
+                                                                ? "text-[#FFF0E0]"
+                                                                : "text-zinc-300"
+                                                        }`}
+                                                    >
+                                                        {isMe
+                                                            ? "You"
+                                                            : formatAddress(
+                                                                  memberAddress
+                                                              )}
+                                                    </span>
+                                                    {!isMe && (
+                                                        <div className="flex items-center gap-0.5 shrink-0">
+                                                            {onOpenDM &&
+                                                                isFriend?.(
+                                                                    memberAddress
+                                                                ) && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            onOpenDM(
+                                                                                memberAddress
+                                                                            );
+                                                                            setShowMembers(
+                                                                                false
+                                                                            );
+                                                                        }}
+                                                                        className="p-1.5 text-zinc-400 hover:text-[#FF5500] transition-colors rounded"
+                                                                        title="Send private message"
+                                                                    >
+                                                                        <svg
+                                                                            className="w-4 h-4"
+                                                                            fill="none"
+                                                                            viewBox="0 0 24 24"
+                                                                            stroke="currentColor"
+                                                                        >
+                                                                            <path
+                                                                                strokeLinecap="round"
+                                                                                strokeLinejoin="round"
+                                                                                strokeWidth={
+                                                                                    2
+                                                                                }
+                                                                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                                                            />
+                                                                        </svg>
+                                                                    </button>
+                                                                )}
+                                                            <button
+                                                                onClick={() =>
+                                                                    handleRemoveMember(
+                                                                        memberAddress
+                                                                    )
+                                                                }
+                                                                className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors rounded"
+                                                                title="Remove from group"
+                                                            >
+                                                                <svg
+                                                                    className="w-4 h-4"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M6 18L18 6M6 6l12 12"
+                                                                    />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </motion.div>
+                            </>
+                        )}
+                    </AnimatePresence>
 
                     {/* Add Member Modal */}
                     <AnimatePresence>
