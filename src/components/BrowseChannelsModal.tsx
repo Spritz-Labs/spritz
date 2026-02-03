@@ -457,69 +457,64 @@ export function BrowseChannelsModal({
                                                         opacity: 1,
                                                         y: 0,
                                                     }}
-                                                    className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
+                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
                                                 >
-                                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
-                                                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                            {event.imageUrl ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        setViewerImage(
-                                                                            event.imageUrl!
-                                                                        )
-                                                                    }
-                                                                    className="w-12 h-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                                                                >
-                                                                    <img
-                                                                        src={`${event.imageUrl}?size=small`}
-                                                                        alt=""
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                </button>
-                                                            ) : (
-                                                                <div className="w-12 h-12 rounded-xl bg-zinc-700 flex items-center justify-center text-2xl shrink-0">
-                                                                    🎫
-                                                                </div>
-                                                            )}
-                                                            <div className="flex-1 min-w-0">
-                                                                <p
-                                                                    className="text-white font-medium truncate"
-                                                                    title={
-                                                                        event.eventName
-                                                                    }
-                                                                >
-                                                                    {
-                                                                        event.eventName
-                                                                    }
-                                                                </p>
-                                                                {event.channel ? (
-                                                                    <p className="text-zinc-500 text-xs mt-0.5">
-                                                                        {Number(
-                                                                            (
-                                                                                event.channel as {
-                                                                                    member_count?: number;
-                                                                                }
-                                                                            )
-                                                                                .member_count ??
-                                                                                0
-                                                                        )}{" "}
-                                                                        members
-                                                                        {event
-                                                                            .channel
-                                                                            .is_member &&
-                                                                            " • You’re in"}
-                                                                    </p>
-                                                                ) : (
-                                                                    <p className="text-zinc-500 text-xs mt-0.5">
-                                                                        No
-                                                                        channel
-                                                                        yet •
-                                                                        Create
-                                                                        on Logos
-                                                                    </p>
-                                                                )}
+                                                    <div className="flex flex-row items-center gap-2 sm:gap-3 min-w-0">
+                                                        {event.imageUrl ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setViewerImage(
+                                                                        event.imageUrl!
+                                                                    )
+                                                                }
+                                                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                                            >
+                                                                <img
+                                                                    src={`${event.imageUrl}?size=small`}
+                                                                    alt=""
+                                                                    className="w-full h-full object-cover"
+                                                                />
+                                                            </button>
+                                                        ) : (
+                                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 flex items-center justify-center text-xl sm:text-2xl shrink-0">
+                                                                🎫
                                                             </div>
+                                                        )}
+                                                        <div className="flex-1 min-w-0">
+                                                            <p
+                                                                className="text-white font-medium truncate text-sm sm:text-base"
+                                                                title={
+                                                                    event.eventName
+                                                                }
+                                                            >
+                                                                {
+                                                                    event.eventName
+                                                                }
+                                                            </p>
+                                                            {event.channel ? (
+                                                                <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5 truncate">
+                                                                    {Number(
+                                                                        (
+                                                                            event.channel as {
+                                                                                member_count?: number;
+                                                                            }
+                                                                        )
+                                                                            .member_count ??
+                                                                            0
+                                                                    )}{" "}
+                                                                    members
+                                                                    {event
+                                                                        .channel
+                                                                        .is_member &&
+                                                                        " • You're in"}
+                                                                </p>
+                                                            ) : (
+                                                                <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5">
+                                                                    No channel
+                                                                    yet • Logos
+                                                                </p>
+                                                            )}
                                                         </div>
                                                         {event.channel ? (
                                                             <button
@@ -539,7 +534,7 @@ export function BrowseChannelsModal({
                                                                     event.channel!
                                                                         .id
                                                                 }
-                                                                className={`w-full sm:w-auto px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 shrink-0 ${
+                                                                className={`shrink-0 py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
                                                                     event.channel!
                                                                         .is_member
                                                                         ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
@@ -571,7 +566,7 @@ export function BrowseChannelsModal({
                                                                     creatingPoapEventId ===
                                                                     event.eventId
                                                                 }
-                                                                className="w-full sm:w-auto px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50 shrink-0"
+                                                                className="shrink-0 py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
                                                             >
                                                                 {creatingPoapEventId ===
                                                                 event.eventId ? (
@@ -579,7 +574,15 @@ export function BrowseChannelsModal({
                                                                         Creating...
                                                                     </span>
                                                                 ) : (
-                                                                    "Create channel"
+                                                                    <>
+                                                                        <span className="sm:hidden">
+                                                                            Create
+                                                                        </span>
+                                                                        <span className="hidden sm:inline">
+                                                                            Create
+                                                                            channel
+                                                                        </span>
+                                                                    </>
                                                                 )}
                                                             </button>
                                                         )}
@@ -609,19 +612,25 @@ export function BrowseChannelsModal({
                                             className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
                                         >
                                             <div className="flex items-start gap-3">
-                                                {(channel.poap_image_url ?? channel.icon_url) ? (
+                                                {channel.poap_image_url ??
+                                                channel.icon_url ? (
                                                     <button
                                                         type="button"
                                                         onClick={() => {
                                                             const url =
                                                                 channel.poap_image_url ??
                                                                 channel.icon_url;
-                                                            if (url) setViewerImage(url);
+                                                            if (url)
+                                                                setViewerImage(
+                                                                    url
+                                                                );
                                                         }}
                                                         className="flex-shrink-0 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 rounded-xl focus:outline-none"
                                                     >
                                                         <ChannelIcon
-                                                            emoji={channel.emoji}
+                                                            emoji={
+                                                                channel.emoji
+                                                            }
                                                             iconUrl={
                                                                 channel.poap_image_url ??
                                                                 channel.icon_url
