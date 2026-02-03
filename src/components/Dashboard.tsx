@@ -1574,7 +1574,7 @@ function DashboardContent({
                 id: channelKey,
                 type: "channel",
                 name: channel.name,
-                avatar: channel.icon_url || null,
+                avatar: channel.poap_image_url ?? channel.icon_url ?? null,
                 lastMessage:
                     lastMessagePreviews[channelKey] ||
                     `${channel.member_count} members`,
