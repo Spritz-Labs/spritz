@@ -26,6 +26,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { ChannelIcon } from "./ChannelIcon";
+import { ImageViewerModal } from "./ImageViewerModal";
 import {
     useWakuChannel,
     type WakuChannelMessage,
@@ -541,6 +542,7 @@ export function ChannelChatModal({
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
+    const [viewerImage, setViewerImage] = useState<string | null>(null);
     const [threadRootMessage, setThreadRootMessage] =
         useState<ChannelMessage | null>(null);
     const [threadInputValue, setThreadInputValue] = useState("");
@@ -1523,13 +1525,18 @@ export function ChannelChatModal({
                     )}
                     {/* Header - unified mobile-first design */}
                     <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                        {/* Avatar - shows custom icon if available, otherwise emoji */}
+                        {/* Avatar - shows custom icon if available, otherwise emoji; click to view full size */}
                         <ChannelIcon
                             emoji={channel.emoji}
                             iconUrl={channelIcon}
                             name={channel.name}
                             size="sm"
                             className="shrink-0 ml-1"
+                            onImageClick={
+                                channelIcon
+                                    ? () => setViewerImage(channelIcon)
+                                    : undefined
+                            }
                         />
 
                         {/* Title area - takes remaining space */}
@@ -3438,6 +3445,13 @@ export function ChannelChatModal({
                     }}
                     getUserInfo={getUserInfo}
                     currentUserAddress={userAddress}
+                />
+
+                <ImageViewerModal
+                    isOpen={!!viewerImage}
+                    onClose={() => setViewerImage(null)}
+                    imageUrl={viewerImage ?? ""}
+                    alt={channel.name}
                 />
             </motion.div>
         </AnimatePresence>

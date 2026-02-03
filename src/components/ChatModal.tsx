@@ -68,6 +68,7 @@ import {
 } from "@/hooks/useMessageEdit";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
+import { ImageViewerModal } from "./ImageViewerModal";
 
 const log = createLogger("Chat");
 
@@ -149,6 +150,7 @@ export function ChatModal({
     const [showMuteModal, setShowMuteModal] = useState(false);
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
+    const [viewerImage, setViewerImage] = useState<string | null>(null);
 
     // Fetch peer online status
     useEffect(() => {
@@ -1293,14 +1295,23 @@ export function ChatModal({
                         >
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                                {/* Avatar with online status */}
+                                {/* Avatar with online status - click to view full size */}
                                 <div className="shrink-0 ml-1 relative">
                                     {peerAvatar ? (
-                                        <img
-                                            src={peerAvatar}
-                                            alt={displayName}
-                                            className="w-9 h-9 rounded-full object-cover"
-                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setViewerImage(peerAvatar)
+                                            }
+                                            className="w-9 h-9 rounded-full overflow-hidden focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:outline-none"
+                                            aria-label="View avatar full size"
+                                        >
+                                            <img
+                                                src={peerAvatar}
+                                                alt={displayName}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </button>
                                     ) : (
                                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
                                             <span className="text-white font-bold text-sm">
@@ -2916,6 +2927,12 @@ export function ChatModal({
                     />
                 </>
             )}
+            <ImageViewerModal
+                isOpen={!!viewerImage}
+                onClose={() => setViewerImage(null)}
+                imageUrl={viewerImage ?? ""}
+                alt={displayName}
+            />
         </AnimatePresence>
     );
 }

@@ -15,9 +15,15 @@ type ChannelInfo = {
     member_count: number;
     message_count: number;
     created_at: string;
+    poap_event_id?: number | null;
+    poap_event_name?: string | null;
 };
 
-export default function ChannelInvitePage({ params }: { params: Promise<{ id: string }> }) {
+export default function ChannelInvitePage({
+    params,
+}: {
+    params: Promise<{ id: string }>;
+}) {
     const { id } = use(params);
     const { user, isLoading: authLoading, isAuthenticated } = useAuth();
     const userAddress = user?.walletAddress || null;
@@ -31,12 +37,13 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
         fetchChannel();
     }, [id]);
 
-    // Auto-join if logged in and we have the channel
+    // Auto-join if logged in and we have the channel (skip auto-join for POAP channels so user sees requirement first)
+    const isPoapChannel = channel?.poap_event_id != null;
     useEffect(() => {
-        if (channel && userAddress && !joining && !joined) {
+        if (channel && userAddress && !joining && !joined && !isPoapChannel) {
             handleJoin();
         }
-    }, [channel, userAddress]);
+    }, [channel, userAddress, isPoapChannel]);
 
     const fetchChannel = async () => {
         try {
@@ -80,7 +87,9 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
             }
         } catch (err) {
             console.error("Error joining channel:", err);
-            setError(err instanceof Error ? err.message : "Failed to join channel");
+            setError(
+                err instanceof Error ? err.message : "Failed to join channel"
+            );
         } finally {
             setJoining(false);
         }
@@ -102,16 +111,22 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
     }
 
     if (error || !channel) {
+        const isPoapError = error?.toLowerCase().includes("poap");
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="text-center">
                     <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-zinc-800 flex items-center justify-center text-4xl">
-                        💬
+                        {isPoapError ? "🎫" : "💬"}
                     </div>
-                    <h1 className="text-xl font-bold text-white mb-2">Channel Not Found</h1>
-                    <p className="text-zinc-500 mb-6">{error || "This channel doesn't exist or has been removed."}</p>
-                    <Link 
-                        href="/" 
+                    <h1 className="text-xl font-bold text-white mb-2">
+                        {isPoapError ? "POAP required" : "Channel Not Found"}
+                    </h1>
+                    <p className="text-zinc-500 mb-6">
+                        {error ||
+                            "This channel doesn't exist or has been removed."}
+                    </p>
+                    <Link
+                        href="/"
                         className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-orange-500/25 transition-all"
                     >
                         Go to Spritz →
@@ -149,7 +164,10 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
                 >
                     {/* Logo */}
                     <div className="mb-8">
-                        <Link href="/" className="inline-block text-3xl font-bold bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">
+                        <Link
+                            href="/"
+                            className="inline-block text-3xl font-bold bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent"
+                        >
                             Spritz
                         </Link>
                     </div>
@@ -162,7 +180,7 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
                         </div>
 
                         {/* Channel Name */}
-                        <div className="flex items-center justify-center gap-2 mb-2">
+                        <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
                             <h1 className="text-2xl font-bold text-white">
                                 # {channel.name}
                             </h1>
@@ -171,7 +189,21 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
                                     Official
                                 </span>
                             )}
+                            {channel.poap_event_id != null && (
+                                <span
+                                    className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs font-medium rounded-full"
+                                    title="Only holders of this POAP can join"
+                                >
+                                    🎫 POAP required
+                                </span>
+                            )}
                         </div>
+                        {channel.poap_event_id != null && (
+                            <p className="text-zinc-500 text-sm mb-4">
+                                You need the event POAP in your wallet to join
+                                this channel.
+                            </p>
+                        )}
 
                         {/* Description */}
                         {channel.description && (
@@ -183,16 +215,42 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
                         {/* Stats */}
                         <div className="flex items-center justify-center gap-6 mb-8 text-sm">
                             <div className="flex items-center gap-2 text-zinc-400">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
                                 </svg>
-                                <span>{channel.member_count.toLocaleString()} members</span>
+                                <span>
+                                    {channel.member_count.toLocaleString()}{" "}
+                                    members
+                                </span>
                             </div>
                             <div className="flex items-center gap-2 text-zinc-400">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                    />
                                 </svg>
-                                <span>{channel.message_count.toLocaleString()} messages</span>
+                                <span>
+                                    {channel.message_count.toLocaleString()}{" "}
+                                    messages
+                                </span>
                             </div>
                         </div>
 
@@ -217,8 +275,18 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
                                     </>
                                 ) : (
                                     <>
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                                            />
                                         </svg>
                                         Join Channel
                                     </>
@@ -229,8 +297,18 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
                                 onClick={handleLoginAndJoin}
                                 className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-lg font-semibold hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center justify-center gap-2"
                             >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                                <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                                    />
                                 </svg>
                                 Sign in to Join
                             </button>
@@ -238,18 +316,22 @@ export default function ChannelInvitePage({ params }: { params: Promise<{ id: st
 
                         {!userAddress && (
                             <p className="text-zinc-500 text-sm mt-4">
-                                Create a free Spritz account to join this channel
+                                Create a free Spritz account to join this
+                                channel
                             </p>
                         )}
                     </div>
 
                     {/* Footer */}
                     <div className="mt-8">
-                        <Link 
-                            href="/" 
+                        <Link
+                            href="/"
                             className="text-zinc-500 hover:text-white text-sm transition-colors"
                         >
-                            Powered by <span className="text-orange-400 font-semibold">Spritz</span>
+                            Powered by{" "}
+                            <span className="text-orange-400 font-semibold">
+                                Spritz
+                            </span>
                         </Link>
                     </div>
                 </motion.div>

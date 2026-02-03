@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useChannels } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
 import { ChannelIcon } from "./ChannelIcon";
+import { ImageViewerModal } from "./ImageViewerModal";
 import type { PoapEventWithChannel } from "@/app/api/poap/events-with-channels/route";
 
 type BrowseChannelsModalProps = {
@@ -78,6 +79,7 @@ export function BrowseChannelsModal({
     const [creatingPoapEventId, setCreatingPoapEventId] = useState<
         number | null
     >(null);
+    const [viewerImage, setViewerImage] = useState<string | null>(null);
 
     // Reset showCreateModal when the modal opens/closes
     useEffect(() => {
@@ -460,18 +462,33 @@ export function BrowseChannelsModal({
                                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
                                                         <div className="flex items-center gap-3 min-w-0 flex-1">
                                                             {event.imageUrl ? (
-                                                                <img
-                                                                    src={`${event.imageUrl}?size=small`}
-                                                                    alt=""
-                                                                    className="w-12 h-12 rounded-xl object-cover shrink-0 ring-1 ring-zinc-600"
-                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setViewerImage(
+                                                                            event.imageUrl!
+                                                                        )
+                                                                    }
+                                                                    className="w-12 h-12 rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                                                >
+                                                                    <img
+                                                                        src={`${event.imageUrl}?size=small`}
+                                                                        alt=""
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                </button>
                                                             ) : (
                                                                 <div className="w-12 h-12 rounded-xl bg-zinc-700 flex items-center justify-center text-2xl shrink-0">
                                                                     🎫
                                                                 </div>
                                                             )}
                                                             <div className="flex-1 min-w-0">
-                                                                <p className="text-white font-medium truncate">
+                                                                <p
+                                                                    className="text-white font-medium truncate"
+                                                                    title={
+                                                                        event.eventName
+                                                                    }
+                                                                >
                                                                     {
                                                                         event.eventName
                                                                     }
@@ -592,16 +609,40 @@ export function BrowseChannelsModal({
                                             className="p-3 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
                                         >
                                             <div className="flex items-start gap-3">
-                                                <ChannelIcon
-                                                    emoji={channel.emoji}
-                                                    iconUrl={
-                                                        channel.poap_image_url ??
-                                                        channel.icon_url
-                                                    }
-                                                    name={channel.name}
-                                                    size="md"
-                                                    className="flex-shrink-0"
-                                                />
+                                                {(channel.poap_image_url ?? channel.icon_url) ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const url =
+                                                                channel.poap_image_url ??
+                                                                channel.icon_url;
+                                                            if (url) setViewerImage(url);
+                                                        }}
+                                                        className="flex-shrink-0 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 rounded-xl focus:outline-none"
+                                                    >
+                                                        <ChannelIcon
+                                                            emoji={channel.emoji}
+                                                            iconUrl={
+                                                                channel.poap_image_url ??
+                                                                channel.icon_url
+                                                            }
+                                                            name={channel.name}
+                                                            size="md"
+                                                            className="flex-shrink-0"
+                                                        />
+                                                    </button>
+                                                ) : (
+                                                    <ChannelIcon
+                                                        emoji={channel.emoji}
+                                                        iconUrl={
+                                                            channel.poap_image_url ??
+                                                            channel.icon_url
+                                                        }
+                                                        name={channel.name}
+                                                        size="md"
+                                                        className="flex-shrink-0"
+                                                    />
+                                                )}
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <p className="text-white font-medium truncate">
@@ -894,6 +935,12 @@ export function BrowseChannelsModal({
                     )}
                 </AnimatePresence>
             </motion.div>
+            <ImageViewerModal
+                isOpen={!!viewerImage}
+                onClose={() => setViewerImage(null)}
+                imageUrl={viewerImage ?? ""}
+                alt="Channel or POAP art"
+            />
         </AnimatePresence>
     );
 }

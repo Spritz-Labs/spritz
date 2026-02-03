@@ -16,7 +16,9 @@ export async function GET(
     try {
         const { data: channel, error } = await supabase
             .from("shout_public_channels")
-            .select("id, name, description, emoji, category, is_official, member_count, message_count, created_at")
+            .select(
+                "id, name, description, emoji, category, is_official, member_count, message_count, created_at, poap_event_id, poap_event_name"
+            )
             .eq("id", id)
             .eq("is_active", true)
             .single();

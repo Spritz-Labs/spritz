@@ -12,6 +12,8 @@ type ChannelIconProps = {
     editable?: boolean;
     onUpload?: (file: File) => Promise<void>;
     onRemove?: () => Promise<void>;
+    /** When set and iconUrl is present, the icon is clickable to open full-width viewer */
+    onImageClick?: () => void;
 };
 
 const SIZE_CLASSES = {
@@ -31,6 +33,7 @@ export function ChannelIcon({
     editable = false,
     onUpload,
     onRemove,
+    onImageClick,
 }: ChannelIconProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [showEditOverlay, setShowEditOverlay] = useState(false);
@@ -68,6 +71,7 @@ export function ChannelIcon({
     };
 
     const hasImage = iconUrl && !imageError;
+    const isImageClickable = hasImage && onImageClick && !editable;
 
     return (
         <div
@@ -76,13 +80,29 @@ export function ChannelIcon({
             onMouseLeave={() => setShowEditOverlay(false)}
         >
             {/* Icon display */}
-            <div className={`${sizeClass} rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center overflow-hidden`}>
+            <div
+                className={`${sizeClass} rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center overflow-hidden ${isImageClickable ? "cursor-pointer focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:outline-none" : ""}`}
+                onClick={isImageClickable ? onImageClick : undefined}
+                onKeyDown={
+                    isImageClickable
+                        ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  onImageClick();
+                              }
+                          }
+                        : undefined
+                }
+                role={isImageClickable ? "button" : undefined}
+                tabIndex={isImageClickable ? 0 : undefined}
+                aria-label={isImageClickable ? "View image full size" : undefined}
+            >
                 {hasImage ? (
                     <Image
                         src={iconUrl}
                         alt={name || "Channel icon"}
                         fill
-                        className="object-cover"
+                        className="object-cover pointer-events-none"
                         onError={() => setImageError(true)}
                         unoptimized
                     />
