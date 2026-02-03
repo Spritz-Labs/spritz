@@ -8,6 +8,8 @@ import { SchedulingCard } from "./SchedulingCard";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 
 interface AgentChatModalProps {
     isOpen: boolean;
@@ -31,6 +33,7 @@ export function AgentChatModal({
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [showWhatCanYouDo, setShowWhatCanYouDo] = useState(false);
     const [isRegenerating, setIsRegenerating] = useState(false);
+    const userTimezone = useUserTimezone();
 
     const {
         messages,
@@ -466,14 +469,11 @@ export function AgentChatModal({
                                                                     : "text-zinc-500"
                                                             }`}
                                                         >
-                                                            {new Date(
-                                                                msg.created_at
-                                                            ).toLocaleTimeString(
-                                                                [],
-                                                                {
-                                                                    hour: "2-digit",
-                                                                    minute: "2-digit",
-                                                                }
+                                                            {formatTimeInTimezone(
+                                                                new Date(
+                                                                    msg.created_at
+                                                                ),
+                                                                userTimezone
                                                             )}
                                                         </p>
                                                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

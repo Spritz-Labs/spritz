@@ -18,6 +18,8 @@ import {
     ARCHIVED_FOLDER_LABEL,
     type ChatFolder,
 } from "@/hooks/useChatFolders";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimestamp, formatDateInTimezone } from "@/lib/timezone";
 import { ChatListItemSkeleton } from "./ChatSkeleton";
 
 // Create Folder Modal Component
@@ -243,23 +245,20 @@ type UnifiedChatListProps = {
     isChatsLoading?: boolean;
 };
 
-const formatTime = (date: Date | null) => {
+const formatTime = (date: Date | null, timezone: string) => {
     if (!date) return "";
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
     if (days === 0) {
-        return date.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-        });
+        return formatTimestamp(date, timezone, "h:mm a");
     } else if (days === 1) {
         return "Yesterday";
     } else if (days < 7) {
-        return date.toLocaleDateString([], { weekday: "short" });
+        return formatDateInTimezone(date, timezone, "weekday");
     } else {
-        return date.toLocaleDateString([], { month: "short", day: "numeric" });
+        return formatDateInTimezone(date, timezone, "monthDay");
     }
 };
 
@@ -353,6 +352,7 @@ type ChatRowProps = {
     onCallClick?: (chat: UnifiedChatItem) => void;
     onVideoClick?: (chat: UnifiedChatItem) => void;
     onPinChat?: (chat: UnifiedChatItem, pinned: boolean) => void;
+    userTimezone: string;
 };
 
 const ChatRow = memo(
@@ -371,6 +371,7 @@ const ChatRow = memo(
         onCallClick,
         onVideoClick,
         onPinChat,
+        userTimezone,
     }: ChatRowProps) {
         return (
             <div className="relative select-none" onContextMenu={onContextMenu}>
@@ -557,7 +558,10 @@ const ChatRow = memo(
                                             : "text-zinc-500"
                                     }`}
                                 >
-                                    {formatTime(chat.lastMessageAt)}
+                                    {formatTime(
+                                        chat.lastMessageAt,
+                                        userTimezone
+                                    )}
                                 </span>
                             )}
                             <button
@@ -794,6 +798,7 @@ function UnifiedChatListInner({
     showSearch?: boolean;
     onSearchToggle?: () => void;
 }) {
+    const userTimezone = useUserTimezone();
     const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = "All"
     const [showFolderPicker, setShowFolderPicker] = useState<string | null>(
         null
@@ -1412,6 +1417,7 @@ function UnifiedChatListInner({
                                 onCallClick={onCallClick}
                                 onVideoClick={onVideoClick}
                                 onPinChat={onPinChat}
+                                userTimezone={userTimezone}
                             />
                         );
                     })

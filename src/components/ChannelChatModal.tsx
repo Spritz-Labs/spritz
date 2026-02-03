@@ -48,6 +48,8 @@ import { ForwardMessageModal } from "./ForwardMessageModal";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ChatEmptyState } from "./ChatEmptyState";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
@@ -1200,12 +1202,9 @@ export function ChannelChatModal({
         }
     };
 
+    const userTimezone = useUserTimezone();
     const formatTime = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-        });
+        return formatTimeInTimezone(new Date(dateString), userTimezone);
     };
 
     const formatAddress = (address: string) => {
@@ -1575,7 +1574,13 @@ export function ChannelChatModal({
                                 </svg>
                                 Community
                                 {typeof channel.member_count === "number" && (
-                                    <> · {channel.member_count} {channel.member_count === 1 ? "member" : "members"}</>
+                                    <>
+                                        {" "}
+                                        · {channel.member_count}{" "}
+                                        {channel.member_count === 1
+                                            ? "member"
+                                            : "members"}
+                                    </>
                                 )}
                                 {isWakuChannel && " · Decentralized"}
                             </button>

@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
+import {
+    motion,
+    AnimatePresence,
+    PanInfo,
+    useMotionValue,
+    useTransform,
+} from "framer-motion";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimestamp, formatDateInTimezone } from "@/lib/timezone";
 
 type GalleryImage = {
     id: string;
@@ -29,14 +37,15 @@ export function ImageGallery({
     onDownload,
     onShare,
 }: ImageGalleryProps) {
+    const userTimezone = useUserTimezone();
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [isZoomed, setIsZoomed] = useState(false);
     const [showControls, setShowControls] = useState(true);
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    
+
     const x = useMotionValue(0);
     const containerRef = useRef<HTMLDivElement>(null);
-    
+
     // Scale transform based on vertical drag (for dismiss)
     const scale = useTransform(x, [-200, 0, 200], [0.8, 1, 0.8]);
     const opacity = useTransform(x, [-200, 0, 200], [0.5, 1, 0.5]);
@@ -106,9 +115,15 @@ export function ImageGallery({
 
             // Horizontal swipe for navigation
             if (Math.abs(offset.x) > Math.abs(offset.y)) {
-                if (offset.x > swipeThreshold || velocity.x > velocityThreshold) {
+                if (
+                    offset.x > swipeThreshold ||
+                    velocity.x > velocityThreshold
+                ) {
                     goToPrevious();
-                } else if (offset.x < -swipeThreshold || velocity.x < -velocityThreshold) {
+                } else if (
+                    offset.x < -swipeThreshold ||
+                    velocity.x < -velocityThreshold
+                ) {
                     goToNext();
                 }
             }
@@ -188,8 +203,18 @@ export function ImageGallery({
                                         }}
                                         className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                                     >
-                                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                        <svg
+                                            className="w-6 h-6 text-white"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
                                         </svg>
                                     </button>
 
@@ -207,11 +232,21 @@ export function ImageGallery({
                                             }}
                                             className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                                         >
-                                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                            <svg
+                                                className="w-5 h-5 text-white"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                strokeWidth={2}
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                                />
                                             </svg>
                                         </button>
-                                        {'share' in navigator && (
+                                        {"share" in navigator && (
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -219,8 +254,18 @@ export function ImageGallery({
                                                 }}
                                                 className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                                             >
-                                                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                <svg
+                                                    className="w-5 h-5 text-white"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                    strokeWidth={2}
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                                    />
                                                 </svg>
                                             </button>
                                         )}
@@ -272,8 +317,18 @@ export function ImageGallery({
                                         }}
                                         className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                                     >
-                                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                                        <svg
+                                            className="w-6 h-6 text-white"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M15 19l-7-7 7-7"
+                                            />
                                         </svg>
                                     </motion.button>
                                 )}
@@ -288,8 +343,18 @@ export function ImageGallery({
                                         }}
                                         className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                                     >
-                                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                        <svg
+                                            className="w-6 h-6 text-white"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M9 5l7 7-7 7"
+                                            />
                                         </svg>
                                     </motion.button>
                                 )}
@@ -314,13 +379,27 @@ export function ImageGallery({
                                 )}
 
                                 {/* Sender & time */}
-                                {(currentImage.sender || currentImage.timestamp) && (
+                                {(currentImage.sender ||
+                                    currentImage.timestamp) && (
                                     <div className="text-white/60 text-xs text-center mb-3">
-                                        {currentImage.sender && <span>{currentImage.sender}</span>}
-                                        {currentImage.sender && currentImage.timestamp && <span> · </span>}
+                                        {currentImage.sender && (
+                                            <span>{currentImage.sender}</span>
+                                        )}
+                                        {currentImage.sender &&
+                                            currentImage.timestamp && (
+                                                <span> · </span>
+                                            )}
                                         {currentImage.timestamp && (
                                             <span>
-                                                {currentImage.timestamp.toLocaleDateString()} {currentImage.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {formatDateInTimezone(
+                                                    currentImage.timestamp,
+                                                    userTimezone,
+                                                    "short"
+                                                )}{" "}
+                                                {formatTimestamp(
+                                                    currentImage.timestamp,
+                                                    userTimezone
+                                                )}
                                             </span>
                                         )}
                                     </div>
@@ -371,13 +450,16 @@ export function useImageGallery() {
         initialIndex: 0,
     });
 
-    const openGallery = useCallback((images: GalleryImage[], initialIndex = 0) => {
-        setGalleryState({
-            isOpen: true,
-            images,
-            initialIndex,
-        });
-    }, []);
+    const openGallery = useCallback(
+        (images: GalleryImage[], initialIndex = 0) => {
+            setGalleryState({
+                isOpen: true,
+                images,
+                initialIndex,
+            });
+        },
+        []
+    );
 
     const closeGallery = useCallback(() => {
         setGalleryState((prev) => ({ ...prev, isOpen: false }));
@@ -402,26 +484,28 @@ export function extractImagesFromMessages(
 ): GalleryImage[] {
     const imageRegex = /https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp)/gi;
     const ipfsImageRegex = /ipfs:\/\/[^\s]+/gi;
-    
+
     const images: GalleryImage[] = [];
-    
+
     messages.forEach((msg) => {
         // Check for regular image URLs
         const urls = msg.content.match(imageRegex) || [];
         // Check for IPFS URLs
-        const ipfsUrls = (msg.content.match(ipfsImageRegex) || []).map(
-            (url) => url.replace("ipfs://", "https://ipfs.io/ipfs/")
+        const ipfsUrls = (msg.content.match(ipfsImageRegex) || []).map((url) =>
+            url.replace("ipfs://", "https://ipfs.io/ipfs/")
         );
-        
+
         [...urls, ...ipfsUrls].forEach((url) => {
             images.push({
                 id: `${msg.id}-${url}`,
                 url,
-                sender: getSenderName ? getSenderName(msg.senderAddress) : msg.senderAddress.slice(0, 8),
+                sender: getSenderName
+                    ? getSenderName(msg.senderAddress)
+                    : msg.senderAddress.slice(0, 8),
                 timestamp: msg.sentAt,
             });
         });
     });
-    
+
     return images;
 }

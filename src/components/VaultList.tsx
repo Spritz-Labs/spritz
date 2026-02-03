@@ -36,6 +36,8 @@ import type {
     VaultTokenBalance,
 } from "@/app/api/vault/[id]/balances/route";
 import type { Address, Hex } from "viem";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatDateInTimezone } from "@/lib/timezone";
 
 // Timeout for waiting for AA transactions (2 minutes)
 const AA_TX_TIMEOUT = 120_000;
@@ -110,6 +112,7 @@ export function VaultList({
     onCreateNew,
     refreshKey,
 }: VaultListProps) {
+    const userTimezone = useUserTimezone();
     const {
         vaults,
         isLoading,
@@ -126,17 +129,17 @@ export function VaultList({
         if (refreshKey !== undefined && refreshKey > 0) {
             console.log(
                 "[VaultList] Refreshing vaults due to refreshKey change:",
-                refreshKey,
+                refreshKey
             );
             fetchVaults();
         }
     }, [refreshKey, fetchVaults]);
     // Pass the userAddress to support passkey users who don't have a wagmi wallet connected
     const vaultExecution = useVaultExecution(
-        userAddress as Address | undefined,
+        userAddress as Address | undefined
     );
     const [selectedVault, setSelectedVault] = useState<VaultDetails | null>(
-        null,
+        null
     );
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -156,7 +159,7 @@ export function VaultList({
 
     // Hidden vaults (per user, persisted in localStorage)
     const [hiddenVaultIds, setHiddenVaultIds] = useState<Set<string>>(
-        () => new Set(),
+        () => new Set()
     );
     const [showHiddenVaults, setShowHiddenVaults] = useState(false);
 
@@ -169,7 +172,7 @@ export function VaultList({
             const raw =
                 typeof window !== "undefined"
                     ? localStorage.getItem(
-                          HIDDEN_VAULTS_STORAGE_KEY(userAddress),
+                          HIDDEN_VAULTS_STORAGE_KEY(userAddress)
                       )
                     : null;
             const parsed = raw ? (JSON.parse(raw) as string[]) : [];
@@ -189,14 +192,14 @@ export function VaultList({
                     try {
                         localStorage.setItem(
                             HIDDEN_VAULTS_STORAGE_KEY(userAddress),
-                            JSON.stringify([...next]),
+                            JSON.stringify([...next])
                         );
                     } catch {}
                 }
                 return next;
             });
         },
-        [userAddress],
+        [userAddress]
     );
 
     const unhideVault = useCallback(
@@ -209,23 +212,23 @@ export function VaultList({
                     try {
                         localStorage.setItem(
                             HIDDEN_VAULTS_STORAGE_KEY(userAddress),
-                            JSON.stringify([...next]),
+                            JSON.stringify([...next])
                         );
                     } catch {}
                 }
                 return next;
             });
         },
-        [userAddress],
+        [userAddress]
     );
 
     const visibleVaults = useMemo(
         () => vaults.filter((v) => !hiddenVaultIds.has(v.id)),
-        [vaults, hiddenVaultIds],
+        [vaults, hiddenVaultIds]
     );
     const hiddenVaultsList = useMemo(
         () => vaults.filter((v) => hiddenVaultIds.has(v.id)),
-        [vaults, hiddenVaultIds],
+        [vaults, hiddenVaultIds]
     );
 
     // Edit state
@@ -274,10 +277,10 @@ export function VaultList({
             const usd = parseFloat(usdAmount);
             if (isNaN(usd) || usd <= 0) return "";
             return (usd / vaultTokenPriceUsd).toFixed(
-                sendToken?.decimals || 18,
+                sendToken?.decimals || 18
             );
         },
-        [vaultTokenPriceUsd, sendToken],
+        [vaultTokenPriceUsd, sendToken]
     );
 
     const getVaultUsdAmount = useCallback(
@@ -287,7 +290,7 @@ export function VaultList({
             if (isNaN(amount) || amount <= 0) return "";
             return (amount * vaultTokenPriceUsd).toFixed(2);
         },
-        [vaultTokenPriceUsd],
+        [vaultTokenPriceUsd]
     );
 
     // Get the actual token amount to send (Vault send - converts from USD if needed)
@@ -357,7 +360,7 @@ export function VaultList({
             setShowRecipientSuggestions(false);
             setSelectedSuggestionIndex(-1);
         },
-        [ensResolver],
+        [ensResolver]
     );
 
     // Handle keyboard navigation for suggestions
@@ -370,13 +373,13 @@ export function VaultList({
                 case "ArrowDown":
                     e.preventDefault();
                     setSelectedSuggestionIndex((prev) =>
-                        prev < filteredSuggestions.length - 1 ? prev + 1 : 0,
+                        prev < filteredSuggestions.length - 1 ? prev + 1 : 0
                     );
                     break;
                 case "ArrowUp":
                     e.preventDefault();
                     setSelectedSuggestionIndex((prev) =>
-                        prev > 0 ? prev - 1 : filteredSuggestions.length - 1,
+                        prev > 0 ? prev - 1 : filteredSuggestions.length - 1
                     );
                     break;
                 case "Enter":
@@ -386,7 +389,7 @@ export function VaultList({
                     ) {
                         e.preventDefault();
                         handleSelectSuggestion(
-                            filteredSuggestions[selectedSuggestionIndex],
+                            filteredSuggestions[selectedSuggestionIndex]
                         );
                     }
                     break;
@@ -401,7 +404,7 @@ export function VaultList({
             filteredSuggestions,
             selectedSuggestionIndex,
             handleSelectSuggestion,
-        ],
+        ]
     );
 
     // Handle saving address to address book
@@ -506,7 +509,7 @@ export function VaultList({
                     `/api/passkey/credential?address=${userAddress}`,
                     {
                         credentials: "include",
-                    },
+                    }
                 );
 
                 if (response.ok) {
@@ -534,7 +537,7 @@ export function VaultList({
             } catch (err) {
                 console.error(
                     "[VaultList] Error loading passkey credential:",
-                    err,
+                    err
                 );
             }
         };
@@ -575,7 +578,7 @@ export function VaultList({
                                 `/api/vault/${vault.id}/balances`,
                                 {
                                     credentials: "include",
-                                },
+                                }
                             );
                             if (response.ok) {
                                 const data: VaultBalanceResponse =
@@ -589,11 +592,11 @@ export function VaultList({
                         } catch (err) {
                             console.error(
                                 `[VaultList] Error fetching balance for vault ${vault.id}:`,
-                                err,
+                                err
                             );
                         }
                         return { id: vault.id, totalUsd: 0, loading: false };
-                    }),
+                    })
                 );
 
                 // Update cache with results
@@ -616,7 +619,7 @@ export function VaultList({
 
     // Get gas cost estimate based on chain
     const getDeployGasCost = (
-        chainId: number,
+        chainId: number
     ): { cost: string; isHigh: boolean; isSponsored: boolean } => {
         // Mainnet is expensive and not sponsored
         if (chainId === 1) {
@@ -660,40 +663,40 @@ export function VaultList({
                     "[VaultList] Chain:",
                     deployInfo.chainId,
                     "Owners:",
-                    deployInfo.owners.length,
+                    deployInfo.owners.length
                 );
                 console.log(
                     "[VaultList] saltNonce from API:",
                     deployInfo.saltNonce,
                     "as BigInt:",
-                    BigInt(deployInfo.saltNonce || "0").toString(),
+                    BigInt(deployInfo.saltNonce || "0").toString()
                 );
                 console.log(
                     "[VaultList] saltNonce hex:",
-                    "0x" + BigInt(deployInfo.saltNonce || "0").toString(16),
+                    "0x" + BigInt(deployInfo.saltNonce || "0").toString(16)
                 );
                 console.log(
                     "[VaultList] Stored safe address:",
-                    deployInfo.safeAddress,
+                    deployInfo.safeAddress
                 );
                 console.log(
                     "[VaultList] Sorted owners:",
                     [...(deployInfo.owners as string[])].sort((a, b) =>
-                        a.toLowerCase().localeCompare(b.toLowerCase()),
-                    ),
+                        a.toLowerCase().localeCompare(b.toLowerCase())
+                    )
                 );
                 console.log(
                     "[VaultList] Using Sponsored:",
                     useSponsoredGas,
                     "Chain supports:",
-                    gasCost.isSponsored,
+                    gasCost.isSponsored
                 );
 
                 // Double-check on-chain status before deploying (in case previous attempt succeeded)
                 // This prevents "Create2 call failed" errors when Safe already exists
                 if (deployInfo.isDeployed) {
                     console.log(
-                        "[VaultList] Safe already deployed on-chain, updating database...",
+                        "[VaultList] Safe already deployed on-chain, updating database..."
                     );
                     await confirmDeployment(vaultId, "");
                     const updatedVault = await getVault(vaultId);
@@ -722,7 +725,7 @@ export function VaultList({
                     }
 
                     console.log(
-                        "[VaultList] Deploying via EOA (wallet pays gas)",
+                        "[VaultList] Deploying via EOA (wallet pays gas)"
                     );
                     const result = await deployMultiSigSafeWithEOA(
                         deployInfo.owners as Address[],
@@ -732,7 +735,7 @@ export function VaultList({
                             account: { address: Address };
                             writeContract: (args: unknown) => Promise<Hex>;
                         },
-                        BigInt(deployInfo.saltNonce || "0"),
+                        BigInt(deployInfo.saltNonce || "0")
                     );
                     txHash = result.txHash;
                     safeAddress = result.safeAddress;
@@ -740,7 +743,7 @@ export function VaultList({
                     // PASSKEY DEPLOYMENT - for users without a connected wallet
                     // Uses their passkey to sign via their Smart Wallet
                     console.log(
-                        "[VaultList] Deploying via Passkey Smart Wallet (sponsored gas)",
+                        "[VaultList] Deploying via Passkey Smart Wallet (sponsored gas)"
                     );
 
                     try {
@@ -749,7 +752,7 @@ export function VaultList({
                             deployInfo.threshold,
                             deployInfo.chainId,
                             passkeyCredential,
-                            BigInt(deployInfo.saltNonce || "0"),
+                            BigInt(deployInfo.saltNonce || "0")
                         );
                         txHash = result.txHash;
                         safeAddress = result.safeAddress;
@@ -766,10 +769,10 @@ export function VaultList({
                         ) {
                             console.log(
                                 "[VaultList] Passkey bundler simulation failed:",
-                                errorMsg,
+                                errorMsg
                             );
                             throw new Error(
-                                "Deployment failed. The vault may already exist - try the Sync button.",
+                                "Deployment failed. The vault may already exist - try the Sync button."
                             );
                         }
 
@@ -780,30 +783,30 @@ export function VaultList({
                     // Try to ensure wallet is connected (handles PWA resume scenarios)
                     if (!connectedAddress || !isConnected) {
                         console.log(
-                            "[VaultList] Wallet appears disconnected, attempting reconnect...",
+                            "[VaultList] Wallet appears disconnected, attempting reconnect..."
                         );
                         const reconnected = await ensureConnected();
                         if (!reconnected) {
                             // If we have a passkey, suggest using that instead
                             if (passkeyCredential) {
                                 setDeployError(
-                                    "Wallet not connected. Make sure 'Use sponsored gas' is checked to deploy with your passkey.",
+                                    "Wallet not connected. Make sure 'Use sponsored gas' is checked to deploy with your passkey."
                                 );
                             } else {
                                 setDeployError(
-                                    "Wallet disconnected. Please reconnect your wallet and try again.",
+                                    "Wallet disconnected. Please reconnect your wallet and try again."
                                 );
                             }
                             setIsDeploying(false);
                             return;
                         }
                         console.log(
-                            "[VaultList] Wallet reconnected successfully",
+                            "[VaultList] Wallet reconnected successfully"
                         );
                     }
 
                     console.log(
-                        "[VaultList] Deploying via Wallet Smart Wallet (sponsored gas)",
+                        "[VaultList] Deploying via Wallet Smart Wallet (sponsored gas)"
                     );
 
                     try {
@@ -818,7 +821,7 @@ export function VaultList({
                                     const reconnected = await ensureConnected();
                                     if (!reconnected) {
                                         throw new Error(
-                                            "Wallet disconnected during signing. Please reconnect.",
+                                            "Wallet disconnected during signing. Please reconnect."
                                         );
                                     }
                                 }
@@ -832,16 +835,16 @@ export function VaultList({
                                     const reconnected = await ensureConnected();
                                     if (!reconnected) {
                                         throw new Error(
-                                            "Wallet disconnected during signing. Please reconnect.",
+                                            "Wallet disconnected during signing. Please reconnect."
                                         );
                                     }
                                 }
                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 return (await signTypedDataAsync(
-                                    data as any,
+                                    data as any
                                 )) as Hex;
                             },
-                            BigInt(deployInfo.saltNonce || "0"),
+                            BigInt(deployInfo.saltNonce || "0")
                         );
                         txHash = result.txHash;
                         safeAddress = result.safeAddress;
@@ -858,7 +861,7 @@ export function VaultList({
                             errorMsg.toLowerCase().includes("no account")
                         ) {
                             throw new Error(
-                                "Wallet disconnected. Please reconnect your wallet and try again.",
+                                "Wallet disconnected. Please reconnect your wallet and try again."
                             );
                         }
 
@@ -869,10 +872,10 @@ export function VaultList({
                         ) {
                             console.log(
                                 "[VaultList] Bundler simulation failed:",
-                                errorMsg,
+                                errorMsg
                             );
                             throw new Error(
-                                "Sponsored gas unavailable. Uncheck 'Use sponsored gas' to deploy with your wallet instead.",
+                                "Sponsored gas unavailable. Uncheck 'Use sponsored gas' to deploy with your wallet instead."
                             );
                         }
 
@@ -885,7 +888,7 @@ export function VaultList({
                     "[VaultList] Safe deployment tx:",
                     txHash,
                     "Safe:",
-                    safeAddress,
+                    safeAddress
                 );
 
                 // Wait for transaction confirmation
@@ -893,7 +896,7 @@ export function VaultList({
                 const waitClient =
                     publicClient || getPublicClient(deployInfo.chainId);
                 console.log(
-                    "[VaultList] Waiting for transaction confirmation (timeout: 2min)...",
+                    "[VaultList] Waiting for transaction confirmation (timeout: 2min)..."
                 );
 
                 try {
@@ -903,7 +906,7 @@ export function VaultList({
                         timeout: AA_TX_TIMEOUT, // 2 minute timeout for AA transactions
                     });
                     console.log(
-                        "[VaultList] Transaction confirmed, verifying on-chain deployment...",
+                        "[VaultList] Transaction confirmed, verifying on-chain deployment..."
                     );
                 } catch (waitError: unknown) {
                     // Log but don't fail - the tx may have succeeded even if we timed out
@@ -916,12 +919,12 @@ export function VaultList({
                         errorMsg.includes("timeout")
                     ) {
                         console.log(
-                            "[VaultList] Receipt wait timed out, but tx may have succeeded. Proceeding to poll...",
+                            "[VaultList] Receipt wait timed out, but tx may have succeeded. Proceeding to poll..."
                         );
                     } else {
                         console.warn(
                             "[VaultList] Error waiting for receipt:",
-                            errorMsg,
+                            errorMsg
                         );
                     }
                 }
@@ -933,13 +936,13 @@ export function VaultList({
                 const retryDelay = 2000; // 2 seconds between checks
 
                 console.log(
-                    "[VaultList] Polling for on-chain deployment confirmation...",
+                    "[VaultList] Polling for on-chain deployment confirmation..."
                 );
 
                 while (!deployed && retries < maxRetries) {
                     // Small delay before checking
                     await new Promise((resolve) =>
-                        setTimeout(resolve, retryDelay),
+                        setTimeout(resolve, retryDelay)
                     );
                     retries++;
 
@@ -959,12 +962,12 @@ export function VaultList({
                             errorMessage.includes("not yet deployed")
                         ) {
                             console.log(
-                                `[VaultList] Deployment check attempt ${retries}/${maxRetries} - still pending...`,
+                                `[VaultList] Deployment check attempt ${retries}/${maxRetries} - still pending...`
                             );
                         } else {
                             console.error(
                                 `[VaultList] Deployment check error:`,
-                                confirmError,
+                                confirmError
                             );
                         }
                     }
@@ -974,7 +977,7 @@ export function VaultList({
                 // DO NOT use force=true here - that should only be for Create2 failures
                 if (!deployed) {
                     console.log(
-                        "[VaultList] Polling timed out, doing final on-chain verification...",
+                        "[VaultList] Polling timed out, doing final on-chain verification..."
                     );
                     try {
                         const finalCheckClient =
@@ -987,16 +990,16 @@ export function VaultList({
 
                         if (actuallyDeployed) {
                             console.log(
-                                "[VaultList] Contract exists on-chain! Confirming deployment...",
+                                "[VaultList] Contract exists on-chain! Confirming deployment..."
                             );
                             await confirmDeployment(vaultId, txHash, false); // NOT force - verify on-chain
                             deployed = true;
                         } else {
                             console.warn(
-                                "[VaultList] Contract NOT deployed on-chain after timeout",
+                                "[VaultList] Contract NOT deployed on-chain after timeout"
                             );
                             setDeployError(
-                                "Deployment may have failed. Please try again or check the transaction.",
+                                "Deployment may have failed. Please try again or check the transaction."
                             );
                             setIsDeploying(false);
                             return;
@@ -1004,10 +1007,10 @@ export function VaultList({
                     } catch (finalCheckError) {
                         console.warn(
                             "[VaultList] Final verification failed:",
-                            finalCheckError,
+                            finalCheckError
                         );
                         setDeployError(
-                            "Transaction sent but verification timed out. Click Sync to check status.",
+                            "Transaction sent but verification timed out. Click Sync to check status."
                         );
                         setIsDeploying(false);
                         return;
@@ -1016,7 +1019,7 @@ export function VaultList({
 
                 // Verify on-chain owners match expected owners
                 console.log(
-                    "[VaultList] Verifying vault owners match expected...",
+                    "[VaultList] Verifying vault owners match expected..."
                 );
                 try {
                     const verifyClient =
@@ -1049,7 +1052,7 @@ export function VaultList({
                     const ownersMatch =
                         expectedOwners.length === actualOwners.length &&
                         expectedOwners.every(
-                            (owner, i) => owner === actualOwners[i],
+                            (owner, i) => owner === actualOwners[i]
                         );
 
                     if (!ownersMatch) {
@@ -1059,13 +1062,13 @@ export function VaultList({
                         // Don't fail deployment, but log a warning - the vault is deployed
                         // but users might have trouble executing transactions
                         setDeployError(
-                            "Warning: Vault deployed but owners may not match expected. Try refreshing.",
+                            "Warning: Vault deployed but owners may not match expected. Try refreshing."
                         );
                     }
                 } catch (ownerCheckError) {
                     console.warn(
                         "[VaultList] Could not verify owners:",
-                        ownerCheckError,
+                        ownerCheckError
                     );
                 }
 
@@ -1090,7 +1093,7 @@ export function VaultList({
                     errorMsg.includes("437265617465322063616c6c206661696c6564")
                 ) {
                     console.log(
-                        "[VaultList] Create2 failed = Safe already exists! Marking as deployed with force=true...",
+                        "[VaultList] Create2 failed = Safe already exists! Marking as deployed with force=true..."
                     );
                     try {
                         // Mark as deployed in the database, force=true bypasses on-chain check
@@ -1103,15 +1106,15 @@ export function VaultList({
                         await fetchVaults();
                         setDeployError(null); // Clear error since we fixed it
                         console.log(
-                            "[VaultList] Vault marked as deployed successfully!",
+                            "[VaultList] Vault marked as deployed successfully!"
                         );
                     } catch (syncErr) {
                         console.error(
                             "[VaultList] Failed to mark vault as deployed:",
-                            syncErr,
+                            syncErr
                         );
                         setDeployError(
-                            "Safe is deployed but failed to update database. Try the Sync button.",
+                            "Safe is deployed but failed to update database. Try the Sync button."
                         );
                     }
                 } else if (
@@ -1141,7 +1144,7 @@ export function VaultList({
             signTypedDataAsync,
             passkeyCredential,
             isPasskeyUser,
-        ],
+        ]
     );
 
     // Sync deployment status - checks on-chain state and updates DB if needed
@@ -1154,7 +1157,7 @@ export function VaultList({
             try {
                 console.log(
                     "[VaultList] Syncing deployment status for vault:",
-                    vaultId,
+                    vaultId
                 );
 
                 // Call getDeploymentInfo which checks on-chain and auto-updates DB
@@ -1164,7 +1167,7 @@ export function VaultList({
                 if (deployInfo.isDeployed && !selectedVault.isDeployed) {
                     // Status changed - update DB and refresh
                     console.log(
-                        "[VaultList] Safe is deployed on-chain! Updating database...",
+                        "[VaultList] Safe is deployed on-chain! Updating database..."
                     );
                     await confirmDeployment(vaultId, "");
 
@@ -1184,7 +1187,7 @@ export function VaultList({
                     return true;
                 } else {
                     console.log(
-                        "[VaultList] Safe is not deployed on-chain yet",
+                        "[VaultList] Safe is not deployed on-chain yet"
                     );
                     return false;
                 }
@@ -1201,7 +1204,7 @@ export function VaultList({
             confirmDeployment,
             getVault,
             fetchVaults,
-        ],
+        ]
     );
 
     // Auto-sync for undeployed vaults: check every 5 seconds after deployment attempt
@@ -1227,7 +1230,7 @@ export function VaultList({
 
         const timer = setTimeout(async () => {
             console.log(
-                `[VaultList] Auto-sync attempt ${autoSyncAttempts + 1}/12...`,
+                `[VaultList] Auto-sync attempt ${autoSyncAttempts + 1}/12...`
             );
             const deployed = await handleSyncStatus(selectedVault.id, true);
             if (deployed) {
@@ -1262,17 +1265,17 @@ export function VaultList({
             });
             console.log(
                 "[VaultList] Balance response status:",
-                response.status,
+                response.status
             );
             if (response.ok) {
                 const data = await response.json();
                 console.log(
                     "[VaultList] Balance data received:",
-                    JSON.stringify(data, null, 2),
+                    JSON.stringify(data, null, 2)
                 );
                 console.log(
                     "[VaultList] Tokens count:",
-                    data.tokens?.length || 0,
+                    data.tokens?.length || 0
                 );
                 console.log("[VaultList] Native balance:", data.nativeBalance);
                 console.log("[VaultList] Total USD:", data.totalUsd);
@@ -1282,7 +1285,7 @@ export function VaultList({
                 console.error(
                     "[VaultList] Balance fetch failed:",
                     response.status,
-                    errorText,
+                    errorText
                 );
             }
         } catch (err) {
@@ -1299,7 +1302,7 @@ export function VaultList({
                 "[VaultList] Fetching transactions for:",
                 safeAddress,
                 "chain:",
-                chainId,
+                chainId
             );
             setIsLoadingTransactions(true);
             try {
@@ -1315,7 +1318,7 @@ export function VaultList({
                 if (!blockscoutUrl) {
                     console.log(
                         "[VaultList] No blockscout URL for chain:",
-                        chainId,
+                        chainId
                     );
                     return;
                 }
@@ -1326,13 +1329,13 @@ export function VaultList({
                         `${blockscoutUrl}/api/v2/addresses/${safeAddress}/transactions?filter=to%20%7C%20from`,
                         {
                             headers: { Accept: "application/json" },
-                        },
+                        }
                     ),
                     fetch(
                         `${blockscoutUrl}/api/v2/addresses/${safeAddress}/token-transfers?type=ERC-20`,
                         {
                             headers: { Accept: "application/json" },
-                        },
+                        }
                     ),
                 ]);
 
@@ -1344,7 +1347,7 @@ export function VaultList({
                     const txData = await txResponse.json();
                     console.log(
                         "[VaultList] Regular transactions:",
-                        txData.items?.length || 0,
+                        txData.items?.length || 0
                     );
                     for (const tx of txData.items || []) {
                         // Only include if there was actual value transfer
@@ -1363,8 +1366,8 @@ export function VaultList({
                                     tx.status === "ok"
                                         ? "confirmed"
                                         : tx.status === "error"
-                                          ? "failed"
-                                          : "pending",
+                                        ? "failed"
+                                        : "pending",
                             });
                         }
                     }
@@ -1375,7 +1378,7 @@ export function VaultList({
                     const tokenData = await tokenResponse.json();
                     console.log(
                         "[VaultList] Token transfers:",
-                        tokenData.items?.length || 0,
+                        tokenData.items?.length || 0
                     );
                     for (const transfer of tokenData.items || []) {
                         allTransactions.push({
@@ -1392,7 +1395,7 @@ export function VaultList({
                             status: "confirmed",
                             tokenSymbol: transfer.token?.symbol,
                             tokenDecimals: parseInt(
-                                transfer.token?.decimals || "18",
+                                transfer.token?.decimals || "18"
                             ),
                             tokenName: transfer.token?.name,
                         });
@@ -1403,12 +1406,12 @@ export function VaultList({
                 allTransactions.sort(
                     (a, b) =>
                         new Date(b.timestamp).getTime() -
-                        new Date(a.timestamp).getTime(),
+                        new Date(a.timestamp).getTime()
                 );
 
                 console.log(
                     "[VaultList] Total transactions:",
-                    allTransactions.length,
+                    allTransactions.length
                 );
                 setTransactions(allTransactions.slice(0, 20)); // Limit to 20 most recent
             } catch (err) {
@@ -1417,7 +1420,7 @@ export function VaultList({
                 setIsLoadingTransactions(false);
             }
         },
-        [],
+        []
     );
 
     const handleViewVault = async (vault: VaultListItem) => {
@@ -1449,7 +1452,7 @@ export function VaultList({
             }
         } catch (err) {
             alert(
-                err instanceof Error ? err.message : "Failed to delete vault",
+                err instanceof Error ? err.message : "Failed to delete vault"
             );
         } finally {
             setIsDeleting(null);
@@ -1476,7 +1479,7 @@ export function VaultList({
         if (diffMins < 60) return `${diffMins}m ago`;
         if (diffHours < 24) return `${diffHours}h ago`;
         if (diffDays < 7) return `${diffDays}d ago`;
-        return date.toLocaleDateString();
+        return formatDateInTimezone(date, userTimezone, "short");
     };
 
     // Fetch pending transactions from database
@@ -1490,8 +1493,8 @@ export function VaultList({
                 const data = await response.json();
                 setPendingTxs(
                     data.transactions?.filter(
-                        (tx: PendingTransaction) => tx.status === "pending",
-                    ) || [],
+                        (tx: PendingTransaction) => tx.status === "pending"
+                    ) || []
                 );
             }
         } catch (err) {
@@ -1509,7 +1512,7 @@ export function VaultList({
             // Find the user's Smart Wallet address from vault members
             // This is required for passkey users whose Smart Wallet is the vault owner
             const userMember = selectedVault.members.find(
-                (m) => m.address.toLowerCase() === userAddress.toLowerCase(),
+                (m) => m.address.toLowerCase() === userAddress.toLowerCase()
             );
             const userSmartWalletAddress = userMember?.smartWalletAddress as
                 | Address
@@ -1517,7 +1520,7 @@ export function VaultList({
 
             console.log(
                 "[VaultList] Signing with Smart Wallet:",
-                userSmartWalletAddress || userAddress,
+                userSmartWalletAddress || userAddress
             );
 
             // Get the transaction details for signing
@@ -1550,7 +1553,7 @@ export function VaultList({
                         signerAddress: signResult.signerAddress,
                         safeTxHash: signResult.safeTxHash,
                     }),
-                },
+                }
             );
 
             const data = await response.json();
@@ -1578,7 +1581,7 @@ export function VaultList({
                     (c) =>
                         c.signature &&
                         !c.signature.startsWith("signed_by_") &&
-                        !c.signature.startsWith("auto_signed"),
+                        !c.signature.startsWith("auto_signed")
                 )
                 .map((c) => ({
                     signerAddress: c.signer_address,
@@ -1588,12 +1591,12 @@ export function VaultList({
             console.log(
                 "[VaultList] Executing with",
                 signatures.length,
-                "signatures",
+                "signatures"
             );
 
             // Find the current user's smart wallet address (Safe owners are Smart Wallets, not EOAs)
             const userMember = selectedVault.members.find(
-                (m) => m.address.toLowerCase() === userAddress.toLowerCase(),
+                (m) => m.address.toLowerCase() === userAddress.toLowerCase()
             );
             const userSmartWalletAddress = userMember?.smartWalletAddress as
                 | Address
@@ -1612,7 +1615,10 @@ export function VaultList({
 
             if (result.success && result.txHash) {
                 alert(
-                    `✅ Transaction executed!\n\nTx Hash: ${result.txHash.slice(0, 10)}...${result.txHash.slice(-8)}`,
+                    `✅ Transaction executed!\n\nTx Hash: ${result.txHash.slice(
+                        0,
+                        10
+                    )}...${result.txHash.slice(-8)}`
                 );
 
                 // Update the transaction status and hash in the database
@@ -1631,11 +1637,11 @@ export function VaultList({
                 fetchBalances(selectedVault.id);
                 fetchTransactions(
                     selectedVault.safeAddress,
-                    selectedVault.chainId,
+                    selectedVault.chainId
                 );
             } else if (result.needsMoreSignatures) {
                 alert(
-                    `Need ${result.threshold} signatures to execute.\n\nAsk other vault members to sign first.`,
+                    `Need ${result.threshold} signatures to execute.\n\nAsk other vault members to sign first.`
                 );
             } else if (result.error) {
                 // Execution failed - show error and option to use Safe app
@@ -1643,19 +1649,19 @@ export function VaultList({
                     selectedVault.chainId === 1
                         ? "eth"
                         : selectedVault.chainId === 8453
-                          ? "base"
-                          : selectedVault.chainId === 42161
-                            ? "arb1"
-                            : selectedVault.chainId === 10
-                              ? "oeth"
-                              : selectedVault.chainId === 137
-                                ? "matic"
-                                : "eth"
+                        ? "base"
+                        : selectedVault.chainId === 42161
+                        ? "arb1"
+                        : selectedVault.chainId === 10
+                        ? "oeth"
+                        : selectedVault.chainId === 137
+                        ? "matic"
+                        : "eth"
                 }:${selectedVault.safeAddress}`;
 
                 if (
                     confirm(
-                        `${result.error}\n\nWould you like to try via the Safe app?`,
+                        `${result.error}\n\nWould you like to try via the Safe app?`
                     )
                 ) {
                     window.open(safeAppUrl, "_blank");
@@ -1681,7 +1687,7 @@ export function VaultList({
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
                     body: JSON.stringify({ transactionId, action: "cancel" }),
-                },
+                }
             );
 
             const data = await response.json();
@@ -1713,7 +1719,9 @@ export function VaultList({
         setIsProposing(true);
         try {
             const displayAmount = isUsdMode
-                ? `$${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(6)} ${sendToken.symbol})`
+                ? `$${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(
+                      6
+                  )} ${sendToken.symbol})`
                 : `${actualVaultSendAmount} ${sendToken.symbol}`;
 
             const response = await fetch(
@@ -1733,7 +1741,7 @@ export function VaultList({
                         tokenSymbol: sendToken.symbol,
                         description: `Send ${displayAmount} to ${ensResolver.input}`,
                     }),
-                },
+                }
             );
 
             const data = await response.json();
@@ -1748,14 +1756,13 @@ export function VaultList({
                 // Now sign the transaction we just created
                 // This ensures the creator's signature is a real one (not a placeholder)
                 const userMember = selectedVault.members.find(
-                    (m) =>
-                        m.address.toLowerCase() === userAddress.toLowerCase(),
+                    (m) => m.address.toLowerCase() === userAddress.toLowerCase()
                 );
                 const userSmartWalletAddress =
                     userMember?.smartWalletAddress as Address | undefined;
 
                 console.log(
-                    "[VaultList] Proposer signing their own transaction...",
+                    "[VaultList] Proposer signing their own transaction..."
                 );
 
                 const signResult = await vaultExecution.signTransaction({
@@ -1783,23 +1790,25 @@ export function VaultList({
                                 signerAddress: signResult.signerAddress,
                                 safeTxHash: signResult.safeTxHash,
                             }),
-                        },
+                        }
                     );
 
                     const signData = await signResponse.json();
                     if (signResponse.ok) {
                         alert(
                             signData.message ||
-                                "Transaction proposed and signed!",
+                                "Transaction proposed and signed!"
                         );
                     } else {
                         alert(
-                            `Transaction proposed but signing failed: ${signData.error}`,
+                            `Transaction proposed but signing failed: ${signData.error}`
                         );
                     }
                 } else {
                     alert(
-                        `Transaction proposed but signing failed: ${signResult.error || "Unknown error"}`,
+                        `Transaction proposed but signing failed: ${
+                            signResult.error || "Unknown error"
+                        }`
                     );
                 }
 
@@ -1855,7 +1864,7 @@ export function VaultList({
             setIsEditing(false);
         } catch (err) {
             alert(
-                err instanceof Error ? err.message : "Failed to update vault",
+                err instanceof Error ? err.message : "Failed to update vault"
             );
         } finally {
             setIsSaving(false);
@@ -1912,7 +1921,7 @@ export function VaultList({
                 ? `${ensResolver.ensName} (${ensResolver.resolvedAddress})`
                 : ensResolver.resolvedAddress;
             alert(
-                `Transaction proposal feature coming soon!\n\nTo: ${displayTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`,
+                `Transaction proposal feature coming soon!\n\nTo: ${displayTo}\nAmount: ${sendAmount} ${sendToken.symbol}\n\nThis will require ${selectedVault.threshold} of ${selectedVault.members.length} signatures.`
             );
             ensResolver.clear();
             setSendAmount("");
@@ -1922,7 +1931,7 @@ export function VaultList({
             alert(
                 err instanceof Error
                     ? err.message
-                    : "Failed to create transaction",
+                    : "Failed to create transaction"
             );
         } finally {
             setIsSending(false);
@@ -2001,7 +2010,7 @@ export function VaultList({
                                                         onClick={() => {
                                                             setEditEmoji(emoji);
                                                             setShowEmojiPicker(
-                                                                false,
+                                                                false
                                                             );
                                                         }}
                                                         className={`w-10 h-10 text-xl rounded-lg hover:bg-zinc-700 transition-colors ${
@@ -2180,7 +2189,11 @@ export function VaultList({
 
                         return (
                             <div
-                                className={`p-4 rounded-xl border ${gasCost.isHigh ? "bg-amber-500/10 border-amber-500/30" : "bg-zinc-800/50 border-zinc-700"}`}
+                                className={`p-4 rounded-xl border ${
+                                    gasCost.isHigh
+                                        ? "bg-amber-500/10 border-amber-500/30"
+                                        : "bg-zinc-800/50 border-zinc-700"
+                                }`}
                             >
                                 <div className="flex items-start gap-3">
                                     <span className="text-2xl">
@@ -2188,7 +2201,11 @@ export function VaultList({
                                     </span>
                                     <div className="flex-1">
                                         <h4
-                                            className={`font-medium mb-1 ${gasCost.isHigh ? "text-amber-400" : "text-white"}`}
+                                            className={`font-medium mb-1 ${
+                                                gasCost.isHigh
+                                                    ? "text-amber-400"
+                                                    : "text-white"
+                                            }`}
                                         >
                                             Vault Not Yet Deployed
                                         </h4>
@@ -2208,8 +2225,8 @@ export function VaultList({
                                                 gasCost.isHigh
                                                     ? "bg-amber-500/20"
                                                     : willUseSponsored
-                                                      ? "bg-emerald-500/20"
-                                                      : "bg-zinc-800"
+                                                    ? "bg-emerald-500/20"
+                                                    : "bg-zinc-800"
                                             }`}
                                         >
                                             <span className="text-xs text-zinc-400">
@@ -2220,8 +2237,8 @@ export function VaultList({
                                                     gasCost.isHigh
                                                         ? "text-amber-400"
                                                         : willUseSponsored
-                                                          ? "text-emerald-400"
-                                                          : "text-zinc-300"
+                                                        ? "text-emerald-400"
+                                                        : "text-zinc-300"
                                                 }`}
                                             >
                                                 {willUseSponsored
@@ -2248,7 +2265,7 @@ export function VaultList({
                                             <button
                                                 onClick={() =>
                                                     handleDeployVault(
-                                                        selectedVault.id,
+                                                        selectedVault.id
                                                     )
                                                 }
                                                 disabled={
@@ -2276,7 +2293,7 @@ export function VaultList({
                                             <button
                                                 onClick={() =>
                                                     setUseSponsoredGas(
-                                                        !useSponsoredGas,
+                                                        !useSponsoredGas
                                                     )
                                                 }
                                                 className="text-xs text-zinc-400 hover:text-zinc-300 flex items-center gap-1.5 mb-2"
@@ -2403,14 +2420,14 @@ export function VaultList({
                                                             {formatBalance(
                                                                 balances
                                                                     .nativeBalance
-                                                                    .balanceFormatted,
+                                                                    .balanceFormatted
                                                             )}
                                                         </p>
                                                         <p className="text-xs text-zinc-500">
                                                             {formatUsd(
                                                                 balances
                                                                     .nativeBalance
-                                                                    .balanceUsd,
+                                                                    .balanceUsd
                                                             )}
                                                         </p>
                                                     </div>
@@ -2435,7 +2452,7 @@ export function VaultList({
                                                         <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-300">
                                                             {token.symbol.slice(
                                                                 0,
-                                                                2,
+                                                                2
                                                             )}
                                                         </div>
                                                     )}
@@ -2450,12 +2467,12 @@ export function VaultList({
                                                     <div className="text-right">
                                                         <p className="text-sm font-medium text-white">
                                                             {formatBalance(
-                                                                token.balanceFormatted,
+                                                                token.balanceFormatted
                                                             )}
                                                         </p>
                                                         <p className="text-xs text-zinc-500">
                                                             {formatUsd(
-                                                                token.balanceUsd,
+                                                                token.balanceUsd
                                                             )}
                                                         </p>
                                                     </div>
@@ -2495,7 +2512,11 @@ export function VaultList({
                                     className="w-full p-2 text-sm text-zinc-400 hover:text-white transition-colors flex items-center justify-center gap-2"
                                 >
                                     <svg
-                                        className={`w-4 h-4 ${isLoadingBalances ? "animate-spin" : ""}`}
+                                        className={`w-4 h-4 ${
+                                            isLoadingBalances
+                                                ? "animate-spin"
+                                                : ""
+                                        }`}
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -2532,7 +2553,7 @@ export function VaultList({
                                         <button
                                             onClick={() =>
                                                 handleDeployVault(
-                                                    selectedVault.id,
+                                                    selectedVault.id
                                                 )
                                             }
                                             disabled={isDeploying || !canDeploy}
@@ -2564,7 +2585,7 @@ export function VaultList({
                                                         <button
                                                             onClick={() =>
                                                                 setShowTokenSelector(
-                                                                    false,
+                                                                    false
                                                                 )
                                                             }
                                                             className="p-1 text-zinc-400 hover:text-white"
@@ -2602,10 +2623,10 @@ export function VaultList({
                                                                         }
                                                                         onClick={() => {
                                                                             setSendToken(
-                                                                                token,
+                                                                                token
                                                                             );
                                                                             setShowTokenSelector(
-                                                                                false,
+                                                                                false
                                                                             );
                                                                         }}
                                                                         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors text-left border-b border-zinc-800/30 last:border-b-0"
@@ -2625,7 +2646,7 @@ export function VaultList({
                                                                                 <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
                                                                                     {token.symbol.slice(
                                                                                         0,
-                                                                                        2,
+                                                                                        2
                                                                                     )}
                                                                                 </div>
                                                                             )}
@@ -2646,7 +2667,7 @@ export function VaultList({
                                                                             <p className="text-sm font-medium text-white">
                                                                                 {formatBalance(
                                                                                     token.balanceFormatted,
-                                                                                    4,
+                                                                                    4
                                                                                 )}
                                                                             </p>
                                                                             {token.balanceUsd !==
@@ -2654,9 +2675,9 @@ export function VaultList({
                                                                                 <p className="text-xs text-zinc-500">
                                                                                     $
                                                                                     {Number(
-                                                                                        token.balanceUsd,
+                                                                                        token.balanceUsd
                                                                                     ).toFixed(
-                                                                                        2,
+                                                                                        2
                                                                                     )}
                                                                                 </p>
                                                                             )}
@@ -2676,7 +2697,7 @@ export function VaultList({
                                                                             </svg>
                                                                         )}
                                                                     </button>
-                                                                ),
+                                                                )
                                                             )
                                                         )}
                                                     </div>
@@ -2693,7 +2714,7 @@ export function VaultList({
                                                 <button
                                                     onClick={() =>
                                                         setShowTokenSelector(
-                                                            true,
+                                                            true
                                                         )
                                                     }
                                                     className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg hover:border-zinc-600 transition-colors flex items-center gap-3"
@@ -2712,7 +2733,7 @@ export function VaultList({
                                                                 <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-medium">
                                                                     {sendToken.symbol.slice(
                                                                         0,
-                                                                        2,
+                                                                        2
                                                                     )}
                                                                 </div>
                                                             )}
@@ -2726,7 +2747,7 @@ export function VaultList({
                                                                     Balance:{" "}
                                                                     {formatBalance(
                                                                         sendToken.balanceFormatted,
-                                                                        4,
+                                                                        4
                                                                     )}
                                                                 </p>
                                                             </div>
@@ -2828,12 +2849,12 @@ export function VaultList({
                                                                     ) {
                                                                         setSendAmount(
                                                                             sendToken.balanceUsd.toFixed(
-                                                                                2,
-                                                                            ),
+                                                                                2
+                                                                            )
                                                                         );
                                                                     } else {
                                                                         setSendAmount(
-                                                                            sendToken.balanceFormatted,
+                                                                            sendToken.balanceFormatted
                                                                         );
                                                                     }
                                                                 }}
@@ -2864,11 +2885,11 @@ export function VaultList({
                                                                     value ===
                                                                         "" ||
                                                                     /^\d*\.?\d*$/.test(
-                                                                        value,
+                                                                        value
                                                                     )
                                                                 ) {
                                                                     setSendAmount(
-                                                                        value,
+                                                                        value
                                                                     );
                                                                 }
                                                             }}
@@ -2889,8 +2910,23 @@ export function VaultList({
                                                         sendAmount && (
                                                             <p className="mt-1 text-xs text-zinc-500">
                                                                 {isUsdMode
-                                                                    ? `≈ ${actualVaultSendAmount ? parseFloat(actualVaultSendAmount).toFixed(6) : "0"} ${sendToken.symbol}`
-                                                                    : `≈ $${getVaultUsdAmount(sendAmount) || "0.00"}`}
+                                                                    ? `≈ ${
+                                                                          actualVaultSendAmount
+                                                                              ? parseFloat(
+                                                                                    actualVaultSendAmount
+                                                                                ).toFixed(
+                                                                                    6
+                                                                                )
+                                                                              : "0"
+                                                                      } ${
+                                                                          sendToken.symbol
+                                                                      }`
+                                                                    : `≈ $${
+                                                                          getVaultUsdAmount(
+                                                                              sendAmount
+                                                                          ) ||
+                                                                          "0.00"
+                                                                      }`}
                                                             </p>
                                                         )}
                                                 </div>
@@ -2909,27 +2945,27 @@ export function VaultList({
                                                         }
                                                         onChange={(e) => {
                                                             ensResolver.setInput(
-                                                                e.target.value,
+                                                                e.target.value
                                                             );
                                                             setShowRecipientSuggestions(
-                                                                true,
+                                                                true
                                                             );
                                                             setSelectedSuggestionIndex(
-                                                                -1,
+                                                                -1
                                                             );
                                                         }}
                                                         onFocus={() =>
                                                             setShowRecipientSuggestions(
-                                                                true,
+                                                                true
                                                             )
                                                         }
                                                         onBlur={() => {
                                                             setTimeout(
                                                                 () =>
                                                                     setShowRecipientSuggestions(
-                                                                        false,
+                                                                        false
                                                                     ),
-                                                                200,
+                                                                200
                                                             );
                                                         }}
                                                         onKeyDown={
@@ -2944,8 +2980,8 @@ export function VaultList({
                                                             ensResolver.error
                                                                 ? "border-red-500 focus:border-red-500"
                                                                 : ensResolver.isValid
-                                                                  ? "border-emerald-500 focus:border-emerald-500"
-                                                                  : "border-zinc-700 focus:border-orange-500"
+                                                                ? "border-emerald-500 focus:border-emerald-500"
+                                                                : "border-zinc-700 focus:border-orange-500"
                                                         }`}
                                                     />
                                                     {/* Loading indicator */}
@@ -2992,10 +3028,10 @@ export function VaultList({
                                                                     type="button"
                                                                     onClick={() => {
                                                                         setShowSaveAddressDialog(
-                                                                            true,
+                                                                            true
                                                                         );
                                                                         setShowRecipientSuggestions(
-                                                                            false,
+                                                                            false
                                                                         );
                                                                     }}
                                                                     className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-zinc-700/50 transition-colors border-b border-zinc-700"
@@ -3016,14 +3052,14 @@ export function VaultList({
                                                                                 ensResolver.input
                                                                             ).slice(
                                                                                 0,
-                                                                                10,
+                                                                                10
                                                                             )}
                                                                             ...
                                                                             {(
                                                                                 ensResolver.resolvedAddress ||
                                                                                 ensResolver.input
                                                                             ).slice(
-                                                                                -8,
+                                                                                -8
                                                                             )}
                                                                         </div>
                                                                     </div>
@@ -3037,19 +3073,19 @@ export function VaultList({
                                                                     {filteredSuggestions
                                                                         .slice(
                                                                             0,
-                                                                            8,
+                                                                            8
                                                                         )
                                                                         .map(
                                                                             (
                                                                                 suggestion,
-                                                                                index,
+                                                                                index
                                                                             ) => (
                                                                                 <button
                                                                                     key={`${suggestion.type}-${suggestion.address}`}
                                                                                     type="button"
                                                                                     onClick={() =>
                                                                                         handleSelectSuggestion(
-                                                                                            suggestion,
+                                                                                            suggestion
                                                                                         )
                                                                                     }
                                                                                     className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${
@@ -3072,7 +3108,7 @@ export function VaultList({
                                                                                         ) : (
                                                                                             <span className="text-sm">
                                                                                                 {getSuggestionIcon(
-                                                                                                    suggestion.type,
+                                                                                                    suggestion.type
                                                                                                 )}
                                                                                             </span>
                                                                                         )}
@@ -3095,7 +3131,7 @@ export function VaultList({
                                                                                         <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
                                                                                             <span className="px-1 py-0.5 rounded bg-zinc-700/50 text-zinc-300">
                                                                                                 {getSuggestionLabel(
-                                                                                                    suggestion.type,
+                                                                                                    suggestion.type
                                                                                                 )}
                                                                                             </span>
                                                                                             {suggestion.sublabel && (
@@ -3115,18 +3151,18 @@ export function VaultList({
                                                                                             suggestion.address
                                                                                         ).slice(
                                                                                             0,
-                                                                                            6,
+                                                                                            6
                                                                                         )}
                                                                                         ...
                                                                                         {(
                                                                                             suggestion.smartWalletAddress ||
                                                                                             suggestion.address
                                                                                         ).slice(
-                                                                                            -4,
+                                                                                            -4
                                                                                         )}
                                                                                     </div>
                                                                                 </button>
-                                                                            ),
+                                                                            )
                                                                         )}
                                                                 </div>
                                                             )}
@@ -3151,7 +3187,7 @@ export function VaultList({
                                                             onChange={(e) =>
                                                                 setSaveAddressLabel(
                                                                     e.target
-                                                                        .value,
+                                                                        .value
                                                                 )
                                                             }
                                                             placeholder="Label (e.g., Mom, Work, Exchange)"
@@ -3164,10 +3200,10 @@ export function VaultList({
                                                                 type="button"
                                                                 onClick={() => {
                                                                     setShowSaveAddressDialog(
-                                                                        false,
+                                                                        false
                                                                     );
                                                                     setSaveAddressLabel(
-                                                                        "",
+                                                                        ""
                                                                     );
                                                                 }}
                                                                 className="flex-1 px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
@@ -3206,11 +3242,11 @@ export function VaultList({
                                                             <span className="font-mono text-zinc-400">
                                                                 {ensResolver.resolvedAddress.slice(
                                                                     0,
-                                                                    6,
+                                                                    6
                                                                 )}
                                                                 ...
                                                                 {ensResolver.resolvedAddress.slice(
-                                                                    -4,
+                                                                    -4
                                                                 )}
                                                             </span>
                                                         </p>
@@ -3262,7 +3298,7 @@ export function VaultList({
                                             {sendToken &&
                                                 actualVaultSendAmount &&
                                                 parseFloat(
-                                                    actualVaultSendAmount,
+                                                    actualVaultSendAmount
                                                 ) > 0 && (
                                                     <div className="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg space-y-2">
                                                         <div className="flex justify-between text-xs">
@@ -3271,9 +3307,9 @@ export function VaultList({
                                                             </span>
                                                             <span className="text-zinc-300 font-medium">
                                                                 {parseFloat(
-                                                                    actualVaultSendAmount,
+                                                                    actualVaultSendAmount
                                                                 ).toFixed(
-                                                                    6,
+                                                                    6
                                                                 )}{" "}
                                                                 {
                                                                     sendToken.symbol
@@ -3301,7 +3337,7 @@ export function VaultList({
                                                     !ensResolver.isValid ||
                                                     !actualVaultSendAmount ||
                                                     parseFloat(
-                                                        actualVaultSendAmount,
+                                                        actualVaultSendAmount
                                                     ) <= 0 ||
                                                     !sendToken ||
                                                     isProposing ||
@@ -3340,7 +3376,11 @@ export function VaultList({
                                                             />
                                                         </svg>
                                                         {isUsdMode
-                                                            ? `Propose $${sendAmount} (${parseFloat(actualVaultSendAmount).toFixed(4)} ${sendToken.symbol})`
+                                                            ? `Propose $${sendAmount} (${parseFloat(
+                                                                  actualVaultSendAmount
+                                                              ).toFixed(4)} ${
+                                                                  sendToken.symbol
+                                                              })`
                                                             : `Propose ${sendAmount} ${sendToken.symbol}`}
                                                     </>
                                                 )}
@@ -3382,7 +3422,7 @@ export function VaultList({
                                         <button
                                             onClick={() =>
                                                 copyAddress(
-                                                    selectedVault.safeAddress,
+                                                    selectedVault.safeAddress
                                                 )
                                             }
                                             className="w-full p-3 bg-zinc-900 rounded-lg hover:bg-zinc-900/70 transition-colors"
@@ -3461,10 +3501,10 @@ export function VaultList({
                                                             .find(
                                                                 (m) =>
                                                                     m.address.toLowerCase() ===
-                                                                    userAddress.toLowerCase(),
+                                                                    userAddress.toLowerCase()
                                                             )
                                                             ?.smartWalletAddress?.toLowerCase() ===
-                                                            c.signer_address.toLowerCase(),
+                                                            c.signer_address.toLowerCase()
                                                 );
                                             const isProposer =
                                                 tx.created_by.toLowerCase() ===
@@ -3474,7 +3514,7 @@ export function VaultList({
 
                                             // Find member info for each signer
                                             const getSignerDisplay = (
-                                                signerAddr: string,
+                                                signerAddr: string
                                             ) => {
                                                 const member =
                                                     selectedVault.members.find(
@@ -3482,11 +3522,14 @@ export function VaultList({
                                                             m.smartWalletAddress?.toLowerCase() ===
                                                                 signerAddr.toLowerCase() ||
                                                             m.address.toLowerCase() ===
-                                                                signerAddr.toLowerCase(),
+                                                                signerAddr.toLowerCase()
                                                     );
                                                 if (member?.nickname)
                                                     return member.nickname;
-                                                return `${signerAddr.slice(0, 6)}...${signerAddr.slice(-4)}`;
+                                                return `${signerAddr.slice(
+                                                    0,
+                                                    6
+                                                )}...${signerAddr.slice(-4)}`;
                                             };
 
                                             return (
@@ -3501,7 +3544,7 @@ export function VaultList({
                                                             setExpandedTxId(
                                                                 isExpanded
                                                                     ? null
-                                                                    : tx.id,
+                                                                    : tx.id
                                                             )
                                                         }
                                                     >
@@ -3564,8 +3607,8 @@ export function VaultList({
                                                                     <span className="text-xs text-zinc-500">
                                                                         {getTimeAgo(
                                                                             new Date(
-                                                                                tx.created_at,
-                                                                            ),
+                                                                                tx.created_at
+                                                                            )
                                                                         )}
                                                                     </span>
                                                                 </div>
@@ -3580,7 +3623,7 @@ export function VaultList({
                                                                     <button
                                                                         onClick={() =>
                                                                             handleExecuteTransaction(
-                                                                                tx,
+                                                                                tx
                                                                             )
                                                                         }
                                                                         disabled={
@@ -3594,7 +3637,7 @@ export function VaultList({
                                                                     <button
                                                                         onClick={() =>
                                                                             handleSignTransaction(
-                                                                                tx,
+                                                                                tx
                                                                             )
                                                                         }
                                                                         disabled={
@@ -3613,7 +3656,7 @@ export function VaultList({
                                                                     <button
                                                                         onClick={() =>
                                                                             cancelTransaction(
-                                                                                tx.id,
+                                                                                tx.id
                                                                             )
                                                                         }
                                                                         className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors"
@@ -3639,7 +3682,11 @@ export function VaultList({
                                                             </div>
                                                             {/* Expand indicator */}
                                                             <svg
-                                                                className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                                                className={`w-4 h-4 text-zinc-500 transition-transform ${
+                                                                    isExpanded
+                                                                        ? "rotate-180"
+                                                                        : ""
+                                                                }`}
                                                                 fill="none"
                                                                 stroke="currentColor"
                                                                 viewBox="0 0 24 24"
@@ -3667,17 +3714,17 @@ export function VaultList({
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {selectedVault.members.map(
                                                                         (
-                                                                            member,
+                                                                            member
                                                                         ) => {
                                                                             const memberSigned =
                                                                                 tx.confirmations.some(
                                                                                     (
-                                                                                        c,
+                                                                                        c
                                                                                     ) =>
                                                                                         c.signer_address.toLowerCase() ===
                                                                                             member.smartWalletAddress?.toLowerCase() ||
                                                                                         c.signer_address.toLowerCase() ===
-                                                                                            member.address.toLowerCase(),
+                                                                                            member.address.toLowerCase()
                                                                                 );
                                                                             return (
                                                                                 <div
@@ -3720,10 +3767,13 @@ export function VaultList({
                                                                                         </svg>
                                                                                     )}
                                                                                     {member.nickname ||
-                                                                                        `${member.address.slice(0, 6)}...`}
+                                                                                        `${member.address.slice(
+                                                                                            0,
+                                                                                            6
+                                                                                        )}...`}
                                                                                 </div>
                                                                             );
-                                                                        },
+                                                                        }
                                                                     )}
                                                                 </div>
                                                             </div>
@@ -3772,10 +3822,10 @@ export function VaultList({
                                             onClick={() => {
                                                 fetchTransactions(
                                                     selectedVault.safeAddress,
-                                                    selectedVault.chainId,
+                                                    selectedVault.chainId
                                                 );
                                                 fetchPendingTxs(
-                                                    selectedVault.id,
+                                                    selectedVault.id
                                                 );
                                             }}
                                             disabled={
@@ -3785,7 +3835,12 @@ export function VaultList({
                                             className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1"
                                         >
                                             <svg
-                                                className={`w-3.5 h-3.5 ${isLoadingTransactions || isLoadingPendingTxs ? "animate-spin" : ""}`}
+                                                className={`w-3.5 h-3.5 ${
+                                                    isLoadingTransactions ||
+                                                    isLoadingPendingTxs
+                                                        ? "animate-spin"
+                                                        : ""
+                                                }`}
                                                 fill="none"
                                                 stroke="currentColor"
                                                 viewBox="0 0 24 24"
@@ -3822,7 +3877,7 @@ export function VaultList({
                                         <div className="space-y-2">
                                             {transactions.map((tx) => {
                                                 const chainInfo = getChainById(
-                                                    selectedVault.chainId,
+                                                    selectedVault.chainId
                                                 );
                                                 const isToken =
                                                     !!tx.tokenSymbol;
@@ -3835,14 +3890,14 @@ export function VaultList({
                                                     isToken &&
                                                         tx.tokenDecimals === 6
                                                         ? 2
-                                                        : 4,
+                                                        : 4
                                                 );
                                                 const symbol =
                                                     tx.tokenSymbol ||
                                                     chainInfo?.symbol ||
                                                     "ETH";
                                                 const date = new Date(
-                                                    tx.timestamp,
+                                                    tx.timestamp
                                                 );
                                                 const timeAgo =
                                                     getTimeAgo(date);
@@ -3936,7 +3991,7 @@ export function VaultList({
                                                                             tx.type ===
                                                                                 "incoming"
                                                                                 ? tx.from
-                                                                                : tx.to,
+                                                                                : tx.to
                                                                         )}
                                                                     </p>
                                                                     <p className="text-xs text-zinc-500">
@@ -4042,7 +4097,7 @@ export function VaultList({
                                     <p className="text-xs text-zinc-500 font-mono truncate">
                                         Signer:{" "}
                                         {truncateAddress(
-                                            member.smartWalletAddress,
+                                            member.smartWalletAddress
                                         )}
                                     </p>
                                 </div>
@@ -4102,7 +4157,7 @@ export function VaultList({
     // Render a single vault row (used for both visible and hidden lists)
     const renderVaultRow = (
         vault: VaultListItem,
-        options: { isHidden?: boolean } = {},
+        options: { isHidden?: boolean } = {}
     ) => {
         const chainInfo = getChainById(vault.chainId);
         const { isHidden = false } = options;
@@ -4147,7 +4202,11 @@ export function VaultList({
                         </span>
                         <span className="text-xs text-zinc-600">•</span>
                         <span
-                            className={`text-xs ${vault.isDeployed ? "text-emerald-400" : "text-yellow-400"}`}
+                            className={`text-xs ${
+                                vault.isDeployed
+                                    ? "text-emerald-400"
+                                    : "text-yellow-400"
+                            }`}
                         >
                             {vault.isDeployed ? "Active" : "Pending"}
                         </span>
@@ -4295,7 +4354,7 @@ export function VaultList({
                 </button>
             )}
             {visibleVaults.map((vault) =>
-                renderVaultRow(vault, { isHidden: false }),
+                renderVaultRow(vault, { isHidden: false })
             )}
             {showHiddenVaults && hiddenVaultsList.length > 0 && (
                 <div className="pt-2 border-t border-zinc-800">
@@ -4304,7 +4363,7 @@ export function VaultList({
                     </p>
                     <div className="space-y-2">
                         {hiddenVaultsList.map((vault) =>
-                            renderVaultRow(vault, { isHidden: true }),
+                            renderVaultRow(vault, { isHidden: true })
                         )}
                     </div>
                 </div>

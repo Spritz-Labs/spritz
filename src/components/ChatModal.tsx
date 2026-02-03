@@ -40,6 +40,8 @@ import {
     formatLocationMessage,
     type LocationData,
 } from "./LocationMessage";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 import {
     useMutedConversations,
     useBlockedUsers,
@@ -194,6 +196,7 @@ export function ChatModal({
     const { reportUser, isSubmitting: isReportSubmitting } =
         useReportUser(userAddress);
 
+    const userTimezone = useUserTimezone();
     const conversationMuted = isMuted("dm", peerAddress);
     const peerBlocked = isBlockedByMe(peerAddress);
     const muteInfo = getMuteInfo("dm", peerAddress);
@@ -1892,12 +1895,9 @@ export function ChatModal({
                                                                             Pixel
                                                                             Art
                                                                             •{" "}
-                                                                            {msg.sentAt.toLocaleTimeString(
-                                                                                [],
-                                                                                {
-                                                                                    hour: "2-digit",
-                                                                                    minute: "2-digit",
-                                                                                }
+                                                                            {formatTimeInTimezone(
+                                                                                msg.sentAt,
+                                                                                userTimezone
                                                                             )}
                                                                         </p>
                                                                     </div>
@@ -1946,12 +1946,9 @@ export function ChatModal({
                                                                             🎬
                                                                             GIF
                                                                             •{" "}
-                                                                            {msg.sentAt.toLocaleTimeString(
-                                                                                [],
-                                                                                {
-                                                                                    hour: "2-digit",
-                                                                                    minute: "2-digit",
-                                                                                }
+                                                                            {formatTimeInTimezone(
+                                                                                msg.sentAt,
+                                                                                userTimezone
                                                                             )}
                                                                         </p>
                                                                     </div>
@@ -2242,12 +2239,9 @@ export function ChatModal({
                                                                                         : "text-zinc-500"
                                                                                 }`}
                                                                             >
-                                                                                {msg.sentAt.toLocaleTimeString(
-                                                                                    [],
-                                                                                    {
-                                                                                        hour: "2-digit",
-                                                                                        minute: "2-digit",
-                                                                                    }
+                                                                                {formatTimeInTimezone(
+                                                                                    msg.sentAt,
+                                                                                    userTimezone
                                                                                 )}
                                                                             </p>
                                                                             {isOwn &&
@@ -2275,14 +2269,11 @@ export function ChatModal({
                                                                                         <span
                                                                                             title={
                                                                                                 readAt
-                                                                                                    ? `Read at ${new Date(
-                                                                                                          readAt
-                                                                                                      ).toLocaleTimeString(
-                                                                                                          [],
-                                                                                                          {
-                                                                                                              hour: "numeric",
-                                                                                                              minute: "2-digit",
-                                                                                                          }
+                                                                                                    ? `Read at ${formatTimeInTimezone(
+                                                                                                          new Date(
+                                                                                                              readAt
+                                                                                                          ),
+                                                                                                          userTimezone
                                                                                                       )}`
                                                                                                     : undefined
                                                                                             }

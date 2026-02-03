@@ -1,6 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatDateInTimezone } from "@/lib/timezone";
 
 type UnreadDividerProps = {
     count: number;
@@ -17,7 +19,7 @@ export function UnreadDivider({ count, className = "" }: UnreadDividerProps) {
             className={`flex items-center gap-3 py-3 ${className}`}
         >
             <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#FF5500]/50 to-[#FF5500]" />
-            
+
             <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -35,14 +37,21 @@ export function UnreadDivider({ count, className = "" }: UnreadDividerProps) {
                     ↓
                 </motion.span>
             </motion.div>
-            
+
             <div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#FF5500]/50 to-[#FF5500]" />
         </motion.div>
     );
 }
 
 // Simpler date divider for separating messages by day
-export function DateDivider({ date, className = "" }: { date: Date; className?: string }) {
+export function DateDivider({
+    date,
+    className = "",
+}: {
+    date: Date;
+    className?: string;
+}) {
+    const userTimezone = useUserTimezone();
     const formatDate = (d: Date) => {
         const now = new Date();
         const diff = now.getTime() - d.getTime();
@@ -51,13 +60,12 @@ export function DateDivider({ date, className = "" }: { date: Date; className?: 
         if (days === 0) return "Today";
         if (days === 1) return "Yesterday";
         if (days < 7) {
-            return d.toLocaleDateString("en-US", { weekday: "long" });
+            return formatDateInTimezone(d, userTimezone, "weekday");
         }
-        return d.toLocaleDateString("en-US", { 
-            month: "short", 
-            day: "numeric",
-            year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined 
-        });
+        const str = formatDateInTimezone(d, userTimezone, "monthDay");
+        const year = new Date(d).getFullYear();
+        const currentYear = new Date().getFullYear();
+        return year !== currentYear ? `${str}, ${year}` : str;
     };
 
     return (

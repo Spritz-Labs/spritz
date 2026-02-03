@@ -59,6 +59,7 @@ export function ProfileAvatarModal({
     const [editEmoji, setEditEmoji] = useState(statusEmoji);
     const [editText, setEditText] = useState(statusText);
     const [isSavingStatus, setIsSavingStatus] = useState(false);
+    const [showPresetLabels, setShowPresetLabels] = useState(false);
 
     useEffect(() => {
         if (isOpen) setActiveTab(initialTab);
@@ -111,12 +112,20 @@ export function ProfileAvatarModal({
                             </button>
                             <button
                                 onClick={() => setActiveTab("goLive")}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
                                     activeTab === "goLive"
                                         ? "bg-zinc-700 text-white"
                                         : "text-zinc-400 hover:text-white"
                                 }`}
                             >
+                                <svg
+                                    className="w-4 h-4 shrink-0 text-red-500"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                    aria-hidden
+                                >
+                                    <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                                </svg>
                                 Go Live
                             </button>
                         </div>
@@ -202,35 +211,69 @@ export function ProfileAvatarModal({
                                                     maxLength={80}
                                                 />
                                             </div>
-                                            <div className="flex flex-wrap gap-1.5 justify-center">
-                                                {STATUS_PRESETS.map(
-                                                    (preset, idx) => (
-                                                        <button
-                                                            key={idx}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setEditEmoji(
-                                                                    preset.emoji
-                                                                );
-                                                                setEditText(
-                                                                    preset.text
-                                                                );
-                                                            }}
-                                                            className={`px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
-                                                                editEmoji ===
-                                                                    preset.emoji &&
-                                                                editText ===
-                                                                    preset.text
-                                                                    ? "bg-orange-500/20 text-orange-400"
-                                                                    : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700"
-                                                            }`}
-                                                        >
-                                                            {preset.emoji}{" "}
-                                                            {preset.text ||
-                                                                "Clear"}
-                                                        </button>
-                                                    )
-                                                )}
+                                            <div className="space-y-2">
+                                                <p className="text-xs text-zinc-500">
+                                                    Quick status
+                                                </p>
+                                                <div className="flex flex-wrap gap-1.5 justify-center">
+                                                    {STATUS_PRESETS.map(
+                                                        (preset, idx) => (
+                                                            <button
+                                                                key={idx}
+                                                                type="button"
+                                                                title={
+                                                                    preset.text ||
+                                                                    "Clear status"
+                                                                }
+                                                                onClick={() => {
+                                                                    setEditEmoji(
+                                                                        preset.emoji
+                                                                    );
+                                                                    setEditText(
+                                                                        preset.text
+                                                                    );
+                                                                }}
+                                                                className={`min-w-[2.25rem] py-1.5 rounded-lg text-base transition-colors flex items-center justify-center gap-1 ${
+                                                                    editEmoji ===
+                                                                        preset.emoji &&
+                                                                    editText ===
+                                                                        preset.text
+                                                                        ? "bg-orange-500/20 text-orange-400 ring-1 ring-orange-500/30"
+                                                                        : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700"
+                                                                } ${
+                                                                    showPresetLabels
+                                                                        ? "px-2.5"
+                                                                        : "px-1.5"
+                                                                }`}
+                                                            >
+                                                                <span>
+                                                                    {
+                                                                        preset.emoji
+                                                                    }
+                                                                </span>
+                                                                {showPresetLabels && (
+                                                                    <span className="text-xs truncate max-w-[4.5rem]">
+                                                                        {preset.text ||
+                                                                            "—"}
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        )
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowPresetLabels(
+                                                            (v) => !v
+                                                        )
+                                                    }
+                                                    className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors"
+                                                >
+                                                    {showPresetLabels
+                                                        ? "Hide labels"
+                                                        : "Show labels"}
+                                                </button>
                                             </div>
                                             <button
                                                 type="button"

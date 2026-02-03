@@ -43,6 +43,8 @@ import { PollCreator } from "./PollCreator";
 import { PollDisplay } from "./PollDisplay";
 import { useAlphaPolls } from "@/hooks/useAlphaPolls";
 import { MessageSearch } from "./MessageSearch";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -221,6 +223,7 @@ export function AlphaChatModal({
         Record<string, boolean>
     >({});
     const [showMembersList, setShowMembersList] = useState(false);
+    const userTimezone = useUserTimezone();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Fetch online statuses for message senders
@@ -2068,14 +2071,11 @@ export function AlphaChatModal({
                                                                                         </span>
                                                                                     )}
                                                                                     <span>
-                                                                                        {new Date(
-                                                                                            msg.created_at
-                                                                                        ).toLocaleTimeString(
-                                                                                            [],
-                                                                                            {
-                                                                                                hour: "2-digit",
-                                                                                                minute: "2-digit",
-                                                                                            }
+                                                                                        {formatTimeInTimezone(
+                                                                                            new Date(
+                                                                                                msg.created_at
+                                                                                            ),
+                                                                                            userTimezone
                                                                                         )}
                                                                                     </span>
                                                                                 </div>

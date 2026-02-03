@@ -45,6 +45,8 @@ import { MessageSearch } from "./MessageSearch";
 import { PollCreator } from "./PollCreator";
 import { PollDisplay } from "./PollDisplay";
 import { useGroupPolls } from "@/hooks/useGroupPolls";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -123,6 +125,7 @@ export function GroupChatModal({
     isFriend,
     onOpenDM,
 }: GroupChatModalProps) {
+    const userTimezone = useUserTimezone();
     const [messages, setMessages] = useState<Message[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [newMessage, setNewMessage] = useState("");
@@ -1067,7 +1070,13 @@ export function GroupChatModal({
                                         </svg>
                                         Community
                                         {members.length > 0 && (
-                                            <> · {members.length} {members.length === 1 ? "member" : "members"}</>
+                                            <>
+                                                {" "}
+                                                · {members.length}{" "}
+                                                {members.length === 1
+                                                    ? "member"
+                                                    : "members"}
+                                            </>
                                         )}
                                     </button>
                                 </div>
@@ -1912,12 +1921,9 @@ export function GroupChatModal({
                                                                                     : "text-zinc-500"
                                                                             }`}
                                                                         >
-                                                                            {msg.sentAt.toLocaleTimeString(
-                                                                                [],
-                                                                                {
-                                                                                    hour: "2-digit",
-                                                                                    minute: "2-digit",
-                                                                                }
+                                                                            {formatTimeInTimezone(
+                                                                                msg.sentAt,
+                                                                                userTimezone
                                                                             )}
                                                                             {isOwn &&
                                                                                 (() => {

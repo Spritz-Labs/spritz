@@ -1,6 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatDateInTimezone } from "@/lib/timezone";
 
 type OnlineStatusProps = {
     status: "online" | "offline" | "away" | "busy";
@@ -47,7 +49,7 @@ export function OnlineStatus({
                     }}
                 />
             )}
-            
+
             {/* Main status dot */}
             <span
                 className={`absolute inset-0 rounded-full ${statusColors[status]} border-2 border-zinc-900`}
@@ -108,7 +110,7 @@ export function AvatarWithStatus({
                     {initials}
                 </div>
             )}
-            
+
             {status && (
                 <div className={`absolute ${statusPositionClasses[size]}`}>
                     <OnlineStatus
@@ -122,9 +124,12 @@ export function AvatarWithStatus({
 }
 
 // Last seen text formatter
-export function formatLastSeen(lastSeen: Date | null): string {
+export function formatLastSeen(
+    lastSeen: Date | null,
+    timezone?: string
+): string {
     if (!lastSeen) return "Never";
-    
+
     const now = new Date();
     const diffMs = now.getTime() - lastSeen.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -136,7 +141,10 @@ export function formatLastSeen(lastSeen: Date | null): string {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays === 1) return "Yesterday";
     if (diffDays < 7) return `${diffDays}d ago`;
-    
+
+    if (timezone) {
+        return formatDateInTimezone(lastSeen, timezone, "short");
+    }
     return lastSeen.toLocaleDateString();
 }
 
@@ -150,9 +158,12 @@ export function StatusText({
     lastSeen?: Date | null;
     className?: string;
 }) {
+    const userTimezone = useUserTimezone();
     const statusText = {
         online: "Online",
-        offline: lastSeen ? `Last seen ${formatLastSeen(lastSeen)}` : "Offline",
+        offline: lastSeen
+            ? `Last seen ${formatLastSeen(lastSeen, userTimezone)}`
+            : "Offline",
         away: "Away",
         busy: "Do not disturb",
     };

@@ -1,6 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 
 type MessageDeliveryStatusProps = {
     status: "sending" | "sent" | "delivered" | "read" | "failed";
@@ -17,8 +19,9 @@ export function MessageDeliveryStatus({
     showTimestamp = true,
     className = "",
 }: MessageDeliveryStatusProps) {
+    const userTimezone = useUserTimezone();
     const formatTime = (date: Date) => {
-        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return formatTimeInTimezone(date, userTimezone);
     };
 
     return (
@@ -26,32 +29,38 @@ export function MessageDeliveryStatus({
             {showTimestamp && timestamp && (
                 <span className="text-zinc-500">{formatTime(timestamp)}</span>
             )}
-            
+
             <DeliveryStatusIcon status={status} />
-            
+
             {/* Show read count for groups */}
             {status === "read" && readBy.length > 0 && (
                 <span className="text-zinc-500 ml-0.5">
-                    {readBy.length === 1 
-                        ? `Seen` 
-                        : `Seen by ${readBy.length}`}
+                    {readBy.length === 1 ? `Seen` : `Seen by ${readBy.length}`}
                 </span>
             )}
         </div>
     );
 }
 
-function DeliveryStatusIcon({ status }: { status: MessageDeliveryStatusProps["status"] }) {
+function DeliveryStatusIcon({
+    status,
+}: {
+    status: MessageDeliveryStatusProps["status"];
+}) {
     switch (status) {
         case "sending":
             return (
                 <motion.div
                     animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    transition={{
+                        duration: 1,
+                        repeat: Infinity,
+                        ease: "linear",
+                    }}
                     className="w-3.5 h-3.5 border border-zinc-500 border-t-transparent rounded-full"
                 />
             );
-        
+
         case "sent":
             // Single checkmark
             return (
@@ -71,7 +80,7 @@ function DeliveryStatusIcon({ status }: { status: MessageDeliveryStatusProps["st
                     />
                 </motion.svg>
             );
-        
+
         case "delivered":
             // Double checkmark (gray)
             return (
@@ -100,7 +109,7 @@ function DeliveryStatusIcon({ status }: { status: MessageDeliveryStatusProps["st
                     />
                 </motion.svg>
             );
-        
+
         case "read":
             // Double checkmark (blue)
             return (
@@ -129,7 +138,7 @@ function DeliveryStatusIcon({ status }: { status: MessageDeliveryStatusProps["st
                     />
                 </motion.svg>
             );
-        
+
         case "failed":
             return (
                 <motion.svg
@@ -148,7 +157,7 @@ function DeliveryStatusIcon({ status }: { status: MessageDeliveryStatusProps["st
                     />
                 </motion.svg>
             );
-        
+
         default:
             return null;
     }

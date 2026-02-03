@@ -40,6 +40,8 @@ import { useUsername } from "@/hooks/useUsername";
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useUserSettings } from "@/hooks/useUserSettings";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimestamp } from "@/lib/timezone";
 import { isAgoraConfigured } from "@/config/agora";
 import { isHuddle01Configured, createHuddle01Room } from "@/config/huddle01";
 import { supabase, isSupabaseConfigured } from "@/config/supabase";
@@ -373,6 +375,7 @@ function DashboardContent({
         toggleUseCustomAvatar,
         setCustomAvatar,
     } = useUserSettings(userAddress);
+    const userTimezone = useUserTimezone();
 
     // Push notifications
     const {
@@ -6164,15 +6167,12 @@ function DashboardContent({
                                             </p>
                                             <p className="text-zinc-400 text-xs">
                                                 {betaAppliedAt
-                                                    ? `Applied on ${new Date(
-                                                          betaAppliedAt
-                                                      ).toLocaleDateString(
-                                                          "en-US",
-                                                          {
-                                                              month: "long",
-                                                              day: "numeric",
-                                                              year: "numeric",
-                                                          }
+                                                    ? `Applied on ${formatTimestamp(
+                                                          new Date(
+                                                              betaAppliedAt
+                                                          ),
+                                                          userTimezone,
+                                                          "MMMM d, yyyy"
                                                       )}`
                                                     : "Your application is being reviewed"}
                                             </p>

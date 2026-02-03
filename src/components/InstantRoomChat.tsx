@@ -10,6 +10,8 @@ import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { DateDivider } from "./UnreadDivider";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -19,7 +21,7 @@ const isEmojiOnly = (text: string): boolean => {
     if (!trimmed) return false;
     if (!EMOJI_REGEX.test(trimmed)) return false;
     const emojiCount = [...trimmed].filter(
-        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char)
     ).length;
     return emojiCount >= 1 && emojiCount <= 3;
 };
@@ -94,7 +96,7 @@ async function loadWakuSDK(): Promise<boolean> {
 async function deriveKeyFromRoomCode(roomCode: string): Promise<Uint8Array> {
     const encoder = new TextEncoder();
     const data = encoder.encode(
-        `spritz-instant-room-${roomCode.toUpperCase()}`,
+        `spritz-instant-room-${roomCode.toUpperCase()}`
     );
 
     // Use SHA-256 to derive a 32-byte key
@@ -132,7 +134,7 @@ export function InstantRoomChat({
     const [unreadCount, setUnreadCount] = useState(0);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null,
+        null
     );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [selectedMessageConfig, setSelectedMessageConfig] =
@@ -153,7 +155,7 @@ export function InstantRoomChat({
     const { draft, saveDraft, clearDraft } = useDraftMessages(
         "room",
         roomCode,
-        displayName,
+        displayName
     );
 
     // Scroll to bottom with unread badge
@@ -273,7 +275,7 @@ export function InstantRoomChat({
             const decoder = wakuEncryption.createDecoder(
                 contentTopic,
                 routingInfo,
-                symmetricKeyRef.current,
+                symmetricKeyRef.current
             );
 
             await node.filter.subscribe(
@@ -283,7 +285,7 @@ export function InstantRoomChat({
                         if (!wakuMessage.payload) return;
 
                         const decoded = ChatMessage.decode(
-                            wakuMessage.payload,
+                            wakuMessage.payload
                         ) as unknown as {
                             timestamp: number | { low: number; high: number };
                             sender: string;
@@ -316,7 +318,7 @@ export function InstantRoomChat({
                                 return prev;
                             }
                             return [...prev, newMessage].sort(
-                                (a, b) => a.timestamp - b.timestamp,
+                                (a, b) => a.timestamp - b.timestamp
                             );
                         });
 
@@ -331,10 +333,10 @@ export function InstantRoomChat({
                     } catch (err) {
                         console.error(
                             "[InstantRoomChat] Error decoding message:",
-                            err,
+                            err
                         );
                     }
-                },
+                }
             );
 
             console.log("[InstantRoomChat] Connected and subscribed!");
@@ -373,7 +375,7 @@ export function InstantRoomChat({
                 }
 
                 const idx = updated[messageId].findIndex(
-                    (r) => r.emoji === emoji,
+                    (r) => r.emoji === emoji
                 );
                 if (idx >= 0) {
                     const hasReacted =
@@ -395,7 +397,7 @@ export function InstantRoomChat({
             setShowReactionPicker(null);
             setSelectedMessage(null);
         },
-        [displayName],
+        [displayName]
     );
 
     // Toggle message selection for mobile tap actions
@@ -494,11 +496,9 @@ export function InstantRoomChat({
         }
     };
 
+    const userTimezone = useUserTimezone();
     const formatTime = (timestamp: number) => {
-        return new Date(timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-        });
+        return formatTimeInTimezone(new Date(timestamp), userTimezone);
     };
 
     return (
@@ -632,7 +632,7 @@ export function InstantRoomChat({
                                             setSelectedMessage(
                                                 selectedMessage === msg.id
                                                     ? null
-                                                    : msg.id,
+                                                    : msg.id
                                             );
                                             setSelectedMessageConfig(
                                                 selectedMessage === msg.id
@@ -642,14 +642,18 @@ export function InstantRoomChat({
                                                           messageContent:
                                                               msg.content,
                                                           isOwn: msg.isMe,
-                                                      },
+                                                      }
                                             );
                                         }}
                                         className={`max-w-[85%] rounded-2xl px-3 py-2 relative cursor-pointer ${
                                             msg.isMe
                                                 ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
                                                 : "bg-zinc-800 text-white"
-                                        } ${selectedMessage === msg.id ? "ring-2 ring-orange-400/50" : ""}`}
+                                        } ${
+                                            selectedMessage === msg.id
+                                                ? "ring-2 ring-orange-400/50"
+                                                : ""
+                                        }`}
                                     >
                                         {!msg.isMe && (
                                             <p className="text-xs font-medium text-zinc-400 mb-1">
@@ -689,20 +693,24 @@ export function InstantRoomChat({
                                                     >
                                                         {msg.replyTo?.sender ||
                                                             inlineReplyText?.split(
-                                                                ":",
+                                                                ":"
                                                             )[0] ||
                                                             ""}
                                                     </span>
                                                 </div>
                                                 <p
-                                                    className={`text-xs mt-1 line-clamp-2 ${msg.isMe ? "text-white/70" : "text-zinc-400"}`}
+                                                    className={`text-xs mt-1 line-clamp-2 ${
+                                                        msg.isMe
+                                                            ? "text-white/70"
+                                                            : "text-zinc-400"
+                                                    }`}
                                                 >
                                                     {msg.replyTo?.content ||
                                                         inlineReplyText
                                                             ?.split(': "')[1]
                                                             ?.replace(
                                                                 /\"$/,
-                                                                "",
+                                                                ""
                                                             ) ||
                                                         ""}
                                                 </p>
@@ -710,14 +718,18 @@ export function InstantRoomChat({
                                         )}
 
                                         <p
-                                            className={`break-words whitespace-pre-wrap ${isEmojiOnly(displayContent) ? "text-4xl leading-tight" : "text-sm"}`}
+                                            className={`break-words whitespace-pre-wrap ${
+                                                isEmojiOnly(displayContent)
+                                                    ? "text-4xl leading-tight"
+                                                    : "text-sm"
+                                            }`}
                                         >
                                             {displayContent}
                                         </p>
 
                                         {/* Reactions Display - Mobile Friendly */}
                                         {reactions[msg.id]?.some(
-                                            (r) => r.users.length > 0,
+                                            (r) => r.users.length > 0
                                         ) && (
                                             <div
                                                 className="flex flex-wrap gap-1.5 mt-2"
@@ -728,12 +740,12 @@ export function InstantRoomChat({
                                                 {reactions[msg.id]
                                                     ?.filter(
                                                         (r) =>
-                                                            r.users.length > 0,
+                                                            r.users.length > 0
                                                     )
                                                     .map((reaction) => {
                                                         const hasReacted =
                                                             reaction.users.includes(
-                                                                displayName,
+                                                                displayName
                                                             );
                                                         return (
                                                             <button
@@ -743,7 +755,7 @@ export function InstantRoomChat({
                                                                 onClick={() =>
                                                                     toggleReaction(
                                                                         msg.id,
-                                                                        reaction.emoji,
+                                                                        reaction.emoji
                                                                     )
                                                                 }
                                                                 className={`
@@ -757,8 +769,8 @@ export function InstantRoomChat({
                                                                                 ? "bg-white/25 text-white"
                                                                                 : "bg-[#FF5500]/25 text-[#FF5500]"
                                                                             : msg.isMe
-                                                                              ? "bg-white/10 hover:bg-white/20 text-white/80"
-                                                                              : "bg-zinc-700/60 hover:bg-zinc-600/60 text-zinc-300"
+                                                                            ? "bg-white/10 hover:bg-white/20 text-white/80"
+                                                                            : "bg-zinc-700/60 hover:bg-zinc-600/60 text-zinc-300"
                                                                     }
                                                                 `}
                                                             >
@@ -900,7 +912,7 @@ export function InstantRoomChat({
                                 ? (emoji) =>
                                       toggleReaction(
                                           selectedMessageConfig.messageId,
-                                          emoji,
+                                          emoji
                                       )
                                 : undefined,
                             onReply: selectedMessageConfig
@@ -908,7 +920,7 @@ export function InstantRoomChat({
                                       const msg = messages.find(
                                           (m) =>
                                               m.id ===
-                                              selectedMessageConfig.messageId,
+                                              selectedMessageConfig.messageId
                                       );
                                       if (msg) setReplyingTo(msg);
                                   }

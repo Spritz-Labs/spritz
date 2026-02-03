@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Hls from "hls.js";
 import Image from "next/image";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 
 type StreamData = {
     id: string;
@@ -52,6 +54,7 @@ export default function PublicLivePage() {
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const lastMessageTimeRef = useRef<string | null>(null);
 
+    const userTimezone = useUserTimezone();
     const [stream, setStream] = useState<StreamData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -75,7 +78,9 @@ export default function PublicLivePage() {
     const [newMessage, setNewMessage] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [showChat, setShowChat] = useState(true);
-    const [floatingReactions, setFloatingReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
+    const [floatingReactions, setFloatingReactions] = useState<
+        { id: string; emoji: string; x: number }[]
+    >([]);
 
     const MAX_RETRIES = 60;
     const RETRY_INTERVAL = 1000;
@@ -84,29 +89,38 @@ export default function PublicLivePage() {
     useEffect(() => {
         const checkAuth = async () => {
             let address: string | null = null;
-            
+
             // Check for passkey users first (spritz_passkey_address)
-            const passkeyAddress = localStorage.getItem("spritz_passkey_address");
+            const passkeyAddress = localStorage.getItem(
+                "spritz_passkey_address"
+            );
             if (passkeyAddress) {
                 address = passkeyAddress.toLowerCase();
             }
-            
+
             // Check for email auth users (spritz_email_address)
             if (!address) {
-                const emailAddress = localStorage.getItem("spritz_email_address");
+                const emailAddress = localStorage.getItem(
+                    "spritz_email_address"
+                );
                 if (emailAddress) {
                     address = emailAddress.toLowerCase();
                 }
             }
-            
+
             // Check for SIWE/SIWS authenticated users (spritz_auth_credentials)
             if (!address) {
-                const authCredentials = localStorage.getItem("spritz_auth_credentials");
+                const authCredentials = localStorage.getItem(
+                    "spritz_auth_credentials"
+                );
                 if (authCredentials) {
                     try {
                         const parsed = JSON.parse(authCredentials);
                         const AUTH_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-                        if (parsed?.address && Date.now() - parsed.timestamp < AUTH_TTL) {
+                        if (
+                            parsed?.address &&
+                            Date.now() - parsed.timestamp < AUTH_TTL
+                        ) {
                             address = parsed.address.toLowerCase();
                         }
                     } catch {
@@ -114,7 +128,7 @@ export default function PublicLivePage() {
                     }
                 }
             }
-            
+
             // Check wagmi store for connected wallet
             if (!address) {
                 const wagmiState = localStorage.getItem("wagmi.store");
@@ -127,12 +141,16 @@ export default function PublicLivePage() {
                             const connections = parsed?.state?.connections;
                             if (connections) {
                                 // connections is a Map-like structure serialized as array of [key, value]
-                                const connectionEntries = connections?.value || connections;
+                                const connectionEntries =
+                                    connections?.value || connections;
                                 if (Array.isArray(connectionEntries)) {
                                     for (const entry of connectionEntries) {
-                                        const conn = Array.isArray(entry) ? entry[1] : entry;
+                                        const conn = Array.isArray(entry)
+                                            ? entry[1]
+                                            : entry;
                                         if (conn?.accounts?.[0]) {
-                                            address = conn.accounts[0].toLowerCase();
+                                            address =
+                                                conn.accounts[0].toLowerCase();
                                             break;
                                         }
                                     }
@@ -144,13 +162,17 @@ export default function PublicLivePage() {
                     }
                 }
             }
-            
+
             if (address) {
                 setUserAddress(address);
-                
+
                 // Fetch user info from Supabase
                 try {
-                    const res = await fetch(`/api/public/user?address=${encodeURIComponent(address)}`);
+                    const res = await fetch(
+                        `/api/public/user?address=${encodeURIComponent(
+                            address
+                        )}`
+                    );
                     if (res.ok) {
                         const data = await res.json();
                         if (data.user) {
@@ -165,9 +187,9 @@ export default function PublicLivePage() {
                 }
             }
         };
-        
+
         checkAuth();
-        
+
         // Also listen for storage changes in case user logs in from another tab
         const handleStorageChange = () => checkAuth();
         window.addEventListener("storage", handleStorageChange);
@@ -187,12 +209,12 @@ export default function PublicLivePage() {
                 const data = await res.json();
                 setStream(data.stream);
                 setViewerCount(data.stream.viewer_count || 0);
-                
+
                 // Check if stream already ended
                 if (data.stream.status === "ended") {
                     setStreamEnded(true);
                 }
-                
+
                 setIsLoading(false);
             } catch {
                 setError("Failed to load stream");
@@ -209,8 +231,10 @@ export default function PublicLivePage() {
     useEffect(() => {
         if (stream && !hasTrackedViewerRef.current) {
             hasTrackedViewerRef.current = true;
-            fetch(`/api/public/streams/${streamId}`, { method: "POST" }).catch(() => {});
-            
+            fetch(`/api/public/streams/${streamId}`, { method: "POST" }).catch(
+                () => {}
+            );
+
             // Track stream view (only if user is logged in)
             if (userAddress) {
                 fetch("/api/admin/track-analytics", {
@@ -226,7 +250,9 @@ export default function PublicLivePage() {
 
             const handleBeforeUnload = () => {
                 if (hasTrackedViewerRef.current) {
-                    navigator.sendBeacon(`/api/public/streams/${streamId}?action=leave`);
+                    navigator.sendBeacon(
+                        `/api/public/streams/${streamId}?action=leave`
+                    );
                 }
             };
             window.addEventListener("beforeunload", handleBeforeUnload);
@@ -235,7 +261,9 @@ export default function PublicLivePage() {
                 window.removeEventListener("beforeunload", handleBeforeUnload);
                 if (hasTrackedViewerRef.current) {
                     hasTrackedViewerRef.current = false;
-                    fetch(`/api/public/streams/${streamId}`, { method: "DELETE" }).catch(() => {});
+                    fetch(`/api/public/streams/${streamId}`, {
+                        method: "DELETE",
+                    }).catch(() => {});
                 }
             };
         }
@@ -251,7 +279,7 @@ export default function PublicLivePage() {
                 if (res.ok) {
                     const data = await res.json();
                     setViewerCount(data.stream.viewer_count || 0);
-                    
+
                     // Check if stream has ended
                     if (data.stream.status === "ended" && !streamEnded) {
                         setStreamEnded(true);
@@ -280,7 +308,9 @@ export default function PublicLivePage() {
 
         try {
             const url = lastMessageTimeRef.current
-                ? `/api/streams/${streamId}/chat?since=${encodeURIComponent(lastMessageTimeRef.current)}`
+                ? `/api/streams/${streamId}/chat?since=${encodeURIComponent(
+                      lastMessageTimeRef.current
+                  )}`
                 : `/api/streams/${streamId}/chat`;
 
             const res = await fetch(url);
@@ -288,8 +318,14 @@ export default function PublicLivePage() {
                 const data = await res.json();
                 if (data.messages && data.messages.length > 0) {
                     // Debug: log first message to see user data
-                    if (data.messages.length > 0 && !lastMessageTimeRef.current) {
-                        console.log("[Live Chat] Sample message user data:", JSON.stringify(data.messages[0].user, null, 2));
+                    if (
+                        data.messages.length > 0 &&
+                        !lastMessageTimeRef.current
+                    ) {
+                        console.log(
+                            "[Live Chat] Sample message user data:",
+                            JSON.stringify(data.messages[0].user, null, 2)
+                        );
                         console.log("[Live Chat] Sample message:", {
                             id: data.messages[0].id,
                             user_address: data.messages[0].user_address,
@@ -301,10 +337,13 @@ export default function PublicLivePage() {
                     setMessages((prev) => {
                         // Merge new messages, avoiding duplicates
                         const existingIds = new Set(prev.map((m) => m.id));
-                        const newMsgs = data.messages.filter((m: ChatMessage) => !existingIds.has(m.id));
+                        const newMsgs = data.messages.filter(
+                            (m: ChatMessage) => !existingIds.has(m.id)
+                        );
                         return [...prev, ...newMsgs];
                     });
-                    lastMessageTimeRef.current = data.messages[data.messages.length - 1].created_at;
+                    lastMessageTimeRef.current =
+                        data.messages[data.messages.length - 1].created_at;
                 }
             }
         } catch {
@@ -324,7 +363,8 @@ export default function PublicLivePage() {
     // Auto-scroll chat to bottom
     useEffect(() => {
         if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+            chatContainerRef.current.scrollTop =
+                chatContainerRef.current.scrollHeight;
         }
     }, [messages]);
 
@@ -430,7 +470,9 @@ export default function PublicLivePage() {
                                 initHls();
                             }, RETRY_INTERVAL);
                         } else {
-                            setError("Stream is not available. The broadcaster may have ended the stream.");
+                            setError(
+                                "Stream is not available. The broadcaster may have ended the stream."
+                            );
                             setIsWaitingForBroadcast(false);
                         }
                     } else {
@@ -489,7 +531,7 @@ export default function PublicLivePage() {
 
         const handlePlay = () => setIsPlaying(true);
         const handlePause = () => setIsPlaying(false);
-        
+
         // Sync muted state with video element
         const handleVolumeChange = () => {
             setIsMuted(video.muted);
@@ -510,7 +552,7 @@ export default function PublicLivePage() {
     const togglePlay = async () => {
         if (!videoRef.current) return;
         const video = videoRef.current;
-        
+
         if (isPlaying) {
             video.pause();
         } else {
@@ -521,7 +563,7 @@ export default function PublicLivePage() {
                 // Set volume explicitly to trigger audio
                 const targetVolume = volume > 0 ? volume : 1;
                 video.volume = Math.max(0.01, targetVolume - 0.01);
-                await new Promise(resolve => setTimeout(resolve, 10));
+                await new Promise((resolve) => setTimeout(resolve, 10));
                 video.volume = targetVolume;
                 setVolume(targetVolume);
             }
@@ -533,22 +575,22 @@ export default function PublicLivePage() {
         if (!videoRef.current) return;
         const video = videoRef.current;
         const newMutedState = !video.muted;
-        
+
         // If unmuting, ensure volume is set and video is playing
         if (!newMutedState) {
             // Unmute first
             video.muted = false;
             setIsMuted(false);
-            
+
             // Explicitly set volume - browsers need this as part of user interaction
             // Trick: Set volume to slightly less, then back to target
             // This forces the browser to recognize the volume change as user-initiated
             const targetVolume = volume > 0 ? volume : 1;
             video.volume = Math.max(0.01, targetVolume - 0.01);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise((resolve) => setTimeout(resolve, 10));
             video.volume = targetVolume;
             setVolume(targetVolume);
-            
+
             // Ensure video is playing (browser may have paused muted autoplay)
             if (video.paused) {
                 try {
@@ -564,32 +606,37 @@ export default function PublicLivePage() {
         }
     };
 
-    const handleVolumeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleVolumeChange = async (
+        e: React.ChangeEvent<HTMLInputElement>
+    ) => {
         const newVolume = parseFloat(e.target.value);
         if (videoRef.current) {
             const video = videoRef.current;
-            
+
             // Set volume first
             video.volume = newVolume;
             setVolume(newVolume);
-            
+
             // Unmute if volume is increased from 0
             if (newVolume > 0 && video.muted) {
                 video.muted = false;
                 setIsMuted(false);
-                
+
                 // Ensure video is playing when unmuting via volume slider
                 if (video.paused) {
                     try {
                         await video.play();
                     } catch (e) {
-                        console.error("[Live] Failed to play after volume change:", e);
+                        console.error(
+                            "[Live] Failed to play after volume change:",
+                            e
+                        );
                     }
                 }
-                
+
                 // Force audio to be enabled by triggering a volume change
                 // This helps with browsers that need explicit user interaction
-                video.dispatchEvent(new Event('volumechange'));
+                video.dispatchEvent(new Event("volumechange"));
             }
             // Mute if volume is set to 0
             if (newVolume === 0) {
@@ -599,17 +646,21 @@ export default function PublicLivePage() {
         }
     };
 
-    const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
-    
+    const formatAddress = (address: string) =>
+        `${address.slice(0, 6)}...${address.slice(-4)}`;
+
     // Get display name with priority: username > display_name > ens_name > formatted address
     const getDisplayName = (msg: ChatMessage) => {
         // Check for username (handle both null and empty string)
-        if (msg.user?.username && msg.user.username.trim()) return msg.user.username.trim();
-        if (msg.user?.display_name && msg.user.display_name.trim()) return msg.user.display_name.trim();
-        if (msg.user?.ens_name && msg.user.ens_name.trim()) return msg.user.ens_name.trim();
+        if (msg.user?.username && msg.user.username.trim())
+            return msg.user.username.trim();
+        if (msg.user?.display_name && msg.user.display_name.trim())
+            return msg.user.display_name.trim();
+        if (msg.user?.ens_name && msg.user.ens_name.trim())
+            return msg.user.ens_name.trim();
         return formatAddress(msg.user_address);
     };
-    
+
     // Get current user display name with priority: username > display_name > ens_name > formatted address
     const getCurrentUserDisplayName = () => {
         if (!userAddress) return "";
@@ -637,17 +688,37 @@ export default function PublicLivePage() {
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
                 <div className="text-center max-w-md px-6">
                     <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-10 h-10 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        <svg
+                            className="w-10 h-10 text-zinc-600"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
                         </svg>
                     </div>
-                    <h1 className="text-2xl font-bold text-white mb-2">Stream Not Found</h1>
-                    <p className="text-zinc-400 mb-8">This stream may have ended or doesn&apos;t exist.</p>
+                    <h1 className="text-2xl font-bold text-white mb-2">
+                        Stream Not Found
+                    </h1>
+                    <p className="text-zinc-400 mb-8">
+                        This stream may have ended or doesn&apos;t exist.
+                    </p>
                     <a
                         href="/"
                         className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-xl hover:from-orange-400 hover:to-red-400 transition-all"
                     >
-                        <Image src="/icons/icon-96x96.png" alt="Spritz" width={24} height={24} className="rounded" />
+                        <Image
+                            src="/icons/icon-96x96.png"
+                            alt="Spritz"
+                            width={24}
+                            height={24}
+                            className="rounded"
+                        />
                         Open Spritz
                     </a>
                 </div>
@@ -660,7 +731,13 @@ export default function PublicLivePage() {
             {/* Header */}
             <header className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between shrink-0">
                 <a href="/" className="flex items-center gap-2">
-                    <Image src="/icons/icon-96x96.png" alt="Spritz" width={32} height={32} className="rounded-lg" />
+                    <Image
+                        src="/icons/icon-96x96.png"
+                        alt="Spritz"
+                        width={32}
+                        height={32}
+                        className="rounded-lg"
+                    />
                     <span className="text-white font-bold text-lg">Spritz</span>
                 </a>
                 {userAddress ? (
@@ -673,11 +750,15 @@ export default function PublicLivePage() {
                             />
                         ) : (
                             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white text-xs font-medium">
-                                {getCurrentUserDisplayName().slice(0, 2).toUpperCase()}
+                                {getCurrentUserDisplayName()
+                                    .slice(0, 2)
+                                    .toUpperCase()}
                             </div>
                         )}
                         <span className="text-zinc-400">Signed in as</span>
-                        <span className="text-white font-medium">{getCurrentUserDisplayName()}</span>
+                        <span className="text-white font-medium">
+                            {getCurrentUserDisplayName()}
+                        </span>
                     </div>
                 ) : (
                     <a
@@ -694,7 +775,7 @@ export default function PublicLivePage() {
                 {/* Video section */}
                 <div className="flex-1 flex flex-col bg-black relative min-h-0 overflow-hidden">
                     {/* Video container */}
-                    <div 
+                    <div
                         className="relative flex-1 flex items-center justify-center group min-h-0 cursor-pointer"
                         onClick={async () => {
                             // Auto-unmute and play when user clicks on video area
@@ -736,18 +817,33 @@ export default function PublicLivePage() {
                                     <div className="relative mx-auto mb-4 w-16 h-16">
                                         <div className="absolute inset-0 border-4 border-red-500/30 border-t-red-500 rounded-full animate-spin" />
                                         <div className="absolute inset-3 bg-red-500/20 rounded-full flex items-center justify-center">
-                                            <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            <svg
+                                                className="w-6 h-6 text-red-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                />
                                             </svg>
                                         </div>
                                     </div>
-                                    <h3 className="text-white font-medium mb-2">Waiting for broadcast...</h3>
+                                    <h3 className="text-white font-medium mb-2">
+                                        Waiting for broadcast...
+                                    </h3>
                                     <p className="text-zinc-400 text-sm mb-4">
-                                        The streamer is setting up. The video will appear once they start broadcasting.
+                                        The streamer is setting up. The video
+                                        will appear once they start
+                                        broadcasting.
                                     </p>
                                     {retryCount > 0 && (
                                         <p className="text-zinc-500 text-xs">
-                                            Checking for stream... ({retryCount}/{MAX_RETRIES})
+                                            Checking for stream... ({retryCount}
+                                            /{MAX_RETRIES})
                                         </p>
                                     )}
                                 </div>
@@ -759,20 +855,44 @@ export default function PublicLivePage() {
                             <div className="absolute inset-0 flex items-center justify-center bg-black">
                                 <div className="text-center max-w-sm px-4">
                                     <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6">
-                                        <svg className="w-10 h-10 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                                        <svg
+                                            className="w-10 h-10 text-zinc-400"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
+                                            />
                                         </svg>
                                     </div>
-                                    <h3 className="text-2xl font-bold text-white mb-2">Stream has ended</h3>
+                                    <h3 className="text-2xl font-bold text-white mb-2">
+                                        Stream has ended
+                                    </h3>
                                     <p className="text-zinc-400 mb-6">
-                                        Thanks for watching! The recording will be available soon.
+                                        Thanks for watching! The recording will
+                                        be available soon.
                                     </p>
                                     <a
                                         href="/"
                                         className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-xl hover:from-orange-400 hover:to-red-400 transition-all"
                                     >
-                                        <Image src="/icons/icon-96x96.png" alt="" width={20} height={20} className="rounded" />
+                                        <Image
+                                            src="/icons/icon-96x96.png"
+                                            alt=""
+                                            width={20}
+                                            height={20}
+                                            className="rounded"
+                                        />
                                         Back to Spritz
                                     </a>
                                 </div>
@@ -783,8 +903,18 @@ export default function PublicLivePage() {
                         {error && !streamEnded && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black">
                                 <div className="text-center">
-                                    <svg className="w-12 h-12 text-red-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <svg
+                                        className="w-12 h-12 text-red-500 mx-auto mb-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                        />
                                     </svg>
                                     <p className="text-red-400 mb-4">{error}</p>
                                     <button
@@ -804,28 +934,67 @@ export default function PublicLivePage() {
                         {/* Video controls */}
                         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
                             <div className="flex items-center gap-4">
-                                <button onClick={togglePlay} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                                <button
+                                    onClick={togglePlay}
+                                    className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                                >
                                     {isPlaying ? (
-                                        <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg
+                                            className="w-6 h-6 text-white"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
                                             <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
                                         </svg>
                                     ) : (
-                                        <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg
+                                            className="w-6 h-6 text-white"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
                                             <path d="M8 5v14l11-7z" />
                                         </svg>
                                     )}
                                 </button>
 
                                 <div className="flex items-center gap-2">
-                                    <button onClick={toggleMute} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                                    <button
+                                        onClick={toggleMute}
+                                        className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                                    >
                                         {isMuted || volume === 0 ? (
-                                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                            <svg
+                                                className="w-5 h-5 text-white"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                                                />
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                                                />
                                             </svg>
                                         ) : (
-                                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                            <svg
+                                                className="w-5 h-5 text-white"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                                                />
                                             </svg>
                                         )}
                                     </button>
@@ -854,8 +1023,18 @@ export default function PublicLivePage() {
                                     onClick={() => setShowChat(!showChat)}
                                     className="lg:hidden p-2 hover:bg-white/20 rounded-lg transition-colors"
                                 >
-                                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    <svg
+                                        className="w-5 h-5 text-white"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                        />
                                     </svg>
                                 </button>
                             </div>
@@ -879,7 +1058,11 @@ export default function PublicLivePage() {
                 </div>
 
                 {/* Sidebar with streamer info and chat */}
-                <div className={`${showChat ? "flex" : "hidden lg:flex"} w-full lg:w-96 bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 flex-col min-h-0 overflow-hidden`}>
+                <div
+                    className={`${
+                        showChat ? "flex" : "hidden lg:flex"
+                    } w-full lg:w-96 bg-zinc-900 border-t lg:border-t-0 lg:border-l border-zinc-800 flex-col min-h-0 overflow-hidden`}
+                >
                     {/* Streamer info */}
                     <div className="p-4 border-b border-zinc-800 shrink-0">
                         <div className="flex items-center gap-3 mb-3">
@@ -891,13 +1074,22 @@ export default function PublicLivePage() {
                                 />
                             ) : (
                                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white font-bold ring-2 ring-red-500">
-                                    {(stream?.streamer.display_name || stream?.streamer.address || "?").slice(0, 2).toUpperCase()}
+                                    {(
+                                        stream?.streamer.display_name ||
+                                        stream?.streamer.address ||
+                                        "?"
+                                    )
+                                        .slice(0, 2)
+                                        .toUpperCase()}
                                 </div>
                             )}
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <span className="text-white font-medium truncate">
-                                        {stream?.streamer.display_name || formatAddress(stream?.streamer.address || "")}
+                                        {stream?.streamer.display_name ||
+                                            formatAddress(
+                                                stream?.streamer.address || ""
+                                            )}
                                     </span>
                                     {stream?.status === "live" && (
                                         <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse shrink-0">
@@ -905,31 +1097,59 @@ export default function PublicLivePage() {
                                         </span>
                                     )}
                                 </div>
-                                <p className="text-zinc-400 text-sm">{viewerCount} watching</p>
+                                <p className="text-zinc-400 text-sm">
+                                    {viewerCount} watching
+                                </p>
                             </div>
                         </div>
-                        <h1 className="text-lg font-bold text-white">{stream?.title || "Live Stream"}</h1>
+                        <h1 className="text-lg font-bold text-white">
+                            {stream?.title || "Live Stream"}
+                        </h1>
                     </div>
 
                     {/* Chat messages */}
-                    <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+                    <div
+                        ref={chatContainerRef}
+                        className="flex-1 overflow-y-auto p-4 space-y-3"
+                    >
                         {messages.length === 0 ? (
                             <div className="text-center text-zinc-500 py-8">
-                                <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                <svg
+                                    className="w-12 h-12 mx-auto mb-3 opacity-50"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={1.5}
+                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                    />
                                 </svg>
                                 <p className="text-sm">No messages yet</p>
-                                <p className="text-xs mt-1">Be the first to say something!</p>
+                                <p className="text-xs mt-1">
+                                    Be the first to say something!
+                                </p>
                             </div>
                         ) : (
-                                            messages.map((msg) => (
-                                <div key={msg.id} className={msg.type === "reaction" ? "flex justify-center" : ""}>
+                            messages.map((msg) => (
+                                <div
+                                    key={msg.id}
+                                    className={
+                                        msg.type === "reaction"
+                                            ? "flex justify-center"
+                                            : ""
+                                    }
+                                >
                                     {msg.type === "reaction" ? (
                                         <div className="flex items-center gap-2 text-sm">
                                             <span className="text-zinc-500">
                                                 {getDisplayName(msg)}
                                             </span>
-                                            <span className="text-2xl">{msg.message}</span>
+                                            <span className="text-2xl">
+                                                {msg.message}
+                                            </span>
                                         </div>
                                     ) : (
                                         <div className="flex gap-2">
@@ -941,7 +1161,9 @@ export default function PublicLivePage() {
                                                 />
                                             ) : (
                                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-medium shrink-0">
-                                                    {getDisplayName(msg).slice(0, 2).toUpperCase()}
+                                                    {getDisplayName(msg)
+                                                        .slice(0, 2)
+                                                        .toUpperCase()}
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0">
@@ -950,10 +1172,17 @@ export default function PublicLivePage() {
                                                         {getDisplayName(msg)}
                                                     </span>
                                                     <span className="text-zinc-600 text-xs">
-                                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                        {formatTimeInTimezone(
+                                                            new Date(
+                                                                msg.created_at
+                                                            ),
+                                                            userTimezone
+                                                        )}
                                                     </span>
                                                 </div>
-                                                <p className="text-white text-sm break-words">{msg.message}</p>
+                                                <p className="text-white text-sm break-words">
+                                                    {msg.message}
+                                                </p>
                                             </div>
                                         </div>
                                     )}
@@ -969,7 +1198,9 @@ export default function PublicLivePage() {
                                 <input
                                     type="text"
                                     value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    onChange={(e) =>
+                                        setNewMessage(e.target.value)
+                                    }
                                     placeholder="Say something..."
                                     maxLength={500}
                                     className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500 text-sm"
@@ -984,12 +1215,20 @@ export default function PublicLivePage() {
                             </form>
                         ) : (
                             <div className="text-center">
-                                <p className="text-zinc-400 text-sm mb-3">Sign in to chat and send reactions</p>
+                                <p className="text-zinc-400 text-sm mb-3">
+                                    Sign in to chat and send reactions
+                                </p>
                                 <a
                                     href="/"
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-semibold rounded-lg hover:from-orange-400 hover:to-red-400 transition-all"
                                 >
-                                    <Image src="/icons/icon-96x96.png" alt="" width={16} height={16} className="rounded" />
+                                    <Image
+                                        src="/icons/icon-96x96.png"
+                                        alt=""
+                                        width={16}
+                                        height={16}
+                                        className="rounded"
+                                    />
                                     Sign In to Chat
                                 </a>
                             </div>

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useModeration, MUTE_DURATION_OPTIONS } from "@/hooks/useModeration";
 import { useUserResolver } from "@/hooks/useUserResolver";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimestamp } from "@/lib/timezone";
 import type { Moderator, MutedUser } from "@/app/api/moderation/route";
 
 interface ModerationPanelProps {
@@ -12,7 +14,9 @@ interface ModerationPanelProps {
     userAddress: string;
     channelId?: string | null;
     channelName?: string;
-    getUserInfo?: (address: string) => { name: string | null; avatar: string | null } | null;
+    getUserInfo?: (
+        address: string
+    ) => { name: string | null; avatar: string | null } | null;
 }
 
 export function ModerationPanel({
@@ -35,7 +39,9 @@ export function ModerationPanel({
         refresh,
     } = useModeration(userAddress, channelId);
 
-    const [activeTab, setActiveTab] = useState<"moderators" | "muted">("moderators");
+    const [activeTab, setActiveTab] = useState<"moderators" | "muted">(
+        "moderators"
+    );
     const [showAddMod, setShowAddMod] = useState(false);
     const [newModPermissions, setNewModPermissions] = useState({
         canPin: true,
@@ -44,6 +50,7 @@ export function ModerationPanel({
         canManageMods: false,
     });
     const [addingMod, setAddingMod] = useState(false);
+    const userTimezone = useUserTimezone();
 
     // User resolver for adding moderators (supports address, ENS, Spritz username)
     const {
@@ -66,7 +73,7 @@ export function ModerationPanel({
 
     const formatTime = (dateStr: string) => {
         const date = new Date(dateStr);
-        return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return formatTimestamp(date, userTimezone, "MMM d, h:mm a");
     };
 
     const handleAddMod = async () => {
@@ -126,8 +133,18 @@ export function ModerationPanel({
                     <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
                         <div>
                             <h2 className="text-white font-semibold flex items-center gap-2">
-                                <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                <svg
+                                    className="w-5 h-5 text-amber-500"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                                    />
                                 </svg>
                                 Moderation
                             </h2>
@@ -139,8 +156,18 @@ export function ModerationPanel({
                             onClick={onClose}
                             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
                         >
-                            <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <svg
+                                className="w-5 h-5 text-zinc-400"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
                             </svg>
                         </button>
                     </div>
@@ -182,11 +209,23 @@ export function ModerationPanel({
                                     <div className="mb-4">
                                         {!showAddMod ? (
                                             <button
-                                                onClick={() => setShowAddMod(true)}
+                                                onClick={() =>
+                                                    setShowAddMod(true)
+                                                }
                                                 className="w-full py-3 px-4 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                                             >
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                <svg
+                                                    className="w-5 h-5"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                                                    />
                                                 </svg>
                                                 Add Moderator
                                             </button>
@@ -196,17 +235,21 @@ export function ModerationPanel({
                                                     <input
                                                         type="text"
                                                         value={modInput}
-                                                        onChange={(e) => setModInput(e.target.value)}
+                                                        onChange={(e) =>
+                                                            setModInput(
+                                                                e.target.value
+                                                            )
+                                                        }
                                                         placeholder="Address, ENS, or @username"
                                                         className={`w-full bg-zinc-900 border rounded-lg px-4 py-3 text-white placeholder:text-zinc-500 focus:outline-none transition-colors ${
-                                                            modResolveError 
-                                                                ? "border-red-500/50 focus:border-red-500" 
-                                                                : isModInputValid 
-                                                                    ? "border-emerald-500/50 focus:border-emerald-500" 
-                                                                    : "border-zinc-700 focus:border-amber-500"
+                                                            modResolveError
+                                                                ? "border-red-500/50 focus:border-red-500"
+                                                                : isModInputValid
+                                                                ? "border-emerald-500/50 focus:border-emerald-500"
+                                                                : "border-zinc-700 focus:border-amber-500"
                                                         }`}
                                                     />
-                                                    
+
                                                     {/* Resolution feedback */}
                                                     <div className="mt-2 min-h-[20px]">
                                                         {isResolvingMod && (
@@ -215,69 +258,133 @@ export function ModerationPanel({
                                                                 Resolving...
                                                             </div>
                                                         )}
-                                                        {!isResolvingMod && modResolveError && (
-                                                            <p className="text-xs text-red-400">
-                                                                {modResolveError}
-                                                            </p>
-                                                        )}
-                                                        {!isResolvingMod && isModInputValid && modResolvedAddress && (
-                                                            <div className="flex items-center gap-2 text-xs text-emerald-400">
-                                                                <span>✓</span>
-                                                                <span>
-                                                                    {modDisplayName && (
-                                                                        <span className="font-medium">{modDisplayName} • </span>
+                                                        {!isResolvingMod &&
+                                                            modResolveError && (
+                                                                <p className="text-xs text-red-400">
+                                                                    {
+                                                                        modResolveError
+                                                                    }
+                                                                </p>
+                                                            )}
+                                                        {!isResolvingMod &&
+                                                            isModInputValid &&
+                                                            modResolvedAddress && (
+                                                                <div className="flex items-center gap-2 text-xs text-emerald-400">
+                                                                    <span>
+                                                                        ✓
+                                                                    </span>
+                                                                    <span>
+                                                                        {modDisplayName && (
+                                                                            <span className="font-medium">
+                                                                                {
+                                                                                    modDisplayName
+                                                                                }{" "}
+                                                                                •{" "}
+                                                                            </span>
+                                                                        )}
+                                                                        <code className="text-emerald-400/70">
+                                                                            {modResolvedAddress.slice(
+                                                                                0,
+                                                                                6
+                                                                            )}
+                                                                            ...
+                                                                            {modResolvedAddress.slice(
+                                                                                -4
+                                                                            )}
+                                                                        </code>
+                                                                    </span>
+                                                                    {modResolvedType ===
+                                                                        "ens" && (
+                                                                        <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px]">
+                                                                            ENS
+                                                                        </span>
                                                                     )}
-                                                                    <code className="text-emerald-400/70">
-                                                                        {modResolvedAddress.slice(0, 6)}...{modResolvedAddress.slice(-4)}
-                                                                    </code>
-                                                                </span>
-                                                                {modResolvedType === "ens" && (
-                                                                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px]">ENS</span>
-                                                                )}
-                                                                {modResolvedType === "username" && (
-                                                                    <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded text-[10px]">Spritz</span>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                                    {modResolvedType ===
+                                                                        "username" && (
+                                                                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded text-[10px]">
+                                                                            Spritz
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                     </div>
                                                 </div>
 
                                                 {/* Help text */}
                                                 <p className="text-[10px] text-zinc-500">
-                                                    Enter a wallet address (0x...), ENS name (vitalik.eth), or Spritz username (@username)
+                                                    Enter a wallet address
+                                                    (0x...), ENS name
+                                                    (vitalik.eth), or Spritz
+                                                    username (@username)
                                                 </p>
 
                                                 <div className="space-y-2">
-                                                    <p className="text-xs text-zinc-500 font-medium">Permissions:</p>
+                                                    <p className="text-xs text-zinc-500 font-medium">
+                                                        Permissions:
+                                                    </p>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         {[
-                                                            { key: "canPin", label: "Pin Messages" },
-                                                            { key: "canDelete", label: "Delete Messages" },
-                                                            { key: "canMute", label: "Mute Users" },
-                                                            { key: "canManageMods", label: "Manage Mods" },
-                                                        ].map(({ key, label }) => (
-                                                            <label key={key} className="flex items-center gap-2 text-sm text-zinc-300">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={newModPermissions[key as keyof typeof newModPermissions]}
-                                                                    onChange={(e) =>
-                                                                        setNewModPermissions((prev) => ({
-                                                                            ...prev,
-                                                                            [key]: e.target.checked,
-                                                                        }))
-                                                                    }
-                                                                    className="w-4 h-4 rounded bg-zinc-700 border-zinc-600 text-amber-500 focus:ring-amber-500"
-                                                                />
-                                                                {label}
-                                                            </label>
-                                                        ))}
+                                                            {
+                                                                key: "canPin",
+                                                                label: "Pin Messages",
+                                                            },
+                                                            {
+                                                                key: "canDelete",
+                                                                label: "Delete Messages",
+                                                            },
+                                                            {
+                                                                key: "canMute",
+                                                                label: "Mute Users",
+                                                            },
+                                                            {
+                                                                key: "canManageMods",
+                                                                label: "Manage Mods",
+                                                            },
+                                                        ].map(
+                                                            ({
+                                                                key,
+                                                                label,
+                                                            }) => (
+                                                                <label
+                                                                    key={key}
+                                                                    className="flex items-center gap-2 text-sm text-zinc-300"
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={
+                                                                            newModPermissions[
+                                                                                key as keyof typeof newModPermissions
+                                                                            ]
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) =>
+                                                                            setNewModPermissions(
+                                                                                (
+                                                                                    prev
+                                                                                ) => ({
+                                                                                    ...prev,
+                                                                                    [key]: e
+                                                                                        .target
+                                                                                        .checked,
+                                                                                })
+                                                                            )
+                                                                        }
+                                                                        className="w-4 h-4 rounded bg-zinc-700 border-zinc-600 text-amber-500 focus:ring-amber-500"
+                                                                    />
+                                                                    {label}
+                                                                </label>
+                                                            )
+                                                        )}
                                                     </div>
                                                 </div>
 
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={() => {
-                                                            setShowAddMod(false);
+                                                            setShowAddMod(
+                                                                false
+                                                            );
                                                             clearModInput();
                                                         }}
                                                         className="flex-1 py-2 px-4 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors"
@@ -286,10 +393,18 @@ export function ModerationPanel({
                                                     </button>
                                                     <button
                                                         onClick={handleAddMod}
-                                                        disabled={!isModInputValid || isResolvingMod || addingMod}
+                                                        disabled={
+                                                            !isModInputValid ||
+                                                            isResolvingMod ||
+                                                            addingMod
+                                                        }
                                                         className="flex-1 py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                                                     >
-                                                        {addingMod ? "Adding..." : isResolvingMod ? "Resolving..." : "Add"}
+                                                        {addingMod
+                                                            ? "Adding..."
+                                                            : isResolvingMod
+                                                            ? "Resolving..."
+                                                            : "Add"}
                                                     </button>
                                                 </div>
                                             </div>
@@ -301,13 +416,28 @@ export function ModerationPanel({
                                 {moderators.length === 0 ? (
                                     <div className="text-center py-8">
                                         <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-3">
-                                            <svg className="w-6 h-6 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                            <svg
+                                                className="w-6 h-6 text-zinc-500"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                                                />
                                             </svg>
                                         </div>
-                                        <p className="text-zinc-400 text-sm">No moderators yet</p>
+                                        <p className="text-zinc-400 text-sm">
+                                            No moderators yet
+                                        </p>
                                         {permissions.isAdmin && (
-                                            <p className="text-zinc-500 text-xs mt-1">Add trusted community members above</p>
+                                            <p className="text-zinc-500 text-xs mt-1">
+                                                Add trusted community members
+                                                above
+                                            </p>
                                         )}
                                     </div>
                                 ) : (
@@ -318,11 +448,17 @@ export function ModerationPanel({
                                                 className="bg-zinc-800/50 rounded-xl p-4 flex items-center gap-3"
                                             >
                                                 <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-sm">
-                                                    {formatAddress(mod.user_address).slice(0, 2).toUpperCase()}
+                                                    {formatAddress(
+                                                        mod.user_address
+                                                    )
+                                                        .slice(0, 2)
+                                                        .toUpperCase()}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-white font-medium text-sm truncate">
-                                                        {formatAddress(mod.user_address)}
+                                                        {formatAddress(
+                                                            mod.user_address
+                                                        )}
                                                     </p>
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                         {mod.can_pin && (
@@ -347,21 +483,42 @@ export function ModerationPanel({
                                                         )}
                                                     </div>
                                                     <p className="text-zinc-500 text-[10px] mt-1">
-                                                        Added {formatTime(mod.granted_at)}
+                                                        Added{" "}
+                                                        {formatTime(
+                                                            mod.granted_at
+                                                        )}
                                                     </p>
                                                 </div>
                                                 {permissions.isAdmin && (
                                                     <button
-                                                        onClick={() => handleRemoveMod(mod)}
-                                                        disabled={actionLoading === `demote-${mod.user_address}`}
+                                                        onClick={() =>
+                                                            handleRemoveMod(mod)
+                                                        }
+                                                        disabled={
+                                                            actionLoading ===
+                                                            `demote-${mod.user_address}`
+                                                        }
                                                         className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                                                         title="Remove moderator"
                                                     >
-                                                        {actionLoading === `demote-${mod.user_address}` ? (
+                                                        {actionLoading ===
+                                                        `demote-${mod.user_address}` ? (
                                                             <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
                                                         ) : (
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                                />
                                                             </svg>
                                                         )}
                                                     </button>
@@ -377,13 +534,32 @@ export function ModerationPanel({
                                 {mutedUsers.length === 0 ? (
                                     <div className="text-center py-8">
                                         <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-3">
-                                            <svg className="w-6 h-6 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                            <svg
+                                                className="w-6 h-6 text-zinc-500"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                                                />
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                                                />
                                             </svg>
                                         </div>
-                                        <p className="text-zinc-400 text-sm">No muted users</p>
-                                        <p className="text-zinc-500 text-xs mt-1">The community is behaving nicely!</p>
+                                        <p className="text-zinc-400 text-sm">
+                                            No muted users
+                                        </p>
+                                        <p className="text-zinc-500 text-xs mt-1">
+                                            The community is behaving nicely!
+                                        </p>
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
@@ -393,38 +569,73 @@ export function ModerationPanel({
                                                 className="bg-zinc-800/50 rounded-xl p-4 flex items-center gap-3"
                                             >
                                                 <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-400 font-bold text-sm">
-                                                    {formatAddress(mute.user_address).slice(0, 2).toUpperCase()}
+                                                    {formatAddress(
+                                                        mute.user_address
+                                                    )
+                                                        .slice(0, 2)
+                                                        .toUpperCase()}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-white font-medium text-sm truncate">
-                                                        {formatAddress(mute.user_address)}
+                                                        {formatAddress(
+                                                            mute.user_address
+                                                        )}
                                                     </p>
                                                     {mute.reason && (
                                                         <p className="text-zinc-400 text-xs truncate">
-                                                            Reason: {mute.reason}
+                                                            Reason:{" "}
+                                                            {mute.reason}
                                                         </p>
                                                     )}
                                                     <p className="text-zinc-500 text-[10px] mt-1">
                                                         {mute.muted_until ? (
-                                                            <>Until {formatTime(mute.muted_until)}</>
+                                                            <>
+                                                                Until{" "}
+                                                                {formatTime(
+                                                                    mute.muted_until
+                                                                )}
+                                                            </>
                                                         ) : (
-                                                            <span className="text-red-400">Permanent</span>
+                                                            <span className="text-red-400">
+                                                                Permanent
+                                                            </span>
                                                         )}
-                                                        {" • "}By {formatAddress(mute.muted_by)}
+                                                        {" • "}By{" "}
+                                                        {formatAddress(
+                                                            mute.muted_by
+                                                        )}
                                                     </p>
                                                 </div>
                                                 {permissions.canMute && (
                                                     <button
-                                                        onClick={() => handleUnmute(mute)}
-                                                        disabled={actionLoading === `unmute-${mute.user_address}`}
+                                                        onClick={() =>
+                                                            handleUnmute(mute)
+                                                        }
+                                                        disabled={
+                                                            actionLoading ===
+                                                            `unmute-${mute.user_address}`
+                                                        }
                                                         className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
                                                         title="Unmute user"
                                                     >
-                                                        {actionLoading === `unmute-${mute.user_address}` ? (
+                                                        {actionLoading ===
+                                                        `unmute-${mute.user_address}` ? (
                                                             <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
                                                         ) : (
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                            <svg
+                                                                className="w-4 h-4"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                                                                />
                                                             </svg>
                                                         )}
                                                     </button>
@@ -441,11 +652,14 @@ export function ModerationPanel({
                     <div className="p-4 border-t border-zinc-800">
                         <div className="flex items-center justify-between text-xs text-zinc-500">
                             <span>
-                                Your role: {
-                                    permissions.isSuperAdmin ? "Super Admin" :
-                                    permissions.isAdmin ? "Admin" :
-                                    permissions.isModerator ? "Moderator" : "Member"
-                                }
+                                Your role:{" "}
+                                {permissions.isSuperAdmin
+                                    ? "Super Admin"
+                                    : permissions.isAdmin
+                                    ? "Admin"
+                                    : permissions.isModerator
+                                    ? "Moderator"
+                                    : "Member"}
                             </span>
                             <button
                                 onClick={refresh}
@@ -512,12 +726,15 @@ export function QuickMuteDialog({
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl">
                     <h3 className="text-white font-semibold mb-1">Mute User</h3>
                     <p className="text-zinc-400 text-sm mb-4">
-                        Mute <span className="text-white">{targetName}</span> from sending messages
+                        Mute <span className="text-white">{targetName}</span>{" "}
+                        from sending messages
                     </p>
 
                     <div className="space-y-3">
                         <div>
-                            <label className="block text-xs text-zinc-500 mb-1.5">Duration</label>
+                            <label className="block text-xs text-zinc-500 mb-1.5">
+                                Duration
+                            </label>
                             <select
                                 value={duration}
                                 onChange={(e) => setDuration(e.target.value)}
@@ -532,7 +749,9 @@ export function QuickMuteDialog({
                         </div>
 
                         <div>
-                            <label className="block text-xs text-zinc-500 mb-1.5">Reason (optional)</label>
+                            <label className="block text-xs text-zinc-500 mb-1.5">
+                                Reason (optional)
+                            </label>
                             <input
                                 type="text"
                                 value={reason}

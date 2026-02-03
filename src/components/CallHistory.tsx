@@ -5,6 +5,8 @@ import { formatCallDuration, getRelativeTime } from "@/hooks/useCallHistory";
 import type { CallHistoryEntry } from "@/app/api/calls/route";
 import type { Address } from "viem";
 import { getDisplayName as getBaseDisplayName } from "@/utils/address";
+import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { formatTimestamp } from "@/lib/timezone";
 
 type Friend = {
     id: string;
@@ -37,6 +39,7 @@ export function CallHistory({
     onCall,
     isCallActive,
 }: CallHistoryProps) {
+    const userTimezone = useUserTimezone();
 
     // Helper to find friend by address
     const getFriendByAddress = (address: string): Friend | undefined => {
@@ -50,12 +53,15 @@ export function CallHistory({
     const getDisplayName = (address: string): string => {
         const friend = getFriendByAddress(address);
         if (friend) {
-            return getBaseDisplayName({
-                address: friend.address,
-                ensName: friend.ensName,
-                username: friend.reachUsername,
-                nickname: friend.nickname,
-            }, true); // includeNickname = true for friends
+            return getBaseDisplayName(
+                {
+                    address: friend.address,
+                    ensName: friend.ensName,
+                    username: friend.reachUsername,
+                    nickname: friend.nickname,
+                },
+                true
+            ); // includeNickname = true for friends
         }
         return getBaseDisplayName({ address });
     };
@@ -79,7 +85,7 @@ export function CallHistory({
     // Get status icon and color
     const getStatusInfo = (call: CallHistoryEntry) => {
         const outgoing = isOutgoing(call);
-        
+
         switch (call.status) {
             case "completed":
                 return {
@@ -142,13 +148,17 @@ export function CallHistory({
                 <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full bg-zinc-800/50 flex items-center justify-center">
                     <span className="text-2xl sm:text-3xl">📞</span>
                 </div>
-                <h3 className="text-base sm:text-lg font-medium text-white mb-1.5 sm:mb-2">No Call History</h3>
+                <h3 className="text-base sm:text-lg font-medium text-white mb-1.5 sm:mb-2">
+                    No Call History
+                </h3>
                 <p className="text-zinc-500 text-xs sm:text-sm max-w-xs mx-auto">
                     Your voice and video calls with friends will appear here.
                 </p>
                 {friends.length > 0 && (
                     <div className="mt-4 sm:mt-6">
-                        <p className="text-zinc-400 text-xs sm:text-sm mb-2 sm:mb-3">Quick call a friend:</p>
+                        <p className="text-zinc-400 text-xs sm:text-sm mb-2 sm:mb-3">
+                            Quick call a friend:
+                        </p>
                         <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
                             {friends.slice(0, 4).map((friend) => (
                                 <button
@@ -165,11 +175,18 @@ export function CallHistory({
                                         />
                                     ) : (
                                         <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-[10px] sm:text-xs text-white">
-                                            {(friend.nickname || friend.reachUsername || friend.ensName || friend.address)?.[0]?.toUpperCase() || "?"}
+                                            {(friend.nickname ||
+                                                friend.reachUsername ||
+                                                friend.ensName ||
+                                                friend.address)?.[0]?.toUpperCase() ||
+                                                "?"}
                                         </div>
                                     )}
                                     <span className="text-xs sm:text-sm text-white">
-                                        {friend.nickname || friend.reachUsername || friend.ensName || `${friend.address.slice(0, 6)}...`}
+                                        {friend.nickname ||
+                                            friend.reachUsername ||
+                                            friend.ensName ||
+                                            `${friend.address.slice(0, 6)}...`}
                                     </span>
                                 </button>
                             ))}
@@ -194,13 +211,10 @@ export function CallHistory({
     const yesterday = new Date(Date.now() - 86400000).toDateString();
 
     const getDateLabel = (dateString: string): string => {
+        const d = new Date(dateString);
         if (dateString === today) return "Today";
         if (dateString === yesterday) return "Yesterday";
-        return new Date(dateString).toLocaleDateString(undefined, {
-            weekday: "long",
-            month: "short",
-            day: "numeric",
-        });
+        return formatTimestamp(d, userTimezone, "EEEE, MMM d");
     };
 
     return (
@@ -225,7 +239,8 @@ export function CallHistory({
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.05 }}
                                         className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl transition-colors group ${
-                                            call.status === "missed" || call.status === "declined"
+                                            call.status === "missed" ||
+                                            call.status === "declined"
                                                 ? "bg-red-500/5 hover:bg-red-500/10 border border-red-500/10"
                                                 : "bg-zinc-800/30 sm:bg-zinc-800/30 hover:bg-zinc-800/50"
                                         }`}
@@ -241,14 +256,19 @@ export function CallHistory({
                                             ) : (
                                                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
                                                     <span className="text-sm sm:text-lg text-white font-medium">
-                                                        {getDisplayName(otherParty)[0]?.toUpperCase() || "?"}
+                                                        {getDisplayName(
+                                                            otherParty
+                                                        )[0]?.toUpperCase() ||
+                                                            "?"}
                                                     </span>
                                                 </div>
                                             )}
                                             {/* Call type badge */}
                                             <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-zinc-900 flex items-center justify-center">
                                                 <span className="text-[10px] sm:text-xs">
-                                                    {call.call_type === "video" ? "🎥" : "📞"}
+                                                    {call.call_type === "video"
+                                                        ? "🎥"
+                                                        : "📞"}
                                                 </span>
                                             </div>
                                         </div>
@@ -259,22 +279,38 @@ export function CallHistory({
                                                 <p className="text-sm sm:text-base text-white font-medium truncate">
                                                     {getDisplayName(otherParty)}
                                                 </p>
-                                                <span className={`text-[10px] sm:text-xs ${statusInfo.color}`}>
+                                                <span
+                                                    className={`text-[10px] sm:text-xs ${statusInfo.color}`}
+                                                >
                                                     {statusInfo.icon}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-zinc-500">
-                                                <span className={statusInfo.color}>
+                                                <span
+                                                    className={statusInfo.color}
+                                                >
                                                     {statusInfo.label}
                                                 </span>
-                                                {call.status === "completed" && call.duration_seconds > 0 && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <span>{formatCallDuration(call.duration_seconds)}</span>
-                                                    </>
-                                                )}
-                                                <span className="hidden sm:inline">•</span>
-                                                <span className="hidden sm:inline">{getRelativeTime(call.created_at)}</span>
+                                                {call.status === "completed" &&
+                                                    call.duration_seconds >
+                                                        0 && (
+                                                        <>
+                                                            <span>•</span>
+                                                            <span>
+                                                                {formatCallDuration(
+                                                                    call.duration_seconds
+                                                                )}
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                <span className="hidden sm:inline">
+                                                    •
+                                                </span>
+                                                <span className="hidden sm:inline">
+                                                    {getRelativeTime(
+                                                        call.created_at
+                                                    )}
+                                                </span>
                                             </div>
                                         </div>
 
@@ -282,23 +318,47 @@ export function CallHistory({
                                         {friend && (
                                             <div className="flex items-center gap-1.5 sm:gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                                 <button
-                                                    onClick={() => onCall(friend, false)}
+                                                    onClick={() =>
+                                                        onCall(friend, false)
+                                                    }
                                                     disabled={isCallActive}
                                                     className="p-1.5 sm:p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors disabled:opacity-50"
                                                     title="Voice call"
                                                 >
-                                                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                    <svg
+                                                        className="w-4 h-4 sm:w-5 sm:h-5"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                                        />
                                                     </svg>
                                                 </button>
                                                 <button
-                                                    onClick={() => onCall(friend, true)}
+                                                    onClick={() =>
+                                                        onCall(friend, true)
+                                                    }
                                                     disabled={isCallActive}
                                                     className="p-1.5 sm:p-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors disabled:opacity-50"
                                                     title="Video call"
                                                 >
-                                                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                    <svg
+                                                        className="w-4 h-4 sm:w-5 sm:h-5"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                        />
                                                     </svg>
                                                 </button>
                                             </div>
@@ -313,4 +373,3 @@ export function CallHistory({
         </div>
     );
 }
-
