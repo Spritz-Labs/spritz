@@ -12,8 +12,12 @@ export type GroupInvitation = {
     status: "pending" | "accepted" | "declined";
     createdAt: Date;
     // Group data needed for joining
-    symmetricKey?: string;
+    symmetricKey?: string | null;
     members?: string[];
+    // Password-protected: invitee must enter password to derive key
+    passwordProtected?: boolean;
+    passwordSalt?: string | null;
+    passwordHash?: string | null;
 };
 
 export function useGroupInvitations(userAddress: string | null) {
@@ -42,17 +46,19 @@ export function useGroupInvitations(userAddress: string | null) {
 
             if (data) {
                 setPendingInvitations(
-                    data.map((inv) => ({
-                        id: inv.id,
-                        groupId: inv.group_id,
-                        groupName: inv.group_name,
-                        inviterAddress: inv.inviter_address,
-                        inviteeAddress: inv.invitee_address,
-                        status: inv.status,
-                        createdAt: new Date(inv.created_at),
-                        // Include group data for joining
-                        symmetricKey: inv.symmetric_key,
-                        members: inv.members,
+                    data.map((inv: Record<string, unknown>) => ({
+                        id: String(inv.id ?? ""),
+                        groupId: String(inv.group_id ?? ""),
+                        groupName: String(inv.group_name ?? ""),
+                        inviterAddress: String(inv.inviter_address ?? ""),
+                        inviteeAddress: String(inv.invitee_address ?? ""),
+                        status: (inv.status as "pending" | "accepted" | "declined") ?? "pending",
+                        createdAt: new Date((inv.created_at as string) ?? 0),
+                        symmetricKey: (inv.symmetric_key as string | null) ?? undefined,
+                        members: inv.members as string[] | undefined,
+                        passwordProtected: inv.password_protected as boolean | undefined,
+                        passwordSalt: (inv.password_salt as string | null) ?? undefined,
+                        passwordHash: (inv.password_hash as string | null) ?? undefined,
                     }))
                 );
             }
@@ -64,28 +70,41 @@ export function useGroupInvitations(userAddress: string | null) {
     }, [userAddress]);
 
     // Send invitations when creating a group
+    // For password-protected groups: pass passwordProtected, passwordSalt, passwordHash; symmetricKey is not sent
     const sendInvitations = useCallback(
         async (
             groupId: string,
             groupName: string,
             inviteeAddresses: string[],
-            symmetricKey?: string,
-            members?: string[]
+            symmetricKey?: string | null,
+            members?: string[],
+            passwordProtected?: boolean,
+            passwordSalt?: string,
+            passwordHash?: string
         ): Promise<boolean> => {
             if (!isSupabaseConfigured || !supabase || !userAddress)
                 return false;
 
             try {
-                const invitations = inviteeAddresses.map((address) => ({
-                    group_id: groupId,
-                    group_name: groupName,
-                    inviter_address: userAddress.toLowerCase(),
-                    invitee_address: address.toLowerCase(),
-                    status: "pending",
-                    // Include group data needed for joining
-                    symmetric_key: symmetricKey,
-                    members: members,
-                }));
+                const invitations = inviteeAddresses.map((address) => {
+                    const inv: Record<string, unknown> = {
+                        group_id: groupId,
+                        group_name: groupName,
+                        inviter_address: userAddress.toLowerCase(),
+                        invitee_address: address.toLowerCase(),
+                        status: "pending",
+                        members: members ?? [],
+                    };
+                    if (passwordProtected && passwordSalt && passwordHash) {
+                        inv.password_protected = true;
+                        inv.password_salt = passwordSalt;
+                        inv.password_hash = passwordHash;
+                        inv.symmetric_key = null;
+                    } else {
+                        inv.symmetric_key = symmetricKey ?? null;
+                    }
+                    return inv;
+                });
 
                 const { error } = await supabase
                     .from("shout_group_invitations")
@@ -117,6 +136,9 @@ export function useGroupInvitations(userAddress: string | null) {
             groupName?: string;
             symmetricKey?: string;
             members?: string[];
+            passwordProtected?: boolean;
+            passwordSalt?: string;
+            passwordHash?: string;
             error?: string;
         }> => {
             if (!isSupabaseConfigured || !supabase || !userAddress) {
@@ -160,8 +182,17 @@ export function useGroupInvitations(userAddress: string | null) {
                     success: true,
                     groupId: invitation.group_id,
                     groupName: invitation.group_name,
-                    symmetricKey: invitation.symmetric_key,
-                    members: invitation.members,
+                    symmetricKey: invitation.symmetric_key ?? undefined,
+                    members: invitation.members as string[] | undefined,
+                    passwordProtected:
+                        (invitation as { password_protected?: boolean })
+                            .password_protected ?? false,
+                    passwordSalt:
+                        (invitation as { password_salt?: string | null })
+                            .password_salt ?? undefined,
+                    passwordHash:
+                        (invitation as { password_hash?: string | null })
+                            .password_hash ?? undefined,
                 };
             } catch (err) {
                 console.error("[GroupInvitations] Accept error:", err);
@@ -225,11 +256,3 @@ export function useGroupInvitations(userAddress: string | null) {
         declineInvitation,
     };
 }
-
-
-
-
-
-
-
-

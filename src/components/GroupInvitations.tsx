@@ -12,6 +12,9 @@ interface GroupInvitationsProps {
         groupName?: string;
         symmetricKey?: string;
         members?: string[];
+        passwordProtected?: boolean;
+        passwordSalt?: string;
+        passwordHash?: string;
         error?: string;
     }>;
     onDecline: (invitationId: string, groupId: string) => Promise<boolean>;
@@ -19,6 +22,15 @@ interface GroupInvitationsProps {
         groupId: string,
         groupData?: { name: string; symmetricKey: string; members: string[] }
     ) => Promise<void>;
+    /** When accepting a password-protected invite: verify password and join with derived key */
+    onAcceptWithPassword?: (
+        groupId: string,
+        groupName: string,
+        members: string[],
+        passwordSalt: string,
+        passwordHash: string,
+        password: string
+    ) => Promise<boolean>;
     isLoading?: boolean;
 }
 
@@ -27,10 +39,20 @@ export function GroupInvitations({
     onAccept,
     onDecline,
     onJoinGroup,
+    onAcceptWithPassword,
     isLoading,
 }: GroupInvitationsProps) {
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [passwordModal, setPasswordModal] = useState<{
+        groupId: string;
+        groupName: string;
+        members: string[];
+        passwordSalt: string;
+        passwordHash: string;
+    } | null>(null);
+    const [passwordInput, setPasswordInput] = useState("");
+    const [passwordError, setPasswordError] = useState<string | null>(null);
 
     const formatAddress = (address: string) =>
         `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -42,16 +64,35 @@ export function GroupInvitations({
         try {
             const result = await onAccept(invitation.id);
             if (result.success && result.groupId) {
-                // Join the Waku group with the group data
-                const groupData =
-                    result.symmetricKey && result.members && result.groupName
-                        ? {
-                              name: result.groupName,
-                              symmetricKey: result.symmetricKey,
-                              members: result.members,
-                          }
-                        : undefined;
-                await onJoinGroup(result.groupId, groupData);
+                if (
+                    result.passwordProtected &&
+                    result.passwordSalt &&
+                    result.passwordHash &&
+                    result.members &&
+                    result.groupName &&
+                    onAcceptWithPassword
+                ) {
+                    setPasswordModal({
+                        groupId: result.groupId,
+                        groupName: result.groupName,
+                        members: result.members,
+                        passwordSalt: result.passwordSalt,
+                        passwordHash: result.passwordHash,
+                    });
+                    setPasswordInput("");
+                    setPasswordError(null);
+                } else if (
+                    result.symmetricKey &&
+                    result.members &&
+                    result.groupName
+                ) {
+                    const groupData = {
+                        name: result.groupName,
+                        symmetricKey: result.symmetricKey,
+                        members: result.members,
+                    };
+                    await onJoinGroup(result.groupId, groupData);
+                }
             } else if (!result.success) {
                 setError(result.error || "Failed to accept invitation");
             }
@@ -59,6 +100,26 @@ export function GroupInvitations({
             setError("Failed to accept invitation");
         } finally {
             setProcessingId(null);
+        }
+    };
+
+    const handlePasswordSubmit = async () => {
+        if (!passwordModal || !onAcceptWithPassword || !passwordInput.trim())
+            return;
+        setPasswordError(null);
+        const ok = await onAcceptWithPassword(
+            passwordModal.groupId,
+            passwordModal.groupName,
+            passwordModal.members,
+            passwordModal.passwordSalt,
+            passwordModal.passwordHash,
+            passwordInput.trim()
+        );
+        if (ok) {
+            setPasswordModal(null);
+            setPasswordInput("");
+        } else {
+            setPasswordError("Wrong password");
         }
     };
 
@@ -143,13 +204,19 @@ export function GroupInvitations({
                                 <p className="text-zinc-500 text-xs mt-1">
                                     {invitation.createdAt.toLocaleDateString()}
                                 </p>
+                                {invitation.passwordProtected && (
+                                    <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                        🔒 Password protected
+                                    </span>
+                                )}
                             </div>
                         </div>
 
                         {/* Info text */}
                         <p className="text-zinc-500 text-xs mt-3">
-                            You&apos;ve been added to this group. Accept to show
-                            it in your list, or decline to leave.
+                            {invitation.passwordProtected
+                                ? "Enter the group password when you accept to decrypt messages."
+                                : "You've been added to this group. Accept to show it in your list, or decline to leave."}
                         </p>
 
                         {/* Actions */}
@@ -196,6 +263,71 @@ export function GroupInvitations({
                         </div>
                     </motion.div>
                 ))}
+            </AnimatePresence>
+
+            {/* Password modal for password-protected invitations */}
+            <AnimatePresence>
+                {passwordModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                        onClick={() => setPasswordModal(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm"
+                        >
+                            <h3 className="text-lg font-semibold text-white mb-1">
+                                Enter group password
+                            </h3>
+                            <p className="text-zinc-400 text-sm mb-4">
+                                &ldquo;{passwordModal.groupName}&rdquo; is
+                                password protected.
+                            </p>
+                            <input
+                                type="password"
+                                value={passwordInput}
+                                onChange={(e) => {
+                                    setPasswordInput(e.target.value);
+                                    setPasswordError(null);
+                                }}
+                                onKeyDown={(e) =>
+                                    e.key === "Enter" && handlePasswordSubmit()
+                                }
+                                placeholder="Password"
+                                className="w-full py-2.5 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 text-sm mb-2"
+                                autoFocus
+                            />
+                            {passwordError && (
+                                <p className="text-red-400 text-xs mb-2">
+                                    {passwordError}
+                                </p>
+                            )}
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setPasswordModal(null)}
+                                    className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handlePasswordSubmit}
+                                    disabled={!passwordInput.trim()}
+                                    className="flex-1 py-2.5 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white text-sm font-medium disabled:opacity-50"
+                                >
+                                    Join
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
             </AnimatePresence>
         </div>
     );

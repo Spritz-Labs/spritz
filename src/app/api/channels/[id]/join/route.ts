@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isAddress, getAddress, createPublicClient, http } from "viem";
+import { mainnet } from "viem/chains";
+import { getRpcUrl } from "@/lib/rpc";
 
 const POAP_API_BASE = "https://api.poap.tech";
 
@@ -24,6 +27,23 @@ async function addressHoldsPoap(
     return list.length > 0;
 }
 
+/** Resolve ENS to address; return lowercase 0x address. If input is already 0x, normalize to lowercase. */
+async function resolveToAddress(input: string): Promise<string | null> {
+    const trimmed = (input || "").trim();
+    if (!trimmed) return null;
+    if (isAddress(trimmed)) return trimmed.toLowerCase();
+    try {
+        const client = createPublicClient({
+            chain: mainnet,
+            transport: http(getRpcUrl(1)),
+        });
+        const resolved = await client.getEnsAddress({ name: trimmed });
+        return resolved ? resolved.toLowerCase() : null;
+    } catch {
+        return null;
+    }
+}
+
 // POST /api/channels/[id]/join - Join a channel (POAP channels require holding the POAP)
 export async function POST(
     request: NextRequest,
@@ -35,14 +55,20 @@ export async function POST(
         const body = await request.json();
         const { userAddress } = body;
 
-        if (!userAddress) {
+        if (!userAddress || typeof userAddress !== "string") {
             return NextResponse.json(
                 { error: "User address is required" },
                 { status: 400 }
             );
         }
 
-        const normalizedAddress = userAddress.toLowerCase();
+        const normalizedAddress = await resolveToAddress(userAddress);
+        if (!normalizedAddress) {
+            return NextResponse.json(
+                { error: "Invalid address or ENS name. Could not resolve to an Ethereum address." },
+                { status: 400 }
+            );
+        }
 
         // Check if channel exists and if it's a POAP channel
         const { data: channel } = await supabase
@@ -78,23 +104,46 @@ export async function POST(
             }
 
             const addressesToCheck: string[] = [normalizedAddress];
-            const { data: userRow } = await supabase
-                .from("shout_users")
-                .select("smart_wallet_address")
-                .eq("wallet_address", normalizedAddress)
-                .maybeSingle();
+            const lookupKeys = [normalizedAddress];
+            if (
+                typeof userAddress === "string" &&
+                userAddress.trim().toLowerCase() !== normalizedAddress
+            ) {
+                lookupKeys.push(userAddress.trim().toLowerCase());
+            }
+            let userRow: { smart_wallet_address: string | null } | null = null;
+            for (const key of lookupKeys) {
+                const { data } = await supabase
+                    .from("shout_users")
+                    .select("smart_wallet_address")
+                    .eq("wallet_address", key)
+                    .maybeSingle();
+                if (data) {
+                    userRow = data;
+                    break;
+                }
+            }
             if (
                 userRow?.smart_wallet_address &&
                 userRow.smart_wallet_address.toLowerCase() !== normalizedAddress
             ) {
-                addressesToCheck.push(
-                    userRow.smart_wallet_address.toLowerCase()
-                );
+                const smart = userRow.smart_wallet_address.toLowerCase();
+                if (!addressesToCheck.includes(smart)) {
+                    addressesToCheck.push(smart);
+                }
             }
 
             let hasPoap = false;
             for (const addr of addressesToCheck) {
-                const holds = await addressHoldsPoap(addr, poapEventId, apiKey);
+                const holds =
+                    (await addressHoldsPoap(addr, poapEventId, apiKey)) ||
+                    (addr.startsWith("0x") &&
+                        addr.length === 42 &&
+                        (await addressHoldsPoap(
+                            getAddress(addr as `0x${string}`),
+                            poapEventId,
+                            apiKey
+                        )));
                 if (holds) {
                     hasPoap = true;
                     break;
@@ -112,13 +161,27 @@ export async function POST(
             }
         }
 
-        // Check if already a member
-        const { data: existing } = await supabase
-            .from("shout_channel_members")
-            .select("id")
-            .eq("channel_id", id)
-            .eq("user_address", normalizedAddress)
-            .single();
+        // Check if already a member (by resolved address or by original ENS/address)
+        const memberKeys = [normalizedAddress];
+        if (
+            typeof userAddress === "string" &&
+            userAddress.trim().toLowerCase() !== normalizedAddress
+        ) {
+            memberKeys.push(userAddress.trim().toLowerCase());
+        }
+        let existing: { id: string } | null = null;
+        for (const key of memberKeys) {
+            const { data } = await supabase
+                .from("shout_channel_members")
+                .select("id")
+                .eq("channel_id", id)
+                .eq("user_address", key)
+                .maybeSingle();
+            if (data) {
+                existing = data;
+                break;
+            }
+        }
 
         if (existing) {
             return NextResponse.json(

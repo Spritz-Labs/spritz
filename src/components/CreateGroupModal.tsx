@@ -7,11 +7,46 @@ import { getDisplayName as getBaseDisplayName } from "@/utils/address";
 
 // Suggested emojis for group icons
 const GROUP_EMOJIS = [
-    "👥", "💬", "🎯", "🚀", "⚡", "🔥", "💎", "🌟",
-    "🎮", "🎵", "📚", "💼", "🏠", "🌍", "🎨", "🏆",
-    "❤️", "💜", "💙", "💚", "🧡", "💛", "🖤", "🤍",
-    "🐱", "🐶", "🦊", "🐻", "🐼", "🦁", "🐸", "🦄",
-    "☕", "🍕", "🍔", "🍺", "🍷", "🎂", "🍩", "🌮",
+    "👥",
+    "💬",
+    "🎯",
+    "🚀",
+    "⚡",
+    "🔥",
+    "💎",
+    "🌟",
+    "🎮",
+    "🎵",
+    "📚",
+    "💼",
+    "🏠",
+    "🌍",
+    "🎨",
+    "🏆",
+    "❤️",
+    "💜",
+    "💙",
+    "💚",
+    "🧡",
+    "💛",
+    "🖤",
+    "🤍",
+    "🐱",
+    "🐶",
+    "🦊",
+    "🐻",
+    "🐼",
+    "🦁",
+    "🐸",
+    "🦄",
+    "☕",
+    "🍕",
+    "🍔",
+    "🍺",
+    "🍷",
+    "🎂",
+    "🍩",
+    "🌮",
 ];
 
 type Friend = {
@@ -30,7 +65,8 @@ interface CreateGroupModalProps {
     onCreate: (
         memberAddresses: string[],
         groupName: string,
-        emoji?: string
+        emoji?: string,
+        password?: string
     ) => Promise<boolean>;
     isCreating?: boolean;
 }
@@ -49,6 +85,9 @@ export function CreateGroupModal({
     const [selectedEmoji, setSelectedEmoji] = useState<string>("👥");
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [passwordProtect, setPasswordProtect] = useState(false);
+    const [password, setPassword] = useState("");
+    const [passwordConfirm, setPasswordConfirm] = useState("");
 
     // Reset state when modal opens
     useEffect(() => {
@@ -58,6 +97,9 @@ export function CreateGroupModal({
             setSelectedEmoji("👥");
             setShowEmojiPicker(false);
             setError(null);
+            setPasswordProtect(false);
+            setPassword("");
+            setPasswordConfirm("");
         }
     }, [isOpen]);
 
@@ -82,12 +124,23 @@ export function CreateGroupModal({
             setError("Please select at least one friend");
             return;
         }
+        if (passwordProtect) {
+            if (password.length < 8) {
+                setError("Password must be at least 8 characters");
+                return;
+            }
+            if (password !== passwordConfirm) {
+                setError("Passwords do not match");
+                return;
+            }
+        }
 
         setError(null);
         const success = await onCreate(
             Array.from(selectedFriends),
             groupName.trim(),
-            selectedEmoji
+            selectedEmoji,
+            passwordProtect ? password : undefined
         );
         if (success) {
             onClose();
@@ -96,12 +149,15 @@ export function CreateGroupModal({
 
     // Get display name with priority: nickname > ENS > username > address
     const getDisplayName = (friend: Friend) => {
-        return getBaseDisplayName({
-            address: friend.address,
-            ensName: friend.ensName,
-            username: friend.reachUsername,
-            nickname: friend.nickname,
-        }, true); // includeNickname = true for friends
+        return getBaseDisplayName(
+            {
+                address: friend.address,
+                ensName: friend.ensName,
+                username: friend.reachUsername,
+                nickname: friend.nickname,
+            },
+            true
+        ); // includeNickname = true for friends
     };
 
     // Close on escape
@@ -173,12 +229,14 @@ export function CreateGroupModal({
                                 <div className="relative">
                                     <button
                                         type="button"
-                                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                        onClick={() =>
+                                            setShowEmojiPicker(!showEmojiPicker)
+                                        }
                                         className="w-12 h-12 bg-zinc-800 border border-zinc-700 rounded-xl text-2xl hover:bg-zinc-700 hover:border-zinc-600 transition-all flex items-center justify-center"
                                     >
                                         {selectedEmoji}
                                     </button>
-                                    
+
                                     {/* Emoji Picker Dropdown */}
                                     <AnimatePresence>
                                         {showEmojiPicker && (
@@ -188,40 +246,93 @@ export function CreateGroupModal({
                                                 exit={{ opacity: 0, y: -10 }}
                                                 className="absolute top-14 left-0 z-50 bg-zinc-800 border border-zinc-700 rounded-xl p-3 shadow-xl"
                                             >
-                                                <p className="text-xs text-zinc-500 mb-2">Choose an icon</p>
+                                                <p className="text-xs text-zinc-500 mb-2">
+                                                    Choose an icon
+                                                </p>
                                                 <div className="grid grid-cols-8 gap-1 w-[280px]">
-                                                    {GROUP_EMOJIS.map((emoji) => (
-                                                        <button
-                                                            key={emoji}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setSelectedEmoji(emoji);
-                                                                setShowEmojiPicker(false);
-                                                            }}
-                                                            className={`w-8 h-8 text-lg rounded-lg hover:bg-zinc-700 transition-colors flex items-center justify-center ${
-                                                                selectedEmoji === emoji
-                                                                    ? "bg-[#FB8D22]/20 ring-1 ring-[#FB8D22]"
-                                                                    : ""
-                                                            }`}
-                                                        >
-                                                            {emoji}
-                                                        </button>
-                                                    ))}
+                                                    {GROUP_EMOJIS.map(
+                                                        (emoji) => (
+                                                            <button
+                                                                key={emoji}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedEmoji(
+                                                                        emoji
+                                                                    );
+                                                                    setShowEmojiPicker(
+                                                                        false
+                                                                    );
+                                                                }}
+                                                                className={`w-8 h-8 text-lg rounded-lg hover:bg-zinc-700 transition-colors flex items-center justify-center ${
+                                                                    selectedEmoji ===
+                                                                    emoji
+                                                                        ? "bg-[#FB8D22]/20 ring-1 ring-[#FB8D22]"
+                                                                        : ""
+                                                                }`}
+                                                            >
+                                                                {emoji}
+                                                            </button>
+                                                        )
+                                                    )}
                                                 </div>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
                                 </div>
-                                
+
                                 {/* Group Name Input */}
                                 <input
                                     type="text"
                                     value={groupName}
-                                    onChange={(e) => setGroupName(e.target.value)}
+                                    onChange={(e) =>
+                                        setGroupName(e.target.value)
+                                    }
                                     placeholder="Enter group name..."
                                     className="flex-1 py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 focus:ring-2 focus:ring-[#FB8D22]/20 transition-all"
                                 />
                             </div>
+                        </div>
+
+                        {/* Password protect (optional) */}
+                        <div className="mb-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={passwordProtect}
+                                    onChange={(e) =>
+                                        setPasswordProtect(e.target.checked)
+                                    }
+                                    className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-[#FB8D22] focus:ring-[#FB8D22]/50"
+                                />
+                                <span className="text-sm font-medium text-zinc-400">
+                                    Password protect (encrypts messages; only
+                                    members with the password can read)
+                                </span>
+                            </label>
+                            {passwordProtect && (
+                                <div className="mt-3 space-y-2 pl-6">
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) =>
+                                            setPassword(e.target.value)
+                                        }
+                                        placeholder="Group password (min 8 characters)"
+                                        className="w-full py-2.5 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 text-sm"
+                                        autoComplete="new-password"
+                                    />
+                                    <input
+                                        type="password"
+                                        value={passwordConfirm}
+                                        onChange={(e) =>
+                                            setPasswordConfirm(e.target.value)
+                                        }
+                                        placeholder="Confirm password"
+                                        className="w-full py-2.5 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 text-sm"
+                                        autoComplete="new-password"
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         {/* Friends Selection */}
@@ -371,6 +482,3 @@ export function CreateGroupModal({
         </AnimatePresence>
     );
 }
-
-
-

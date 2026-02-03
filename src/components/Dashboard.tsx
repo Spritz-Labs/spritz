@@ -61,6 +61,10 @@ import { type XMTPGroup } from "@/context/WakuProvider";
 import { useGroupCallSignaling } from "@/hooks/useGroupCallSignaling";
 import { useGroupInvitations } from "@/hooks/useGroupInvitations";
 import { GroupInvitations } from "./GroupInvitations";
+import {
+    verifyGroupPassword,
+    deriveKeyFromPassword,
+} from "@/lib/groupPassword";
 import { usePresence } from "@/hooks/usePresence";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
 // Session lock removed - all wallet/vault operations require signatures anyway
@@ -1308,6 +1312,10 @@ function DashboardContent({
                 success: false,
                 error: "Waku not available for Solana wallets",
             }));
+    const unlockGroupWithPassword =
+        wakuContext?.unlockGroupWithPassword ??
+        (() =>
+            Promise.resolve({ success: false, error: "Waku not available" }));
     const addGroupMembers =
         wakuContext?.addGroupMembers ?? (() => Promise.resolve(false));
     const leaveGroup = wakuContext?.leaveGroup ?? (() => Promise.resolve());
@@ -1784,17 +1792,21 @@ function DashboardContent({
         }
     }, [groups.length, syncGroupsCount]);
 
-    // Handler to create a new group
+    // Handler to create a new group (optional password: encrypts with password-derived key; key not stored server-side)
     const handleCreateGroup = async (
         memberAddresses: string[],
         groupName: string,
-        emoji?: string
+        emoji?: string,
+        password?: string
     ): Promise<boolean> => {
         setIsCreatingGroup(true);
         try {
-            // Create the group WITH all members immediately
-            // (Waku requires creator to add members - members can't add themselves)
-            const result = await createGroup(memberAddresses, groupName, emoji);
+            const result = await createGroup(
+                memberAddresses,
+                groupName,
+                emoji,
+                password
+            );
             if (!result.success || !result.groupId) {
                 console.error(
                     "[Dashboard] Failed to create group:",
@@ -1803,23 +1815,23 @@ function DashboardContent({
                 return false;
             }
 
-            // Send invitations with group data so invited users can join
-            // Include symmetric key and members so they can decrypt messages
+            // Send invitations: for password-protected groups send salt/hash so invitees can derive key
             const invitesSent = await sendInvitations(
                 result.groupId,
                 groupName,
                 memberAddresses,
-                result.symmetricKey,
-                result.members
+                result.passwordProtected ? null : result.symmetricKey,
+                result.members,
+                result.passwordProtected ?? false,
+                result.passwordSalt,
+                result.passwordHash
             );
             if (!invitesSent) {
                 console.warn("[Dashboard] Failed to send some invitations");
             }
 
-            // Refresh groups list
             const fetchedGroups = await getGroups();
             setGroups(fetchedGroups);
-
             return true;
         } catch (err) {
             console.error("[Dashboard] Create group error:", err);
@@ -1835,10 +1847,8 @@ function DashboardContent({
         groupData?: { name: string; symmetricKey: string; members: string[] }
     ) => {
         try {
-            // Join the Waku group with group data (needed for invited users)
             const result = await joinGroupById(groupId, groupData);
             if (result.success) {
-                // Refresh groups list
                 const fetchedGroups = await getGroups();
                 setGroups(fetchedGroups);
             }
@@ -1847,8 +1857,52 @@ function DashboardContent({
         }
     };
 
-    // Handler to open a group chat
+    // Handler for password-protected invitation: verify password, derive key, join group
+    const handleAcceptWithPassword = async (
+        groupId: string,
+        groupName: string,
+        members: string[],
+        passwordSalt: string,
+        passwordHash: string,
+        password: string
+    ): Promise<boolean> => {
+        try {
+            const valid = await verifyGroupPassword(
+                password,
+                passwordSalt,
+                passwordHash
+            );
+            if (!valid) return false;
+            const symmetricKey = await deriveKeyFromPassword(
+                password,
+                passwordSalt
+            );
+            await handleJoinGroupFromInvite(groupId, {
+                name: groupName,
+                symmetricKey,
+                members,
+            });
+            return true;
+        } catch (err) {
+            console.error("[Dashboard] Accept with password error:", err);
+            return false;
+        }
+    };
+
+    // Password prompt when opening a locked (password-protected) group
+    const [groupPendingUnlock, setGroupPendingUnlock] =
+        useState<XMTPGroup | null>(null);
+    const [unlockPassword, setUnlockPassword] = useState("");
+    const [unlockError, setUnlockError] = useState("");
+
+    // Handler to open a group chat (shows password modal if group is password-protected and not unlocked)
     const handleOpenGroup = (group: XMTPGroup) => {
+        if (group.passwordProtected && !group.symmetricKey) {
+            setGroupPendingUnlock(group);
+            setUnlockPassword("");
+            setUnlockError("");
+            return;
+        }
         setSelectedGroup(group);
         markGroupAsRead(group.id);
     };
@@ -2624,17 +2678,56 @@ function DashboardContent({
                         setSelectedChannel(channel);
                     }
                     break;
-                case "group":
+                case "group": {
                     const groupId = chat.id.replace("group-", "");
                     const group = groups.find((g) => g.id === groupId);
                     if (group) {
-                        setSelectedGroup(group);
+                        if (group.passwordProtected && !group.symmetricKey) {
+                            setGroupPendingUnlock(group);
+                            setUnlockPassword("");
+                            setUnlockError("");
+                        } else {
+                            setSelectedGroup(group);
+                            markGroupAsRead(group.id);
+                        }
                     }
                     break;
+                }
             }
         },
         [friendsListData, joinedChannels, groups, markAsRead]
     );
+
+    const handleUnlockGroupSubmit = async () => {
+        if (
+            !groupPendingUnlock ||
+            !unlockPassword.trim() ||
+            !groupPendingUnlock.passwordSalt ||
+            !groupPendingUnlock.passwordHash
+        )
+            return;
+        setUnlockError("");
+        const result = await unlockGroupWithPassword(
+            groupPendingUnlock.id,
+            unlockPassword.trim(),
+            groupPendingUnlock.passwordSalt,
+            groupPendingUnlock.passwordHash
+        );
+        if (result.success) {
+            const fetchedGroups = await getGroups();
+            const updated = fetchedGroups.find(
+                (g) => g.id === groupPendingUnlock.id
+            );
+            setGroupPendingUnlock(null);
+            setUnlockPassword("");
+            if (updated) {
+                setSelectedGroup(updated);
+                markGroupAsRead(updated.id);
+            }
+        } else {
+            setUnlockError(result.error || "Wrong password");
+        }
+    };
 
     // Handle call from unified chat
     const handleUnifiedCallClick = useCallback(
@@ -4570,14 +4663,11 @@ function DashboardContent({
                                                 invitationId: string,
                                                 groupId: string
                                             ) => {
-                                                // First leave/hide the Waku group
                                                 await leaveGroup(groupId);
-                                                // Then mark the invitation as declined
                                                 const result =
                                                     await declineInvitation(
                                                         invitationId
                                                     );
-                                                // Refresh groups list
                                                 const fetchedGroups =
                                                     await getGroups();
                                                 setGroups(fetchedGroups);
@@ -4585,6 +4675,9 @@ function DashboardContent({
                                             }}
                                             onJoinGroup={
                                                 handleJoinGroupFromInvite
+                                            }
+                                            onAcceptWithPassword={
+                                                handleAcceptWithPassword
                                             }
                                         />
                                     </div>
@@ -5512,6 +5605,80 @@ function DashboardContent({
                 onCreate={handleCreateGroup}
                 isCreating={isCreatingGroup}
             />
+
+            {/* Password prompt when opening a locked group */}
+            <AnimatePresence>
+                {groupPendingUnlock && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                        onClick={() => {
+                            setGroupPendingUnlock(null);
+                            setUnlockPassword("");
+                            setUnlockError("");
+                        }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm"
+                        >
+                            <h3 className="text-lg font-semibold text-white mb-1">
+                                Enter group password
+                            </h3>
+                            <p className="text-zinc-400 text-sm mb-4">
+                                &ldquo;{groupPendingUnlock.name}&rdquo; is
+                                password protected.
+                            </p>
+                            <input
+                                type="password"
+                                value={unlockPassword}
+                                onChange={(e) => {
+                                    setUnlockPassword(e.target.value);
+                                    setUnlockError("");
+                                }}
+                                onKeyDown={(e) =>
+                                    e.key === "Enter" &&
+                                    handleUnlockGroupSubmit()
+                                }
+                                placeholder="Password"
+                                className="w-full py-2.5 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 text-sm mb-2"
+                                autoFocus
+                            />
+                            {unlockError && (
+                                <p className="text-red-400 text-xs mb-2">
+                                    {unlockError}
+                                </p>
+                            )}
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setGroupPendingUnlock(null);
+                                        setUnlockPassword("");
+                                        setUnlockError("");
+                                    }}
+                                    className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleUnlockGroupSubmit}
+                                    disabled={!unlockPassword.trim()}
+                                    className="flex-1 py-2.5 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white text-sm font-medium disabled:opacity-50"
+                                >
+                                    Unlock
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Group Chat Modal */}
             {userAddress && (
